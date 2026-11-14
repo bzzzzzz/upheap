@@ -788,6 +788,59 @@
         ]
       }
     },
+    "/api/v1/me/decisions": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "What agents finished that waits for the signed-in user to decide: items an agent brought to a stable state (a\nnote with context, a defined task) that are still at it, not started and not closed, and notes that became other\nitems and have not been sent on, in the active heaps of their teams, one row each, most important first. Rows are\nordered by the item's ranking score in its own heap times your priority for that heap, highest first, then by heap\nname and the item's position; a note that became other items takes the best score of what was made from it that is\nranked, or 0. At most 500 rows come back; `count` is the true total. Read-only, for any member.",
+        "operationId": "get_decisions",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Decisions"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/me/history": {
       "get": {
         "tags": [
@@ -1104,6 +1157,78 @@
         "security": [
           {
             "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/results": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "The history of agent runs that ended as reached, newest first, in the active heaps of the signed-in user's teams:\nthe last 30 days only, 50 to a page. Pass `next_cursor` as `cursor` for the next page; it is `null` when no more\nruns are in the last 30 days. Read-only, for any member.",
+        "operationId": "get_results",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` from the previous page.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Results"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`, or `invalid_cursor`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
           }
         ]
       }
@@ -9141,6 +9266,58 @@
           }
         }
       },
+      "DecisionRow": {
+        "type": "object",
+        "description": "An item an agent brought to a stable state, which waits for the caller.",
+        "required": [
+          "item",
+          "heap",
+          "arrived"
+        ],
+        "properties": {
+          "arrived": {
+            "type": "string",
+            "description": "How long ago the agent's turn ended, in calendar days in the client's time zone: \"today\", \"yesterday\",\n\"4 days ago\"."
+          },
+          "became_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What a note that became other items became, in words: \"made 3 tasks\". `null` on any other row."
+          },
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap"
+          },
+          "item": {
+            "$ref": "#/components/schemas/WaitingItem",
+            "description": "The item, at its stage now. For a note that became other items, the note. It has no open turn."
+          }
+        }
+      },
+      "Decisions": {
+        "type": "object",
+        "description": "What waits for the caller's decision: items an agent brought to a stable state, in their active heaps, most\nimportant first.",
+        "required": [
+          "count",
+          "rows"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many rows wait. At most 500 are in `rows`; this is the true total.",
+            "minimum": 0
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionRow"
+            },
+            "description": "Ordered by the item's score in its own heap times your priority for that heap, highest first; ties by heap\nname, then the item's position in its heap. A note that became other items takes the best score of what was\nmade from it that is ranked, or 0."
+          }
+        }
+      },
       "Due": {
         "type": "object",
         "description": "A due time, ready to show.",
@@ -12272,6 +12449,102 @@
         },
         "additionalProperties": false
       },
+      "ResultRow": {
+        "type": "object",
+        "description": "One run that ended as reached.",
+        "required": [
+          "run_id",
+          "ended_at",
+          "day",
+          "day_label",
+          "time",
+          "item",
+          "heap",
+          "goal",
+          "result",
+          "links"
+        ],
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "The local calendar date the run ended on in the client's time zone, `YYYY-MM-DD`: the key rows are grouped by.",
+            "example": "2026-11-12"
+          },
+          "day_label": {
+            "type": "string",
+            "description": "The date as a label: \"today\", \"yesterday\", \"12 Nov\"."
+          },
+          "ended_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds: when the run ended."
+          },
+          "goal": {
+            "$ref": "#/components/schemas/Goal",
+            "description": "The goal of the run's turn."
+          },
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap"
+          },
+          "item": {
+            "$ref": "#/components/schemas/WaitingItem",
+            "description": "The item at its stage now."
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reached": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunReached",
+                "description": "What the run reached; `null` for a run that ended before this was recorded."
+              }
+            ]
+          },
+          "result": {
+            "type": "string",
+            "description": "What the run said it reached."
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "time": {
+            "type": "string",
+            "description": "The local time the run ended at in the client's time zone, \"HH:MM\" on a 24-hour clock.",
+            "example": "14:02"
+          }
+        }
+      },
+      "Results": {
+        "type": "object",
+        "description": "A page of the history: the runs that ended as reached in the last 30 days, newest first.",
+        "required": [
+          "rows"
+        ],
+        "properties": {
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where the next page starts; `null` when there are no more runs in the last 30 days."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResultRow"
+            },
+            "description": "Up to 50 rows."
+          }
+        }
+      },
       "Review": {
         "type": "object",
         "description": "What a review asks about.",
@@ -12396,6 +12669,15 @@
           "failed",
           "taken_back",
           "handed_back"
+        ]
+      },
+      "RunReached": {
+        "type": "string",
+        "description": "What a run reached when it ended as reached. More can join.",
+        "enum": [
+          "with_context",
+          "defined",
+          "became"
         ]
       },
       "SavedView": {

@@ -2,8 +2,10 @@
 //! item has at most one open turn (`ended_at` is `NULL`), which the service keeps under the heap lock. Turns are
 //! never deleted: a taken-back one keeps its row.
 
+use domain::item::StateKind;
 use domain::turn::{Ended, Goal, Reach, Redone, Turn, TurnEnd, TurnLine, TurnSource};
 use domain::{HeapId, ItemId, TurnId, UserId};
+use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
 };
@@ -105,6 +107,71 @@ pub async fn list_open_turns(
         }
     }
     Ok(turns)
+}
+
+/// The latest turn of each of `item_ids` that has one (the one opened last, ties broken by ID), in one query per
+/// [`IN_LIST_CHUNK`] items. Items with none are left out.
+pub async fn list_latest_turns(
+    db: &impl ConnectionTrait,
+    item_ids: &[ItemId],
+) -> Result<HashMap<ItemId, Turn>, StoreError> {
+    let ids: Vec<String> = item_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut latest: HashMap<ItemId, Turn> = HashMap::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_turns::Entity::find()
+            .filter(item_turns::Column::ItemId.is_in(chunk.iter().map(String::as_str)))
+            .all(db)
+            .await?;
+        for row in rows {
+            let turn = to_turn(row)?;
+            let newer = latest
+                .get(&turn.item_id)
+                .is_none_or(|kept| (turn.opened_at, *turn.id.as_uuid()) > (kept.opened_at, *kept.id.as_uuid()));
+            if newer {
+                latest.insert(turn.item_id, turn);
+            }
+        }
+    }
+    Ok(latest)
+}
+
+/// The turns of the items of `heap_ids` that ended as reached and are the latest of their item (no turn opened
+/// after), where the item is neither done, won't do, nor in progress, in one query per [`IN_LIST_CHUNK`] heaps. The
+/// order is the database's.
+pub async fn list_latest_reached_turns_in_heaps(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+) -> Result<Vec<Turn>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_turns::Entity::find()
+            .join(
+                JoinType::InnerJoin,
+                item_turns::Entity::belongs_to(items::Entity)
+                    .from(item_turns::Column::ItemId)
+                    .to(items::Column::Id)
+                    .into(),
+            )
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::State.is_in([
+                StateKind::Open.code(),
+                StateKind::Blocked.code(),
+                StateKind::Became.code(),
+            ]))
+            .filter(item_turns::Column::EndKind.eq(TurnEnd::Reached.code()))
+            .filter(Expr::cust(
+                "NOT EXISTS (SELECT 1 FROM item_turns newer WHERE newer.item_id = item_turns.item_id \
+                 AND (newer.opened_at > item_turns.opened_at \
+                 OR (newer.opened_at = item_turns.opened_at AND newer.id > item_turns.id)))",
+            ))
+            .all(db)
+            .await?;
+        for row in rows {
+            found.push(to_turn(row)?);
+        }
+    }
+    Ok(found)
 }
 
 /// Every open turn of the items of `heap_id`, as locking reads (see [`find_open_turn_locking`]), ordered by when they

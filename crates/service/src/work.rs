@@ -14,8 +14,8 @@ use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, Kind, NewItem, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{
-    LAPSE_FAILURE, MAX_QUEUE_HEAPS, Run, RunEnd, RunError, RunForbidden, RunLink, RunResult, default_failure,
-    reached_check, reported_goal,
+    LAPSE_FAILURE, MAX_QUEUE_HEAPS, Run, RunEnd, RunError, RunForbidden, RunLink, RunReached, RunResult,
+    default_failure, reached_check, reported_goal,
 };
 use domain::step::StepState;
 use domain::team::Team;
@@ -296,13 +296,16 @@ impl Services {
             return Err(missed.into());
         }
 
-        let ended_run = run.ended_as(RunEnd::Reached, now, Some(result), links, None);
-        store::runs::end_run(&txn, &ended_run).await?;
-        let ended_turn = turn.reached(principal.user_id, now);
-        store::turns::end_turn(&txn, &ended_turn).await?;
         // A goal that is not a stage never passes the check, so there is a stage to move to. The person may have
         // taken the item further than the goal while the agent worked, and reaching never moves it back.
         let after = goal.stage().map_or(item.stage, |goal| goal.max(item.stage));
+        let mut ended_run = run.ended_as(RunEnd::Reached, now, Some(result), links, None);
+        if let Some(reached) = RunReached::from_stage(after) {
+            ended_run = ended_run.reaching(reached);
+        }
+        store::runs::end_run(&txn, &ended_run).await?;
+        let ended_turn = turn.reached(principal.user_id, now);
+        store::turns::end_turn(&txn, &ended_turn).await?;
         let before = item.stage;
         let item = if after == before {
             item

@@ -219,6 +219,67 @@ impl TestApp {
         Ok((list.count, list.pinned.len() + list.ranked.len() + list.blocked.len()))
     }
 
+    /// How many decisions wait for the user with `user_id`, and how many rows the list holds when it is capped at
+    /// `max_rows`, which the cap's real size makes too many items to make in a test.
+    pub async fn decisions_capped(&self, user_id: &str, max_rows: usize) -> Result<(u32, usize)> {
+        let principal = service::Principal {
+            user_id: UserId::from_uuid(user_id.parse()?),
+            run: None,
+        };
+        let decisions = self.services.list_decisions_capped(principal, max_rows).await?;
+        Ok((decisions.count, decisions.rows.len()))
+    }
+
+    /// The runs of the user's history, newest first, read `page_size` at a time: the run IDs of each page.
+    pub async fn results_in_pages(&self, user_id: &str, page_size: u64) -> Result<Vec<Vec<String>>> {
+        let principal = service::Principal {
+            user_id: UserId::from_uuid(user_id.parse()?),
+            run: None,
+        };
+        let mut pages = Vec::new();
+        let mut after = None;
+        loop {
+            let page = self.services.list_results_paged(principal, after, page_size).await?;
+            pages.push(page.rows.iter().map(|row| row.run.id.to_string()).collect());
+            after = page.next;
+            if after.is_none() {
+                return Ok(pages);
+            }
+        }
+    }
+
+    /// What the run `run_id` reached, as stored.
+    pub async fn run_reached(&self, run_id: &str) -> Result<Option<String>> {
+        let id: uuid::Uuid = run_id.parse()?;
+        let sql = format!("SELECT reached FROM item_runs WHERE id = '{id}'");
+        let row = self
+            .db
+            .query_one_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?
+            .context("no run row")?;
+        Ok(row.try_get("", "reached")?)
+    }
+
+    /// Moves the end of the run `run_id` to `ended_at` (UTC milliseconds), so a test can put it long ago.
+    pub async fn set_run_ended_at(&self, run_id: &str, ended_at: i64) -> Result<()> {
+        let id: uuid::Uuid = run_id.parse()?;
+        self.db
+            .execute_unprepared(&format!("UPDATE item_runs SET ended_at = {ended_at} WHERE id = '{id}'"))
+            .await
+            .context("set run ended at")?;
+        Ok(())
+    }
+
+    /// Clears what the run `run_id` reached, as it is for a run that ended before it was recorded.
+    pub async fn clear_run_reached(&self, run_id: &str) -> Result<()> {
+        let id: uuid::Uuid = run_id.parse()?;
+        self.db
+            .execute_unprepared(&format!("UPDATE item_runs SET reached = NULL WHERE id = '{id}'"))
+            .await
+            .context("clear run reached")?;
+        Ok(())
+    }
+
     /// Sends a request as the app does: with the CSRF and timezone headers.
     pub async fn send(
         &self,

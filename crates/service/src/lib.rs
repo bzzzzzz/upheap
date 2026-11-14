@@ -6,6 +6,7 @@
 mod access;
 pub mod account_history;
 pub mod across_heaps;
+pub mod agents;
 mod audit;
 pub mod audit_log;
 pub mod auth;
