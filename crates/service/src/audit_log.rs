@@ -837,6 +837,7 @@ fn describe_how(code: &str) -> Option<&'static str> {
     match code {
         "stage_set" => Some("Stage set by hand"),
         "already_met" => Some("Already at the goal"),
+        "became" => Some("Defined when its note became"),
         _ => None,
     }
 }

@@ -378,9 +378,43 @@ async fn a_split_task_the_person_sent_on_already_keeps_its_turn() -> Result<()> 
     // Act
     let became = w.became_in_run(&run, key_of(&note)).await?;
 
+    // Assert: defined meets A's turn, so it ended as reached, and A gets no turn from the note.
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(w.get(key_of(&a.body)).await?["turn"], eq(&Value::Null));
+    let entries = w.app.audit_entries(a.body["id"].as_str().context("id")?).await?;
+    let reached = entries
+        .iter()
+        .find(|(action, _)| action == "turn_reached")
+        .context("no turn_reached entry")?;
+    expect_that!(reached.1["how"], eq(&json!("became")));
+    expect_that!(reached.1["goal"], eq(&json!("defined")));
+    expect_that!(
+        entries.iter().filter(|(action, _)| action == "turn_opened").count(),
+        eq(1)
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_split_task_s_turn_to_done_stays_open_through_became() -> Result<()> {
+    // Arrange: a note sent all the way; its run makes task A, which the person defines and sends on, to done.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&a.body)).await?;
+    let defined = w.edit(key_of(&a.body), json!({ "stage": "defined" })).await?;
+    anyhow::ensure!(defined.status == StatusCode::OK, "stage failed: {}", defined.body);
+    w.send_turn(key_of(&a.body)).await?;
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
     // Assert
     expect_that!(became.status, eq(StatusCode::OK));
-    expect_that!(w.get(key_of(&a.body)).await?["turn"]["reach"], eq(&json!("one")));
+    let turn = &w.get(key_of(&a.body)).await?["turn"];
+    expect_that!(turn["reach"], eq(&json!("one")));
+    expect_that!(turn["goal"], eq(&json!("done")));
     Ok(())
 }
 
@@ -963,5 +997,42 @@ async fn a_run_tried_again_adds_steps_to_the_tasks_the_failed_run_of_its_turn_sp
     expect_that!(stepped.status, eq(StatusCode::CREATED));
     expect_that!(became.status, eq(StatusCode::OK));
     expect_that!(became.body["state"], eq(&json!("became")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn became_ends_the_prepare_turn_of_a_task_the_person_split_and_passes_the_note_s_turn_on() -> Result<()> {
+    // Arrange: a note sent all the way and claimed; then the heap prepares new items, so the task the person makes
+    // from the note gets a prepare turn to defined. The run adds its step.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    set_prepare(&w).await?;
+    let task = w
+        .split(
+            &note,
+            "Rotate staging",
+            json!({ "description": "Done when: it works." }),
+        )
+        .await?;
+    anyhow::ensure!(task.status == StatusCode::CREATED, "split failed: {}", task.body);
+    expect_that!(task.body["turn"]["goal"], eq(&json!("defined")));
+    w.add_step_in_run(&run, key_of(&task.body)).await?;
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: the prepare turn ended as reached, and the task has the note's turn, all the way to done.
+    expect_that!(became.status, eq(StatusCode::OK));
+    let entries = w.app.audit_entries(task.body["id"].as_str().context("id")?).await?;
+    let reached = entries
+        .iter()
+        .find(|(action, _)| action == "turn_reached")
+        .context("no turn_reached entry")?;
+    expect_that!(reached.1["how"], eq(&json!("became")));
+    expect_that!(reached.1["goal"], eq(&json!("defined")));
+    let turn = &w.get(key_of(&task.body)).await?["turn"];
+    expect_that!(turn["reach"], eq(&json!("all_the_way")));
+    expect_that!(turn["goal"], eq(&json!("done")));
     Ok(())
 }
