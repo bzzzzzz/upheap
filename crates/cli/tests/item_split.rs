@@ -309,7 +309,6 @@ async fn in_a_run_the_note_to_step_reaches_the_turn() -> Result<()> {
 async fn a_note_becomes_a_heap_with_its_items_and_item_show_lists_it() -> Result<()> {
     // Arrange
     let (_server, _ada, mut cli, note) = with_a_note().await?;
-    let note_path = format!("{HEAP}/{note}");
 
     // Act
     cli.stdin = b"A move of the blog.\n".to_vec();
@@ -326,7 +325,7 @@ async fn a_note_becomes_a_heap_with_its_items_and_item_show_lists_it() -> Result
             "--heap",
             "ada/blog-move",
             "--from",
-            &note_path,
+            &note,
             "--need",
             "expected",
             "--age",

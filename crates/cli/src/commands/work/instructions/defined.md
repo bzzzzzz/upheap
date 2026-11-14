@@ -33,8 +33,8 @@ after it.
 If the note is a project of its own, too big for tasks in this heap, make it a heap instead: first
 `upheap heap add "<name>" --from <key> --context-file -`, with the heap's context on stdin (what the project is, where
 its work lives and what finishing it means). Then make each of its tasks, with the context and steps as above, and
-its notes (with a context), in the new heap: `upheap item add "<title>" --task --heap <team/heap> --from <team/heap/key>
---need <need> --age keep|new --context-file - --step "<title>"`, naming the note by its team/heap/key. Then
+its notes (with a context), in the new heap: `upheap item add "<title>" --task --heap <team/heap> --from <key>
+--need <need> --age keep|new --context-file - --step "<title>"`. Then
 `upheap item became <key>`, which reaches the turn. The heap needs at least one task or note made from this one; its
 tasks are defined by then, and get no turn in this run.
 A single piece of work stays one task, in place (`upheap item to-task <key>`).

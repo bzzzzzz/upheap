@@ -1,6 +1,7 @@
 //! `upheap item add <title>`: add an item to a heap, and say where it landed, or when a reminder joins the list.
 
 use api_types::common::{ItemDto, KindDto, NeedDto, SizeDto};
+use api_types::heaps::HeapDto;
 use api_types::items::{AgeDto, CreateItemDto, ItemPatchDto, OriginInputDto, RankedListDto, RankedQuery};
 use api_types::steps::AddStepDto;
 use api_types::tags::TagListDto;
@@ -59,7 +60,7 @@ pub struct AddArgs {
     #[arg(long, value_name = "WHEN", conflicts_with_all = ["due", "task"])]
     pub reminder: Option<String>,
     /// Make it from this note, to split the note into several items: its key, team/heap/key or link. It is added in
-    /// the note's heap, and needs --need and --age
+    /// the note's heap, or with --heap in a heap made from the note, and needs --need and --age
     #[arg(long, value_name = "ITEM", requires_all = ["need", "age"], conflicts_with = "reminder")]
     pub from: Option<String>,
     /// With --from: `keep` ranks it from the note's age, `new` from now
@@ -141,7 +142,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     };
     let origin = match (from_name, args.from.as_deref(), args.age) {
         (Some(name), Some(typed), Some(age)) => Some(OriginInputDto {
-            item_id: item_id_of(name, typed, &heap, &client, &token).await?,
+            item_id: origin_id_of(name, typed, &api).await?,
             age,
         }),
         _ => None,
@@ -252,6 +253,18 @@ pub(in crate::commands) async fn item_id_of(
         heap: &at,
     };
     Ok(api.get_item(typed, &key).await?.value.id)
+}
+
+/// The ID of the note `--from` names. A bare key is the note of the heap the item goes to, or, in a heap made from a
+/// note, that note, which is in another heap.
+async fn origin_id_of(name: ItemName, typed: &str, api: &HeapApi<'_>) -> Result<Uuid, CliError> {
+    if let ItemName::Key(key) = &name {
+        let target = api.get::<HeapDto>(&[], NO_QUERY).await?;
+        if let Some(origin) = target.value.origin.filter(|origin| origin.key == *key) {
+            return Ok(origin.id);
+        }
+    }
+    item_id_of(name, typed, api.heap, api.client, api.token).await
 }
 
 /// Whether the server added a note although `--task` asked for a task, which only a server older than `kind` on
