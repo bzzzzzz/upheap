@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use domain::heap::Heap;
+use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, ItemSummary, Title};
 use domain::permission::{ItemAction, Permission, allowed_item_actions, allowed_question_actions};
 use domain::step::StepNumber;
@@ -34,6 +34,8 @@ pub struct WaitingRow {
     pub item: Item,
     pub heap: Heap,
     pub team: Team,
+    /// The caller's priority for the row's heap.
+    pub priority: HeapPriority,
     /// The title of the step the question names, when it names one that exists. `None` on the other rows.
     pub step_title: Option<Title>,
     pub subject: WaitingSubject,
@@ -94,6 +96,8 @@ enum CandidateSubject {
 struct Candidate {
     heap_index: usize,
     score: f64,
+    /// The caller's priority for the item's heap: the item sorts by its score times this.
+    priority: HeapPriority,
     position: u32,
     /// When the item arrives, when it is a reminder to come: it has no rank, so it sorts after the ranked ones, by
     /// this, soonest first.
@@ -103,6 +107,12 @@ struct Candidate {
 }
 
 impl Candidate {
+    /// What the candidate is ordered by among the ranked ones: its score in its own heap times the caller's priority
+    /// for that heap.
+    fn sort_key(&self) -> f64 {
+        self.score * self.priority.as_factor()
+    }
+
     /// Where the candidate sorts among those of one item: a gone blocker or a stuck turn first, then questions by
     /// number. A blocked item has no stuck turn, as an agent isn't sent a blocked item.
     fn order_in_item(&self) -> u32 {
@@ -136,8 +146,8 @@ impl Services {
     }
 
     /// The open questions on open items, the items whose agent turn is stuck, and the blocked items whose blocker is
-    /// gone, in the active heaps of the caller's teams, ordered by the score of their item in its own heap, highest
-    /// first (every heap weighs the same for now), then by heap (by name), the item's position in its heap, a stuck or
+    /// gone, in the active heaps of the caller's teams, ordered by the score of their item in its own heap times
+    /// the caller's priority for that heap, highest first, then by heap (by name), the item's position in its heap, a stuck or
     /// gone-blocker row before the item's questions, and the question's number. Scores are those the heap's list
     /// ranks by right now. A reminder to come has no score: its rows come after the ranked ones, by the reminder's
     /// date, soonest first.
@@ -185,8 +195,10 @@ impl Services {
             });
         }
 
+        let priorities = store::heap_priorities::list_heap_priorities(&self.db, principal.user_id, &heap_ids).await?;
         let mut candidates = Vec::with_capacity(waiting.len());
         for (heap_index, heap) in heaps.iter().enumerate() {
+            let priority = priorities.get(&heap.id).copied().unwrap_or(HeapPriority::DEFAULT);
             let (mine, rest): (Vec<_>, Vec<_>) = waiting.into_iter().partition(|(id, _)| *id == heap.id);
             waiting = rest;
             let (mine_stuck, rest): (Vec<_>, Vec<_>) = stuck.into_iter().partition(|(id, _)| *id == heap.id);
@@ -214,6 +226,7 @@ impl Services {
                     candidates.push(Candidate {
                         heap_index,
                         score: 0.0,
+                        priority,
                         position: 0,
                         to_come_until: item.arrives_at,
                         item: (*item).clone(),
@@ -230,6 +243,7 @@ impl Services {
                 candidates.push(Candidate {
                     heap_index,
                     score,
+                    priority,
                     position,
                     to_come_until: None,
                     item: (*item).clone(),
@@ -244,6 +258,7 @@ impl Services {
                 candidates.push(Candidate {
                     heap_index,
                     score,
+                    priority,
                     position,
                     to_come_until: None,
                     item: (*item).clone(),
@@ -260,6 +275,7 @@ impl Services {
                         candidates.push(Candidate {
                             heap_index,
                             score: 0.0,
+                            priority,
                             position: 0,
                             to_come_until: item.arrives_at,
                             item: (*item).clone(),
@@ -277,6 +293,7 @@ impl Services {
                 candidates.push(Candidate {
                     heap_index,
                     score,
+                    priority,
                     position,
                     to_come_until: None,
                     item: (*item).clone(),
@@ -289,7 +306,7 @@ impl Services {
             a.to_come_until
                 .is_some()
                 .cmp(&b.to_come_until.is_some())
-                .then_with(|| b.score.total_cmp(&a.score))
+                .then_with(|| b.sort_key().total_cmp(&a.sort_key()))
                 .then_with(|| a.to_come_until.cmp(&b.to_come_until))
                 .then_with(|| a.heap_index.cmp(&b.heap_index))
                 .then_with(|| a.position.cmp(&b.position))
@@ -405,6 +422,7 @@ impl Services {
                     turn,
                     heap: heap.clone(),
                     team: team.clone(),
+                    priority: candidate.priority,
                     step_title,
                     subject,
                     item: candidate.item,

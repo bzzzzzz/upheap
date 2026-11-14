@@ -3,6 +3,7 @@
 use crate::handle::Handle;
 use crate::parameter::Weight;
 use crate::text::{Context, Name};
+use crate::validation::ValidationError;
 use crate::{HeapId, TeamId, Timestamp, Version};
 
 /// The heap's ranking weights. Each weight scales one factor's influence relative to the others; `0` turns the
@@ -24,6 +25,39 @@ impl Default for HeapPolicy {
             deadline_weight: Weight::DEFAULT,
             value_weight: Weight::DEFAULT,
         }
+    }
+}
+
+/// A person's priority for a heap, 1 to 10: where several heaps are ordered together, its items' scores are
+/// multiplied by it. Each person has their own for each heap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeapPriority(u8);
+
+impl HeapPriority {
+    pub const MIN: u8 = 1;
+    pub const MAX: u8 = 10;
+    /// The priority of a heap its person hasn't set one for.
+    pub const DEFAULT: Self = Self(Self::MIN);
+
+    /// Takes any integer, so a negative or huge priority from a request is refused as out of range.
+    pub fn parse(raw: i64) -> Result<Self, ValidationError> {
+        u8::try_from(raw)
+            .ok()
+            .filter(|p| (Self::MIN..=Self::MAX).contains(p))
+            .map(Self)
+            .ok_or(ValidationError::PriorityOutOfRange {
+                min: Self::MIN,
+                max: Self::MAX,
+            })
+    }
+
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
+    /// The multiplier for an item's score.
+    pub fn as_factor(self) -> f64 {
+        f64::from(self.0)
     }
 }
 
@@ -53,6 +87,18 @@ mod tests {
     use googletest::prelude::*;
 
     use super::*;
+
+    #[gtest]
+    fn priority_accepts_1_to_10_only() {
+        expect_that!(HeapPriority::parse(1).map(HeapPriority::get), ok(eq(&1)));
+        expect_that!(HeapPriority::parse(10).map(HeapPriority::get), ok(eq(&10)));
+        for raw in [0, 11, -1, i64::MAX] {
+            expect_that!(
+                HeapPriority::parse(raw),
+                err(eq(&ValidationError::PriorityOutOfRange { min: 1, max: 10 }))
+            );
+        }
+    }
 
     fn weight(raw: i64) -> Weight {
         Weight::parse(raw).expect("valid")

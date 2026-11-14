@@ -143,6 +143,7 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             version: item.version.get(),
         },
         heap: to_item_heap_dto(&row.heap, &row.team),
+        heap_priority: row.priority.get(),
         question,
         stuck,
         blocker,
@@ -211,6 +212,7 @@ async fn get_items(
             .map(|row| AcrossHeapsItemDto {
                 position: row.position,
                 heap: to_item_heap_dto(&row.heap, &row.team),
+                heap_priority: row.priority.get(),
                 entry: to_ranked_dto(row.entry, as_of, &tz),
             })
             .collect()

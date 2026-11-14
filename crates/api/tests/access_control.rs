@@ -159,6 +159,8 @@ enum RequestBody {
     HeapContext,
     /// A new need weight for the heap.
     Weights,
+    /// A new priority for the heap.
+    HeapPriority,
     /// A ranking preview with the stored weights.
     RankingPreview,
     /// A parameter name no other request used, since names are unique per heap.
@@ -576,6 +578,15 @@ fn endpoints() -> Vec<Endpoint> {
             configure,
             Target::HeapVersion,
             RequestBody::Weights,
+            StatusCode::OK,
+        ),
+        // The caller's own setting, not the heap's data: any role that may view the heap sets it, archived or not.
+        row(
+            Method::PUT,
+            "/teams/{team}/heaps/{heap}/priority",
+            view,
+            Target::Heap,
+            RequestBody::HeapPriority,
             StatusCode::OK,
         ),
         // A read that carries a body, so it works on an archived heap too.
@@ -1493,6 +1504,7 @@ impl World {
             RequestBody::Name => Some(json!({ "name": self.unique_name("name") })),
             RequestBody::HeapContext => Some(json!({ "context": "Where the work is reviewed" })),
             RequestBody::Weights => Some(json!({ "need": 11 })),
+            RequestBody::HeapPriority => Some(json!({ "priority": 3 })),
             RequestBody::RankingPreview => Some(json!({})),
             RequestBody::AddMember => Some(json!({ "user_id": user })),
             RequestBody::Promote => Some(json!({ "role": "admin" })),

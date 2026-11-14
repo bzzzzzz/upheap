@@ -4,7 +4,7 @@ mod invite_links;
 mod manage;
 
 use domain::audit::{AuditAction, EntityType};
-use domain::heap::Heap;
+use domain::heap::{Heap, HeapPriority};
 use domain::permission::{
     HeapAction, MemberAction, Permission, TeamAction, allowed_heap_actions, allowed_member_actions,
     allowed_team_actions,
@@ -51,8 +51,10 @@ pub struct HeapView {
     pub heap: Heap,
     /// Items its list shows by default, before filters: open and in progress ones.
     pub open_count: u32,
-    /// Empty unless the caller is an admin of the heap's team.
+    /// What the caller may do with the heap: every role that may view it can set their priority.
     pub allowed_actions: Vec<HeapAction>,
+    /// The caller's own priority for the heap.
+    pub priority: HeapPriority,
 }
 
 /// `heap` as a member with `role` sees it, with its open items counted at `now`.
@@ -60,10 +62,25 @@ pub(crate) async fn load_heap_view(
     db: &impl ConnectionTrait,
     heap: Heap,
     role: Role,
+    user_id: UserId,
     now: Timestamp,
 ) -> Result<HeapView, ServiceError> {
     let open_count = count_heap_open_items(db, heap.id, now).await?;
-    Ok(to_heap_view(heap, role, open_count))
+    let priority = load_heap_priority(db, user_id, heap.id).await?;
+    Ok(to_heap_view(heap, role, open_count, priority))
+}
+
+/// `user_id`'s priority for `heap_id`: the default until they set one.
+pub(crate) async fn load_heap_priority(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    heap_id: HeapId,
+) -> Result<HeapPriority, ServiceError> {
+    Ok(store::heap_priorities::list_heap_priorities(db, user_id, &[heap_id])
+        .await?
+        .get(&heap_id)
+        .copied()
+        .unwrap_or(HeapPriority::DEFAULT))
 }
 
 /// How many open items `heap_id` has (see [`HeapView::open_count`]).
@@ -79,29 +96,34 @@ pub(crate) async fn count_heap_open_items(
         .unwrap_or(0))
 }
 
-/// `heap` as a member with `role` sees it, with `open_count` already counted.
-pub(crate) fn to_heap_view(heap: Heap, role: Role, open_count: u32) -> HeapView {
+/// `heap` as a member with `role` sees it, with `open_count` already counted and the member's `priority` loaded.
+pub(crate) fn to_heap_view(heap: Heap, role: Role, open_count: u32, priority: HeapPriority) -> HeapView {
     HeapView {
         open_count,
+        priority,
         allowed_actions: allowed_heap_actions(&heap, role),
         heap,
     }
 }
 
-/// `heaps`, in the same order, as a member with `role` sees them, with their open items counted in one query.
+/// `heaps`, in the same order, as the member `user_id` with `role` sees them, with their open items counted in one
+/// query and their priorities in another.
 pub(crate) async fn load_heap_views(
     db: &impl ConnectionTrait,
     heaps: Vec<Heap>,
     role: Role,
+    user_id: UserId,
     now: Timestamp,
 ) -> Result<Vec<HeapView>, ServiceError> {
     let ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
     let open_counts = count_open_items(db, &ids, now).await?;
+    let priorities = store::heap_priorities::list_heap_priorities(db, user_id, &ids).await?;
     Ok(heaps
         .into_iter()
         .map(|heap| {
             let open_count = open_counts.get(&heap.id).copied().unwrap_or(0);
-            to_heap_view(heap, role, open_count)
+            let priority = priorities.get(&heap.id).copied().unwrap_or(HeapPriority::DEFAULT);
+            to_heap_view(heap, role, open_count, priority)
         })
         .collect())
 }
@@ -178,7 +200,7 @@ pub(super) async fn load_team_detail(
         })
         .collect::<Result<Vec<_>, ServiceError>>()?;
     let heaps = store::heaps::list_heaps_for_teams(db, &[team.id]).await?;
-    let heaps = load_heap_views(db, heaps, caller.role, now).await?;
+    let heaps = load_heap_views(db, heaps, caller.role, principal.user_id, now).await?;
     Ok(TeamDetail {
         allowed_actions: allowed_team_actions(&team, &memberships, principal.user_id),
         role: caller.role,

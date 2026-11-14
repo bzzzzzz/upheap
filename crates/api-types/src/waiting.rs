@@ -14,8 +14,9 @@ use crate::turns::{GoalDto, TurnDto};
 pub struct WaitingDto {
     /// How many rows wait: questions, stuck turns and gone blockers. At most 500 are in `rows`; this is the true total.
     pub count: u32,
-    /// Ordered by the item's score in its own heap, highest first; ties by heap name, then the item's position in
-    /// its heap, a stuck or blocker row before the item's questions, then the question's number. Heaps weigh the same for now.
+    /// Ordered by the item's score in its own heap times your priority for that heap, highest first; ties by heap
+    /// name, then the item's position in its heap, a stuck or blocker row before the item's questions, then the
+    /// question's number.
     /// Questions on reminders to come have no score and come after the rest, by the reminder's date, soonest first.
     pub rows: Vec<WaitingRowDto>,
 }
@@ -45,6 +46,8 @@ pub struct WaitingRowDto {
     pub kind: WaitingRowKindDto,
     pub item: WaitingItemDto,
     pub heap: ItemHeapDto,
+    /// Your priority for the row's heap, 1 to 10.
+    pub heap_priority: u8,
     /// The open question, as the item carries it. Set on a `question` row.
     // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
     // says required.

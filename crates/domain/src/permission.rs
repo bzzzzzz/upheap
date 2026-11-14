@@ -45,7 +45,7 @@ impl Permission {
 /// Leaving a team is the exception: every member may leave, but leaving is a membership change, which the offering
 /// shows to admins only. Display name changes are shown to every member, since that is where teammates see the name.
 ///
-/// A password change, a reset link being made and a password set with one are recorded in the user's personal team,
+/// A heap priority change, a password change, a reset link being made and a password set with one are recorded in the user's personal team,
 /// whose one member is its admin, so only the user sees them.
 pub const fn audit_permission(action: AuditAction) -> Permission {
     match action {
@@ -60,6 +60,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::InviteLinkCreated
         | AuditAction::InviteLinkRevoked
         | AuditAction::PasswordChanged
+        | AuditAction::HeapPriorityChanged
         | AuditAction::PasswordResetLinkMade
         | AuditAction::PasswordReset => Permission::ManageTeam,
         AuditAction::HeapCreated
@@ -465,6 +466,9 @@ pub enum HeapAction {
     EditWeights,
     /// Set whether agents prepare the items added to the heap. Not offered while it is archived.
     SetAgentsPrepare,
+    /// Set the caller's own priority for the heap. Offered to every role that may view it, archived or not: it is
+    /// the caller's setting, not the heap's data.
+    SetPriority,
     /// Read the heap's own history: created, renamed, archived. Shown to those who may manage heaps (see
     /// [`audit_permission`]).
     ViewHistory,
@@ -475,14 +479,15 @@ pub enum HeapAction {
 pub fn allowed_heap_actions(heap: &Heap, role: Role) -> Vec<HeapAction> {
     let can_edit_context = !heap.is_archived() && Permission::EditItems.is_granted_to(role);
     if !Permission::ManageHeaps.is_granted_to(role) {
-        return if can_edit_context {
-            vec![HeapAction::EditContext]
-        } else {
-            Vec::new()
-        };
+        let mut actions = Vec::new();
+        if can_edit_context {
+            actions.push(HeapAction::EditContext);
+        }
+        actions.push(HeapAction::SetPriority);
+        return actions;
     }
     if heap.is_archived() {
-        return vec![HeapAction::Unarchive, HeapAction::ViewHistory];
+        return vec![HeapAction::Unarchive, HeapAction::SetPriority, HeapAction::ViewHistory];
     }
     let mut actions = vec![HeapAction::Rename, HeapAction::Archive];
     if can_edit_context {
@@ -492,6 +497,7 @@ pub fn allowed_heap_actions(heap: &Heap, role: Role) -> Vec<HeapAction> {
         actions.push(HeapAction::EditWeights);
         actions.push(HeapAction::SetAgentsPrepare);
     }
+    actions.push(HeapAction::SetPriority);
     actions.push(HeapAction::ViewHistory);
     actions
 }
@@ -552,18 +558,38 @@ mod tests {
                 eq(&HeapAction::EditContext),
                 eq(&HeapAction::EditWeights),
                 eq(&HeapAction::SetAgentsPrepare),
+                eq(&HeapAction::SetPriority),
                 eq(&HeapAction::ViewHistory)
             ]
         );
         expect_that!(
             allowed_heap_actions(&heap(false), Role::Member),
-            elements_are![eq(&HeapAction::EditContext)]
+            elements_are![eq(&HeapAction::EditContext), eq(&HeapAction::SetPriority)]
         );
-        expect_that!(allowed_heap_actions(&heap(true), Role::Member), is_empty());
+        expect_that!(
+            allowed_heap_actions(&heap(true), Role::Member),
+            elements_are![eq(&HeapAction::SetPriority)]
+        );
         expect_that!(
             allowed_heap_actions(&heap(true), Role::Admin),
-            elements_are![eq(&HeapAction::Unarchive), eq(&HeapAction::ViewHistory)]
+            elements_are![
+                eq(&HeapAction::Unarchive),
+                eq(&HeapAction::SetPriority),
+                eq(&HeapAction::ViewHistory)
+            ]
         );
+    }
+
+    #[gtest]
+    fn every_role_sets_their_priority_on_an_active_or_archived_heap() {
+        for role in [Role::Admin, Role::Member] {
+            for archived in [false, true] {
+                expect_that!(
+                    allowed_heap_actions(&heap(archived), role),
+                    contains(eq(&HeapAction::SetPriority))
+                );
+            }
+        }
     }
 
     #[gtest]

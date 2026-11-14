@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use domain::audit::AuditAction;
 use domain::handle::Handle;
-use domain::heap::Heap;
+use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, Kind, NewItem, Stage, StateKind};
 use domain::permission::Permission;
 use domain::run::{
@@ -21,7 +21,7 @@ use domain::step::StepState;
 use domain::team::Team;
 use domain::turn::{TakeBackWhy, Turn};
 use domain::validation::Field;
-use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, ValidationError};
+use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, UserId, ValidationError};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
@@ -140,7 +140,9 @@ impl Services {
                 lapsed.insert(run.turn_id);
             }
         }
-        let queue = self.read_queue(&self.db, &heaps, &live, &lapsed, now, false).await?;
+        let queue = self
+            .read_queue(&self.db, principal.user_id, &heaps, &live, &lapsed, now, false)
+            .await?;
         Ok(NextView {
             item: queue.first,
             waiting_count: queue.waiting_count,
@@ -178,7 +180,9 @@ impl Services {
             }
         }
         // Every lapsed run was written above, so none is left to count.
-        let mut queue = self.read_queue(&txn, &heaps, &live, &HashSet::new(), now, true).await?;
+        let mut queue = self
+            .read_queue(&txn, principal.user_id, &heaps, &live, &HashSet::new(), now, true)
+            .await?;
         // Each pass ends at least one turn, and a follow-on goes past the stage, so it is never met itself.
         let person = Principal { run: None, ..principal };
         while !queue.met.is_empty() {
@@ -201,7 +205,9 @@ impl Services {
             if !opened {
                 break;
             }
-            queue = self.read_queue(&txn, &heaps, &live, &HashSet::new(), now, true).await?;
+            queue = self
+                .read_queue(&txn, principal.user_id, &heaps, &live, &HashSet::new(), now, true)
+                .await?;
         }
         let Some(mut work) = queue.first else {
             // Lapsed runs written above stay written.
@@ -680,17 +686,19 @@ impl Services {
                 team,
             });
         }
-        // Heaps weigh the same for now, so ties between heaps go by name, then ID, as Waiting for me orders them.
+        // Ties between heaps go by name, then ID, as Waiting for me orders them.
         heaps.sort_by(|a, b| (a.heap.name.as_str(), a.heap.id).cmp(&(b.heap.name.as_str(), b.heap.id)));
         Ok(heaps)
     }
 
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
-    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once.
+    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The best candidate is the one
+    /// with the highest score times `user_id`'s priority for its heap, then by heap, then by position.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
+        user_id: UserId,
         heaps: &[QueueHeap],
         live: &HashSet<ItemId>,
         lapsed: &HashSet<TurnId>,
@@ -738,13 +746,16 @@ impl Services {
             }
         }
 
-        // (score, heap index, position) of the best candidate so far, and the candidate.
+        // (score times the person's heap priority, heap index, position) of the best candidate so far, and the
+        // candidate.
+        let priorities = store::heap_priorities::list_heap_priorities(db, user_id, &heap_ids).await?;
         let mut met = Vec::new();
         let mut best: Option<((f64, usize, u32), Item, Turn)> = None;
         for (heap_index, queue) in heaps.iter().enumerate() {
             let Some(candidates) = by_heap.remove(&queue.heap.id) else {
                 continue;
             };
+            let priority = priorities.get(&queue.heap.id).copied().unwrap_or(HeapPriority::DEFAULT);
             let OpenRanking { items, ranking, .. } = rank_open_items(db, &queue.heap, now, now).await?;
             let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
             for ranked in &ranking {
@@ -758,7 +769,7 @@ impl Services {
                     met.push((heap_index, (*item).clone(), turn.clone()));
                     continue;
                 }
-                let key = (ranked.score, heap_index, ranked.position);
+                let key = (ranked.score * priority.as_factor(), heap_index, ranked.position);
                 let better = best.as_ref().is_none_or(|(held, _, _)| {
                     key.0
                         .total_cmp(&held.0)
