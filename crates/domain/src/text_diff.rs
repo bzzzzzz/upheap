@@ -4,6 +4,8 @@
 //! reads as one removed phrase and one added phrase, rather than word against word. When too little stays the same,
 //! a diff reads worse than the two versions in full, so there is none.
 
+use std::collections::HashMap;
+
 use similar::{ChangeTag, TextDiff};
 
 /// The share of words that must stay the same for a diff, in percent of the longer version's words. Below it, both
@@ -34,15 +36,24 @@ impl DiffPiece {
     }
 }
 
-/// The word diff from `before` to `after`, in order: the same and removed pieces make `before`, the same and added
-/// pieces make `after`. Neighbouring pieces are never of the same kind. `None` when the texts are equal, when
-/// neither has a word, or when fewer than [`MIN_KEPT_PERCENT`] of the longer version's words stay the same.
+/// A word diff: its pieces in order, the same and removed ones making the old version, the same and added ones the
+/// new. Neighbouring pieces are never of the same kind, and none is empty.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WordDiff {
+    pub pieces: Vec<DiffPiece>,
+    /// Whether every word stayed and only the whitespace between them changed.
+    pub spacing_only: bool,
+}
+
+/// The word diff from `before` to `after`. `None` when the texts are equal, when neither has a word, or when fewer
+/// than [`MIN_KEPT_PERCENT`] of the longer version's words stay the same.
 ///
-/// Size assumption: texts are at most a context's 20,000 characters and edits are mostly small, so Myers' diff over
-/// words is cheap; a whole rewrite of the longest context takes some tens of millions of steps, which a page of
-/// history can afford. If texts grow much longer, bound the work.
-pub fn diff_words(before: &str, after: &str) -> Option<Vec<DiffPiece>> {
-    if before == after {
+/// Size assumption: texts are at most a context's 20,000 characters, some 4,000 words, and a page of history holds up
+/// to 200 edits. Myers' diff costs the texts' length times the number of edits, so it is cheap for the small edits
+/// most changes are; a rewrite would be the costly case, and a count of the words the versions share turns it away
+/// before any diff is made. If texts grow much longer, bound the diff's work as well.
+pub fn diff_words(before: &str, after: &str) -> Option<WordDiff> {
+    if before == after || !could_keep_enough(before, after) {
         return None;
     }
     let diff = TextDiff::from_words(before, after);
@@ -60,11 +71,38 @@ pub fn diff_words(before: &str, after: &str) -> Option<Vec<DiffPiece>> {
     let kept = count_words(&|tag| tag == ChangeTag::Equal);
     let before_words = count_words(&|tag| tag != ChangeTag::Insert);
     let after_words = count_words(&|tag| tag != ChangeTag::Delete);
-    let longer = before_words.max(after_words);
-    if longer == 0 || kept * 100 < longer * MIN_KEPT_PERCENT {
+    if !keeps_enough(kept, before_words.max(after_words)) {
         return None;
     }
-    Some(group_pieces(&merge_tokens(&tokens)))
+    Some(WordDiff {
+        pieces: group_pieces(&merge_tokens(&tokens)),
+        spacing_only: kept == before_words && kept == after_words,
+    })
+}
+
+fn keeps_enough(kept: usize, longer: usize) -> bool {
+    longer > 0 && kept * 100 >= longer * MIN_KEPT_PERCENT
+}
+
+/// Whether the words the versions share, counted regardless of order, are enough. The words a diff keeps are never
+/// more, so a rewrite is turned away without one.
+fn could_keep_enough(before: &str, after: &str) -> bool {
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    let mut before_words = 0;
+    for word in before.split_whitespace() {
+        *counts.entry(word).or_default() += 1;
+        before_words += 1;
+    }
+    let mut after_words = 0;
+    let mut shared = 0;
+    for word in after.split_whitespace() {
+        after_words += 1;
+        if let Some(count) = counts.get_mut(word).filter(|count| **count > 0) {
+            *count -= 1;
+            shared += 1;
+        }
+    }
+    keeps_enough(shared, before_words.max(after_words))
 }
 
 /// The tokens with neighbours of one kind joined.
@@ -84,8 +122,8 @@ fn merge_tokens(tokens: &[(ChangeTag, &str)]) -> Vec<DiffPiece> {
     pieces
 }
 
-/// Joins each run of edits split only by whitespace into one removed and one added piece, the whitespace in both.
-/// A run that only adds or only removes stays as it is.
+/// Joins each run of edits split only by spaces into one removed and one added piece, the spaces in both. A line
+/// break ends a run, so each side keeps its lines. A run that only adds or only removes stays as it is.
 fn group_pieces(pieces: &[DiffPiece]) -> Vec<DiffPiece> {
     let mut grouped = Vec::new();
     let mut run: Vec<&DiffPiece> = Vec::new();
@@ -93,6 +131,7 @@ fn group_pieces(pieces: &[DiffPiece]) -> Vec<DiffPiece> {
         let inside_run = piece.kind != DiffPieceKind::Same
             || (!run.is_empty()
                 && is_blank(&piece.text)
+                && !piece.text.contains('\n')
                 && pieces
                     .get(index + 1)
                     .is_some_and(|next| next.kind != DiffPieceKind::Same));
@@ -141,6 +180,24 @@ mod tests {
         DiffPiece::new(kind, text)
     }
 
+    fn pieces_of(before: &str, after: &str) -> Option<Vec<DiffPiece>> {
+        diff_words(before, after).map(|diff| diff.pieces)
+    }
+
+    /// Whether a removed and an added piece are split only by spaces, which grouping should have joined.
+    fn has_unjoined_run(pieces: &[DiffPiece]) -> bool {
+        pieces.windows(3).any(|three| match three {
+            [first, middle, last] => {
+                first.kind == Removed
+                    && last.kind == Added
+                    && middle.kind == Same
+                    && is_blank(&middle.text)
+                    && !middle.text.contains('\n')
+            }
+            _ => false,
+        })
+    }
+
     fn rebuild(pieces: &[DiffPiece], side: DiffPieceKind) -> String {
         pieces
             .iter()
@@ -151,7 +208,7 @@ mod tests {
 
     #[gtest]
     fn a_small_edit_marks_only_the_changed_words() {
-        let pieces = diff_words("Ship the web app on Friday", "Ship the web app on Monday");
+        let pieces = pieces_of("Ship the web app on Friday", "Ship the web app on Monday");
 
         expect_that!(
             pieces,
@@ -165,7 +222,7 @@ mod tests {
 
     #[gtest]
     fn a_reworded_phrase_reads_as_one_removed_and_one_added_piece() {
-        let pieces = diff_words(
+        let pieces = pieces_of(
             "We ship it in early spring to every team",
             "We ship it after our review to every team",
         );
@@ -183,7 +240,7 @@ mod tests {
 
     #[gtest]
     fn line_breaks_are_kept() {
-        let pieces = diff_words("First line\nSecond line\nThird", "First line\nSecond row\nThird");
+        let pieces = pieces_of("First line\nSecond line\nThird", "First line\nSecond row\nThird");
 
         expect_that!(
             pieces,
@@ -198,7 +255,7 @@ mod tests {
 
     #[gtest]
     fn an_added_sentence_is_one_added_piece() {
-        let pieces = diff_words("Done when it ships.", "Done when it ships. Then tell the team.");
+        let pieces = pieces_of("Done when it ships.", "Done when it ships. Then tell the team.");
 
         expect_that!(
             pieces,
@@ -232,17 +289,51 @@ mod tests {
 
     #[gtest]
     fn a_spacing_change_is_a_diff_of_whitespace_only() {
-        let pieces = diff_words("one two", "one\ntwo");
+        let diff = diff_words("one two", "one\ntwo");
+
+        expect_that!(
+            diff,
+            some(eq(&WordDiff {
+                pieces: vec![
+                    piece(Same, "one"),
+                    piece(Removed, " "),
+                    piece(Added, "\n"),
+                    piece(Same, "two"),
+                ],
+                spacing_only: true,
+            }))
+        );
+        expect_that!(
+            diff_words("ship on Friday", "ship on Monday"),
+            some(field!(WordDiff.spacing_only, is_false()))
+        );
+    }
+
+    #[gtest]
+    fn a_run_of_edits_stops_at_a_line_break() {
+        let pieces = pieces_of(
+            "Line one ends here\nnext line starts here",
+            "Line one ends there\nso line starts here",
+        );
 
         expect_that!(
             pieces,
             some(elements_are![
-                eq(&piece(Same, "one")),
-                eq(&piece(Removed, " ")),
-                eq(&piece(Added, "\n")),
-                eq(&piece(Same, "two")),
+                eq(&piece(Same, "Line one ends ")),
+                eq(&piece(Removed, "here")),
+                eq(&piece(Added, "there")),
+                eq(&piece(Same, "\n")),
+                eq(&piece(Removed, "next")),
+                eq(&piece(Added, "so")),
+                eq(&piece(Same, " line starts here")),
             ])
         );
+    }
+
+    #[gtest]
+    fn a_rewrite_with_the_same_words_in_another_order_is_still_judged_by_the_diff() {
+        // Every word is shared, so the count lets it through, but the diff keeps only two of six.
+        expect_that!(diff_words("a b c d e f", "f e d c b a"), none());
     }
 
     proptest! {
@@ -251,11 +342,13 @@ mod tests {
             before in "[ab \n]{0,40}",
             after in "[ab \n]{0,40}",
         ) {
-            if let Some(pieces) = diff_words(&before, &after) {
+            if let Some(pieces) = pieces_of(&before, &after) {
                 prop_assert_eq!(rebuild(&pieces, Removed), before);
                 prop_assert_eq!(rebuild(&pieces, Added), after);
                 prop_assert!(pieces.windows(2).all(|pair| pair[0].kind != pair[1].kind));
                 prop_assert!(pieces.iter().all(|piece| !piece.text.is_empty()));
+                // A run of edits is joined into one removed and one added piece, but never across a line break.
+                prop_assert!(!has_unjoined_run(&pieces));
             }
         }
     }

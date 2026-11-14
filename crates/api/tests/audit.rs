@@ -70,11 +70,14 @@ async fn an_items_history_reads_newest_first_with_names_for_ids() -> Result<()> 
     expect_that!(
         edit["changes"],
         eq(&json!([
-            { "field": "title", "label": "Title", "before": "Rotate keys", "after": "Rotate all keys", "text_diff": [
-                { "kind": "same", "text": "Rotate " },
-                { "kind": "added", "text": "all " },
-                { "kind": "same", "text": "keys" },
-            ] },
+            { "field": "title", "label": "Title", "before": "Rotate keys", "after": "Rotate all keys", "text_diff": {
+                "pieces": [
+                    { "kind": "same", "text": "Rotate " },
+                    { "kind": "added", "text": "all " },
+                    { "kind": "same", "text": "keys" },
+                ],
+                "spacing_only": false,
+            } },
             { "field": "state", "label": "State", "before": "Open", "after": "In progress", "text_diff": null },
             { "field": "need", "label": "Need", "before": "Expected", "after": "Critical", "text_diff": null },
             { "field": "tags", "label": "Tags", "before": null, "after": "ops", "text_diff": null },

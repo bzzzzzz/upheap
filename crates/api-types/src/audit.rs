@@ -1,7 +1,7 @@
 //! Reading the audit log: a heap's history and a team's history, or one entity's within them.
 
 use domain::audit::{AuditAction, EntityType};
-use domain::text_diff::{DiffPiece, DiffPieceKind};
+use domain::text_diff::{DiffPiece, DiffPieceKind, WordDiff};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -176,13 +176,32 @@ pub struct AuditChangeDto {
     /// `null` when it had no value, and for values with no short form, such as what a saved view shows.
     pub before: Option<String>,
     pub after: Option<String>,
-    /// The edit as a word diff, whitespace and line breaks kept: the same and removed pieces make `before`, the same
-    /// and added pieces make `after`. Only for an edited item title or context, step title or context, or heap
-    /// context with a value before and after; `null` otherwise, and when too little stayed the same, so both are
-    /// shown in full.
+    /// The edit as a word diff. Only for an edited item title or context, step title or context, or heap context
+    /// with a value before and after; `null` otherwise, and when too little stayed the same, so both are shown in
+    /// full.
     #[serde(default)]
     #[schema(required = true)]
-    pub text_diff: Option<Vec<AuditDiffPieceDto>>,
+    pub text_diff: Option<AuditTextDiffDto>,
+}
+
+/// An edited text as a word diff, whitespace and line breaks kept.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[schema(as = AuditTextDiff)]
+pub struct AuditTextDiffDto {
+    /// In order: the same and removed pieces make `before`, the same and added pieces make `after`. Neighbours are
+    /// never of the same kind.
+    pub pieces: Vec<AuditDiffPieceDto>,
+    /// Whether every word stayed and only the whitespace between them changed.
+    pub spacing_only: bool,
+}
+
+impl From<WordDiff> for AuditTextDiffDto {
+    fn from(diff: WordDiff) -> Self {
+        Self {
+            pieces: diff.pieces.into_iter().map(Into::into).collect(),
+            spacing_only: diff.spacing_only,
+        }
+    }
 }
 
 /// Whether a piece of a text diff is in both versions, only the new one or only the old one.

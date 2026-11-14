@@ -302,6 +302,8 @@ test("History shows an edited context as a diff, its long unchanged start folded
   await expect(edit).not.toContainText("step1 ");
   await edit.getByRole("button", { name: "… 25 more words" }).click();
   await expect(edit).toContainText("step1 step2");
+  // The button goes, so focus moves to the stretch it unfolded.
+  await expect(edit.locator("span[tabindex='-1']")).toBeFocused();
   // Setting the context from nothing has nothing to diff, so it shows in full.
   await expect(edits.nth(1)).toContainText(`${start} then ship on Friday`);
   await expect(edits.nth(1).locator("ins, del")).toHaveCount(0);

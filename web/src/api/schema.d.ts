@@ -1540,13 +1540,7 @@ export interface components {
             field: string;
             /** @description The field in words. */
             label: string;
-            /**
-             * @description The edit as a word diff, whitespace and line breaks kept: the same and removed pieces make `before`, the same
-             *     and added pieces make `after`. Only for an edited item title or context, step title or context, or heap
-             *     context with a value before and after; `null` otherwise, and when too little stayed the same, so both are
-             *     shown in full.
-             */
-            text_diff: components["schemas"]["AuditDiffPiece"][] | null;
+            text_diff: null | components["schemas"]["AuditTextDiff"];
         };
         /** @description A stretch of text that is the same, added or removed. */
         AuditDiffPiece: {
@@ -1606,6 +1600,16 @@ export interface components {
             /** Format: uuid */
             id: string;
             item: null | components["schemas"]["ItemOrigin"];
+        };
+        /** @description An edited text as a word diff, whitespace and line breaks kept. */
+        AuditTextDiff: {
+            /**
+             * @description In order: the same and removed pieces make `before`, the same and added pieces make `after`. Neighbours are
+             *     never of the same kind.
+             */
+            pieces: components["schemas"]["AuditDiffPiece"][];
+            /** @description Whether every word stayed and only the whitespace between them changed. */
+            spacing_only: boolean;
         };
         /**
          * @description Where shown blocked items go.

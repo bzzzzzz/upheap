@@ -13,7 +13,7 @@ use domain::permission::{Permission, visible_audit_actions};
 use domain::question::QuestionKind;
 use domain::step::StepState;
 use domain::team::Role;
-use domain::text_diff::{DiffPiece, diff_words};
+use domain::text_diff::{WordDiff, diff_words};
 use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, RunId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
@@ -87,7 +87,7 @@ pub struct AuditChange {
     /// The edit as a word diff, for an edited text with a value before and after: an item's title and context, a
     /// step's title and context, a heap's context. `None` for any other change, and when too little stayed the same
     /// to read well as a diff.
-    pub text_diff: Option<Vec<DiffPiece>>,
+    pub text_diff: Option<WordDiff>,
 }
 
 /// Which history to read and from where.
@@ -913,7 +913,7 @@ const fn describe_role(role: Role) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use domain::text_diff::DiffPieceKind;
+    use domain::text_diff::{DiffPiece, DiffPieceKind};
     use googletest::prelude::*;
     use serde_json::json;
 
@@ -1170,11 +1170,14 @@ mod tests {
             elements_are![
                 eq(&change("step", "Step", None, Some("Run in prod"))),
                 eq(&AuditChange {
-                    text_diff: Some(vec![
-                        piece(DiffPieceKind::Same, "Run in "),
-                        piece(DiffPieceKind::Removed, "staging"),
-                        piece(DiffPieceKind::Added, "prod"),
-                    ]),
+                    text_diff: Some(WordDiff {
+                        pieces: vec![
+                            piece(DiffPieceKind::Same, "Run in "),
+                            piece(DiffPieceKind::Removed, "staging"),
+                            piece(DiffPieceKind::Added, "prod"),
+                        ],
+                        spacing_only: false,
+                    }),
                     ..change("step_title", "Step title", Some("Run in staging"), Some("Run in prod"))
                 }),
                 eq(&change("step_context", "Step context", Some("old"), None)),
@@ -1205,19 +1208,25 @@ mod tests {
             elements_are![
                 field!(
                     AuditChange.text_diff,
-                    some(elements_are![
-                        eq(&piece(DiffPieceKind::Same, "Launch")),
-                        eq(&piece(DiffPieceKind::Added, " day")),
-                    ])
+                    some(field!(
+                        WordDiff.pieces,
+                        elements_are![
+                            eq(&piece(DiffPieceKind::Same, "Launch")),
+                            eq(&piece(DiffPieceKind::Added, " day")),
+                        ]
+                    ))
                 ),
                 field!(
                     AuditChange.text_diff,
-                    some(elements_are![
-                        eq(&piece(DiffPieceKind::Same, "Ship it on ")),
-                        eq(&piece(DiffPieceKind::Removed, "Friday.")),
-                        eq(&piece(DiffPieceKind::Added, "Monday.")),
-                        eq(&piece(DiffPieceKind::Same, "\nTell the team.")),
-                    ])
+                    some(field!(
+                        WordDiff.pieces,
+                        elements_are![
+                            eq(&piece(DiffPieceKind::Same, "Ship it on ")),
+                            eq(&piece(DiffPieceKind::Removed, "Friday.")),
+                            eq(&piece(DiffPieceKind::Added, "Monday.")),
+                            eq(&piece(DiffPieceKind::Same, "\nTell the team.")),
+                        ]
+                    ))
                 ),
             ]
         );
@@ -1238,7 +1247,10 @@ mod tests {
             changes,
             elements_are![field!(
                 AuditChange.text_diff,
-                some(contains(eq(&piece(DiffPieceKind::Added, "whole "))))
+                some(field!(
+                    WordDiff.pieces,
+                    contains(eq(&piece(DiffPieceKind::Added, "whole ")))
+                ))
             )]
         );
     }

@@ -151,7 +151,7 @@ function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: str
 /** A change's values: as a word diff when the server sent one, else the old value struck through and the new one. */
 function ChangeValues({ before, after, text_diff }: AuditChange) {
   if (text_diff) {
-    return <TextDiff pieces={text_diff} />;
+    return <TextDiff diff={text_diff} />;
   }
   if (before == null && after == null) {
     return <span>changed</span>;
