@@ -41,7 +41,8 @@ pub async fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(EXIT_UNEXPECTED);
         }
     };
-    crate::init_tracing(config.log_format, "warn", BoxMakeWriter::new(std::io::stderr));
+    // At info, unlike `user reset-link`: with `MAIL_URL=log:` the test mail itself is an info line.
+    crate::init_tracing(config.log_format, "info", BoxMakeWriter::new(std::io::stderr));
     let Some(mailer) = &config.mail else {
         eprintln!("Mail isn't set up: set MAIL_URL and MAIL_FROM.");
         return ExitCode::from(EXIT_MAIL);
@@ -89,7 +90,7 @@ async fn send_test(
             )?;
             Ok(0)
         }
-        Err(mail::MailError::InvalidRecipient(_)) => {
+        Err(mail::SendError::InvalidRecipient(_)) => {
             writeln!(stderr, "{address} isn't an email address.")?;
             Ok(EXIT_USAGE)
         }

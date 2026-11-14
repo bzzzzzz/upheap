@@ -85,16 +85,16 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 
 Mail is optional: without `MAIL_URL` and `MAIL_FROM` the server sends none. To set it up, pick any SMTP provider, set
 up its sending domain (the SPF and DKIM records it gives you), and set `MAIL_URL` and `MAIL_FROM`. Use port 465
-(`smtps://`) or 587 (`smtp://`, which requires STARTTLS and never sends in cleartext): many hosts, Cloud Run included,
-block port 25. Percent-encode special characters in the password (`@` as `%40`, `/` as `%2F`). For example, with
-Resend:
+(`smtps://`) or 587 (`smtp://`, which always requires STARTTLS and never sends in cleartext): many hosts, Cloud Run
+included, block port 25. Percent-encode special characters in the user and password (`@` as `%40`, `/` as `%2F`, `?`
+as `%3F`, `#` as `%23`). For example, with Resend:
 
 ```sh
 MAIL_URL='smtps://resend:<API key>@smtp.resend.com:465'
 MAIL_FROM='Upheap <upheap@example.com>'
 ```
 
-Restart the server and check that the `listening` line in its log has `mail` set to the URL, without the user and password.
+Restart the server and check that the `listening` line in its log has `mail` set to the scheme, host and port.
 Then send a test mail:
 
 ```sh

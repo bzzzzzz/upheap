@@ -17,18 +17,23 @@ pub struct Mail {
     pub body: String,
 }
 
-/// Why a mailer couldn't be built or a mail couldn't be sent. None of them holds the SMTP password.
+/// Why a mailer couldn't be built from its settings. None of them holds the SMTP password.
 #[derive(Debug, thiserror::Error)]
-pub enum MailError {
+pub enum MailerError {
     /// The mail URL isn't one this crate can use; the reason never repeats the URL.
     #[error("{0}")]
     InvalidUrl(String),
     #[error("the sender isn't an email address")]
     InvalidSender(#[source] lettre::address::AddressError),
+}
+
+/// Why a mail wasn't sent.
+#[derive(Debug, thiserror::Error)]
+pub enum SendError {
     #[error("the recipient isn't an email address")]
     InvalidRecipient(#[source] lettre::address::AddressError),
     #[error("the mail wasn't sent")]
-    Send(#[source] Box<dyn std::error::Error + Send + Sync>),
+    Transport(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// Where a mailer's mail goes.
@@ -49,33 +54,23 @@ pub struct Mailer {
 
 impl Mailer {
     /// Builds a mailer from `MAIL_URL` (`smtps://`, `smtp://`, `file://` or `log:`) and `MAIL_FROM`. Does no network
-    /// IO. An `smtp://` URL without a `tls=` parameter gets `tls=required`, so it never sends in cleartext.
-    pub fn new(url: &str, from: &str) -> Result<Self, MailError> {
-        let from: Mailbox = from.parse().map_err(MailError::InvalidSender)?;
+    /// IO.
+    pub fn new(url: &str, from: &str) -> Result<Self, MailerError> {
+        let from: Mailbox = from.parse().map_err(MailerError::InvalidSender)?;
         let (transport, description) = if url == "log:" {
             (Transport::Log, url.to_owned())
         } else if let Some(dir) = url.strip_prefix("file://") {
             if !Path::new(dir).is_dir() {
-                return Err(MailError::InvalidUrl(format!("directory {dir} doesn't exist")));
+                return Err(MailerError::InvalidUrl(format!("directory {dir} doesn't exist")));
             }
             (
                 Transport::File(AsyncFileTransport::new(PathBuf::from(dir))),
                 url.to_owned(),
             )
         } else if url.starts_with("smtps://") || url.starts_with("smtp://") {
-            let mut parsed = Url::parse(url).map_err(|error| MailError::InvalidUrl(error.to_string()))?;
-            if parsed.scheme() == "smtp" && !parsed.query_pairs().any(|(key, _)| key == "tls") {
-                parsed.query_pairs_mut().append_pair("tls", "required");
-            }
-            let builder = AsyncSmtpTransport::<Tokio1Executor>::from_url(parsed.as_str())
-                .map_err(|error| MailError::InvalidUrl(error.to_string()))?;
-            // The user goes too: some providers take the API token as the user name. Removing them fails only for a
-            // URL that can't hold them, which from_url has already refused.
-            let _ = parsed.set_password(None);
-            let _ = parsed.set_username("");
-            (Transport::Smtp(builder.build()), parsed.to_string())
+            build_smtp(url)?
         } else {
-            return Err(MailError::InvalidUrl(
+            return Err(MailerError::InvalidUrl(
                 "must start with smtps://, smtp://, file:// or log:".to_owned(),
             ));
         };
@@ -87,8 +82,8 @@ impl Mailer {
     }
 
     /// Sends `mail` from the configured sender. Fails when `mail.to` isn't an address or the transport fails.
-    pub async fn send(&self, mail: Mail) -> Result<(), MailError> {
-        let to: Mailbox = mail.to.parse().map_err(MailError::InvalidRecipient)?;
+    pub async fn send(&self, mail: Mail) -> Result<(), SendError> {
+        let to: Mailbox = mail.to.parse().map_err(SendError::InvalidRecipient)?;
         // From and To are set, and those are all the builder requires.
         #[allow(clippy::expect_used)]
         let message = Message::builder()
@@ -108,7 +103,8 @@ impl Mailer {
         }
     }
 
-    /// Where mail goes: `MAIL_URL` without the user and password. For logs and the test command.
+    /// Where mail goes: the transport's scheme, and for SMTP its host and port, never the user or password. For logs
+    /// and the test command.
     pub fn describe(&self) -> &str {
         &self.description
     }
@@ -119,8 +115,40 @@ impl Mailer {
     }
 }
 
-fn boxed(error: impl std::error::Error + Send + Sync + 'static) -> MailError {
-    MailError::Send(Box::new(error))
+/// An SMTP transport from an `smtps://` or `smtp://` URL, and its description: scheme, host and port only, since a
+/// password with an unencoded `/`, `?` or `#` can end up in any other part. `smtp://` always requires STARTTLS:
+/// lettre's `tls=opportunistic`, or no `tls=` at all, would send the password in cleartext to a server, or a
+/// man in the middle, that doesn't offer it.
+fn build_smtp(url: &str) -> Result<(Transport, String), MailerError> {
+    let mut parsed = Url::parse(url).map_err(|error| MailerError::InvalidUrl(error.to_string()))?;
+    let starttls = parsed.scheme() == "smtp";
+    if starttls {
+        match parsed
+            .query_pairs()
+            .find(|(key, _)| key == "tls")
+            .map(|(_, value)| value.into_owned())
+        {
+            None => {
+                parsed.query_pairs_mut().append_pair("tls", "required");
+            }
+            Some(value) if value == "required" => {}
+            Some(_) => {
+                return Err(MailerError::InvalidUrl(
+                    "smtp:// always requires STARTTLS; leave tls= out, or use smtps://".to_owned(),
+                ));
+            }
+        }
+    }
+    let transport = AsyncSmtpTransport::<Tokio1Executor>::from_url(parsed.as_str())
+        .map_err(|error| MailerError::InvalidUrl(error.to_string()))?
+        .build();
+    let port = parsed.port().unwrap_or(if starttls { 587 } else { 465 });
+    let description = format!("{}://{}:{port}", parsed.scheme(), parsed.host_str().unwrap_or_default());
+    Ok((Transport::Smtp(transport), description))
+}
+
+fn boxed(error: impl std::error::Error + Send + Sync + 'static) -> SendError {
+    SendError::Transport(Box::new(error))
 }
 
 #[cfg(test)]
@@ -137,7 +165,7 @@ mod tests {
         let urls = [
             "smtps://user:s3cret@smtp.example.com",
             "smtp://user:s3cret@smtp.example.com:2525",
-            "smtp://user:s3cret@smtp.example.com?tls=opportunistic",
+            "smtp://user:s3cret@smtp.example.com?tls=required",
         ];
 
         // Act
@@ -151,9 +179,9 @@ mod tests {
         expect_that!(
             described,
             elements_are![
-                eq("smtps://smtp.example.com"),
-                eq("smtp://smtp.example.com:2525?tls=required"),
-                eq("smtp://smtp.example.com?tls=opportunistic"),
+                eq("smtps://smtp.example.com:465"),
+                eq("smtp://smtp.example.com:2525"),
+                eq("smtp://smtp.example.com:587"),
             ]
         );
         expect_that!(described.concat(), not(contains_substring("s3cret")));
@@ -179,23 +207,29 @@ mod tests {
     fn bad_settings_are_named() {
         expect_that!(
             Mailer::new("http://x", FROM),
-            err(matches_pattern!(MailError::InvalidUrl(contains_substring(
+            err(matches_pattern!(MailerError::InvalidUrl(contains_substring(
                 "must start with"
             ))))
         );
         expect_that!(
             Mailer::new("smtps://", FROM),
-            err(matches_pattern!(MailError::InvalidUrl(_)))
+            err(matches_pattern!(MailerError::InvalidUrl(_)))
+        );
+        expect_that!(
+            Mailer::new("smtp://u:p@smtp.example.com?tls=opportunistic", FROM),
+            err(matches_pattern!(MailerError::InvalidUrl(contains_substring(
+                "STARTTLS"
+            ))))
         );
         expect_that!(
             Mailer::new("file:///no/such/upheap/dir", FROM),
-            err(matches_pattern!(MailError::InvalidUrl(contains_substring(
+            err(matches_pattern!(MailerError::InvalidUrl(contains_substring(
                 "doesn't exist"
             ))))
         );
         expect_that!(
             Mailer::new("log:", "not an address"),
-            err(matches_pattern!(MailError::InvalidSender(_)))
+            err(matches_pattern!(MailerError::InvalidSender(_)))
         );
     }
 
@@ -245,7 +279,7 @@ mod tests {
         let result = mailer.send(mail).await;
 
         // Assert
-        expect_that!(result, err(matches_pattern!(MailError::InvalidRecipient(_))));
+        expect_that!(result, err(matches_pattern!(SendError::InvalidRecipient(_))));
         expect_that!(std::fs::read_dir(dir.path()).or_fail()?.count(), eq(0));
         Ok(())
     }

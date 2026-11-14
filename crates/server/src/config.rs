@@ -94,10 +94,9 @@ impl Config {
                     .context("MAIL_FROM is required when MAIL_URL is set")?;
                 // The errors don't repeat the URL, so none of them holds the SMTP password.
                 let mailer = mail::Mailer::new(url.trim(), from.trim()).map_err(|error| match error {
-                    mail::MailError::InvalidSender(_) => {
-                        anyhow::anyhow!("MAIL_FROM must be an address such as \"Upheap <upheap@example.com>\"")
-                    }
-                    other => anyhow::anyhow!("MAIL_URL: {other}"),
+                    mail::MailerError::InvalidSender(_) => anyhow::Error::new(error)
+                        .context("MAIL_FROM must be an address such as \"Upheap <upheap@example.com>\""),
+                    mail::MailerError::InvalidUrl(_) => anyhow::Error::new(error).context("MAIL_URL"),
                 })?;
                 Some(mailer)
             }

@@ -224,7 +224,7 @@ History
 
 ### Choices
 
-1. **Plain SMTP, not a provider's HTTP API.** One code path for every provider; switching is four settings.
+1. **Plain SMTP, not a provider's HTTP API.** One code path for every provider; switching is two settings.
    Passes the bar for decisions.md (D). Now [decisions.md §37](../decisions.md#37-mail-goes-out-over-smtp-not-a-providers-http-api).
 2. **Plain text only, no HTML.** Every client shows it, links are clickable, nothing to render or test across
    clients. HTML can come later without changing a link.
