@@ -50,8 +50,10 @@ pub struct WordDiff {
 ///
 /// Size assumption: texts are at most a context's 20,000 characters, some 4,000 words, and a page of history holds up
 /// to 200 edits. Myers' diff costs the texts' length times the number of edits, so it is cheap for the small edits
-/// most changes are; a rewrite would be the costly case, and a count of the words the versions share turns it away
-/// before any diff is made. If texts grow much longer, bound the diff's work as well.
+/// most changes are. A rewrite would be the costly case, and a count of the words the versions share turns it away
+/// before any diff is made. What gets past the count keeps its words in another order: moving half of a 4,000-word
+/// text takes about 3 ms in a release build, and reversing every word, the worst case, about 80 ms. If such edits
+/// become common or texts grow much longer, bound the diff's work or move it off the async threads.
 pub fn diff_words(before: &str, after: &str) -> Option<WordDiff> {
     if before == after || !could_keep_enough(before, after) {
         return None;

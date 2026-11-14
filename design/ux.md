@@ -468,11 +468,13 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     agent's change the same way.
 22. **History shows an edited text as a word diff**: an item's title and context, a step's title and context, and a
     heap's context, in the item's History, the heap's and Activity. Removed words are red and struck through, added
-    ones teal, both on a soft background, in light and dark; line breaks are kept. An unchanged stretch over 24 words
-    folds to the 8 words next to each edit, and the rest is a button, "… N more words", that unfolds that stretch. A
-    change of spacing alone reads "Only spacing changed"; spacing changed beside a word edit shows as the new
-    spacing. Where there is nothing to diff (set from nothing, cleared, any other field) or under 40% of the longer
-    version's words stayed the same, the change shows as before: the old value struck through, an arrow, the new one.
+    ones teal, both on a soft background, in light and dark; line breaks are kept. These are overdue's red and done's
+    teal, an exception to one colour meaning one thing, agreed for the diff on its mockup; they are their own tokens,
+    so they can move apart. An unchanged stretch over 24 words folds to the 8 words next to each edit, and the rest
+    is a button, "… N more words", that unfolds that stretch. A change of spacing alone reads "Only spacing changed";
+    spacing changed beside a word edit shows as the new spacing. Where there is nothing to diff (set from nothing,
+    cleared, any other field) or under 40% of the longer version's words stayed the same, the change shows as before:
+    the old value struck through, an arrow, the new one.
 
 ## Adding an item
 
