@@ -2,6 +2,7 @@
 //!
 //! Calls return the server's body as well as the value read from it, so `--json` can print the body unchanged.
 
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use api_types::oauth::{OAuthErrorDto, RevokeRequestForm, TokenRequestForm, TokenResponseDto};
@@ -17,6 +18,35 @@ use crate::config::is_loopback;
 /// doesn't leave loopback out by itself).
 fn uses_proxy(server: &Url) -> bool {
     !is_loopback(server)
+}
+
+/// The HTTP clients of a process, one that may go through a proxy and one that never does. Each is built the first
+/// time it's needed and then shared by every [`ApiClient`]: a build loads the system's root certificates, which on
+/// macOS asks securityd, one daemon for the whole machine, and `work run` makes a client for every claim, heartbeat
+/// and finish. Cheap to clone; clones share the clients. A build that fails isn't kept.
+#[derive(Clone, Default)]
+pub struct HttpClients {
+    proxied: Arc<OnceLock<reqwest::Client>>,
+    direct: Arc<OnceLock<reqwest::Client>>,
+}
+
+impl HttpClients {
+    /// The client for requests to `server`.
+    fn for_server(&self, server: &Url) -> Result<reqwest::Client, ClientError> {
+        let proxied = uses_proxy(server);
+        let shared = if proxied { &self.proxied } else { &self.direct };
+        if let Some(http) = shared.get() {
+            return Ok(http.clone());
+        }
+        let builder = reqwest::Client::builder()
+            .user_agent(concat!("upheap/", env!("CARGO_PKG_VERSION")))
+            .timeout(Duration::from_secs(30))
+            // A redirect could carry a form with a refresh token or a code verifier to another host.
+            .redirect(reqwest::redirect::Policy::none());
+        let builder = if proxied { builder } else { builder.no_proxy() };
+        let http = builder.build().map_err(ClientError::Setup)?;
+        Ok(shared.get_or_init(|| http).clone())
+    }
 }
 
 /// The query of a request that has none.
@@ -66,20 +96,10 @@ pub enum ClientError {
 }
 
 impl ApiClient {
-    /// A client of `server` that sends `time_zone`, an IANA name, with every request, so labels and dates come back
-    /// in the machine's timezone. Without one, the server uses UTC.
-    pub fn new(server: Url, time_zone: Option<String>) -> Result<Self, ClientError> {
-        let builder = reqwest::Client::builder()
-            .user_agent(concat!("upheap/", env!("CARGO_PKG_VERSION")))
-            .timeout(Duration::from_secs(30))
-            // A redirect could carry a form with a refresh token or a code verifier to another host.
-            .redirect(reqwest::redirect::Policy::none());
-        let builder = if uses_proxy(&server) {
-            builder
-        } else {
-            builder.no_proxy()
-        };
-        let http = builder.build().map_err(ClientError::Setup)?;
+    /// A client of `server`, over one of `http`, that sends `time_zone`, an IANA name, with every request, so labels
+    /// and dates come back in the machine's timezone. Without one, the server uses UTC.
+    pub fn new(http: &HttpClients, server: Url, time_zone: Option<String>) -> Result<Self, ClientError> {
+        let http = http.for_server(&server)?;
         Ok(Self {
             http,
             server,
@@ -358,7 +378,7 @@ mod tests {
             std::io::Result::Ok(String::from_utf8_lossy(&head).to_lowercase())
         });
 
-        ApiClient::new(server, None)?
+        ApiClient::new(&HttpClients::default(), server, None)?
             .post_empty(&["work", "runs", "r", "heartbeat"], "token")
             .await?;
 

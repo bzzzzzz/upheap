@@ -15,8 +15,8 @@ use std::time::Duration as StdDuration;
 use anyhow::{Context, Result};
 use api::{AppState, CookieSettings};
 use cli::{
-    AgentTools, Browser, Deps, Environment, Interrupt, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError,
-    Tool, ToolError, ToolReport, ToolStart, WorkDeps,
+    AgentTools, Browser, Deps, Environment, HttpClients, Interrupt, MemoryTokenStore, StoredTokens, TokenStore,
+    TokenStoreError, Tool, ToolError, ToolReport, ToolStart, WorkDeps,
 };
 use domain::sign_in::SignInLimit;
 use domain::{Duration, Timestamp};
@@ -394,10 +394,23 @@ impl TestServer {
     }
 }
 
+/// The CLI's HTTP clients, one set for every machine and run in the test binary, as each build reads the system's
+/// root certificates, which is slow when many tests ask at once.
+fn shared_http() -> HttpClients {
+    static SHARED: std::sync::LazyLock<HttpClients> = std::sync::LazyLock::new(HttpClients::default);
+    SHARED.clone()
+}
+
 /// An HTTP client for the test server, which ignores any proxy the environment names, as the CLI does for a server on
-/// this machine.
+/// this machine. Built once and shared, as the CLI's is: each build reads the system's root certificates, which is slow
+/// when many tests ask at once.
 fn local_client() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder().no_proxy().build()?)
+    static SHARED: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(http) = SHARED.get() {
+        return Ok(http.clone());
+    }
+    let http = reqwest::Client::builder().no_proxy().build()?;
+    Ok(SHARED.get_or_init(|| http).clone())
 }
 
 /// The value of `name` in `url`'s query.
@@ -552,6 +565,7 @@ impl TestCli {
                     .unwrap_or_else(|_| jiff::Timestamp::now())
             }),
             work,
+            http: shared_http(),
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
         Outcome {
@@ -856,6 +870,7 @@ impl Agent {
             stdout: Box::new(stdout.clone()),
             stderr: Box::new(stderr.clone()),
             clock: Arc::new(jiff::Timestamp::now),
+            http: shared_http(),
             work: WorkDeps {
                 tools: Box::new(StandIn::not_installed()),
                 interrupts: Box::new(move || no_interrupts),
