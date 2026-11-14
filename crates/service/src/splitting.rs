@@ -38,7 +38,10 @@ impl Services {
     /// A person's close takes back the note's open turn and withdraws its open questions, as any close does. In a run
     /// the note must be the run's item, and it is refused with [`ServiceError::NotReached`] (and the run only heard
     /// from) unless it has no open question and every open task made from it has a context and a step that isn't
-    /// dropped (those still in the note's heap; one moved away is the person's). Otherwise each of those tasks becomes
+    /// dropped (those still in the note's heap or in a heap made from the note; one moved away is the person's), and
+    /// each heap made from the note has a context and an open item made from the note, and each open note made from
+    /// it there has a context ([`domain::run::made_heaps_check`]). A made heap the person archived is ignored. Made
+    /// heaps are locked with the note's, in heap ID order. Otherwise each of those tasks becomes
     /// defined, the note closes as became, and the run and the turn end as reached; no next turn opens on the note.
     /// Each of those tasks with an open turn that defined meets has it ended as reached, as a person's stage edit
     /// would ([`Services::end_met_turn`], how `became`). When the note's turn was sent all the way, each of those
@@ -216,7 +219,19 @@ impl Services {
                 ),
                 None => None,
             };
-            let result = became_result(&made, &made_heaps, team.as_ref())?;
+            // Items in a made heap the person archived are theirs: the result names neither the heap nor them, unless
+            // nothing else was made.
+            let reported: Vec<Item> = made
+                .iter()
+                .filter(|item| {
+                    !candidates.iter().any(|made_heap| {
+                        made_heap.id == item.heap_id && !made_heaps.iter().any(|kept| kept.id == made_heap.id)
+                    })
+                })
+                .cloned()
+                .collect();
+            let reported = if reported.is_empty() { &made } else { &reported };
+            let result = became_result(reported, &made_heaps, team.as_ref())?;
             let ended_run = scope.run.ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None);
             store::runs::end_run(&txn, &ended_run).await?;
             self.reach_turn(&txn, heap, principal, &scope, &saved, now).await?;

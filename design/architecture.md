@@ -208,7 +208,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   prepare turn, or one the person sent) ends as reached there too, as a stage edit ends it (`end_met_turn`, how
   `became`). A heap made from the note counts as made: the same transaction defines the open tasks in it, and the
   run's `became` first checks that each such heap has a context, an open item made from the note, and a context on
-  each open note made from it (`made_heaps_check`). The tasks in a made heap get no turn from the note's. If the note's turn was sent all the way, each of those tasks not started and without an open turn gets
+  each open note made from it (`made_heaps_check`). A made heap the person archived is ignored. The tasks in a made heap get no turn from the note's. If the note's turn was sent all the way, each of those tasks not started and without an open turn gets
   one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener, to done), but not one
   whose ended turn the person sent: that task stays as they left it; a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`). The audit API sends an entry's run (`run`, with
@@ -414,7 +414,8 @@ a fixed time.
    one writer at a time, so there the second of two conflicting writes fails instead of waiting; the outcome that
    matters, no inconsistent state, holds either way.
 2. A move of an item to another heap of its team locks both heaps in heap ID order, as the agent's queue locks
-   several, then reads the item with a locking read and checks its version. Two moves in opposite directions can't
+   several, then reads the item with a locking read and checks its version. A run's `became` locks the note's heap and
+   the active heaps made from the note the same way, since it defines the tasks in them. Two moves in opposite directions can't
    wait for each other, and the second of two moves of one item finds it changed. The item's own blocker is part of
    its old heap's state, so the moved item stays blocked with nobody picked. The items that waited for it keep it as
    their blocker, now in another heap of the team, so they wait for the person (§3), and a move back makes it hold

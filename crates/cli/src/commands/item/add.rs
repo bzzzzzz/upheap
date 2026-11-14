@@ -142,7 +142,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     };
     let origin = match (from_name, args.from.as_deref(), args.age) {
         (Some(name), Some(typed), Some(age)) => Some(OriginInputDto {
-            item_id: origin_id_of(name, typed, &api).await?,
+            item_id: origin_id_of(name, typed, args.heap.name.is_some(), &api).await?,
             age,
         }),
         _ => None,
@@ -255,10 +255,10 @@ pub(in crate::commands) async fn item_id_of(
     Ok(api.get_item(typed, &key).await?.value.id)
 }
 
-/// The ID of the note `--from` names. A bare key is the note of the heap the item goes to, or, in a heap made from a
-/// note, that note, which is in another heap.
-async fn origin_id_of(name: ItemName, typed: &str, api: &HeapApi<'_>) -> Result<Uuid, CliError> {
-    if let ItemName::Key(key) = &name {
+/// The ID of the note `--from` names. A bare key is the note of the heap the item goes to, or, with `--heap` naming a
+/// heap made from a note (`heap_named`), that note, which is in another heap.
+async fn origin_id_of(name: ItemName, typed: &str, heap_named: bool, api: &HeapApi<'_>) -> Result<Uuid, CliError> {
+    if let (ItemName::Key(key), true) = (&name, heap_named) {
         let target = api.get::<HeapDto>(&[], NO_QUERY).await?;
         if let Some(origin) = target.value.origin.filter(|origin| origin.key == *key) {
             return Ok(origin.id);
