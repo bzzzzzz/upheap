@@ -42,7 +42,8 @@ type Main = { label: string; state: ItemState } | { label: "Make it a task"; sta
 /**
  * What the item's main button and ⋯ offer (ux.md, The item §6), each only when the server allows it. The main button
  * is the likeliest next state, Make it a task for a reminder that has arrived, or Reopen on a closed item. ⋯ holds the
- * other states, Won't do, Make it a task…, Send to an agent…, Change blocker…, Add reason… or Change reason…, Copy link and the Stage choices.
+ * other states, Won't do, Make it a task…, Send to an agent…, Change blocker…, Add reason… or Change reason…, Copy
+ * link and the Stage choices.
  */
 function actionsOf(item: Item) {
   const allowed = item.allowed_actions;

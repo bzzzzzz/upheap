@@ -310,10 +310,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
    accent), and for a closed item when it closed, or "It can't be reopened." A blocked item says "Blocked by" and
    links to the item it waits for, which opens in the pane, or just "Blocked" while none is named. A reason in words
-   follows: "Blocked: <reason>", or "Blocked by <item>: <reason>" with both. It wraps, never shortened. ⋯ on a blocked item has Add reason… or Change reason… under
-   Change blocker…, which opens "Why it's blocked" (a popover, a sheet on a phone): one line, where Enter saves, and
-   Remove reason or an empty save clears it. It holds 300 characters, with a counter from 250. A failed save keeps
-   the draft and says why, and a save shows no toast. Then the chips: the item's place in the list, "#3" (point 9), and who has the item when an agent does, or the button that sends it to
+   follows: "Blocked: <reason>", or "Blocked by <item>: <reason>" with both. It wraps, never shortened. ⋯ on a
+   blocked item has Add reason… or Change reason… under Change blocker…, which opens "Why it's blocked" (a popover, a
+   sheet on a phone): one line, where Enter saves, and Remove reason or an empty save clears it. It holds 300
+   characters, with a counter from 250. A failed save keeps the draft and says why, and a save shows no toast. Then
+   the chips: the item's place in the list, "#3" (point 9), and who has the item when an agent does, or the button that sends it to
    one when none does (point 15). A
    reminder still ahead has a line under it, "Joins the list on 12 March". The header bar names the section the item
    is in ("Up next") and has no rank.
@@ -328,7 +329,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    for a reminder that has arrived (its state's own choice then moves into ⋯), Reopen for a closed item while it can
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
    always there, and holds, each only when the server allows it and in this order: the other state changes, Won't do,
-   Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked item, Copy link, and the Stage choices.
+   Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked item, Copy link,
+   and the Stage choices.
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
    a popover (a sheet on a phone) and saves on a pick. Copy link confirms with a toast, "Link copied", as the menu has
    closed by then. Make it a task asks first, naming the item, since a task can't go back to a note (or to a
