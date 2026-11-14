@@ -47,6 +47,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/oidc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The provider people may sign in through on this server. */
+        get: operations["provider"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/oidc/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where the provider sends the browser back. Registered with the provider as `{BASE_URL}/api/v1/auth/oidc/callback`.
+         * @description Always answers `303`. A known person is signed in and sent to the page the sign-in started from, or `/`. A new
+         *     one is sent to `/login/provider` to pick a username. A refusal is sent to `/login?sign_in_error=<code>`, with
+         *     `redirect` when the sign-in started from a page, and `login` for `email_taken`. The codes are `email_taken`,
+         *     `email_unverified`, `provider_refused`, `sign_in_expired` and `provider_unreachable`.
+         */
+        get: operations["callback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/oidc/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who the provider vouched for, for the username step. */
+        get: operations["pending"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/oidc/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finishes a first sign-in through the provider: makes the user with the username they picked, with a personal
+         *     team and heap, and signs in. Works while registration is closed.
+         * @description Fails like registering when the username is invalid or taken, and leaves the sign-in to try again.
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/oidc/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Starts a sign-in: sends the browser to the provider.
+         * @description A link to follow, not a request to make. Sets the `upheap_oidc` cookie that the callback and the username step
+         *     read. When the provider can't be reached, the browser is sent to the sign-in page with `sign_in_error` set to
+         *     `provider_unreachable`.
+         */
+        get: operations["start"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -2570,6 +2670,31 @@ export interface components {
             /** @description Always `Bearer`. */
             token_type: string;
         };
+        /** @description Who the provider vouched for, shown on the username step. */
+        OidcPending: {
+            display_name: string;
+            email: string;
+        };
+        /** @description The OpenID Connect provider people may sign in through on this server. */
+        OidcProvider: {
+            /** @description What the sign-in button names, such as `Acme SSO`. */
+            label: string;
+        };
+        /** @description The username a person picks to finish a first sign-in through the provider. */
+        OidcRegisterRequest: {
+            /**
+             * @description Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of
+             *     the personal team, and can't be changed later.
+             * @example eugene
+             */
+            username: string;
+        };
+        /** @description A user made through the provider, signed in. */
+        OidcRegistered: {
+            /** @description The app path the sign-in started from, to go to next, if it started from one. */
+            redirect?: string | null;
+            user: components["schemas"]["User"];
+        };
         /** @description One option of a new arrangement. */
         OptionArrangement: {
             /** Format: uuid */
@@ -3557,6 +3682,185 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    provider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The label of the provider's sign-in button */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcProvider"];
+                };
+            };
+            /** @description `not_found`: the server has no provider */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    callback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The authorization code. */
+                code: string | null;
+                state: string | null;
+                /** @description Set when the person or the provider refused, such as `access_denied`. */
+                error: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed in (sets the session cookie), to the username step, or to the sign-in page with the reason */
+            303: {
+                headers: {
+                    /** @description Where to go */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `not_found`: the server has no provider */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pending: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sign-in of this browser waits for a username */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcPending"];
+                };
+            };
+            /** @description `not_found`: no provider, or no verified sign-in in this browser, or it ended */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OidcRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Registered and signed in; sets the session cookie */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OidcRegistered"];
+                };
+            };
+            /** @description `not_found`: no provider, or no verified sign-in in this browser, or it ended */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `email_taken` (`field` `email`), or `handle_taken` (`field` `username`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_empty` or `invalid_handle` (with a `hint`) for the username */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The app path to go to once signed in, such as `/invite/<token>`. Dropped unless it starts with a single `/`
+                 *     and holds no control character or space.
+                 */
+                redirect: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description To the provider's authorization endpoint, or to the sign-in page when it can't be reached */
+            303: {
+                headers: {
+                    /** @description Where to go */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `not_found`: the server has no provider */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
         };
     };

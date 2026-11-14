@@ -1,9 +1,10 @@
 // The Password card on Account: changing the password, which ends the user's other sign-ins (design/ux.md,
-// Password). Server build only; the server says so with the `change_password` action.
-import { useRef, useState, type FormEvent } from "react";
+// Password). The server says so with the `change_password` action; a user without a password, who signs in through
+// the server's OpenID Connect provider, sees the card's frame with a line in place of the button.
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiProblem } from "../api/client";
-import { useChangePassword } from "../api/queries";
+import { useChangePassword, useOidcProvider } from "../api/queries";
 import { AccountHistoryDisclosure } from "./AccountHistory";
 import { compactButtonClass } from "./buttons";
 import { problemMessage, ProblemText } from "./ProblemText";
@@ -28,6 +29,28 @@ function newPasswordMessage(error: Error): string {
 function endedMessage(ended: number): string {
   if (ended === 0) return "Password changed. No other sign-ins were open.";
   return `Password changed. ${ended} other sign-in${ended === 1 ? "" : "s"} ended.`;
+}
+
+/** The card's frame: its title with `action` beside it, then `children`, then the History disclosure. */
+function PasswordFrame({ action, children }: { action?: ReactNode; children?: ReactNode }) {
+  return (
+    <section aria-labelledby="password" className="rounded-[14px] border border-line bg-surface p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="password" className="text-base font-semibold">
+          Password
+        </h2>
+        {action}
+      </div>
+      {children}
+      <AccountHistoryDisclosure />
+    </section>
+  );
+}
+
+/** The card of a user who has no password: they sign in through the provider. */
+export function NoPasswordCard() {
+  const label = useOidcProvider().data?.label ?? "an identity provider";
+  return <PasswordFrame action={<p className="text-sm text-ink-soft">You sign in through {label}.</p>} />;
 }
 
 /** `inputClass` is the look of the Profile card's input, which the card shares. */
@@ -79,12 +102,9 @@ export function PasswordCard({ inputClass }: { inputClass: string }) {
   };
 
   return (
-    <section aria-labelledby="password" className="rounded-[14px] border border-line bg-surface p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="password" className="text-base font-semibold">
-          Password
-        </h2>
-        {!open && (
+    <PasswordFrame
+      action={
+        !open && (
           <button
             ref={opener}
             type="button"
@@ -96,8 +116,9 @@ export function PasswordCard({ inputClass }: { inputClass: string }) {
           >
             Change password
           </button>
-        )}
-      </div>
+        )
+      }
+    >
       {ended !== null && !open && (
         <p role="status" className="mt-3 text-sm text-ink-soft">
           {endedMessage(ended)}
@@ -153,8 +174,7 @@ export function PasswordCard({ inputClass }: { inputClass: string }) {
           <p className="-mt-2 text-xs text-muted">This signs you out of your other browsers and the command line.</p>
         </form>
       )}
-      <AccountHistoryDisclosure />
-    </section>
+    </PasswordFrame>
   );
 }
 

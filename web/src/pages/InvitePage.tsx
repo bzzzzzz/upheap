@@ -242,6 +242,7 @@ function SignedOut({
         </div>
       }
       initialMode="register"
+      providerRedirect={`/invite/${token}`}
       register={request}
       registerLabel="Create account and join"
       registerNote={`You'll join ${team} as a member, and get a heap of your own too.`}

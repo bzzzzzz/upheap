@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Tab, TabList, TabPanel, Tabs, type Key } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
-import { useRegister, useSignIn } from "../api/queries";
+import { useOidcProvider, useRegister, useSignIn } from "../api/queries";
+import { BASE } from "../basePath";
 import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";
 import { problemMessage } from "../components/ProblemText";
@@ -16,6 +17,34 @@ const FIELDS: Record<Mode, readonly FieldName[]> = {
   sign_in: ["login", "password"],
   register: ["display_name", "username", "email", "password"],
 };
+
+/** Create account's footnote, which the username step after a provider sign-in has too. */
+export const REGISTER_NOTE = "You'll start in your own heap. Teams come next.";
+
+/** The Username field's hint, as sign-up and the username step say it. */
+export const USERNAME_HINT = "Lowercase letters, digits and dashes. It's in your links, and can't be changed later.";
+
+/**
+ * The line a refused sign-in through the provider gets above the card's button, from the `sign_in_error` code the
+ * server sent the browser back with; nothing for a code that isn't known. `login` is the address of the account that
+ * has the provider's email, which `email_taken` names.
+ */
+function refusalLine(code: string | undefined, label: string, login: string | undefined): string | undefined {
+  switch (code) {
+    case "email_taken":
+      return login ? `An account with ${login} exists. Sign in with its password below.` : undefined;
+    case "email_unverified":
+      return `${label} didn't share a verified email address, which Upheap needs.`;
+    case "provider_refused":
+      return `${label} didn't sign you in. Try again.`;
+    case "sign_in_expired":
+      return "That sign-in took too long. Try again.";
+    case "provider_unreachable":
+      return `${label} can't be reached right now. Try again in a minute.`;
+    default:
+      return undefined;
+  }
+}
 
 /** What Create account sends. */
 type RegisterBody = { email: string; username: string; display_name: string; password: string };
@@ -38,6 +67,11 @@ export type RegisterRequest = {
  * The invite page (ux.md, Invite page) uses the same switch and forms, changed through the optional props: `header`
  * above the switch, `initialMode` (Create account comes first in the switch when it starts selected), its own
  * `register` request, and Create account's submit label (`registerLabel`) and footnote (`registerNote`).
+ *
+ * When the server has a provider, a button to sign in through it comes first (ux.md, Sign in and create account).
+ * `providerRedirect` is the app path the provider sign-in returns to. A refused one comes back to the sign-in page
+ * with `refusal` set to the server's code: the line says why, and `initialLogin` is the address `email_taken` carries,
+ * which fills "Email or username" with the password next to type.
  */
 export function AuthPage({
   notice,
@@ -45,7 +79,10 @@ export function AuthPage({
   initialMode = "sign_in",
   register: registerOverride,
   registerLabel = "Create account",
-  registerNote = "You'll start in your own heap. Teams come next.",
+  registerNote = REGISTER_NOTE,
+  providerRedirect,
+  refusal,
+  initialLogin,
   onSignedIn,
 }: {
   notice?: string;
@@ -54,17 +91,25 @@ export function AuthPage({
   register?: RegisterRequest;
   registerLabel?: string;
   registerNote?: string;
+  providerRedirect?: string | undefined;
+  refusal?: string | undefined;
+  initialLogin?: string | undefined;
   onSignedIn: () => void;
 }) {
+  const provider = useOidcProvider().data;
+  // Gone once a form is submitted. A new `refusal` in the address is a new sign-in, which comes with a new page.
+  const [refusalShown, setRefusalShown] = useState(true);
+  const refusalText = refusalShown && provider ? refusalLine(refusal, provider.label, initialLogin) : undefined;
+  const carriesLogin = refusal === "email_taken" && initialLogin !== undefined;
   const [mode, setMode] = useState<Mode>(initialMode);
   // After "Sign in instead", the password is the next thing to type: the address is already carried over.
-  const [focusPassword, setFocusPassword] = useState(false);
+  const [focusPassword, setFocusPassword] = useState(carriesLogin);
   // Kept across the switch, so an email typed under Sign in stays for Create account; the password isn't.
   const [values, setValues] = useState<Values>({
     display_name: "",
     username: "",
     email: "",
-    login: "",
+    login: carriesLogin ? (initialLogin ?? "") : "",
     password: "",
   });
   // Here rather than in the form, which the switch unmounts: a submit's navigation must outlive it.
@@ -101,16 +146,17 @@ export function AuthPage({
         setFocusPassword(true);
         selectMode("sign_in");
       }}
-      onSubmit={() =>
-        formMode === "sign_in"
+      onSubmit={() => {
+        setRefusalShown(false);
+        return formMode === "sign_in"
           ? signIn.mutate({ login: values.login, password: values.password }, { onSuccess: onSignedIn })
           : register.mutate({
               display_name: values.display_name,
               username: values.username,
               email: values.email,
               password: values.password,
-            })
-      }
+            });
+      }}
       values={values}
       onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}
     />
@@ -120,6 +166,12 @@ export function AuthPage({
     <AuthCard>
       {header}
       {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
+      {refusalText && (
+        <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+          {refusalText}
+        </p>
+      )}
+      {provider && <ProviderButton label={provider.label} redirect={providerRedirect} />}
       {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
       {/* Held while a submit is pending, so its result lands on the form that sent it. */}
       <Tabs
@@ -169,6 +221,29 @@ export function AuthCard({ children }: { children: ReactNode }) {
 /** The card's main button: 52 px on a phone, 44 px beyond. A link styled as one adds `flex items-center justify-center`. */
 export const authButtonClass =
   "h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
+
+/**
+ * Sign in through the provider, then the "or" rule that sets it apart from the forms. A plain link: the browser
+ * leaves for the provider and comes back to the callback, which is no request of the app's.
+ */
+function ProviderButton({ label, redirect }: { label: string; redirect: string | undefined }) {
+  const query = redirect === undefined ? "" : `?${new URLSearchParams({ redirect })}`;
+  return (
+    <>
+      <a
+        href={`${BASE}/api/v1/auth/oidc/start${query}`}
+        className="flex h-[52px] w-full items-center justify-center rounded-[14px] border border-line-strong bg-surface text-base font-semibold text-ink sm:h-11 sm:rounded-[10px] sm:text-sm"
+      >
+        Sign in with {label}
+      </a>
+      <div role="separator" className="flex items-center gap-3 text-xs text-muted">
+        <span className="h-px flex-1 bg-line" />
+        or
+        <span className="h-px flex-1 bg-line" />
+      </div>
+    </>
+  );
+}
 
 const tabClass =
   "flex h-10 flex-1 cursor-default items-center justify-center rounded-[10px] text-sm text-ink-soft sm:h-auto sm:rounded-lg sm:p-[7px] data-selected:bg-surface data-selected:font-semibold data-selected:text-ink data-selected:shadow-[0_1px_2px_rgba(0,0,0,0.08)]";
@@ -254,7 +329,7 @@ function AuthForm({
         <Field
           label="Username"
           {...field("username")}
-          hint="Lowercase letters, digits and dashes. It's in your links, and can't be changed later."
+          hint={USERNAME_HINT}
           autoComplete="username"
           autoCapitalize="none"
           autoCorrect="off"

@@ -58,23 +58,30 @@ export function Heading({ children, moveFocus }: { children: ReactNode; moveFocu
   );
 }
 
-/** A link that can't be used, in words and the way back: Open Upheap sends a signed-out visitor on to sign-in. */
+/**
+ * A link that can't be used, in words and the way back: Open Upheap sends a signed-out visitor on to sign-in, or
+ * `action` takes its place.
+ */
 export function Notice({
   heading,
   moveFocus,
   children,
+  action,
 }: {
   heading: string;
   moveFocus: MoveFocus;
   children?: ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <Heading moveFocus={moveFocus}>{heading}</Heading>
       {children}
-      <Link to="/" className={`${authButtonClass} mt-1 flex items-center justify-center`}>
-        Open Upheap
-      </Link>
+      {action ?? (
+        <Link to="/" className={`${authButtonClass} mt-1 flex items-center justify-center`}>
+          Open Upheap
+        </Link>
+      )}
     </div>
   );
 }
