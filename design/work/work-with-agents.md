@@ -658,8 +658,7 @@ change it makes carries the run it was made in.
 
 1. The agents' progress is the runs that ended as reached, newest first, each with its item, the state reached
    and its result. Asked and failed runs are on the item only. A run that went past its turn's goal shows the
-   state it reached and the one it skipped: "defined (skipped with context)". Until the progress is built, the
-   `turn_reached` audit entry of the run holds the stage before and after, and `work run` prints the line.
+   state it reached and the one it skipped: "defined (skipped with context)".
 2. Costs are added up per item and per heap, by the unit the agent tool reported them in.
 3. Every change an agent makes is in the audit log as the person's, marked as made by an agent, with its run.
 4. Contexts are part of the audit log like any field: each change keeps the text before and after.
@@ -813,8 +812,6 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | W7 | Item: closed questions with their replies, change a reply | P13 | Weekly | Enabler | A wrong answer has no other fix |
 | W8 | Item: what it came from and what it became | P4, P10 | Weekly | Enabler | After a split it's the only way from the note to its tasks |
 | W9 | Item: runs with result, links and cost, and the total | P10, A5 | Weekly | Enabler | Asked and failed runs, and why a turn is stuck, are nowhere else |
-| W10 | Agents: progress across heaps, and what waits for a decision | P4, P10 | Daily | Core | P4 starts here; a prepared note is otherwise found only by scrolling |
-| W11 | Navigation: Waiting for me and Agents | all | Constant | Core | Both are across heaps and have no place today |
 | W12 | Add: a reminder with its date | P1 | Weekly | Enabler | A reminder can't be made otherwise |
 | W13 | Heap settings: context, agents prepare | P8 | Once | Core | Golden path step 1 |
 | W14 | Heap settings: my priority for this heap | Queue §2 | Sometimes | Enabler | With two heaps it's the only way to say which comes first |
@@ -870,24 +867,6 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 ### Wireframes: web app
 
 One wireframe per screen; entries that share a screen share a wireframe.
-
-```
-ALL WIDTHS · Navigation (W11)                         constant · core
-Wide sidebar, tablet rail              Phone tabs
-┌────────────────────────┐             ┌──────────────────────────────────────┐
-│ Waiting for me       3 │             │ Open   Waiting 3   [+]  Agents  More │
-│ Agents                 │             └──────────────────────────────────────┘
-│ ────────────────────── │             More: Closed, Settings, Activity, Team,
-│ [Work · Acme ▾]        │                   Teams, Account
-│ Open 14                │
-│ Closed                 │
-│ Activity               │
-│ Settings               │
-│ team, Teams, Account   │
-└────────────────────────┘
-States: no count at zero. The count is fetched again every 30 s on every page, as the list is, so it
-never lags a row that shows a question.
-```
 
 ```
 ALL WIDTHS · List row (W1)                            constant · core
@@ -990,36 +969,6 @@ The runs' total is shown per unit when the runs reported more than one ("$1.20 a
 Confirmations: Send on acts at once, with Undo while no run has started. Take back asks first.
 States: loading, saved, conflict (shows the other version, as today), read-only in an archived heap.
 Next likely action: reply when something waits; otherwise send on, or tick a step.
-```
-
-```
-ALL WIDTHS · Agents (W10)                             daily · core
-┌────────────────────────────────────────────────────────────────────────┐
-│ Agents                                                                 │
-│                                                                        │
-│ Your decision · 2                                                      │
-│   Rotate the certs     Work    note, with context         2 h ago      │
-│   Move the blog        Work    made the heap "Blog move"  yesterday    │
-│                                                                        │
-│ Today                                                                  │
-│   14:02  Rotate the certs · Work               reached: with context   │
-│          Filled the context from the infra repo's runbook.             │
-│   11:40  Fix the footer · Site                 reached: done           │
-│          Footer links fixed.   ↗ pull request                          │
-│ Yesterday                                                              │
-│   …                                                                    │
-│ Load more                                                              │
-└────────────────────────────────────────────────────────────────────────┘
-Your decision: items with the person whose latest turn ended as reached, with no turn opened and no
-         change of state or stage since; and for a note closed as became in such a turn, one row
-         standing for what it became, until any of those is sent on, started or closed. Most important
-         first, ordered as Waiting for me is.
-History: runs that ended as reached, newest first: the item, its heap, the state reached, the run's
-         result in a line or two, and its links. No cost here; it's on the item.
-A row opens its item.
-States: empty (says no agent has finished anything yet, and shows the command that starts one);
-        loading; a failed refresh keeps the rows.
-Next likely action: open the first item under Your decision.
 ```
 
 ```

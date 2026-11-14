@@ -97,11 +97,11 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
 | Width                | Navigation                                                                                                                                                                                                                | List                                                     | Item                                                  |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More                                                                       | Full width, compact rows                                 | Bottom sheet over the list                            |
-| Tablet, 640–1023 px  | An 80 px rail: Waiting, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
+| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                       | Full width, compact rows                                 | Bottom sheet over the list                            |
+| Tablet, 640–1023 px  | An 80 px rail: Waiting, Agents, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me, Agents and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
-**More** on a phone holds Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
+**More** on a phone holds Closed, Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
 the Add button beside the heap name shows only from a tablet up.
 
@@ -109,8 +109,8 @@ The sidebar and the rail list the heap's views (Open, Closed, Activity, Data, Se
 the team in the URL (a link to its page, shown on the heap's pages and the team's own), Teams and Account. The heap's title names its team too ("Product ·
 Acme"), on the phone's top bar as well, except for a heap in the personal team.
 
-A phone's tabs have room for four: Waiting sits left of the + and Closed right of it, and Settings, Activity and Data go
-into More with the account pages.
+A phone's tabs have room for four: Waiting sits left of the + and Agents right of it, and Closed, Settings, Activity
+and Data go into More with the account pages. More shows as active on the pages it holds, Closed among them.
 
 **Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
 me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count as a small badge on
@@ -119,7 +119,12 @@ person's heaps, fetched with the page and again every 30 seconds while the tab i
 question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and after a reply
 or an item's change.
 
-**All items** sits under Waiting for me, in the same bordered block of the sidebar and the rail: a layers icon, "All
+**Agents** sits under Waiting for me, in the same block: a bot icon, "Agents" with the number of rows under Your
+decision (Agents) shown as Waiting for me's count is: on the right in the sidebar, as a badge on the icon in the rail
+and the tabs, none at zero. It is fetched with the page and again every 30 seconds, on focus and after a change of an
+item, as that count is.
+
+**All items** sits under Agents, in the same bordered block of the sidebar and the rail: a layers icon, "All
 items" in the sidebar with the person's open items on the right, "All" in the rail with no count. The count is the sum
 of the open counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when
 those do. On a phone the heap switcher's sheet starts with an "All heaps" row, the same count at its right, marked
@@ -128,7 +133,7 @@ bar are as on Waiting for me.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
-that is `/waiting` and `/all`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
+that is `/waiting`, `/agents` and `/all`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
 there and active, else the first active heap, else the first.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
@@ -601,6 +606,49 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
     optional: what is left, if not yet", and **Close as done**, the primary button, and **Not yet**, which sends the
     task back to the agent with the comment. Close as done is the only reply with a toast: "“<title>” is done." with
     **Open**, which opens the closed item (Reopen is there). Not yet has none.
+
+## Agents
+
+The page at `/agents`: what agents finished across the person's active heaps. Your decision is the items an agent
+brought to a stable state that now wait for the person; under it is the history of the runs that ended as reached.
+
+1. The heading is "Agents" and under it a quiet line, "What agents finished, across your heaps." Everything is one
+   column at the app's content width, as Waiting for me is, and no item pane opens beside the page. A title opens its
+   item over the page, and closing it comes back here. A heap is named by its name, with its team's only when the
+   person is in more than one team.
+2. **Your decision** is left out when nothing is in it. Its heading is a button, "Your decision · 4", with a chevron
+   that turns when the section is folded; folding hides the rows and keeps the count, and the person's choice is
+   remembered in this browser. A row is the item's title as an accent, underlined link, its heap, the item in words
+   ("note, with context", "task, defined"), or, for a note that became other items, what it made ("made 3 tasks",
+   "made the heap “Blog move” and 2 tasks"), and how long ago the agent finished it ("today", "yesterday", "4 days
+   ago"). A row has no buttons: the item is where the person sends it on, starts it or closes it.
+3. A row is there while the agent's work is the last thing that happened to the item: its latest turn ended as
+   reached by a run that ended as reached, the item is not in progress or closed, and it is still at the state the run
+   reached. Sending it on, starting it, closing it or setting its stage back takes it out. A turn the person reached
+   (by setting the stage, or agreeing to a done proposal), or one a claim found already met, has no such run and no
+   row, and a note that became a step of a task has none, as the task already existed. A note that became items or
+   heaps is one row standing for them, until any of what it made is sent on, started or closed (being blocked does
+   not take it out). The order is Waiting for me's: the item's score in its own heap times the person's priority for
+   that heap, highest first, then the heap and the position; a note that became items takes the best of its made items
+   that are ranked, and sorts as an unranked item when none is.
+4. The first 5 rows show, and under them "Show N more" unfolds the rest in place and "Show less" folds them back. A
+   reload starts folded again. Past 500 rows the first 500 show, with "Showing the 500 most important of n."
+5. **History** lists the runs that ended as reached in the last 30 days, newest first, grouped by day with a heading
+   ("Today", "Yesterday", "12 Nov"; the day is the one in the person's time zone). A row is the time, the item's
+   title as a link and its heap, then "reached: with context", "reached: defined" or "reached: became", the result
+   cut to two lines, and the run's links. When the run went past its turn's goal the state says so: "reached: defined
+   (skipped with context)"; a run that ended before the state was recorded says "reached" alone. A link to a pull
+   request or merge request reads "↗ pull request"; any other shows its address without `https://`. Links open in a new
+   tab and the title opens the item. Turns the person reached, and asked or failed runs, are not here: asked and
+   failed runs are on the item. A task an agent proposed closing and the person closed has no reached run, so it is
+   not in History.
+6. Fifty runs load at a time, and "Load more" under the last day loads the next. When the last page has loaded the
+   page says, quiet, "That's the last 30 days. Older runs are on their items." Cost is on the item, not here.
+7. Loading says "Loading…". With nothing in Your decision and no run in the history the page says "No agent has
+   finished anything yet." and, under it, "Start one in a terminal:" with `upheap work run` as code. Both lists and the
+   count are fetched again every 30 seconds while the tab is visible, and on focus; a failed refresh keeps the rows.
+8. On a phone a row takes two or three lines: the title with the time or how long ago, then the heap and the state,
+   then the result. Rows and buttons are at least 44 px tall.
 
 ## All items
 
