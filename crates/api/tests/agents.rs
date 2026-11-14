@@ -620,6 +620,22 @@ async fn a_note_that_became_items_sent_all_the_way_is_not_a_decision() -> Result
 
 #[gtest]
 #[tokio::test]
+async fn a_note_that_became_items_leaves_once_a_task_is_sent_on() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (_note, task) = w.became_note("Certs are a mess").await?;
+
+    // Act
+    w.send_turn(&w.heap, key_of(&task)).await?;
+    let decisions = w.decisions().await?;
+
+    // Assert
+    expect_that!(decisions, eq(&json!({ "count": 0, "rows": [] })));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_note_that_became_a_heap_ranks_by_the_best_item_made_in_it() -> Result<()> {
     // Arrange: a note with a context that an agent reached, and a note that became a heap holding a critical task.
     let w = world().await?;

@@ -117,7 +117,7 @@ pub struct ResultRowDto {
 pub struct RunLinkDto {
     /// The address.
     pub url: String,
-    /// What to show for it: "pull request" for a pull or merge request, else the address without `https://`.
+    /// What to show for it: "pull request" for a pull or merge request, else the address without its `https://` or `http://`.
     pub label: String,
     /// Whether it is a pull or merge request.
     pub pull_request: bool,
@@ -125,20 +125,47 @@ pub struct RunLinkDto {
 
 impl RunLinkDto {
     pub fn new(url: &str) -> Self {
-        let path = url
-            .strip_prefix("https://")
-            .or_else(|| url.strip_prefix("http://"))
-            .map_or(url, |rest| rest.find('/').map_or("", |at| &rest[at..]));
+        let scheme = ["https://", "http://"].into_iter().find(|scheme| {
+            url.get(..scheme.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(scheme))
+        });
+        let rest = scheme.map_or(url, |scheme| &url[scheme.len()..]);
+        let path = rest.find(['/', '?', '#']).map_or("", |at| &rest[at..]);
+        let path = path.split(['?', '#']).next().unwrap_or_default();
         let pull_request = path.contains("/pull/") || path.contains("/merge_requests/");
         let label = if pull_request {
             "pull request".to_owned()
         } else {
-            url.strip_prefix("https://").unwrap_or(url).to_owned()
+            rest.to_owned()
         };
         Self {
             url: url.to_owned(),
             label,
             pull_request,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn a_link_label_drops_either_scheme_and_a_pull_request_is_found_in_the_path_only() {
+        let plain = RunLinkDto::new("HTTP://wiki.example/page");
+        let query = RunLinkDto::new("https://host.example?u=/pull/1");
+        let pull = RunLinkDto::new("https://github.com/acme/app/pull/7#top");
+
+        expect_that!(
+            (plain.label.as_str(), plain.pull_request),
+            eq(("wiki.example/page", false))
+        );
+        expect_that!(
+            (query.label.as_str(), query.pull_request),
+            eq(("host.example?u=/pull/1", false))
+        );
+        expect_that!((pull.label.as_str(), pull.pull_request), eq(("pull request", true)));
     }
 }

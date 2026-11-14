@@ -638,7 +638,7 @@ brought to a stable state that now wait for the person; under it is the history 
    title as a link and its heap, then "reached: with context", "reached: defined" or "reached: became", the result
    cut to two lines, and the run's links. When the run went past its turn's goal the state says so: "reached: defined
    (skipped with context)"; a run that ended before the state was recorded says "reached" alone. A link to a pull
-   request or merge request reads "↗ pull request"; any other shows its address without `https://`. Links open in a new
+   request or merge request reads "↗ pull request"; any other shows its address without `https://` or `http://`. Links open in a new
    tab and the title opens the item. Turns the person reached, and asked or failed runs, are not here: asked and
    failed runs are on the item. A task an agent proposed closing and the person closed has no reached run, so it is
    not in History.

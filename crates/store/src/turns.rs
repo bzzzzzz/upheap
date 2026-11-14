@@ -112,7 +112,8 @@ pub async fn list_open_turns(
 /// The turns of the items of `heap_ids` that ended as reached and are the latest of their item (no turn opened
 /// after), where the item is neither done, won't do, nor in progress, in one query per [`IN_LIST_CHUNK`] heaps. A
 /// note that became items is left out once one of what was made from it is no longer open or blocked (started or
-/// closed), or has a turn opened at or after the note's turn ended (sent on). The order is the database's.
+/// closed), or has any turn (sent on: a made item starts with none, so any turn is the person's or one passed on
+/// by the split). The order is the database's.
 pub async fn list_latest_reached_turns_in_heaps(
     db: &impl ConnectionTrait,
     heap_ids: &[HeapId],
@@ -144,8 +145,7 @@ pub async fn list_latest_reached_turns_in_heaps(
                 "(items.state <> '{became}' OR NOT EXISTS (SELECT 1 FROM items made WHERE made.origin_id = items.id \
                  AND made.made_in_split = TRUE \
                  AND (made.state NOT IN ('{open}', '{blocked}') \
-                 OR EXISTS (SELECT 1 FROM item_turns sent WHERE sent.item_id = made.id \
-                 AND sent.opened_at >= item_turns.ended_at))))",
+                 OR EXISTS (SELECT 1 FROM item_turns sent WHERE sent.item_id = made.id))))",
                 became = StateKind::Became.code(),
                 open = StateKind::Open.code(),
                 blocked = StateKind::Blocked.code(),

@@ -90,7 +90,7 @@ impl Services {
     /// The items an agent brought to a stable state that still wait for the caller, in the active heaps of their
     /// teams: the latest turn of the item ended as reached by a run that ended as reached, the item is not closed or
     /// in progress, and it is still at the stage the run reached. A note that became items or heaps is one row, until
-    /// one of what it made is started, closed or sent on (a turn opened at or after the note's turn ended). Ordered as
+    /// one of what it made is started, closed or sent on (has any turn). Ordered as
     /// Waiting for me orders its rows: the item's
     /// score in its own heap times the caller's priority for that heap, highest first, then heap, then position. A
     /// became row takes the best of its made items that are ranked, or score 0.

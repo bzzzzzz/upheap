@@ -12689,7 +12689,7 @@
         "properties": {
           "label": {
             "type": "string",
-            "description": "What to show for it: \"pull request\" for a pull or merge request, else the address without `https://`."
+            "description": "What to show for it: \"pull request\" for a pull or merge request, else the address without its `https://` or `http://`."
           },
           "pull_request": {
             "type": "boolean",

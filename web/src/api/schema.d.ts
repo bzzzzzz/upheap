@@ -3534,7 +3534,7 @@ export interface components {
         RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back";
         /** @description A link a run left. */
         RunLink: {
-            /** @description What to show for it: "pull request" for a pull or merge request, else the address without `https://`. */
+            /** @description What to show for it: "pull request" for a pull or merge request, else the address without its `https://` or `http://`. */
             label: string;
             /** @description Whether it is a pull or merge request. */
             pull_request: boolean;
