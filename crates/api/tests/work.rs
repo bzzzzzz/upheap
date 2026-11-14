@@ -2714,3 +2714,69 @@ async fn a_heaps_priority_multiplies_its_scores_in_the_queue() -> Result<()> {
     expect_that!(after.body["item"]["title"], eq(&json!("In garage")));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn started_work_comes_before_a_slightly_higher_scored_item() -> Result<()> {
+    // Arrange: an agent has had a go at the first item; the second scores a little above it.
+    let w = world().await?;
+    let started = w
+        .add("Rotate the certs", json!({ "impact": "m", "effort": "m" }))
+        .await?;
+    w.send_turn(&started).await?;
+    w.fail_once().await?;
+    let fresh = w.add("Tidy the logs", json!({ "impact": "l", "effort": "m" })).await?;
+    w.send_turn(&fresh).await?;
+    let list = w
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/items", w.app.heap_url(&w.heap).await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Act
+    let next = w.next().await?;
+    let claimed = w.claim().await?;
+
+    // Assert
+    expect_that!(list.body["ranked"][0]["item"]["key"], eq(&json!(fresh)));
+    expect_that!(next.body["item"]["key"], eq(&json!(started)));
+    expect_that!(next.body["item"]["runs"], eq(&json!(1)));
+    expect_that!(claimed.status, eq(StatusCode::CREATED));
+    expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(started)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_critical_item_passes_started_nice_to_have_work() -> Result<()> {
+    // Arrange: an agent has had a go at a nice-to-have; a critical item of the same size comes in.
+    let w = world().await?;
+    let started = w
+        .add(
+            "Polish the footer",
+            json!({ "need": "nice_to_have", "impact": "m", "effort": "m" }),
+        )
+        .await?;
+    w.send_turn(&started).await?;
+    w.fail_once().await?;
+    let critical = w
+        .add(
+            "Servers are down",
+            json!({ "need": "critical", "impact": "m", "effort": "m" }),
+        )
+        .await?;
+    w.send_turn(&critical).await?;
+
+    // Act
+    let next = w.next().await?;
+    let claimed = w.claim().await?;
+
+    // Assert
+    expect_that!(next.body["item"]["key"], eq(&json!(critical)));
+    expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(critical)));
+    Ok(())
+}

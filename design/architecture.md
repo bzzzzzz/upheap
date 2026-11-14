@@ -165,7 +165,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   Like turns, runs are never deleted and never bump the item's `version`.
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
   blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
-  item's score in its own heap (`rank_open_items`, once per heap), then heap name, then position. A claim takes the
+  item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
+  `STARTED_BOOST` (3) when the open turn already had a run, however it ended, then heap name, then position. The
+  boost lets half-done work go on before new work of about the same importance while something much more important
+  still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the plain score. A claim takes the
   locks of every given heap in ID order, as the item writes do, so two claims at once get different items.
   **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
@@ -345,7 +348,7 @@ the default view's ranked group with each item's position under both. It stores 
 item is ranked and grouped under the request's view by the same code as its own list, so a row is what that list
 would show. Then each group (pinned, ranked, blocked) is merged across heaps by the item's score in its own heap
 times the caller's **heap priority** for that heap, highest first, then heap name, then the item's position in its
-heap, the same rule `GET /me/waiting` and the agents' queue order by. A heap priority is one person's own number
+heap, the same rule `GET /me/waiting` and the agents' queue order by (the queue also boosts started work, as above). A heap priority is one person's own number
 for one heap, 1 to 10: a `heap_priorities` row per person and heap, 1 when there is none, so teammates in a shared
 heap each order it their own way. Since a heap's group is already in score order and the priority is the same
 positive factor for all of a heap's items, the merge keeps every heap's own order. A change to it is audited in the

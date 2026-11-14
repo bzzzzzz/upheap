@@ -569,8 +569,9 @@ change it makes carries the run it was made in.
    and raising a heap's priority moves all of its items up.
 3. **Started work comes first.** An item whose turn already has a run, and which is ready to go on, gets a large
    boost in the queue: large enough that only something much more important passes it. Half-done work is
-   finished before new work of about the same importance is begun. The size of the boost is a number in the
-   formula, like the others.
+   finished before new work of about the same importance is begun. The boost is ×3, a number in the formula
+   like the others, and counts any run on the open turn, however it ended. It is the queue's only: the person's
+   lists keep the plain score.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
 5. A run ends in one of four ways: **reached**, with its result; **asked**, having attached at least one
