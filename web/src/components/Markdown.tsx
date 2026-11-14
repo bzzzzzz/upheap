@@ -3,6 +3,9 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 
+/** How a link in text written by people and agents looks. */
+export const linkClass = "text-accent-ink underline";
+
 /**
  * Text written by other people is shown here, never run: raw HTML is skipped (`skipHtml`, and no `rehype-raw`),
  * react-markdown's default URL transform stays on so a `javascript:` link is dropped, and an image is never loaded from
@@ -22,18 +25,14 @@ const components: Components = {
     // An in-page anchor, such as a footnote's, moves in place; every other link opens a tab, so the app stays open.
     const inPage = href.startsWith("#");
     return (
-      <a
-        href={href}
-        {...(inPage ? {} : { target: "_blank", rel: "noopener noreferrer" })}
-        className="text-accent-ink underline"
-      >
+      <a href={href} {...(inPage ? {} : { target: "_blank", rel: "noopener noreferrer" })} className={linkClass}>
         {children}
       </a>
     );
   },
   img: ({ src, alt }) =>
     typeof src === "string" && src !== "" ? (
-      <a href={src} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
+      <a href={src} target="_blank" rel="noopener noreferrer" className={linkClass}>
         {alt || src}
       </a>
     ) : (

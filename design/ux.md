@@ -87,7 +87,9 @@ in place, every other link opens in a new tab, and an unsafe one (`javascript:`)
 the text stays one, so plain text written before reads as it did. Long words and addresses break, and code blocks and
 tables scroll sideways inside their box, so the page never does. Writing stays a plain textarea of the Markdown source,
 with no toolbar and no preview. A turn's line, a stuck reason, error messages and a question's short text and choices
-are one line each and stay plain.
+are one line each and stay plain, except that in a question's text and choices a web address (`https://…`) and a
+Markdown link to one (`[the mockup](https://…)`) are links that open a new tab; a link in a choice opens without
+picking it. The rest of the line shows as written.
 
 ## Layout
 
