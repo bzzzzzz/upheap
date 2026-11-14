@@ -54,6 +54,7 @@ fn build_services(config: &Config, db: store::DatabaseConnection) -> Services {
             allow_registration: config.allow_registration,
             session_ttl: domain::Duration::from_days(i64::from(config.session_ttl_days)),
             sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
+            oidc: config.oidc.clone(),
         },
     )
 }

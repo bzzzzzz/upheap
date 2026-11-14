@@ -96,6 +96,247 @@
         }
       }
     },
+    "/api/v1/auth/oidc": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "The provider people may sign in through on this server.",
+        "operationId": "provider",
+        "responses": {
+          "200": {
+            "description": "The label of the provider's sign-in button",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OidcProvider"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the server has no provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/oidc/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Where the provider sends the browser back. Registered with the provider as `{BASE_URL}/api/v1/auth/oidc/callback`.",
+        "description": "Always answers `303`. A known person is signed in and sent to the page the sign-in started from, or `/`. A new\none is sent to `/login/provider` to pick a username. A refusal is sent to `/login?sign_in_error=<code>`, with\n`redirect` when the sign-in started from a page, and `login` for `email_taken`. The codes are `email_taken`,\n`email_unverified`, `provider_refused`, `sign_in_expired` and `provider_unreachable`.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "description": "The authorization code.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "state",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "error",
+            "in": "path",
+            "description": "Set when the person or the provider refused, such as `access_denied`.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Signed in (sets the session cookie), to the username step, or to the sign-in page with the reason",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Where to go"
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the server has no provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/oidc/pending": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Who the provider vouched for, for the username step.",
+        "operationId": "pending",
+        "responses": {
+          "200": {
+            "description": "The sign-in of this browser waits for a username",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OidcPending"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: no provider, or no verified sign-in in this browser, or it ended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/oidc/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Finishes a first sign-in through the provider: makes the user with the username they picked, with a personal\nteam and heap, and signs in. Works while registration is closed.",
+        "description": "Fails like registering when the username is invalid or taken, and leaves the sign-in to try again.",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OidcRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Registered and signed in; sets the session cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OidcRegistered"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: no provider, or no verified sign-in in this browser, or it ended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`email_taken` (`field` `email`), or `handle_taken` (`field` `username`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`field_empty` or `invalid_handle` (with a `hint`) for the username",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/oidc/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Starts a sign-in: sends the browser to the provider.",
+        "description": "A link to follow, not a request to make. Sets the `upheap_oidc` cookie that the callback and the username step\nread. When the provider can't be reached, the browser is sent to the sign-in page with `sign_in_error` set to\n`provider_unreachable`.",
+        "operationId": "start",
+        "parameters": [
+          {
+            "name": "redirect",
+            "in": "path",
+            "description": "The app path to go to once signed in, such as `/invite/<token>`. Dropped unless it starts with a single `/`\nand holds no control character or space.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "To the provider's authorization endpoint, or to the sign-in page when it can't be reached",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Where to go"
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the server has no provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/register": {
       "post": {
         "tags": [
@@ -10279,6 +10520,68 @@
           "token_type": {
             "type": "string",
             "description": "Always `Bearer`."
+          }
+        }
+      },
+      "OidcPending": {
+        "type": "object",
+        "description": "Who the provider vouched for, shown on the username step.",
+        "required": [
+          "display_name",
+          "email"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "OidcProvider": {
+        "type": "object",
+        "description": "The OpenID Connect provider people may sign in through on this server.",
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "What the sign-in button names, such as `Acme SSO`."
+          }
+        }
+      },
+      "OidcRegisterRequest": {
+        "type": "object",
+        "description": "The username a person picks to finish a first sign-in through the provider.",
+        "required": [
+          "username"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of\nthe personal team, and can't be changed later.",
+            "example": "eugene"
+          }
+        }
+      },
+      "OidcRegistered": {
+        "type": "object",
+        "description": "A user made through the provider, signed in.",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "redirect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The app path the sign-in started from, to go to next, if it started from one."
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
           }
         }
       },

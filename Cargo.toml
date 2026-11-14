@@ -29,6 +29,8 @@ argon2 = "0.5"
 # Without `tokio` and `http1`: `server` and the CLI's tests add them, to serve with `axum::serve`.
 axum = { version = "0.8", default-features = false, features = ["form", "json", "macros", "matched-path", "original-uri", "query", "tower-log", "tracing"] }
 base64 = "0.22"
+# The OIDC tests sign ID tokens, whose times openidconnect takes as chrono dates; already in the tree through it.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The CLI's command line.
 clap = { version = "4", features = ["derive"] }
 # The CLI's config and data directories.

@@ -3,6 +3,7 @@
 use std::net::SocketAddr;
 
 use anyhow::{Context, bail};
+use service::oidc::OidcSettings;
 
 /// Every option the server reads. Documented in the README; validated by [`Config::from_env`].
 #[derive(Debug)]
@@ -24,6 +25,10 @@ pub struct Config {
     pub session_ttl_days: u16,
     /// `LOG_FORMAT`: `json` (default) or `pretty`.
     pub log_format: LogFormat,
+    /// `UPHEAP_OIDC_ISSUER`, `UPHEAP_OIDC_CLIENT_ID`, `UPHEAP_OIDC_CLIENT_SECRET` and `UPHEAP_OIDC_LABEL`, all or
+    /// none, and `UPHEAP_OIDC_SCOPES`, default `openid email profile`: the provider people may sign in through. No
+    /// request is made to it at startup.
+    pub oidc: Option<OidcSettings>,
 }
 
 /// The URL schemes of the databases the server can use. sqlx takes both spellings of Postgres's.
@@ -84,6 +89,7 @@ impl Config {
             Some("pretty") => LogFormat::Pretty,
             Some(other) => bail!("LOG_FORMAT must be json or pretty, not {other:?}"),
         };
+        let oidc = oidc_settings(&lookup, &base_url)?;
         Ok(Self {
             database_url,
             database_max_connections,
@@ -92,12 +98,43 @@ impl Config {
             allow_registration,
             session_ttl_days,
             log_format,
+            oidc,
         })
     }
 
     pub fn cookies_secure(&self) -> bool {
         !self.base_url.starts_with("http://")
     }
+}
+
+/// The OpenID Connect provider: none when none of its four required variables is set, and an error naming each one
+/// that is missing when only some are. `UPHEAP_OIDC_SCOPES` alone is ignored.
+fn oidc_settings(lookup: &impl Fn(&str) -> Option<String>, base_url: &str) -> anyhow::Result<Option<OidcSettings>> {
+    const REQUIRED: [&str; 4] = [
+        "UPHEAP_OIDC_ISSUER",
+        "UPHEAP_OIDC_CLIENT_ID",
+        "UPHEAP_OIDC_CLIENT_SECRET",
+        "UPHEAP_OIDC_LABEL",
+    ];
+    let values = REQUIRED.map(|name| lookup(name).filter(|value| !value.trim().is_empty()));
+    let [Some(issuer), Some(client_id), Some(client_secret), Some(label)] = &values else {
+        if values.iter().all(Option::is_none) {
+            return Ok(None);
+        }
+        let set = REQUIRED[values.iter().position(Option::is_some).unwrap_or_default()];
+        let missing: Vec<_> = REQUIRED
+            .iter()
+            .zip(&values)
+            .filter(|(_, value)| value.is_none())
+            .map(|(name, _)| format!("{name} is required when {set} is set"))
+            .collect();
+        bail!("{}", missing.join("; "));
+    };
+    let scopes = lookup("UPHEAP_OIDC_SCOPES").unwrap_or_else(|| "openid email profile".to_owned());
+    // The issuer is kept as given: the ID token's `iss` must equal it byte for byte.
+    let settings = OidcSettings::new(issuer, client_id, client_secret, label, &scopes, base_url)
+        .context("UPHEAP_OIDC_ISSUER, UPHEAP_OIDC_LABEL or BASE_URL is not usable for the OpenID Connect provider")?;
+    Ok(Some(settings))
 }
 
 #[cfg(test)]
@@ -158,5 +195,56 @@ mod tests {
             assert_eq!(config.database_max_connections, 5);
         }
         Ok(())
+    }
+
+    const BASE: [(&str, &str); 2] = [("DATABASE_URL", "sqlite://x.db"), ("BASE_URL", "https://x")];
+    const OIDC: [(&str, &str); 4] = [
+        ("UPHEAP_OIDC_ISSUER", "https://idp.example.com/"),
+        ("UPHEAP_OIDC_CLIENT_ID", "upheap"),
+        ("UPHEAP_OIDC_CLIENT_SECRET", "s3cret"),
+        ("UPHEAP_OIDC_LABEL", " Acme SSO "),
+    ];
+
+    #[test]
+    fn has_no_provider_unless_one_is_set() -> anyhow::Result<()> {
+        assert!(config(&BASE)?.oidc.is_none());
+        let scopes_only = [BASE[0], BASE[1], ("UPHEAP_OIDC_SCOPES", "openid email")];
+        assert!(config(&scopes_only)?.oidc.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn reads_the_provider() -> anyhow::Result<()> {
+        let vars: Vec<_> = BASE.iter().chain(&OIDC).copied().collect();
+        let oidc = config(&vars)?.oidc.context("a provider")?;
+        assert_eq!(oidc.label(), "Acme SSO");
+        assert_eq!(oidc.issuer(), "https://idp.example.com/");
+        assert_eq!(oidc.scopes(), ["email", "profile"]);
+
+        let with_scopes: Vec<_> = vars
+            .iter()
+            .copied()
+            .chain([("UPHEAP_OIDC_SCOPES", "openid  groups")])
+            .collect();
+        assert_eq!(config(&with_scopes)?.oidc.context("a provider")?.scopes(), ["groups"]);
+        Ok(())
+    }
+
+    #[test]
+    fn names_each_missing_provider_variable() {
+        let vars: Vec<_> = BASE.iter().chain(&OIDC[..2]).copied().collect();
+        let message = format!("{:#}", config(&vars).expect_err("an error"));
+        assert!(message.contains("UPHEAP_OIDC_CLIENT_SECRET is required"), "{message}");
+        assert!(message.contains("UPHEAP_OIDC_LABEL is required"), "{message}");
+        assert!(!message.contains("UPHEAP_OIDC_CLIENT_ID is required"), "{message}");
+    }
+
+    #[test]
+    fn rejects_a_malformed_issuer_or_an_empty_label() {
+        for (name, value) in [("UPHEAP_OIDC_ISSUER", "not a url"), ("UPHEAP_OIDC_LABEL", "   ")] {
+            let vars: Vec<_> = BASE.iter().chain(&OIDC).copied().filter(|(n, _)| *n != name).collect();
+            let vars: Vec<_> = vars.into_iter().chain([(name, value)]).collect();
+            assert!(config(&vars).is_err(), "{name}");
+        }
     }
 }

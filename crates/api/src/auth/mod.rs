@@ -1,5 +1,7 @@
 //! Registration, sign-in and sign-out for local accounts. Sessions are carried in an `HttpOnly` cookie.
 
+mod oidc;
+
 use api_types::auth::{RegisterRequest, SignInRequest};
 use api_types::me::UserDto;
 use axum::extract::State;
@@ -19,6 +21,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(register))
         .routes(routes!(sign_in))
         .routes(routes!(sign_out))
+        .merge(oidc::routes())
 }
 
 /// Creates an account with a personal team and heap, and signs in.
