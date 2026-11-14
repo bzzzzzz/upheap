@@ -441,3 +441,23 @@ its own ranking and its own questions of progress: does the parent rank by its c
 **Consequences.** Ranking stays flat: the tasks rank as any other. Nothing tracks "how much of the note is done"; the
 note's page lists what it became with their states. A blocker that became leaves what it blocks waiting for the
 person, as one closed as won't do does (§35).
+
+## 37. External identities are matched by (issuer, subject); an email that matches a local account is refused, not linked
+
+**Context.** A server can have one OpenID Connect provider next to local accounts. A person who signs in through it
+for the first time may already have a local account with the same email, and the two have to be told apart.
+
+**Decision.** An identity is the pair of the issuer as configured and the provider's subject, and only that pair
+signs a person in. A first sign-in whose verified email belongs to a local account is refused, and the page says to
+sign in with that account's password. There is no linking for now. An email alone never links two accounts: whoever
+controls an account at the provider, or a provider that doesn't verify emails, could otherwise take over a local
+account by choosing its address.
+
+**Instead of.** Linking by email when the provider says it is verified, which trusts every provider's idea of
+"verified". Linking after the person proves the local password, which is safe but a flow of its own to build and test.
+
+**Consequences.** A person with both a local account and a provider account can't merge them yet; they sign in with
+the one that exists, and a provider user has no password. Changing the configured issuer makes everyone known at the
+old one new at the new one, and their emails then clash with their own accounts. The identity table keys on the issuer
+string, so it must be kept exactly as the provider names itself ([architecture.md](architecture.md#authentication-and-authorization)
+§3).

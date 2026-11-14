@@ -50,9 +50,10 @@ What it is not:
 
 1. The app runs self-contained, with its own accounts: an email address, a username and a password.
 2. Registration is open by default. The operator can close it, and then a new account is made only through a
-   team's invite link (Invite links §4).
+   team's invite link (Invite links §4) or a first sign-in through the identity provider (§3).
 3. Users can also sign in through a third-party identity provider, for example Okta. Signing in through one for the
-   first time creates the user record.
+   first time creates the user record, and does so even when registration is closed. People who sign in through the
+   provider have no password in Upheap.
 4. Non-web clients such as the CLI sign in through the browser: the client opens the app's sign-in page, the user
    signs in there, and the backend hands a token back to the client (OAuth authorization code flow with PKCE). The
    client never handles the user's password.

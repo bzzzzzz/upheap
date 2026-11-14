@@ -32,7 +32,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | API contract | Code-first OpenAPI 3.1 with utoipa. The web app's TypeScript types are generated from it with openapi-typescript, and CI fails on drift |
 | Data access | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres |
 | Migrations | sea-orm-migration, embedded in the binary and run at startup |
-| Auth | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients. External identity providers (OIDC) are planned, not built |
+| Auth | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients. One OpenID Connect provider per server, through the `openidconnect` crate, next to local accounts |
 | Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
 | Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz` |
 | Testing | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end |
@@ -285,7 +285,7 @@ Display names, team names and heap names stay free text that can repeat. Only ha
    and heap slugs can change, and an item's heap can, by a move. An old link stops working when any of them does;
    redirects from old handles are out of scope for now.
 7. **Sign-up** asks for a username with the display name, email and password; the personal team takes it as its
-   slug, and the first heap is `personal`. A first OIDC sign-in will ask for a username before creating the
+   slug, and the first heap is `personal`. A first OIDC sign-in asks for a username before creating the
    user.
 
 ## Ranking
@@ -485,8 +485,30 @@ a fixed time.
      person at the browser should see, and the CLI gives up waiting after a few minutes.
    - A proxy that puts HTTP Basic auth in front of the server works for the web app but not for the CLI, since a
      request carries one `Authorization` header. Such a proxy has to let `/api` through.
-3. **External identity providers** (planned): generic OIDC, configured per deployment. A first sign-in creates the
-   user, after asking for a username. An identity is matched by `(provider, subject)`, never by email alone.
+3. **External identity provider:** one generic OpenID Connect provider per server, set with environment variables
+   ([README.md](../README.md#signing-in-through-a-provider)). Discovery, PKCE, the nonce and the ID token's signature
+   and claims are security code, so the `openidconnect` crate does them.
+   - **Start and callback.** The start (`GET /auth/oidc/start`, a link the browser follows) stores a row in
+     `oidc_sign_ins` keyed by the SHA-256 of a random `state`, holding a nonce, a PKCE verifier and the app path to
+     return to, and sets the `upheap_oidc` cookie to the `state`, scoped to `/api/v1/auth/oidc`. The callback accepts
+     the provider's answer only from the browser that started: the cookie must equal the `state`, and the row must
+     exist and be under 15 minutes old. It then exchanges the code with the verifier and checks the ID token's
+     signature against the provider's keys, `iss`, `aud`, `exp` and the row's nonce. Every refusal sends the browser
+     back to sign-in with a code that the page words, and deletes the row.
+   - **Discovery is fetched on every start and callback,** not cached and not at startup: sign-ins are rare, keys
+     rotate, and a provider that is down never stops the server or local sign-in.
+   - **Matching is by `(issuer, subject)`, never by email.** `user_identities` ties a user to the subject at the
+     issuer string as configured. A known identity gets a normal session; name and email aren't refreshed from the
+     provider later.
+   - **A new identity needs a verified email that no account has,** read from the ID token's claims; an email that
+     matches a local account is refused rather than linked ([decisions.md](decisions.md) §37). The callback keeps the
+     verified name and email on the row for 15 more minutes and sends the browser to the username step, which makes
+     the user, personal team, `personal` heap, identity and session in one transaction, also when registration is
+     closed. A failure rolls it all back and leaves the row, so the person can try another username.
+   - **No password:** a provider user has no password row, so password sign-in can't succeed for them and Change
+     password isn't offered (`change_password` is left out of `/me`'s allowed actions).
+   - An invite page passes `redirect=/invite/<token>` through the round trip, so the person comes back to the invite
+     page signed in and joins with its own Join step; the provider flow has no invite logic.
 4. **Local accounts:** passwords are hashed with argon2id, sign-in takes an email address or a username, and
    attempts are rate-limited per account, keyed by its email address whichever was typed, or per unknown address or
    username.
