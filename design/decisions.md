@@ -442,7 +442,21 @@ its own ranking and its own questions of progress: does the parent rank by its c
 note's page lists what it became with their states. A blocker that became leaves what it blocks waiting for the
 person, as one closed as won't do does (§35).
 
-## 37. External identities are matched by (issuer, subject); an email that matches a local account is refused, not linked
+## 37. Mail goes out over SMTP, not a provider's HTTP API
+
+**Context.** Resetting a password by mail, confirming an address and changing one all need the server to send mail,
+and operators run Upheap on their own infrastructure with whichever provider they already use.
+
+**Decision.** The server speaks plain SMTP through lettre, set by one URL (`MAIL_URL`) and a sender (`MAIL_FROM`).
+SMTP always uses TLS, implicit or STARTTLS; there is no cleartext mode.
+
+**Instead of.** A provider's HTTP API such as Resend's or SES's, or several providers behind a trait.
+
+**Consequences.** Switching provider is changing two settings. There are no provider-specific features, such as bounce
+webhooks or templates. Cloud Run blocks port 25, so operators use 465 or 587. Delivery problems show up as SMTP errors
+in the log.
+
+## 38. External identities are matched by (issuer, subject); an email that matches a local account is refused, not linked
 
 **Context.** A server can have one OpenID Connect provider next to local accounts. A person who signs in through it
 for the first time may already have a local account with the same email, and the two have to be told apart.

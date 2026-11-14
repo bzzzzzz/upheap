@@ -6,6 +6,7 @@ members = [
     "crates/service",
     "crates/api-types",
     "crates/api",
+    "crates/mail",
     "crates/server",
     "crates/cli",
 ]
@@ -23,6 +24,7 @@ store = { path = "crates/store", default-features = false }
 service = { path = "crates/service" }
 api = { path = "crates/api" }
 api-types = { path = "crates/api-types" }
+mail = { path = "crates/mail" }
 
 anyhow = "1"
 argon2 = "0.5"
@@ -44,6 +46,9 @@ jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
 # The CLI's refresh token: the Windows credential manager, or the Secret Service on Linux and the BSDs over zbus,
 # which is pure Rust, so building needs no libdbus. On macOS the CLI runs the system's `security` tool instead.
 keyring = "4"
+# The `mail` crate's SMTP client and message builder: rustls with ring and the bundled webpki roots, files for
+# development, no connection pool.
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "tokio1-rustls-tls", "file-transport"] }
 mime_guess = "2"
 # OIDC sign-in: discovery, PKCE, nonce and ID token checks are security code, so the maintained crate does them.
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "rustls-tls"] }
@@ -78,6 +83,8 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["request-id", "util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+# Takes the password out of `MAIL_URL` for the log; already in the tree through lettre and reqwest.
+url = "2"
 utoipa = { version = "5", features = ["uuid"] }
 utoipa-axum = "0.2"
 uuid = { version = "1", features = ["v7", "serde"] }

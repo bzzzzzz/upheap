@@ -78,6 +78,8 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | `ALLOW_REGISTRATION` | `true` | Set to `false` to close sign-ups; a team admin's invite link still lets a new person create an account |
 | `SESSION_TTL_DAYS` | `30` | How long a sign-in lasts |
 | `LOG_FORMAT` | `json` | `json` or `pretty`; levels via `RUST_LOG` |
+| `MAIL_URL` | unset | Where mail goes: `smtps://user:pass@host:465`, `smtp://user:pass@host:587` (STARTTLS), or for development `file:///dir` or `log:`. Unset means no mail |
+| `MAIL_FROM` | unset | The sender, `Upheap <upheap@example.com>`. Required with `MAIL_URL` |
 | `UPHEAP_OIDC_ISSUER` | none | The issuer URL of an OpenID Connect provider (Okta, Google Workspace, Keycloak…), exactly as the provider names itself, trailing `/` included. Set it with the next three, or none of the four |
 | `UPHEAP_OIDC_CLIENT_ID` | none | The client ID the provider gave Upheap |
 | `UPHEAP_OIDC_CLIENT_SECRET` | none | The client secret the provider gave Upheap |
@@ -100,11 +102,38 @@ person whose email already belongs to a local account is refused, not linked. Pe
 have no password in Upheap. The server doesn't contact the provider at startup, so a provider that is down never
 stops the server or local sign-in. Start with one setting missing and the server stops, naming it.
 
+### Setting up mail
+
+Mail is optional: without `MAIL_URL` and `MAIL_FROM` the server sends none. To set it up, pick any SMTP provider, set
+up its sending domain (the SPF and DKIM records it gives you), and set `MAIL_URL` and `MAIL_FROM`. Use port 465
+(`smtps://`) or 587 (`smtp://`, which always requires STARTTLS and never sends in cleartext): many hosts, Cloud Run
+included, block port 25. Percent-encode special characters in the user and password (`@` as `%40`, `/` as `%2F`, `?`
+as `%3F`, `#` as `%23`). For example, with Resend:
+
+```sh
+MAIL_URL='smtps://resend:<API key>@smtp.resend.com:465'
+MAIL_FROM='Upheap <upheap@example.com>'
+```
+
+Restart the server and check that the `listening` line in its log has `mail` set to the scheme, host and port.
+Then send a test mail:
+
+```sh
+upheap-server mail test you@example.com
+docker compose exec upheap upheap-server mail test you@example.com
+```
+
+It takes the same environment variables as the server, and prints `Sent a test mail to … via …` on success. Exit
+codes: `0` sent, `2` wrong arguments or not an email address, `6` mail isn't set up or the send failed, `1` anything
+else.
+
+For development, `MAIL_URL=log:` writes each mail to the server's log, and `MAIL_URL=file:///tmp/upheap-mail` writes
+each as an `.eml` file in that directory, which must exist. Nothing is sent.
+
 ### Resetting a password
 
-The server sends no email, so whoever runs it makes a one-time reset link for a user, who opens it, sets a new
-password and is signed in. The command takes the same environment variables as the server (at least `DATABASE_URL`
-and `BASE_URL`):
+Whoever runs the server makes a one-time reset link for a user, who opens it, sets a new password and is signed in.
+The command takes the same environment variables as the server (at least `DATABASE_URL` and `BASE_URL`):
 
 ```sh
 upheap-server user reset-link sam          # a username or an email address
@@ -320,6 +349,7 @@ crates/service    use cases: authorization, transactions, audit
 crates/api-types  request and response types, shared by the API and the CLI
 crates/api        axum routes, OpenAPI, sessions, problem+json
 crates/cli        the upheap command-line client
+crates/mail       sending plain-text mail over SMTP, or to files or the log
 crates/server     the binary: config, startup, embedded web app
 web/              React app (TypeScript), generated API types only
 plugins/upheap    the Claude Code plugin: skills that add items, report status and do the next one, through the CLI
