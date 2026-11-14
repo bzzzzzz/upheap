@@ -342,9 +342,9 @@ Each pulls two rules against each other. Each is a test case for later.
    they confirm, someone makes `billing` in heap C. The confirm is refused and shows A, B and C (rule 9).
 7. **An agent in the loop renames.** An agent given heap A alone is told to rename the team tag `ops`, used in A and
    B. It's refused (rule 19); it asks its person instead. Putting `ops` on an item in A works.
-8. **Two at once.** One member makes the team tag `docs` while another makes a heap tag `docs` in heap B. If the heap tag
-   comes second, it is refused (rule 3). If the team tag comes second, its confirm showed no reach, so it is refused
-   and shows B's tag (rule 9); confirmed again, it merges it. Rule 1 holds either way.
+8. **Two at once.** One member makes the team tag `docs` while another makes a heap tag `docs` in heap B. If the
+   heap tag comes second, it is refused (rule 3). If the team tag comes second, its confirm showed no reach, so it
+   is refused and shows B's tag (rule 9); confirmed again, it merges it. Rule 1 holds either way.
 9. **A personal team.** One person with heaps Home and Work makes the team tag `errand` and uses it in both
    (commitment 4). Nothing changes from a shared team except that one person is every member.
 
