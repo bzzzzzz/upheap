@@ -155,6 +155,54 @@ test("a choice question is answered by one pick, a many-choice one by any number
   expect([second.reply.picked, second.reply.comment]).toEqual([[0, 2], null]);
 });
 
+test("web addresses and Markdown links in the text and choices are links, and the rest stays as written", async ({
+  page,
+  heapPath,
+}) => {
+  // The links lead outside; the tests use no network, so those pages are answered here.
+  await page.context().route("https://example.com/**", (route) => route.fulfill({ body: "elsewhere" }));
+  await itemWithQuestions(page, heapPath, "Ship the page", [
+    {
+      kind: "question",
+      text: "Is **this** ready? See https://example.com/pr/1. Or [the mockup](https://example.com/mock) (javascript:x)",
+      choices: ["Yes, as in [the mockup](https://example.com/mock)", "No"],
+    },
+  ]);
+  const row = waits(page).getByRole("listitem").filter({ hasText: "Is **this** ready?" });
+  const text = row.locator('[id^="question-text-"]');
+
+  const bare = row.getByRole("link", { name: "https://example.com/pr/1", exact: true });
+  await expect(bare).toHaveAttribute("href", "https://example.com/pr/1");
+  await expect(bare).toHaveAttribute("target", "_blank");
+  const mockup = text.getByRole("link", { name: "the mockup", exact: true });
+  await expect(mockup).toHaveAttribute("href", "https://example.com/mock");
+  // The rest reads as written: no bold, the full stop outside the link, and no link but to a web address.
+  await expect(text).toContainText("Is **this** ready? See https://example.com/pr/1. Or");
+  await expect(row.locator("strong")).toHaveCount(0);
+  await expect(text.getByRole("link")).toHaveCount(2);
+
+  // A link in a choice opens its page and leaves the choice unpicked.
+  const radios = row.getByRole("radiogroup");
+  const inChoice = radios.getByRole("link", { name: "the mockup", exact: true });
+  const [tab] = await Promise.all([page.context().waitForEvent("page"), inChoice.click()]);
+  await expect(tab).toHaveURL("https://example.com/mock");
+  await tab.close();
+  await expect(radios.getByRole("radio", { checked: true })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Reply", exact: true })).toBeDisabled();
+
+  // Picked, the choice reads back with its link.
+  // The words around the link pick the choice.
+  await radios.getByText("Yes, as in", { exact: false }).click({ position: { x: 4, y: 4 } });
+  await row.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(waits(page)).toHaveCount(0);
+  const folded = answered(page);
+  await folded.locator("summary").click();
+  await expect(folded).toContainText("→ Yes, as in the mockup");
+  await expect(
+    folded.locator("p", { hasText: "→" }).getByRole("link", { name: "the mockup", exact: true }),
+  ).toHaveAttribute("href", "https://example.com/mock");
+});
+
 test("a request is replied to at once with Done or Can't be done, and a comment", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Stage the token", [
     { kind: "request", text: "Put a staging token in the vault." },

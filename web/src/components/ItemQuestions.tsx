@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button, Checkbox, CheckboxGroup, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import {
@@ -16,6 +16,7 @@ import { BlockerGoneRow, blockerGoneWord } from "./BlockerGoneRow";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { GOAL_LABELS, isClosed } from "./labels";
+import { LinkedText } from "./LinkedText";
 import { Markdown } from "./Markdown";
 import { proposalSummary } from "./proposalSummary";
 import { StuckRow } from "./StuckRow";
@@ -135,7 +136,7 @@ function QuestionHead({
     <>
       {line}
       <p id={textId(itemId, question)} className="text-base leading-snug font-semibold break-words">
-        {question.text}
+        <LinkedText text={question.text} />
       </p>
       <ReviewLink question={question} />
       {question.kind === "done_proposal" && summary && <p className="text-xs text-muted">{summary}</p>}
@@ -539,8 +540,7 @@ function ReplyControls({
     );
   }
 
-  const indexed = (index: number) => ({ value: String(index), label: question.choices[index] });
-  const choices = question.choices.map((_, index) => indexed(index));
+  const choices = question.choices.map((label, index) => ({ value: String(index), label }));
   const group = question.many ? (
     <CheckboxGroup aria-label={question.text} value={picked} onChange={setPicked} className="flex flex-col">
       {choices.map((choice) => (
@@ -550,7 +550,9 @@ function ReplyControls({
               <span aria-hidden="true" className={`${pickBoxClass} rounded-md`}>
                 {isSelected && <span className="size-2 rounded-sm bg-surface" />}
               </span>
-              {choice.label}
+              <span className="min-w-0 break-words">
+                <LinkedText text={choice.label} />
+              </span>
             </>
           )}
         </Checkbox>
@@ -570,7 +572,9 @@ function ReplyControls({
               <span aria-hidden="true" className={`${pickBoxClass} rounded-full`}>
                 {isSelected && <span className="size-2 rounded-full bg-surface" />}
               </span>
-              {choice.label}
+              <span className="min-w-0 break-words">
+                <LinkedText text={choice.label} />
+              </span>
             </>
           )}
         </Radio>
@@ -638,11 +642,21 @@ function Outcome({ question }: { question: Question }) {
   const reply = question.reply;
   if (question.state === "withdrawn") return <p className="text-sm text-muted">Withdrawn</p>;
   if (!reply) return null;
-  const labels = reply.picked.map((index) => question.choices[index]).join(", ");
+  const labels = reply.picked.map((index) => question.choices[index] ?? "");
   const who = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)}, ` : "";
   return (
     <>
-      {labels && <p className="text-sm break-words">→ {labels}</p>}
+      {labels.length > 0 && (
+        <p className="text-sm break-words">
+          →{" "}
+          {labels.map((label, index) => (
+            <Fragment key={index}>
+              {index > 0 && ", "}
+              <LinkedText text={label} />
+            </Fragment>
+          ))}
+        </p>
+      )}
       {reply.comment && <Markdown text={reply.comment} />}
       <p className="text-xs text-muted">
         {who}
