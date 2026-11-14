@@ -37,6 +37,7 @@ its notes (with a context), in the new heap: `upheap item add "<title>" --task -
 --need <need> --age keep|new --context-file - --step "<title>"`. Then
 `upheap item became <key>`, which reaches the turn. The heap needs at least one task or note made from this one; its
 tasks are defined by then, and get no turn in this run.
+Making a heap needs an admin: if `heap add` is refused as forbidden, ask the person instead.
 A single piece of work stays one task, in place (`upheap item to-task <key>`).
 
 Don't do the work and don't tick steps.

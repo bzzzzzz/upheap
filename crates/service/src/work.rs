@@ -718,6 +718,8 @@ impl Services {
         // A heap made from an item in one of these counts as given too, and so on down: a made heap's items are the
         // work of the note it came from. Access is by team role, so no check per heap. An archived heap has no open
         // turn to give and would fail a claim, so it adds nothing.
+        // A made heap is always in its note's team, so the team of a heap in the frontier is the made heap's.
+        let teams: HashMap<_, _> = heaps.iter().map(|queue| (queue.team.id, queue.team.clone())).collect();
         let mut seen: HashSet<HeapId> = heaps.iter().map(|queue| queue.heap.id).collect();
         let mut frontier: Vec<HeapId> = seen.iter().copied().collect();
         while !frontier.is_empty() {
@@ -726,9 +728,7 @@ impl Services {
                 if made.is_archived() || !seen.insert(made.id) {
                     continue;
                 }
-                let team = store::teams::find_team(&self.db, made.team_id)
-                    .await?
-                    .ok_or(ServiceError::NotFound)?;
+                let team = teams.get(&made.team_id).cloned().ok_or(ServiceError::NotFound)?;
                 next.push(made.id);
                 heaps.push(QueueHeap { heap: made, team });
             }

@@ -21,7 +21,7 @@ use domain::turn::{TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, StepId, Timestamp, TurnId, ValidationError};
 use store::{StoreError, TransactionTrait};
 
-use crate::access::authorize_heap_write;
+use crate::access::{authorize_heap, authorize_heap_write, ensure_active};
 use crate::audit::{GoalMetHow, describe_new_step, describe_new_turn, describe_reached, diff_items};
 use crate::items::{ItemChildren, ItemView, build_item_view, commit_if_in_run, in_run};
 use crate::work::RunScope;
@@ -50,12 +50,42 @@ impl Services {
         let found = store::items::find_item(&txn, item_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
+        let access = authorize_heap(&txn, principal, found.heap_id, Permission::EditItems)
             .await
             .map_err(|error| in_run(principal, error))?;
+        // A run's became writes the tasks of the heaps made from the note, so those heaps are read before any lock
+        // and locked with the note's, in heap ID order (as `lock_run_and` does), and checked again under the lock.
+        let candidates = if principal.run.is_some() {
+            store::heaps::list_heaps_made_from(&txn, &[item_id]).await?
+        } else {
+            Vec::new()
+        };
+        let mut lock_ids = vec![found.heap_id];
+        lock_ids.extend(candidates.iter().filter(|made| !made.is_archived()).map(|made| made.id));
+        lock_ids.sort();
+        lock_ids.dedup();
+        let mut locked = Vec::new();
+        for heap_id in lock_ids {
+            locked.push(
+                store::heaps::lock_heap(&txn, heap_id)
+                    .await?
+                    .ok_or(ServiceError::NotFound)?,
+            );
+        }
+        let heap = locked
+            .iter()
+            .find(|locked| locked.id == found.heap_id)
+            .ok_or(ServiceError::NotFound)?;
+        ensure_active(heap).map_err(|error| in_run(principal, error))?;
+        // The made heaps still active and still made from the note, as read under the lock. A heap the person
+        // archived is theirs: it isn't checked and its items aren't defined.
+        let made_heaps: Vec<Heap> = locked
+            .iter()
+            .filter(|locked| locked.id != heap.id && !locked.is_archived() && locked.origin_id == Some(item_id))
+            .cloned()
+            .collect();
         let now = self.now();
         let scope = self.check_run_write(&txn, principal, item_id, now).await?;
-        let heap = &access.heap;
         let note = store::items::find_item_locking(&txn, item_id)
             .await?
             .filter(|note| note.heap_id == heap.id)
@@ -73,11 +103,6 @@ impl Services {
         }
 
         // Heaps made from the note count as made: a run's became checks them and defines the tasks in them.
-        let made_heaps = if scope.is_some() {
-            store::heaps::list_heaps_made_from(&txn, &[note.id]).await?
-        } else {
-            Vec::new()
-        };
         let mut defining = vec![heap.id];
         defining.extend(made_heaps.iter().map(|made| made.id));
         let mut turns_taken_back = 0_usize;
@@ -127,8 +152,9 @@ impl Services {
                         expected: task.version,
                         current: task.version.next(),
                     })?;
+                let task_heap = made_heaps.iter().find(|made| made.id == task.heap_id).unwrap_or(heap);
                 let entry = self.item_audit_entry(
-                    heap,
+                    task_heap,
                     principal,
                     AuditAction::ItemUpdated,
                     &saved,
@@ -145,7 +171,7 @@ impl Services {
                     }
                     self.end_met_turn(
                         &txn,
-                        heap,
+                        task_heap,
                         principal,
                         &turn,
                         &saved,

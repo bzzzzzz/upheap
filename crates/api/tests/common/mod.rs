@@ -522,6 +522,19 @@ impl TestApp {
             .collect()
     }
 
+    /// The heap each audit entry about `entity_id` is stamped with, oldest first, as `(action, heap ID)`.
+    pub async fn audit_heaps(&self, entity_id: &str) -> Result<Vec<(String, Option<String>)>> {
+        let id: uuid::Uuid = entity_id.parse()?;
+        let sql = format!("SELECT action, heap_id FROM audit_log WHERE entity_id = '{id}' ORDER BY created_at, id");
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?;
+        rows.into_iter()
+            .map(|row| Ok((row.try_get("", "action")?, row.try_get("", "heap_id")?)))
+            .collect()
+    }
+
     /// The run each audit entry about `entity_id` was made in, oldest first, as `(action, run ID)`.
     pub async fn audit_runs(&self, entity_id: &str) -> Result<Vec<(String, Option<String>)>> {
         let id: uuid::Uuid = entity_id.parse()?;

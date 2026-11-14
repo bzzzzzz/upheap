@@ -1817,3 +1817,70 @@ async fn the_queue_takes_items_from_a_heap_made_from_a_note_in_a_named_heap() ->
     expect_that!(claimed.body["run"]["item"]["heap"]["slug"], eq(&heap["slug"]));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_runs_became_writes_a_made_heap_task_in_that_heap_s_history() -> Result<()> {
+    // Arrange: a heap made from the note, with a task in it that has a context and a step, and a run on the note.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("expected", "all_the_way").await?;
+    let heap = w.made_heap(&note, "Blog move").await?;
+    let task = w
+        .add_to_heap(
+            &heap,
+            Some(&run),
+            &note,
+            json!({ "title": "Move posts", "kind": "task", "description": "Done when: moved." }),
+        )
+        .await?;
+    let step = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{}/items/{}/steps", w.made_path(&heap).await?, key_of(&task.body)),
+            Some(json!({ "title": "Do it" })),
+        )
+        .await?;
+    expect_that!(step.status, eq(StatusCode::CREATED));
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: the task's stage change is in the made heap's history, and the note's close in the note's heap's.
+    expect_that!(became.status, eq(StatusCode::OK));
+    let heap_id = heap["id"].as_str().context("heap id")?.to_owned();
+    let entries = w.app.audit_heaps(task.body["id"].as_str().context("id")?).await?;
+    let updated: Vec<_> = entries.iter().filter(|(action, _)| action == "item_updated").collect();
+    expect_that!(updated.is_empty(), eq(false));
+    for (_, entry_heap) in &updated {
+        expect_that!(entry_heap.as_deref(), some(eq(heap_id.as_str())));
+    }
+    let note_entries = w.app.audit_heaps(note["id"].as_str().context("id")?).await?;
+    let note_heap = note["heap_id"].as_str().context("note heap")?;
+    let note_closed = note_entries.last().context("note entry")?;
+    expect_that!(note_closed.1.as_deref(), some(eq(note_heap)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heap_the_person_archived_does_not_hold_back_a_runs_became() -> Result<()> {
+    // Arrange: a heap made from the note, with nothing in it, archived by the person; a run on the note.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run("expected").await?;
+    let heap = w.made_heap(&note, "Blog move").await?;
+    w.app
+        .set_heap_archived(heap["id"].as_str().context("heap id")?, true)
+        .await?;
+    let own = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&own.body)).await?;
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: it reaches, and the archived heap is still listed as made.
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(became.body["state"], eq(&json!("became")));
+    expect_that!(became.body["became_heaps"][0]["slug"], eq(&heap["slug"]));
+    Ok(())
+}
