@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-router";
 import {
   Activity,
+  Bot,
   Building2,
   ChartColumn,
   ChevronDown,
@@ -30,7 +31,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { HeapRef, Me } from "../api/client";
-import { useHeap, useMe, useSetHeapArchived, useWaiting } from "../api/queries";
+import { useHeap, useMe, useDecisions, useSetHeapArchived, useWaiting } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
 import { HeapSwitcher, openItemCount } from "../components/HeapSwitcher";
@@ -50,12 +51,13 @@ export function AppLayout() {
   // The heap's list, also with an item open over it.
   const onList = useMatch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false }) !== undefined;
   // The heap on screen counts as opened once per visit, for the switcher's Recent.
-  // Pages with no heap in their address keep the heap opened last, where Waiting for me, All items and Data need the heap's
+  // Pages with no heap in their address keep the heap opened last, where Waiting for me, Agents, All items and Data need the heap's
   // views.
   const onWaiting = useMatch({ from: "/app/waiting", shouldThrow: false }) !== undefined;
+  const onAgents = useMatch({ from: "/app/agents", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
   const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
-  const shellHeap = heapRef ?? ((onWaiting || onAll || onData) && me ? keptHeap(me) : undefined);
+  const shellHeap = heapRef ?? ((onWaiting || onAgents || onAll || onData) && me ? keptHeap(me) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
   useEffect(() => {
     if (heapId !== undefined) recordRecentHeap(heapId);
@@ -173,17 +175,28 @@ function NavLink({
 }
 
 /**
- * Waiting for me, with the number of questions that wait. The count is a badge on the icon in the rail and the tabs, and
- * on the right in the sidebar; it is part of the link's name, and there is none at zero.
+ * A page of the shell with a number of things that wait: Waiting for me and Agents. The count is a badge on the icon in
+ * the rail and the tabs, and on the right in the sidebar; it is part of the link's name, and there is none at zero.
  */
-function WaitingLink() {
-  const count = useWaiting().data?.count ?? 0;
+function CountLink({
+  to,
+  icon: Icon,
+  short,
+  long,
+  count,
+}: {
+  to: "/waiting" | "/agents";
+  icon: LucideIcon;
+  short: string;
+  long: string;
+  count: number;
+}) {
   return (
-    <Link to="/waiting" className={`${navItemClass} relative`}>
-      <Inbox aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
+    <Link to={to} className={`${navItemClass} relative`}>
+      <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">
-        <span className="lg:hidden">Waiting</span>
-        <span className="max-lg:hidden">Waiting for me</span>
+        <span className="lg:hidden">{short}</span>
+        <span className="max-lg:hidden">{long}</span>
       </span>
       {count > 0 && (
         <span className="absolute top-0.5 left-1/2 ml-1 min-w-4 rounded-full bg-accent-ink px-1 text-center text-[10px] leading-4 font-semibold text-canvas tabular-nums lg:static lg:ml-auto lg:min-w-0 lg:bg-transparent lg:px-0 lg:text-sm lg:leading-normal lg:font-normal lg:text-muted">
@@ -192,6 +205,18 @@ function WaitingLink() {
       )}
     </Link>
   );
+}
+
+/** Waiting for me, with the number of questions that wait. */
+function WaitingLink() {
+  const count = useWaiting().data?.count ?? 0;
+  return <CountLink to="/waiting" icon={Inbox} short="Waiting" long="Waiting for me" count={count} />;
+}
+
+/** Agents, with the number of decisions that wait for the person (Your decision). */
+function AgentsLink() {
+  const count = useDecisions().data?.count ?? 0;
+  return <CountLink to="/agents" icon={Bot} short="Agents" long="Agents" count={count} />;
 }
 
 /** The heap's views, from both the sidebar and the phone's tabs. An open item sits over the open list. */
@@ -239,6 +264,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
 
       <div className="flex flex-col gap-1 lg:gap-0.5 lg:border-b lg:border-line lg:pb-4">
         <WaitingLink />
+        <AgentsLink />
         <NavLink
           to="/all"
           icon={Layers}
@@ -349,8 +375,8 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
 }
 
 /**
- * The phone's tabs (ux.md, Layout): Open, Waiting, Add in the middle under the thumb, Closed, and More for the rest,
- * Settings among it.
+ * The phone's tabs (ux.md, Layout): Open, Waiting, Add in the middle under the thumb, Agents, and More for the rest,
+ * Closed and Settings among it.
  */
 function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const links = useShellLinks(me, heapRef);
@@ -366,10 +392,11 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
   const [more, setMore] = useState(false);
   // The heap's pages that only More leads to, so More shows as active on them.
+  const onClosed = useMatch({ from: "/app/teams/$team/heaps/$heap/closed", shouldThrow: false }) !== undefined;
   const onActivity = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
   const onSettings = useMatch({ from: "/app/teams/$team/heaps/$heap/settings", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
-  const onMorePage = onActivity || onSettings || onData;
+  const onMorePage = onClosed || onActivity || onSettings || onData;
 
   return (
     <nav
@@ -388,7 +415,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       >
         <Plus aria-hidden="true" className="mx-auto size-6" strokeWidth={2.25} />
       </button>
-      <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
+      <AgentsLink />
       <button
         type="button"
         aria-expanded={more}
@@ -414,7 +441,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
 }
 
 /**
- * More on a phone: the heap's settings, its activity and the team and account pages, as a card of 52 px rows above the tabs. It opens on
+ * More on a phone: the heap's closed items, settings and activity, and the team and account pages, as a card of 52 px rows above the tabs. It opens on
  * release, as a button does, so lifting the finger never picks a row.
  */
 function MoreSheet({
@@ -440,6 +467,9 @@ function MoreSheet({
   return (
     <Sheet title="More" isOpen={isOpen} onClose={onClose} aboveTabs showTitle={false}>
       <nav aria-label="More" className="flex flex-col">
+        <Link {...views.closed} onClick={onClose} className={sheetRowClass}>
+          {row("Closed")}
+        </Link>
         <Link {...views.settings} onClick={onClose} className={sheetRowClass}>
           {row("Settings")}
         </Link>

@@ -398,6 +398,8 @@ test("on a phone, More shows as active on the pages it holds", async ({ page }) 
   await expect(more).toHaveAttribute("aria-current", "true");
   await expectToStandOut(more, bar);
   await goTo(page, "Closed");
+  await expect(more).toHaveAttribute("aria-current", "true");
+  await goTo(page, "Open");
   await expect(more).not.toHaveAttribute("data-status");
 });
 

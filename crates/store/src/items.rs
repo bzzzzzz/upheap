@@ -120,6 +120,23 @@ pub async fn list_item_summaries(
     Ok(summaries)
 }
 
+/// The items `ids`, in any heap and state, without their tags and values, in one query per [`IN_LIST_CHUNK`] IDs, in no
+/// particular order. Unknown IDs are left out.
+pub async fn list_items_by_ids(db: &impl ConnectionTrait, ids: &[ItemId]) -> Result<Vec<Item>, StoreError> {
+    let ids: Vec<String> = ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::with_capacity(ids.len());
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = items::Entity::find()
+            .filter(items::Column::Id.is_in(chunk.iter().map(String::as_str)))
+            .all(db)
+            .await?;
+        for row in rows {
+            found.push(to_item(row)?);
+        }
+    }
+    Ok(found)
+}
+
 /// The summaries of the blockers `ids`, in whichever heap each is now, in no particular order.
 ///
 /// Not scoped by heap, unlike the rest: a blocker moved to another heap stays the blocker of the items it left

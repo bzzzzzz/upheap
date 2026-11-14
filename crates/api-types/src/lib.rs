@@ -11,6 +11,7 @@
 // The test fixtures spell whole responses with `json!`, which recurses once per field.
 #![cfg_attr(test, recursion_limit = "256")]
 
+pub mod agents;
 pub mod audit;
 pub mod auth;
 pub mod comments;

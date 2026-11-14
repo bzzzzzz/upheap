@@ -266,6 +266,30 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/v1/me/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What agents finished that waits for the signed-in user to decide: items an agent brought to a stable state (a
+         *     note with context, a defined task) that are still at it, not started and not closed, and notes that became other
+         *     items and have not been sent on, in the active heaps of their teams, one row each, most important first. Rows are
+         *     ordered by the item's ranking score in its own heap times your priority for that heap, highest first, then by heap
+         *     name and the item's position; a note that became other items takes the best score of what was made from it that is
+         *     ranked, or 0. At most 500 rows come back; `count` is the true total. Read-only, for any member.
+         */
+        get: operations["get_decisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/history": {
         parameters: {
             query?: never;
@@ -380,6 +404,27 @@ export interface paths {
          *     session cookie only.
          */
         delete: operations["revoke_personal_token"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The history of agent runs that ended as reached, newest first, in the active heaps of the signed-in user's teams:
+         *     the last 30 days only, 50 to a page. Pass `next_cursor` as `cursor` for the next page; it is `null` when no more
+         *     runs are in the last 30 days. Read-only, for any member.
+         */
+        get: operations["get_results"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2114,6 +2159,36 @@ export interface components {
             /** Format: int32 */
             reached: number;
         };
+        /** @description An item an agent brought to a stable state, which waits for the caller. */
+        DecisionRow: {
+            /**
+             * @description How long ago the agent's turn ended, in calendar days in the client's time zone: "today", "yesterday",
+             *     "4 days ago".
+             */
+            arrived: string;
+            /** @description What a note that became other items became, in words: "made 3 tasks". `null` on any other row. */
+            became_label?: string | null;
+            heap: components["schemas"]["ItemHeap"];
+            /** @description The item, at its stage now. For a note that became other items, the note. It has no open turn. */
+            item: components["schemas"]["WaitingItem"];
+        };
+        /**
+         * @description What waits for the caller's decision: items an agent brought to a stable state, in their active heaps, most
+         *     important first.
+         */
+        Decisions: {
+            /**
+             * Format: int32
+             * @description How many rows wait. At most 500 are in `rows`; this is the true total.
+             */
+            count: number;
+            /**
+             * @description Ordered by the item's score in its own heap times your priority for that heap, highest first; ties by heap
+             *     name, then the item's position in its heap. A note that became other items takes the best score of what was
+             *     made from it that is ranked, or 0.
+             */
+            rows: components["schemas"]["DecisionRow"][];
+        };
         /** @description A due time, ready to show. */
         Due: {
             /**
@@ -3460,6 +3535,49 @@ export interface components {
             /** @description The email address of the account. Any case. */
             email: string;
         };
+        /** @description One run that ended as reached. */
+        ResultRow: {
+            /**
+             * @description The local calendar date the run ended on in the client's time zone, `YYYY-MM-DD`: the key rows are grouped by.
+             * @example 2026-11-12
+             */
+            day: string;
+            /** @description The date as a label: "today", "yesterday", "12 Nov". */
+            day_label: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when the run ended.
+             */
+            ended_at: number;
+            /** @description The goal of the run's turn. */
+            goal: components["schemas"]["Goal"];
+            heap: components["schemas"]["ItemHeap"];
+            /** @description The item at its stage now. */
+            item: components["schemas"]["WaitingItem"];
+            links: components["schemas"]["RunLink"][];
+            reached?: null | components["schemas"]["RunReached"];
+            /**
+             * @description What the run reached, in words: "with context", "defined", "defined (skipped with context)" when it went past
+             *     the goal of its turn, "became". `null` when `reached` is.
+             */
+            reached_label?: string | null;
+            /** @description What the run said it reached. */
+            result: string;
+            /** Format: uuid */
+            run_id: string;
+            /**
+             * @description The local time the run ended at in the client's time zone, "HH:MM" on a 24-hour clock.
+             * @example 14:02
+             */
+            time: string;
+        };
+        /** @description A page of the history: the runs that ended as reached in the last 30 days, newest first. */
+        Results: {
+            /** @description Where the next page starts; `null` when there are no more runs in the last 30 days. */
+            next_cursor?: string | null;
+            /** @description Up to 50 rows. */
+            rows: components["schemas"]["ResultRow"][];
+        };
         /** @description What a review asks about. */
         Review: {
             /** @description The address of the work to look at: an absolute `http` or `https` link. */
@@ -3523,6 +3641,20 @@ export interface components {
          * @enum {string}
          */
         RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back";
+        /** @description A link a run left. */
+        RunLink: {
+            /** @description What to show for it: "pull request" for a pull or merge request, else the address without its `https://` or `http://`. */
+            label: string;
+            /** @description Whether it is a pull or merge request. */
+            pull_request: boolean;
+            /** @description The address. */
+            url: string;
+        };
+        /**
+         * @description What a run reached when it ended as reached. More can join.
+         * @enum {string}
+         */
+        RunReached: "with_context" | "defined" | "became";
         SavedView: {
             allowed_actions: components["schemas"]["SavedViewAction"][];
             /**
@@ -4576,6 +4708,37 @@ export interface operations {
             };
         };
     };
+    get_decisions: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decisions"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_history: {
         parameters: {
             query?: {
@@ -4863,6 +5026,49 @@ export interface operations {
             };
             /** @description No such token, or it isn't the caller's */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_results: {
+        parameters: {
+            query?: {
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Results"];
+                };
+            };
+            /** @description `invalid_query`, or `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2,8 +2,10 @@
 //! item has at most one open turn (`ended_at` is `NULL`), which the service keeps under the heap lock. Turns are
 //! never deleted: a taken-back one keeps its row.
 
+use domain::item::StateKind;
 use domain::turn::{Ended, Goal, Reach, Redone, Turn, TurnEnd, TurnLine, TurnSource};
 use domain::{HeapId, ItemId, TurnId, UserId};
+use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
 };
@@ -105,6 +107,56 @@ pub async fn list_open_turns(
         }
     }
     Ok(turns)
+}
+
+/// The turns of the items of `heap_ids` that ended as reached and are the latest of their item (no turn opened
+/// after), where the item is neither done, won't do, nor in progress, in one query per [`IN_LIST_CHUNK`] heaps. A
+/// note that became items is left out once one of what was made from it is no longer open or blocked (started or
+/// closed), or has any turn (sent on: a made item starts with none, so any turn is the person's or one passed on
+/// by the split). The order is the database's.
+pub async fn list_latest_reached_turns_in_heaps(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+) -> Result<Vec<Turn>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_turns::Entity::find()
+            .join(
+                JoinType::InnerJoin,
+                item_turns::Entity::belongs_to(items::Entity)
+                    .from(item_turns::Column::ItemId)
+                    .to(items::Column::Id)
+                    .into(),
+            )
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
+            .filter(items::Column::State.is_in([
+                StateKind::Open.code(),
+                StateKind::Blocked.code(),
+                StateKind::Became.code(),
+            ]))
+            .filter(item_turns::Column::EndKind.eq(TurnEnd::Reached.code()))
+            .filter(Expr::cust(
+                "NOT EXISTS (SELECT 1 FROM item_turns newer WHERE newer.item_id = item_turns.item_id \
+                 AND (newer.opened_at > item_turns.opened_at \
+                 OR (newer.opened_at = item_turns.opened_at AND newer.id > item_turns.id)))",
+            ))
+            .filter(Expr::cust(format!(
+                "(items.state <> '{became}' OR NOT EXISTS (SELECT 1 FROM items made WHERE made.origin_id = items.id \
+                 AND made.made_in_split = TRUE \
+                 AND (made.state NOT IN ('{open}', '{blocked}') \
+                 OR EXISTS (SELECT 1 FROM item_turns sent WHERE sent.item_id = made.id))))",
+                became = StateKind::Became.code(),
+                open = StateKind::Open.code(),
+                blocked = StateKind::Blocked.code(),
+            )))
+            .all(db)
+            .await?;
+        for row in rows {
+            found.push(to_turn(row)?);
+        }
+    }
+    Ok(found)
 }
 
 /// Every open turn of the items of `heap_id`, as locking reads (see [`find_open_turn_locking`]), ordered by when they
