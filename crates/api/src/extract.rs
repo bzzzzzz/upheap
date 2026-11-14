@@ -33,12 +33,13 @@ pub(crate) const RUN_HEADER: &str = "upheap-run";
 /// other write is refused with `run_forbidden`: replying to a question, sending and taking back, retrying, claiming
 /// another run, heaps, teams, tags, parameters and views belong to the person. A run adds a task or a note, with a
 /// context, to any heap the person can edit; one it makes from its own item (a split) may start blocked by another
-/// it made. It closes its own item as became once something was made from it.
+/// it made. It closes its own item as became once something was made from it, or makes it a step of a task of the heap.
 ///
 /// Templates are those the routes are registered with, under `/api/v1`.
 const RUN_ALLOWED_WRITES: &[(Method, &str)] = &[
     (Method::POST, "/teams/{team}/heaps/{heap}/items"),
     (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/became"),
+    (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/to-step"),
     (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}"),
     (Method::POST, "/teams/{team}/heaps/{heap}/items/{item}/steps"),
     (Method::PATCH, "/teams/{team}/heaps/{heap}/items/{item}/steps/{step}"),

@@ -1,23 +1,29 @@
-//! A note becoming the items made from it (architecture.md, Data model and Cycle detection and locking).
+//! A note becoming the items made from it, or a step of a task (architecture.md, Data model and Cycle detection and
+//! locking).
 //!
 //! The items are made with `create_item` from an origin. This closes the note as became. A person's close takes back
 //! the note's turn like any close. In a run it is also the run's report that the turn is reached: the check that every
 //! open task made from the note is ready to be defined, the tasks' stage, the note's close, the end of the run and the
 //! turn, and the turns those tasks get when the note was sent all the way are one transaction, so a run that dies
-//! between them can't strand a closed note with an open turn.
+//! between them can't strand a closed note with an open turn. A note made a step of a task closes the same way, and
+//! in a run it reaches the turn with the step added.
 
 use domain::audit::AuditAction;
-use domain::item::{Item, Kind, Stage, StateKind};
+use domain::heap::Heap;
+use domain::item::{Item, ItemError, Kind, Stage, StateKind};
 use domain::permission::Permission;
-use domain::run::{RunEnd, RunResult, split_reached_check};
-use domain::step::StepState;
+use domain::question::QuestionState;
+use domain::run::{NotReached, RunEnd, RunResult, split_reached_check};
+use domain::step::{NewStep, Step, StepState, check_steps_editable, place_step};
+use domain::text::Context;
 use domain::turn::TakeBackWhy;
-use domain::{HeapId, ItemId, TurnId, ValidationError};
+use domain::{HeapId, ItemId, StepId, Timestamp, TurnId, ValidationError};
 use store::{StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
-use crate::audit::{describe_new_turn, describe_reached, diff_items};
+use crate::audit::{describe_new_step, describe_new_turn, describe_reached, diff_items};
 use crate::items::{ItemChildren, ItemView, build_item_view, commit_if_in_run, in_run};
+use crate::work::RunScope;
 use crate::{Principal, ServiceError, Services};
 
 impl Services {
@@ -136,16 +142,7 @@ impl Services {
             let result = became_result(&made)?;
             let ended_run = scope.run.ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None);
             store::runs::end_run(&txn, &ended_run).await?;
-            store::turns::end_turn(&txn, &scope.turn.reached(principal.user_id, now)).await?;
-            let entry = self.item_audit_entry(
-                heap,
-                principal,
-                AuditAction::TurnReached,
-                &saved,
-                describe_reached(scope.turn.goal, saved.stage, saved.stage),
-                now,
-            );
-            store::audit::insert_audit_entry(&txn, &entry).await?;
+            self.reach_turn(&txn, heap, principal, &scope, &saved, now).await?;
 
             // All the way §2: sent all the way, the note's turn goes on to the tasks it became, each defined by now.
             // One the person has started or sent on already stays as the person left it.
@@ -195,6 +192,167 @@ impl Services {
             "note became"
         );
         Ok(view)
+    }
+    /// Makes the note `item_id` a step of the open task `task_id` in its heap: the step is at the end of the task, with
+    /// the note's title and description as its title and context, and it keeps the note as its origin. The note
+    /// closes as became. Not declarative: a note that already became is refused, as a repeat would add a second step.
+    ///
+    /// Fails with [`domain::item::ItemError::BecameNeedsNote`] unless the item is a note,
+    /// [`domain::item::ItemError::Closed`] when the note or the task is closed, [`ServiceError::StepTaskNotInHeap`]
+    /// when the task isn't an item of the note's heap, and [`domain::step::StepError`] when the task is a note or has
+    /// too many steps.
+    ///
+    /// A person's close takes back the note's open turn and withdraws its open questions, as any close does. In a run
+    /// the note must be the run's item, and it is refused with [`ServiceError::NotReached`] (and the run only heard
+    /// from) while it has an open question. Otherwise the run and the turn end as reached; no turn opens on the task,
+    /// and its stage, state and turn stay as they are.
+    pub async fn note_to_step(
+        &self,
+        principal: Principal,
+        item_id: ItemId,
+        task_id: ItemId,
+    ) -> Result<ItemView, ServiceError> {
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let found = store::items::find_item(&txn, item_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems)
+            .await
+            .map_err(|error| in_run(principal, error))?;
+        let now = self.now();
+        let scope = self.check_run_write(&txn, principal, item_id, now).await?;
+        let heap = &access.heap;
+        let note = store::items::find_item_locking(&txn, item_id)
+            .await?
+            .filter(|note| note.heap_id == heap.id)
+            .ok_or(ServiceError::NotFound)?;
+        let became = note
+            .became(principal.user_id, now)?
+            .ok_or(ItemError::Closed { item_id })?;
+        let task = store::items::find_item_locking(&txn, task_id)
+            .await?
+            .filter(|task| task.heap_id == heap.id)
+            .ok_or(ServiceError::StepTaskNotInHeap { item_id: task_id })?;
+        check_steps_editable(&task)?;
+        let steps = store::steps::list_steps_locking(&txn, task.id).await?;
+        let placement = place_step(&task, &steps, None)?;
+
+        let mut turns_taken_back = 0_usize;
+        let mut questions_withdrawn = 0_usize;
+        if scope.is_some() {
+            let open_questions = store::questions::list_questions_locking(&txn, note.id)
+                .await?
+                .iter()
+                .any(|question| question.state() == QuestionState::Open);
+            if open_questions {
+                // The run is plainly still going, so it was heard from; the check already touched it.
+                commit_if_in_run(txn, principal).await?;
+                return Err(NotReached::OpenQuestion.into());
+            }
+        } else {
+            turns_taken_back = self
+                .take_back_open_turn(&txn, heap, principal, note.id, TakeBackWhy::Closed, now)
+                .await?
+                .into();
+            questions_withdrawn = self.withdraw_open_questions(&txn, heap, principal, &note, now).await?;
+        }
+
+        let fields = NewStep {
+            title: note.title.clone(),
+            context: note
+                .description
+                .as_ref()
+                .map(|description| Context::parse(description.as_str()))
+                .transpose()?
+                .flatten(),
+            after: None,
+        };
+        let step = Step {
+            origin_id: Some(note.id),
+            ..Step::new(StepId::from_uuid(self.new_id(now)), task.id, placement, fields, now)
+        };
+        store::steps::insert_step(&txn, &step).await?;
+        let entry = self.item_audit_entry(
+            heap,
+            principal,
+            AuditAction::StepAdded,
+            &task,
+            describe_new_step(&step),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+
+        let saved = store::items::update_item(&txn, &became, note.version, now)
+            .await?
+            .ok_or(ServiceError::VersionConflict {
+                expected: note.version,
+                current: note.version.next(),
+            })?;
+        let entry = self.item_audit_entry(
+            heap,
+            principal,
+            AuditAction::ItemUpdated,
+            &saved,
+            diff_items(&note, &saved),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+
+        if let Some(scope) = scope {
+            let text = format!(
+                "Became step {}.{} \"{}\" of {} \"{}\"",
+                task.key,
+                step.number,
+                step.title.as_str(),
+                task.key,
+                task.title.as_str()
+            );
+            let result = RunResult::parse(&text.chars().take(RunResult::MAX_CHARS).collect::<String>())?;
+            let ended_run = scope.run.ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None);
+            store::runs::end_run(&txn, &ended_run).await?;
+            self.reach_turn(&txn, heap, principal, &scope, &saved, now).await?;
+        }
+
+        let children = ItemChildren::read_locking(&txn, saved.id).await?;
+        let view = build_item_view(&txn, heap, &access.membership, saved, children, now).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(
+            heap_id = %heap.id,
+            item_id = %item_id,
+            task_id = %task.id,
+            step = step.number.get(),
+            user_id = %principal.user_id,
+            turns_taken_back,
+            questions_withdrawn,
+            in_run = principal.run.is_some(),
+            "note became a step"
+        );
+        Ok(view)
+    }
+
+    /// Ends the turn of `scope` as reached and records it on `note`, the run's item, which has just closed as became.
+    /// No next turn opens on it.
+    async fn reach_turn(
+        &self,
+        txn: &store::DatabaseTransaction,
+        heap: &Heap,
+        principal: Principal,
+        scope: &RunScope,
+        note: &Item,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
+        store::turns::end_turn(txn, &scope.turn.reached(principal.user_id, now)).await?;
+        let entry = self.item_audit_entry(
+            heap,
+            principal,
+            AuditAction::TurnReached,
+            note,
+            describe_reached(scope.turn.goal, note.stage, note.stage),
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
+        Ok(())
     }
 }
 

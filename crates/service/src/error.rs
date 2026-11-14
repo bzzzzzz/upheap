@@ -76,6 +76,9 @@ pub enum ServiceError {
     /// The item to make a new one from isn't an item of the heap the new one is made in.
     #[error("item {item_id} is not an item of this heap")]
     OriginNotInHeap { item_id: ItemId },
+    /// The task a note is made a step of isn't a task of the note's heap, or isn't there for the caller.
+    #[error("item {item_id} is not an item of this heap")]
+    StepTaskNotInHeap { item_id: ItemId },
     /// Only a note is split.
     #[error("item {item_id} is not a note, so nothing is made from it")]
     OriginNotANote { item_id: ItemId },

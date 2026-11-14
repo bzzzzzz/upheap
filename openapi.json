@@ -3870,6 +3870,130 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/to-step": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Makes a note a step of an open task in the same heap, at the end of the task's steps, with the note's title and\ndescription as the step's title and context. The step keeps the note as its origin, and the note closes as became.\nNot declarative: a note that already became is refused (`item_closed`), as a repeat would add a second step. Open\nquestions are withdrawn, as on any close, and a person's request takes back the note's open turn.",
+        "description": "From inside a run the note must be the run's item, and it is refused with `not_reached` while it has an open\nquestion. Otherwise the run and the turn end as reached, with no turn on the task. `POST /work/runs/{run}/reached`\nafter it succeeds and does nothing.",
+        "operationId": "note_to_step",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemToStepRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The note, closed as became, with `became_steps` naming the step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "From inside a run: `run_wrong_item` (another item than the run's, named in `item_key`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`became_needs_note` (a task or a reminder), `item_closed` (the note or the task is done, won't do, or the note already became), `steps_need_task` (the target is a note), `too_many_steps`, `heap_archived`, or from inside a run `run_over`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`step_task_not_in_heap` (`task_id` is no item of the note's heap), or from inside a run `not_reached`, naming the open question",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn": {
       "post": {
         "tags": [
@@ -8993,6 +9117,7 @@
           "state",
           "blocker_gone",
           "became",
+          "became_steps",
           "need",
           "tags",
           "parameters",
@@ -9038,6 +9163,16 @@
               "$ref": "#/components/schemas/MadeItem"
             },
             "description": "The items made from this one, oldest first, in any state and heap. `null` in the ranked list and other lists;\non one item and in the closed list it is a list, empty when nothing was made from it."
+          },
+          "became_steps": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/MadeStep"
+            },
+            "description": "The steps of other tasks made from this note, oldest first (`item to-step`), in any task state and heap. `null`\nin the ranked list and other lists; on one item and in the closed list it is a list, empty when no step was\nmade from it."
           },
           "blocked_by": {
             "oneOf": [
@@ -9751,6 +9886,21 @@
           }
         }
       },
+      "ItemToStepRequest": {
+        "type": "object",
+        "description": "The task to make a note a step of.",
+        "required": [
+          "task_id"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The open task of the note's heap that gets the step."
+          }
+        },
+        "additionalProperties": false
+      },
       "Kind": {
         "type": "string",
         "description": "What an item is. A note or a reminder becomes a task in place; a task never goes back, and a note and a reminder\nnever become each other.",
@@ -10009,6 +10159,61 @@
           },
           "state": {
             "$ref": "#/components/schemas/ItemState"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "MadeStep": {
+        "type": "object",
+        "description": "A step a note became, as the note's `became_steps` lists it, with the task it is a step of.",
+        "required": [
+          "number",
+          "title",
+          "state",
+          "task"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The step's number within its task.",
+            "minimum": 0
+          },
+          "state": {
+            "$ref": "#/components/schemas/StepState"
+          },
+          "task": {
+            "$ref": "#/components/schemas/MadeStepTask",
+            "description": "The task the step belongs to."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "MadeStepTask": {
+        "type": "object",
+        "description": "The task a step a note became belongs to.",
+        "required": [
+          "id",
+          "key",
+          "title",
+          "heap"
+        ],
+        "properties": {
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap",
+            "description": "The heap it is in now, and its team."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "Unique within the heap; the task's path is `…/items/{key}`."
           },
           "title": {
             "type": "string"
@@ -11552,6 +11757,7 @@
           "title",
           "state",
           "version",
+          "origin",
           "allowed_actions"
         ],
         "properties": {
@@ -11577,6 +11783,17 @@
             "format": "int32",
             "description": "The step's number within its item, given when it was added and never changed or reused. The step is named\nby its item's key and this number, as `k3x9a.3`, and its path is `…/items/{key}/steps/{number}`.",
             "minimum": 0
+          },
+          "origin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemOrigin",
+                "description": "The note this step was made from, when the caller may view the note's heap. `null` for a step that wasn't made\nfrom a note, and when the caller can't view the note's heap."
+              }
+            ]
           },
           "state": {
             "$ref": "#/components/schemas/StepState"

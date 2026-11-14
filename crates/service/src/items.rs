@@ -6,7 +6,7 @@ use domain::audit::{AuditAction, EntityType};
 use domain::comment::Comment;
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
-use domain::item::{BlockerGone, Item, ItemPatch, ItemSummary, Kind, NewItem, NewOrigin, Stage, StateKind};
+use domain::item::{BlockerGone, Item, ItemPatch, ItemSummary, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
 use domain::list_view::{Group, ListView, RemindersMode};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
 use domain::permission::{
@@ -16,7 +16,7 @@ use domain::permission::{
 use domain::question::{Question, QuestionState, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
 use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
-use domain::step::{Step, StepProgress, progress};
+use domain::step::{Step, StepNumber, StepProgress, StepState, progress};
 use domain::tag::Tag;
 use domain::team::{Membership, Role, Team};
 use domain::turn::{Goal, Reach, TakeBackWhy, Turn, TurnSource, goal_for, with_agent};
@@ -65,6 +65,8 @@ pub struct ItemView {
     /// closed list, `None` in the ranked list and other lists. A split makes a handful of items, and the closed list
     /// is at most [`MAX_CLOSED_PAGE`] rows, so one query reads them for the whole page.
     pub became: Option<Vec<MadeItem>>,
+    /// The steps of other tasks made from it, oldest first: `Some` where `became` is, `None` in other lists.
+    pub became_steps: Option<Vec<MadeStep>>,
     /// Who added it, when that is known (see [`Item::created_by`]).
     pub created_by: Option<User>,
     /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
@@ -97,6 +99,20 @@ pub struct ItemView {
     /// The item this one was made from, when the caller may see the heap it is in. `None` otherwise, and in lists,
     /// which don't look it up: the item's own view does.
     pub origin: Option<ItemOrigin>,
+    /// The note each of the steps was made from, by step number, for the steps whose note the caller may see. Empty
+    /// where `steps` is `None`.
+    pub step_origins: HashMap<StepNumber, ItemOrigin>,
+}
+
+/// A step a note became, with the task it is a step of and where that task is now.
+#[derive(Clone, Debug)]
+pub struct MadeStep {
+    pub number: StepNumber,
+    pub title: Title,
+    pub state: StepState,
+    pub task: ItemSummary,
+    pub heap: Heap,
+    pub team: Team,
 }
 
 /// An item a note was split into, with where it is now.
@@ -372,6 +388,7 @@ impl Services {
                 blocker_gone,
                 // What an item became is read for one item or the closed list.
                 became: None,
+                became_steps: None,
                 created_by,
                 // Listed items aren't closed, so they have no closer.
                 closed_by: None,
@@ -390,6 +407,7 @@ impl Services {
                 turn: None,
                 with_agent: false,
                 origin: None,
+                step_origins: HashMap::new(),
             }
         };
 
@@ -569,6 +587,11 @@ impl Services {
         let item_ids: Vec<ItemId> = items.iter().map(|item| item.id).collect();
         let made_items = store::items::list_items_made_from(&self.db, &item_ids, false).await?;
         let mut made = made_from_by_origin(&self.db, &made_items).await?;
+        let mut made_steps = made_steps_by_origin(
+            &self.db,
+            &store::steps::list_steps_made_from(&self.db, &item_ids, false).await?,
+        )
+        .await?;
         let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
         let role = access.membership.role;
@@ -585,6 +608,7 @@ impl Services {
                 let created_by = pick_user(&users, item.created_by);
                 let closed_by = pick_user(&users, item.state.closed_by());
                 let became = made.remove(&item.id).unwrap_or_default();
+                let became_steps = made_steps.remove(&item.id).unwrap_or_default();
                 // Only blocked items have a blocker, and closed items aren't blocked.
                 ItemView {
                     item,
@@ -593,6 +617,7 @@ impl Services {
                     blocked_by: None,
                     blocker_gone: None,
                     became: Some(became),
+                    became_steps: Some(became_steps),
                     created_by,
                     closed_by,
                     allowed_actions,
@@ -608,6 +633,7 @@ impl Services {
                     turn: None,
                     with_agent: false,
                     origin: None,
+                    step_origins: HashMap::new(),
                 }
             })
             .collect();
@@ -757,6 +783,7 @@ impl Services {
         // New items have no closer, no steps and nothing made from them, and their blocker is not gone.
         Ok(ItemView {
             became: Some(Vec::new()),
+            became_steps: Some(Vec::new()),
             item,
             tags,
             parameters: values,
@@ -777,6 +804,7 @@ impl Services {
             with_agent: turn.is_some(),
             turn,
             origin,
+            step_origins: HashMap::new(),
         })
     }
 
@@ -1236,6 +1264,18 @@ pub(crate) async fn build_item_view(
         .await?
         .remove(&item.id)
         .unwrap_or_default();
+    let became_steps = made_steps_by_origin(db, &store::steps::list_steps_made_from(db, &[item.id], locking).await?)
+        .await?
+        .remove(&item.id)
+        .unwrap_or_default();
+    let mut step_origins = HashMap::new();
+    for step in &steps {
+        if let Some(origin_id) = step.origin_id
+            && let Some(origin) = find_viewable_item(db, membership.user_id, origin_id).await?
+        {
+            step_origins.insert(step.number, origin);
+        }
+    }
     let (created_by, closed_by) = find_item_users(db, &item).await?;
     let open_questions = questions.iter().filter(|q| q.state() == QuestionState::Open).count();
     let waits_for_you = waits_for_you(&item, heap, open_questions, stuck, blocker_gone.is_some());
@@ -1259,6 +1299,8 @@ pub(crate) async fn build_item_view(
         blocked_by,
         blocker_gone,
         became: Some(became),
+        became_steps: Some(became_steps),
+        step_origins,
         created_by,
         closed_by,
         allowed_actions,
@@ -1670,24 +1712,13 @@ pub(crate) async fn made_from_by_origin(
     db: &impl ConnectionTrait,
     made: &[Item],
 ) -> Result<HashMap<ItemId, Vec<MadeItem>>, ServiceError> {
-    let mut heaps: HashMap<HeapId, (Heap, Team)> = HashMap::new();
+    let mut heaps = HashMap::new();
     let mut grouped: HashMap<ItemId, Vec<MadeItem>> = HashMap::new();
     for item in made {
         let Some(origin) = item.origin_id else {
             continue;
         };
-        let (heap, team) = match heaps.entry(item.heap_id) {
-            std::collections::hash_map::Entry::Occupied(found) => found.get().clone(),
-            std::collections::hash_map::Entry::Vacant(slot) => {
-                let heap = store::heaps::find_heap(db, item.heap_id)
-                    .await?
-                    .ok_or(ServiceError::NotFound)?;
-                let team = store::teams::find_team(db, heap.team_id)
-                    .await?
-                    .ok_or(ServiceError::NotFound)?;
-                slot.insert((heap, team)).clone()
-            }
-        };
+        let (heap, team) = heap_with_team(db, &mut heaps, item.heap_id).await?;
         grouped.entry(origin).or_default().push(MadeItem {
             item: ItemSummary::from(item),
             heap,
@@ -1695,6 +1726,51 @@ pub(crate) async fn made_from_by_origin(
         });
     }
     Ok(grouped)
+}
+
+/// `made`, the steps made from notes with their tasks, grouped under the note each was made from, in the order given,
+/// each with the heap its task is in now and that heap's team.
+pub(crate) async fn made_steps_by_origin(
+    db: &impl ConnectionTrait,
+    made: &[(Step, ItemSummary)],
+) -> Result<HashMap<ItemId, Vec<MadeStep>>, ServiceError> {
+    let mut heaps = HashMap::new();
+    let mut grouped: HashMap<ItemId, Vec<MadeStep>> = HashMap::new();
+    for (step, task) in made {
+        let Some(origin) = step.origin_id else {
+            continue;
+        };
+        let (heap, team) = heap_with_team(db, &mut heaps, task.heap_id).await?;
+        grouped.entry(origin).or_default().push(MadeStep {
+            number: step.number,
+            title: step.title.clone(),
+            state: step.state,
+            task: task.clone(),
+            heap,
+            team,
+        });
+    }
+    Ok(grouped)
+}
+
+/// The heap `heap_id` and its team, read once into `cache`: a page has a handful of heaps.
+async fn heap_with_team(
+    db: &impl ConnectionTrait,
+    cache: &mut HashMap<HeapId, (Heap, Team)>,
+    heap_id: HeapId,
+) -> Result<(Heap, Team), ServiceError> {
+    match cache.entry(heap_id) {
+        std::collections::hash_map::Entry::Occupied(found) => Ok(found.get().clone()),
+        std::collections::hash_map::Entry::Vacant(slot) => {
+            let heap = store::heaps::find_heap(db, heap_id)
+                .await?
+                .ok_or(ServiceError::NotFound)?;
+            let team = store::teams::find_team(db, heap.team_id)
+                .await?
+                .ok_or(ServiceError::NotFound)?;
+            Ok(slot.insert((heap, team)).clone())
+        }
+    }
 }
 
 /// Fails unless every tag and option `view` filters by, and the parameter it sorts by, belong to the heap whose

@@ -763,6 +763,31 @@ export interface paths {
         patch: operations["update_step"];
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/to-step": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Makes a note a step of an open task in the same heap, at the end of the task's steps, with the note's title and
+         *     description as the step's title and context. The step keeps the note as its origin, and the note closes as became.
+         *     Not declarative: a note that already became is refused (`item_closed`), as a repeat would add a second step. Open
+         *     questions are withdrawn, as on any close, and a person's request takes back the note's open turn.
+         * @description From inside a run the note must be the run's item, and it is refused with `not_reached` while it has an open
+         *     question. Otherwise the run and the turn end as reached, with no turn on the task. `POST /work/runs/{run}/reached`
+         *     after it succeeds and does nothing.
+         */
+        post: operations["note_to_step"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn": {
         parameters: {
             query?: never;
@@ -2105,6 +2130,12 @@ export interface components {
              *     on one item and in the closed list it is a list, empty when nothing was made from it.
              */
             became: components["schemas"]["MadeItem"][] | null;
+            /**
+             * @description The steps of other tasks made from this note, oldest first (`item to-step`), in any task state and heap. `null`
+             *     in the ranked list and other lists; on one item and in the closed list it is a list, empty when no step was
+             *     made from it.
+             */
+            became_steps: components["schemas"]["MadeStep"][] | null;
             blocked_by?: null | components["schemas"]["ItemRef"];
             /**
              * @description Why the item is blocked, in words, as set when it was blocked. Set only on blocked items, and only when
@@ -2377,6 +2408,14 @@ export interface components {
             id: string;
             name: string;
         };
+        /** @description The task to make a note a step of. */
+        ItemToStepRequest: {
+            /**
+             * Format: uuid
+             * @description The open task of the note's heap that gets the step.
+             */
+            task_id: string;
+        };
         /**
          * @description What an item is. A note or a reminder becomes a task in place; a task never goes back, and a note and a reminder
          *     never become each other.
@@ -2456,6 +2495,28 @@ export interface components {
             key: string;
             kind: components["schemas"]["Kind"];
             state: components["schemas"]["ItemState"];
+            title: string;
+        };
+        /** @description A step a note became, as the note's `became_steps` lists it, with the task it is a step of. */
+        MadeStep: {
+            /**
+             * Format: int32
+             * @description The step's number within its task.
+             */
+            number: number;
+            state: components["schemas"]["StepState"];
+            /** @description The task the step belongs to. */
+            task: components["schemas"]["MadeStepTask"];
+            title: string;
+        };
+        /** @description The task a step a note became belongs to. */
+        MadeStepTask: {
+            /** @description The heap it is in now, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+            /** Format: uuid */
+            id: string;
+            /** @description Unique within the heap; the task's path is `…/items/{key}`. */
+            key: string;
             title: string;
         };
         Me: {
@@ -3125,6 +3186,7 @@ export interface components {
              *     by its item's key and this number, as `k3x9a.3`, and its path is `…/items/{key}/steps/{number}`.
              */
             number: number;
+            origin: null | components["schemas"]["ItemOrigin"];
             state: components["schemas"]["StepState"];
             title: string;
             /**
@@ -5879,6 +5941,84 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    note_to_step: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemToStepRequest"];
+            };
+        };
+        responses: {
+            /** @description The note, closed as became, with `became_steps` naming the step */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description From inside a run: `run_wrong_item` (another item than the run's, named in `item_key`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `became_needs_note` (a task or a reminder), `item_closed` (the note or the task is done, won't do, or the note already became), `steps_need_task` (the target is a note), `too_many_steps`, `heap_archived`, or from inside a run `run_over` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `step_task_not_in_heap` (`task_id` is no item of the note's heap), or from inside a run `not_reached`, naming the open question */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1131,6 +1131,7 @@ mod tests {
             title: crate::item::Title::parse("Run in staging").expect("valid"),
             context: None,
             state,
+            origin_id: None,
             created_at: Timestamp::EPOCH,
             version: Version::INITIAL,
         }

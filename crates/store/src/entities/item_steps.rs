@@ -12,6 +12,8 @@ pub struct Model {
     pub title: String,
     pub context: Option<String>,
     pub state: String,
+    /// The note that became this step.
+    pub origin_id: Option<String>,
     pub created_at: i64,
     pub version: i32,
 }
