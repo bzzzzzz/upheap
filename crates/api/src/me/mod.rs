@@ -5,6 +5,7 @@ pub(crate) mod password;
 pub(crate) mod personal_tokens;
 pub(crate) mod sign_ins;
 
+use api_types::agents::{DecisionRowDto, DecisionsDto, ResultRowDto, ResultsDto, ResultsQuery, RunLinkDto};
 use api_types::common::HeapSummaryDto;
 use api_types::common::{ItemActionDto, ItemRefDto};
 use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
@@ -14,15 +15,21 @@ use api_types::waiting::{
 };
 use axum::Json;
 use axum::extract::State;
+use domain::due::{describe_ago, describe_date};
+use domain::item::Item;
+use domain::run::RunReached;
+use domain::turn::Goal;
 use domain::user::DisplayName;
-use domain::{Timestamp, ValidationError};
+use domain::{RunId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
 use service::ServiceError;
 use service::across_heaps::AcrossHeapsEntry;
+use service::agents::{DecisionRow, ReachedCursor, ResultRow};
 use service::me::{HeapOverview, MeView, TeamView};
 use service::waiting::{WaitingRow, WaitingSubject};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
+use uuid::Uuid;
 
 use crate::dto::{IfMatchHeader, to_blocker_gone_dto, to_item_heap_dto, to_question_dto, to_ranked_dto, to_turn_dto};
 use crate::error::Problem;
@@ -33,6 +40,8 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(get_me, update_me))
         .routes(routes!(get_waiting))
+        .routes(routes!(get_decisions))
+        .routes(routes!(get_results))
         .routes(routes!(get_items))
 }
 
@@ -227,4 +236,132 @@ async fn get_items(
         hidden_count: list.hidden_count,
         in_progress_count: list.in_progress_count,
     }))
+}
+
+/// The item of a row on the Agents page. It has no open turn: the agent has finished with it, or it was never sent.
+fn to_agent_item_dto(item: &Item) -> WaitingItemDto {
+    WaitingItemDto {
+        id: *item.id.as_uuid(),
+        key: item.key.to_string(),
+        title: item.title.as_str().to_owned(),
+        kind: item.kind.into(),
+        stage: Some(item.stage.into()),
+        turn: None,
+        with_agent: false,
+        version: item.version.get(),
+    }
+}
+
+fn to_decision_row_dto(row: DecisionRow, as_of: Timestamp, tz: &TimeZone) -> DecisionRowDto {
+    DecisionRowDto {
+        item: to_agent_item_dto(&row.item),
+        heap: to_item_heap_dto(&row.heap, &row.team),
+        arrived: describe_ago(row.arrived_at, as_of, tz),
+        became_label: row.became_label,
+    }
+}
+
+fn to_result_row_dto(row: ResultRow, as_of: Timestamp, tz: &TimeZone) -> ResultRowDto {
+    let ended = row.ended;
+    let local = ended.at.to_jiff().to_zoned(tz.clone());
+    let reached_label = ended.reached.map(|reached| match reached {
+        RunReached::WithContext => "with context".to_owned(),
+        RunReached::Defined if row.goal == Goal::WithContext => {
+            format!("defined (skipped {})", Goal::WithContext.phrase())
+        }
+        RunReached::Defined => "defined".to_owned(),
+        RunReached::Became => "became".to_owned(),
+    });
+    ResultRowDto {
+        run_id: *row.run.id.as_uuid(),
+        ended_at: ended.at.as_millis(),
+        day: local.date().to_string(),
+        day_label: describe_date(ended.at, as_of, tz),
+        time: local.strftime("%H:%M").to_string(),
+        item: to_agent_item_dto(&row.item),
+        heap: to_item_heap_dto(&row.heap, &row.team),
+        goal: row.goal.into(),
+        reached: ended.reached.map(Into::into),
+        reached_label,
+        result: ended
+            .result
+            .map(|result| result.as_str().to_owned())
+            .unwrap_or_default(),
+        links: ended.links.iter().map(|link| RunLinkDto::new(link.as_str())).collect(),
+    }
+}
+
+/// What agents finished that waits for the signed-in user to decide: items an agent brought to a stable state (a
+/// note with context, a defined task) that are still at it, not started and not closed, and notes that became other
+/// items and have not been sent on, in the active heaps of their teams, one row each, most important first. Rows are
+/// ordered by the item's ranking score in its own heap times your priority for that heap, highest first, then by heap
+/// name and the item's position; a note that became other items takes the best score of what was made from it that is
+/// ranked, or 0. At most 500 rows come back; `count` is the true total. Read-only, for any member.
+#[utoipa::path(get, path = "/me/decisions", tag = "me", security(("session" = [])),
+    params(TimeZoneHeader),
+    responses((status = 200, body = DecisionsDto), (status = 401, description = "`unauthenticated`", body = Problem)))]
+async fn get_decisions(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ClientTimeZone(tz): ClientTimeZone,
+) -> Result<Json<DecisionsDto>, ApiError> {
+    let decisions = state.services.list_decisions(principal).await?;
+    let as_of = state.services.now();
+    Ok(Json(DecisionsDto {
+        count: decisions.count,
+        rows: decisions
+            .rows
+            .into_iter()
+            .map(|row| to_decision_row_dto(row, as_of, &tz))
+            .collect(),
+    }))
+}
+
+/// The history of agent runs that ended as reached, newest first, in the active heaps of the signed-in user's teams:
+/// the last 30 days only, 50 to a page. Pass `next_cursor` as `cursor` for the next page; it is `null` when no more
+/// runs are in the last 30 days. Read-only, for any member.
+#[utoipa::path(get, path = "/me/results", tag = "me", security(("session" = [])),
+    params(ResultsQuery, TimeZoneHeader),
+    responses(
+        (status = 200, body = ResultsDto),
+        (status = 400, description = "`invalid_query`, or `invalid_cursor`", body = Problem),
+        (status = 401, description = "`unauthenticated`", body = Problem),
+    ))]
+async fn get_results(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ClientTimeZone(tz): ClientTimeZone,
+    ApiQuery(query): ApiQuery<ResultsQuery>,
+) -> Result<Json<ResultsDto>, ApiError> {
+    let cursor = query.cursor.as_deref().map(parse_results_cursor).transpose()?;
+    let page = state.services.list_results(principal, cursor).await?;
+    let as_of = state.services.now();
+    Ok(Json(ResultsDto {
+        rows: page
+            .rows
+            .into_iter()
+            .map(|row| to_result_row_dto(row, as_of, &tz))
+            .collect(),
+        next_cursor: page
+            .next
+            .map(|cursor| format!("{}.{}", cursor.ended_at.as_millis(), cursor.id)),
+    }))
+}
+
+fn parse_results_cursor(raw: &str) -> Result<ReachedCursor, ApiError> {
+    let invalid = || ApiError::BadRequest {
+        code: "invalid_cursor",
+        detail: "cursor is not one this server issued".to_owned(),
+    };
+    let (millis, id) = raw.split_once('.').ok_or_else(invalid)?;
+    let ended_at = millis
+        .parse()
+        .ok()
+        .and_then(Timestamp::from_millis)
+        .ok_or_else(invalid)?;
+    let id = Uuid::parse_str(id).map_err(|_| invalid())?;
+    Ok(ReachedCursor {
+        ended_at,
+        id: RunId::from_uuid(id),
+    })
 }

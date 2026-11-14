@@ -13,7 +13,7 @@ use domain::heap::Heap;
 use domain::item::{Item, ItemError, Kind, Stage, StateKind};
 use domain::permission::Permission;
 use domain::question::QuestionState;
-use domain::run::{NotReached, RunEnd, RunResult, made_heaps_check, split_reached_check};
+use domain::run::{NotReached, RunEnd, RunReached, RunResult, made_heaps_check, split_reached_check};
 use domain::step::{NewStep, Step, StepState, check_steps_editable, place_step};
 use domain::team::Team;
 use domain::text::Context;
@@ -232,7 +232,10 @@ impl Services {
                 .collect();
             let reported = if reported.is_empty() { &made } else { &reported };
             let result = became_result(reported, &made_heaps, team.as_ref())?;
-            let ended_run = scope.run.ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None);
+            let ended_run = scope
+                .run
+                .ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None)
+                .reaching(RunReached::Became);
             store::runs::end_run(&txn, &ended_run).await?;
             self.reach_turn(&txn, heap, principal, &scope, &saved, now).await?;
 
@@ -402,7 +405,10 @@ impl Services {
                 task.title.as_str()
             );
             let result = RunResult::parse(&text.chars().take(RunResult::MAX_CHARS).collect::<String>())?;
-            let ended_run = scope.run.ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None);
+            let ended_run = scope
+                .run
+                .ended_as(RunEnd::Reached, now, Some(result), Vec::new(), None)
+                .reaching(RunReached::Became);
             store::runs::end_run(&txn, &ended_run).await?;
             self.reach_turn(&txn, heap, principal, &scope, &saved, now).await?;
         }

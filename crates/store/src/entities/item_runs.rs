@@ -16,6 +16,7 @@ pub struct Model {
     pub from_stage: String,
     pub result: Option<String>,
     pub links: Option<String>,
+    pub reached: Option<String>,
     pub failure: Option<String>,
     pub cost_micro_usd: Option<i64>,
     pub tool_started_at: Option<i64>,

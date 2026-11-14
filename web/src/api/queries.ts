@@ -76,6 +76,8 @@ const teamKey = (team: string) => ["team", team] as const;
 const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
 const waitingKey = ["waiting"] as const;
+const decisionsKey = ["decisions"] as const;
+const resultsKey = ["results"] as const;
 /** Every view of the list across heaps, by prefix. */
 const acrossHeapsKey = ["across-heaps"] as const;
 const usersKey = (query: string) => ["users", query] as const;
@@ -228,6 +230,32 @@ export function useWaiting() {
 }
 
 /**
+ * What agents finished that waits for the person across their heaps (ux.md, Agents): its count is in the navigation,
+ * so it's fetched for every page, once signed in, and again every 30 s like Waiting for me's.
+ */
+export function useDecisions() {
+  return useQuery({
+    queryKey: decisionsKey,
+    queryFn: async () => unwrap(await api.GET("/api/v1/me/decisions")),
+    staleTime: POLL_INTERVAL,
+    refetchInterval: POLL_INTERVAL,
+  });
+}
+
+/** The history of runs that ended as reached in the last 30 days, a page at a time, newest first (ux.md, Agents). */
+export function useResults() {
+  return useInfiniteQuery({
+    queryKey: resultsKey,
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) =>
+      unwrap(await api.GET("/api/v1/me/results", { params: { query: { cursor: pageParam } } })),
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
+    staleTime: POLL_INTERVAL,
+    refetchInterval: POLL_INTERVAL,
+  });
+}
+
+/**
  * The rough due times a due picker offers, from the server, so a picked choice reads back with the label it was
  * picked by. Their dates move with the day, so they're fetched again after a while.
  */
@@ -249,6 +277,8 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: ["item"] }),
     // An item's state or order changes what waits for the person, and in what order.
     queryClient.invalidateQueries({ queryKey: waitingKey }),
+    // Starting, closing or sending on an item takes it off Your decision.
+    queryClient.invalidateQueries({ queryKey: decisionsKey }),
   ]);
 }
 

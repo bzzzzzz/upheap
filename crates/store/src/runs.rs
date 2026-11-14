@@ -8,11 +8,12 @@
 use std::collections::{HashMap, HashSet};
 
 use domain::item::Stage;
-use domain::run::{Run, RunEnd, RunEnded, RunLink, RunResult};
+use domain::run::{Run, RunEnd, RunEnded, RunLink, RunReached, RunResult};
 use domain::turn::Goal;
 use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, UserId};
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect,
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, FromQueryResult, JoinType, QueryFilter,
+    QueryOrder, QuerySelect,
 };
 
 use crate::StoreError;
@@ -141,6 +142,7 @@ pub async fn end_run(db: &impl ConnectionTrait, run: &Run) -> Result<bool, Store
             end_kind: Set(Some(ended.end.code().to_owned())),
             result: Set(ended.result.as_ref().map(|result| result.as_str().to_owned())),
             links: Set(links),
+            reached: Set(ended.reached.map(|reached| reached.code().to_owned())),
             failure: Set(ended.failure.clone()),
             ..Default::default()
         })
@@ -237,6 +239,114 @@ pub async fn list_runs_for_item(
             Ok((to_run(row)?, goal))
         })
         .collect()
+}
+
+/// Position after which a page of reached runs starts: the last run of the previous page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReachedCursor {
+    pub ended_at: Timestamp,
+    pub id: RunId,
+}
+
+/// A run row with the goal of its turn.
+#[derive(FromQueryResult)]
+struct RunWithGoal {
+    #[sea_orm(nested)]
+    run: item_runs::Model,
+    goal: String,
+}
+
+/// Up to `limit` runs that ended as reached on or after `since`, on the items of `heap_ids`, each with the goal of
+/// its turn, newest first (by end, then id), starting after `after`. Each comes with how it ended, which a run that
+/// ended as reached always has. Runs of `heap_ids` are read in one query per [`IN_LIST_CHUNK`] heaps, each as far as
+/// `limit`, and merged.
+pub async fn list_reached_runs_in_heaps(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+    since: Timestamp,
+    after: Option<ReachedCursor>,
+    limit: u64,
+) -> Result<Vec<(Run, RunEnded, Goal)>, StoreError> {
+    let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let mut query = item_runs::Entity::find()
+            .join(
+                JoinType::InnerJoin,
+                item_runs::Entity::belongs_to(items::Entity)
+                    .from(item_runs::Column::ItemId)
+                    .to(items::Column::Id)
+                    .into(),
+            )
+            .join(
+                JoinType::InnerJoin,
+                item_runs::Entity::belongs_to(item_turns::Entity)
+                    .from(item_runs::Column::TurnId)
+                    .to(item_turns::Column::Id)
+                    .into(),
+            )
+            .column_as(item_turns::Column::Goal, "goal")
+            .filter(items::Column::HeapId.is_in(chunk.iter().map(String::as_str)))
+            .filter(item_runs::Column::EndKind.eq(RunEnd::Reached.code()))
+            .filter(item_runs::Column::EndedAt.gte(since.as_millis()));
+        if let Some(cursor) = after {
+            let ended_at = cursor.ended_at.as_millis();
+            query = query.filter(
+                Condition::any().add(item_runs::Column::EndedAt.lt(ended_at)).add(
+                    Condition::all()
+                        .add(item_runs::Column::EndedAt.eq(ended_at))
+                        .add(item_runs::Column::Id.lt(id_to_db(cursor.id.as_uuid()))),
+                ),
+            );
+        }
+        let rows = query
+            .order_by_desc(item_runs::Column::EndedAt)
+            .order_by_desc(item_runs::Column::Id)
+            .limit(limit)
+            .into_model::<RunWithGoal>()
+            .all(db)
+            .await?;
+        for RunWithGoal { run, goal } in rows {
+            let read = RowReader {
+                table: TABLE,
+                id: &run.id,
+            };
+            let goal = Goal::from_code(&goal).ok_or_else(|| read.corrupt(format!("unknown goal {goal:?}")))?;
+            let run_id = run.id.clone();
+            let run = to_run(run)?;
+            let ended = run
+                .ended
+                .clone()
+                .ok_or_else(|| StoreError::corrupt(TABLE, &run_id, "a run that ended as reached has no end"))?;
+            found.push((run, ended, goal));
+        }
+    }
+    found.sort_by_key(|(run, ended, _)| std::cmp::Reverse((ended.at, *run.id.as_uuid())));
+    found.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+    Ok(found)
+}
+
+/// The runs that ended as reached among the turns `turn_ids`, in one query per [`IN_LIST_CHUNK`] turns, oldest end
+/// first.
+pub async fn list_reached_runs_for_turns(
+    db: &impl ConnectionTrait,
+    turn_ids: &[TurnId],
+) -> Result<Vec<Run>, StoreError> {
+    let ids: Vec<String> = turn_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut runs = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_runs::Entity::find()
+            .filter(item_runs::Column::TurnId.is_in(chunk.iter().map(String::as_str)))
+            .filter(item_runs::Column::EndKind.eq(RunEnd::Reached.code()))
+            .order_by_asc(item_runs::Column::EndedAt)
+            .order_by_asc(item_runs::Column::Id)
+            .all(db)
+            .await?;
+        for row in rows {
+            runs.push(to_run(row)?);
+        }
+    }
+    Ok(runs)
 }
 
 /// Records that the run `id` was heard from at `heard_at`, if it has not ended and not been heard from later.
@@ -367,6 +477,7 @@ fn to_row(run: &Run) -> item_runs::ActiveModel {
         from_stage: Set(run.from_stage.code().to_owned()),
         result: Set(ended.and_then(|ended| ended.result.as_ref().map(|result| result.as_str().to_owned()))),
         links: Set(ended.and_then(|ended| (!ended.links.is_empty()).then(|| links_to_db(&ended.links)))),
+        reached: Set(ended.and_then(|ended| ended.reached.map(|reached| reached.code().to_owned()))),
         failure: Set(ended.and_then(|ended| ended.failure.clone())),
         cost_micro_usd: Set(run.cost_micro_usd),
         tool_started_at: Set(run.tool_started_at.map(Timestamp::as_millis)),
@@ -396,7 +507,15 @@ fn to_run(row: item_runs::Model) -> Result<Run, StoreError> {
                 }
                 None => Vec::new(),
             };
+            let reached = row
+                .reached
+                .as_deref()
+                .map(|code| {
+                    RunReached::from_code(code).ok_or_else(|| read.corrupt(format!("unknown reached {code:?}")))
+                })
+                .transpose()?;
             Some(RunEnded {
+                reached,
                 end: RunEnd::from_code(kind).ok_or_else(|| read.corrupt(format!("unknown end {kind:?}")))?,
                 at: read.timestamp(at)?,
                 result,

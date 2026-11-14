@@ -166,6 +166,11 @@ The tables and columns are in the migrations. These are the conventions they fol
   failed, and its cost in micro-dollars. `work run` also sends the agent tool's own start and exit times with `finish`
   (`tool_started_at`, `tool_ended_at`, each set once, null for older runs and for runs whose tool never started).
   Like turns, runs are never deleted and never bump the item's `version`.
+  A run that ends as `reached` also records what it reached (`reached`: `with_context` or `defined`, the item's stage
+  after the reach, or `became` for a note that became items, heaps or a step), null for every other end and for runs
+  that ended before it was recorded. The Agents page's two lists are built from runs and turns, not the audit log:
+  history is the runs that ended as reached in the last 30 days, and Your decision is the items whose latest turn
+  ended as reached by such a run and that are still at that stage, not started and not closed.
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
   blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
   item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times

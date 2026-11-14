@@ -71,6 +71,50 @@ impl RunEnd {
     }
 }
 
+/// What a run reached when it ended as [`RunEnd::Reached`]: the stage its item is at after the reach, or that its
+/// note became other items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunReached {
+    WithContext,
+    Defined,
+    Became,
+}
+
+impl RunReached {
+    pub const ALL: [Self; 3] = [Self::WithContext, Self::Defined, Self::Became];
+
+    /// Stable code used in storage and the API. Never renamed.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::WithContext => "with_context",
+            Self::Defined => "defined",
+            Self::Became => "became",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|reached| reached.code() == code)
+    }
+
+    /// What an item at `stage` reached, or `None` for a stage no run reaches: as written.
+    pub const fn from_stage(stage: Stage) -> Option<Self> {
+        match stage {
+            Stage::AsWritten => None,
+            Stage::WithContext => Some(Self::WithContext),
+            Stage::Defined => Some(Self::Defined),
+        }
+    }
+
+    /// The stage this is, or `None` for became.
+    pub const fn stage(self) -> Option<Stage> {
+        match self {
+            Self::WithContext => Some(Stage::WithContext),
+            Self::Defined => Some(Stage::Defined),
+            Self::Became => None,
+        }
+    }
+}
+
 /// What a run says it reached, or why it handed the turn back: trimmed, 1 to 2,000 characters.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunResult(String);
@@ -143,6 +187,8 @@ pub struct RunEnded {
     /// where it is the reason.
     pub result: Option<RunResult>,
     pub links: Vec<RunLink>,
+    /// What it reached. Set exactly when it ended as [`RunEnd::Reached`], by a run that ended after this was recorded.
+    pub reached: Option<RunReached>,
     /// Why it failed. Set exactly when it ended as [`RunEnd::Failed`].
     pub failure: Option<String>,
 }
@@ -213,9 +259,22 @@ impl Run {
                 at,
                 result,
                 links,
+                reached: None,
                 failure,
             }),
             ..self.clone()
+        }
+    }
+
+    /// This run, which has ended as reached, recording what it `reached`.
+    #[must_use]
+    pub fn reaching(self, reached: RunReached) -> Self {
+        Self {
+            ended: self.ended.map(|ended| RunEnded {
+                reached: Some(reached),
+                ..ended
+            }),
+            ..self
         }
     }
 }
