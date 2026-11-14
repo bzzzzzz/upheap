@@ -40,7 +40,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 
 ## Workspace
 
-Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` beside it.
+Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` beside it, and `server → mail`.
 `domain` depends on nothing in the workspace, so ranking
 and the state rules are unit- and property-tested in isolation, and `store` and `api` never depend on each other.
 `api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
@@ -505,8 +505,8 @@ a fixed time.
      transaction with the new hash and its audit entry, it deletes all the user's sessions and opens a new one for
      the caller, so a copy of the old cookie stops working too, revokes all their token families, and expires their
      unused authorization codes. It also cancels the user's working reset link.
-   - A forgotten password is reset with a **reset link**, because the server sends no email and the operator who runs
-     it is the only one who can vouch for a person. The operator makes it with `upheap-server user reset-link`
+   - A forgotten password is reset with a **reset link**, because the operator who runs the server is the one who can
+     vouch for a person when it has no mail set up. The operator makes it with `upheap-server user reset-link`
      (`create_password_reset_link`), which opens the database and builds the use cases like the server but runs no
      migration and listens on nothing. The link is `{BASE_URL}/reset/{token}`: a 256-bit random token whose SHA-256 is
      stored (`password_reset_links`), shown once. It works once, for an hour, and one is working per user: making a
@@ -659,7 +659,10 @@ the remaining admins.
 5. **Health checks:** `/healthz` returns `200` while the process is up. `/readyz` returns `200` only once migrations
    have finished and the database answers a ping, so orchestrators route traffic only to ready instances. Neither
    needs authentication, and neither reveals versions or configuration.
-6. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
+6. **Mail** is optional. The `mail` crate builds the mailer at startup from `MAIL_URL` and `MAIL_FROM` (lettre with
+   rustls, no connection pool). SMTP always uses TLS, implicit or STARTTLS. `file://` and `log:` are the development
+   transports, and the only places a mail's text is recorded. A failed send isn't retried.
+7. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
 
 ## CLI

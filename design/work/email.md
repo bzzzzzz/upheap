@@ -225,7 +225,7 @@ History
 ### Choices
 
 1. **Plain SMTP, not a provider's HTTP API.** One code path for every provider; switching is four settings.
-   Passes the bar for decisions.md (D).
+   Passes the bar for decisions.md (D). Now [decisions.md §37](../decisions.md#37-mail-goes-out-over-smtp-not-a-providers-http-api).
 2. **Plain text only, no HTML.** Every client shows it, links are clickable, nothing to render or test across
    clients. HTML can come later without changing a link.
 3. **Send after commit, off the request, no queue.** A queue table with retries is safer against a provider
@@ -360,12 +360,9 @@ If it wasn't you, ignore this mail. Your password stays as it is.
 
 Below this design's level; for the pieces' specs.
 
-- Settings as one `SMTP_URL` (lettre parses it) or as separate host, port, user, password and TLS variables; the
-  sender as `MAIL_FROM`. Piece 2 decides.
 - Where mailed links live: the existing `password_reset_links` table for resets, and one new table with a purpose
   column for confirm and change, or one table for all three.
 - The address state as an `email_confirmed_at` column, filled for every existing account by the migration.
 - How the web app learns mail is set up: a field on an existing public response.
-- The SMTP client: `lettre` with rustls, behind a small trait so the file transport and tests swap in.
 - Sending off the request: a spawned task with a timeout; at shutdown, in-flight sends drain with the requests.
 - The Playwright tests read the file transport's directory to find a link.

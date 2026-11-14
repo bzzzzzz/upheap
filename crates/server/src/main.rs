@@ -2,9 +2,11 @@
 //!
 //! `upheap-server` runs the server. `upheap-server openapi` prints the OpenAPI document and exits.
 //! `upheap-server user reset-link <username or email>` makes a password reset link ([`user_command`]).
+//! `upheap-server mail test <address>` sends a test mail ([`mail_command`]).
 
 mod assets;
 mod config;
+mod mail_command;
 mod user_command;
 
 use std::process::ExitCode;
@@ -33,6 +35,7 @@ async fn main() -> anyhow::Result<ExitCode> {
             return Ok(ExitCode::SUCCESS);
         }
         Some("user") => return Ok(user_command::run(&args[1..]).await),
+        Some("mail") => return Ok(mail_command::run(&args[1..]).await),
         _ => {}
     }
 
@@ -74,7 +77,8 @@ async fn run(config: Config) -> anyhow::Result<()> {
     let listener = TcpListener::bind(config.bind_addr)
         .await
         .with_context(|| format!("can't listen on {}", config.bind_addr))?;
-    tracing::info!(addr = %config.bind_addr, base_url = %config.base_url, "listening");
+    let mail = config.mail.as_ref().map_or("off", mail::Mailer::describe);
+    tracing::info!(addr = %config.bind_addr, base_url = %config.base_url, mail, "listening");
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
