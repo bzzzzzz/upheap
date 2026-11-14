@@ -94,7 +94,7 @@ MAIL_URL='smtps://resend:<API key>@smtp.resend.com:465'
 MAIL_FROM='Upheap <upheap@example.com>'
 ```
 
-Restart the server and check that the `listening` line in its log has `mail` set to the URL, without the password.
+Restart the server and check that the `listening` line in its log has `mail` set to the URL, without the user and password.
 Then send a test mail:
 
 ```sh
@@ -111,9 +111,8 @@ each as an `.eml` file in that directory, which must exist. Nothing is sent.
 
 ### Resetting a password
 
-Whoever runs the server makes a one-time reset link for a user, who opens it, sets a new
-password and is signed in. The command takes the same environment variables as the server (at least `DATABASE_URL`
-and `BASE_URL`):
+Whoever runs the server makes a one-time reset link for a user, who opens it, sets a new password and is signed in.
+The command takes the same environment variables as the server (at least `DATABASE_URL` and `BASE_URL`):
 
 ```sh
 upheap-server user reset-link sam          # a username or an email address

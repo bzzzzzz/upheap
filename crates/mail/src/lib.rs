@@ -69,8 +69,10 @@ impl Mailer {
             }
             let builder = AsyncSmtpTransport::<Tokio1Executor>::from_url(parsed.as_str())
                 .map_err(|error| MailError::InvalidUrl(error.to_string()))?;
-            // Only an absent password can fail to be removed, and then there is nothing to remove.
+            // The user goes too: some providers take the API token as the user name. Removing them fails only for a
+            // URL that can't hold them, which from_url has already refused.
             let _ = parsed.set_password(None);
+            let _ = parsed.set_username("");
             (Transport::Smtp(builder.build()), parsed.to_string())
         } else {
             return Err(MailError::InvalidUrl(
@@ -106,7 +108,7 @@ impl Mailer {
         }
     }
 
-    /// Where mail goes: `MAIL_URL` without the password. For logs and the test command.
+    /// Where mail goes: `MAIL_URL` without the user and password. For logs and the test command.
     pub fn describe(&self) -> &str {
         &self.description
     }
@@ -130,7 +132,7 @@ mod tests {
     const FROM: &str = "Upheap <upheap@example.com>";
 
     #[gtest]
-    fn smtp_urls_show_their_tls_and_never_the_password() -> Result<()> {
+    fn smtp_urls_show_their_tls_and_never_the_credentials() -> Result<()> {
         // Arrange
         let urls = [
             "smtps://user:s3cret@smtp.example.com",
@@ -149,9 +151,9 @@ mod tests {
         expect_that!(
             described,
             elements_are![
-                eq("smtps://user@smtp.example.com"),
-                eq("smtp://user@smtp.example.com:2525?tls=required"),
-                eq("smtp://user@smtp.example.com?tls=opportunistic"),
+                eq("smtps://smtp.example.com"),
+                eq("smtp://smtp.example.com:2525?tls=required"),
+                eq("smtp://smtp.example.com?tls=opportunistic"),
             ]
         );
         expect_that!(described.concat(), not(contains_substring("s3cret")));
