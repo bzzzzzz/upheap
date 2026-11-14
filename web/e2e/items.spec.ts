@@ -243,15 +243,20 @@ test("the item has one main state button, and ⋯ holds the rest", async ({ page
   await expect(state.getByRole("button", { name: "More", exact: true })).toBeVisible();
 
   const more = await openMore(page);
-  for (const name of ["Block", "Done", "Won't do", "Copy link"]) {
+  for (const name of ["Block", "Done", "Won't do"]) {
     await expect(moreEntry(page, more, name)).toBeVisible();
   }
-  // Done from ⋯ closes the item; the pane offers to reopen it.
+  // The item's link is copied from its key in the header, not from ⋯.
+  await expect(moreEntry(page, more, "Copy link")).toHaveCount(0);
+  // Done from ⋯ closes the item; the pane offers to reopen it, and focus goes there, as ⋯ has gone.
   await moreEntry(page, more, "Done").click();
-  await expect(state.getByRole("button", { name: "Reopen", exact: true })).toBeVisible();
+  const reopen = state.getByRole("button", { name: "Reopen", exact: true });
+  await expect(reopen).toBeVisible();
+  await expect(reopen).toBeFocused();
+  await expect(state.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
 });
 
-test("a reader's item has values to read, no Edit, and ⋯ with only Copy link", async ({ page, heapPath }) => {
+test("a reader's item has values to read, no Edit, no ⋯, and its link to copy", async ({ page, context, heapPath }) => {
   // An archived heap is read-only, as it is for a reader: the server offers neither edit nor change_state.
   await addItem(page, "Rotate the certs", { effort: "S" });
   await openItem(page, "Rotate the certs");
@@ -266,11 +271,64 @@ test("a reader's item has values to read, no Edit, and ⋯ with only Copy link",
   await expect(pane.getByText("Not set").first()).toBeVisible();
   await expect(pane.getByRole("button", { name: /^(Need|Effort|Impact|Due|Tags): / })).toHaveCount(0);
   await expect(pane.getByRole("button", { name: /^(Edit|Add) context$/ })).toHaveCount(0);
-  await expect(pane.getByRole("group", { name: "State", exact: true }).getByRole("button")).toHaveCount(1);
+  // Nothing to change and nothing in ⋯, so there is neither.
+  await expect(pane.getByRole("group", { name: "State", exact: true })).toHaveCount(0);
+  await expect(pane.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
 
-  const more = await openMore(page);
-  await expect(moreEntry(page, more, "Copy link")).toBeVisible();
-  await expect(more.getByRole(isPhone(page) ? "button" : "menuitem")).toHaveCount(isPhone(page) ? 2 : 1);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await pane.getByRole("button", { name: `Copy link to ${key}`, exact: true }).click();
+  await expect(pane.getByRole("status").filter({ hasText: "Link copied" })).toHaveCount(1);
+});
+
+test("the key in the item's header copies its short link, and a check confirms it", async ({
+  page,
+  context,
+  heapPath,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await addItem(page, "Share the plan");
+  await openItem(page, "Share the plan");
+  const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  const pane = itemPane(page);
+  const copy = pane.getByRole("button", { name: `Copy link to ${key}`, exact: true });
+  await expect(copy).toHaveText(key);
+  await expect(copy).toHaveAttribute("title", "Copy link");
+  if (isPhone(page)) expect(Math.round((await copy.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44);
+  await expect(copy.locator("svg.lucide-link")).toHaveCount(1);
+
+  await copy.click();
+  // The check shows only after the write worked, so the clipboard is read after it.
+  await expect(copy.locator("svg.lucide-check")).toHaveCount(1);
+  await expect(pane.getByRole("status").filter({ hasText: "Link copied" })).toHaveCount(1);
+  const [, , team, , heap] = heapPath.split("/");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toBe(`${new URL(page.url()).origin}/h/${team}/${heap}/${key}`);
+  // After two seconds the link icon is back.
+  await expect(copy.locator("svg.lucide-link")).toHaveCount(1);
+  await expect(pane.getByRole("status").filter({ hasText: "Link copied" })).toHaveCount(0);
+
+  // The copied link opens the item.
+  await page.goto(copied);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Share the plan");
+});
+
+test("a copy of the item's link the browser refuses says so in a toast", async ({ page }) => {
+  test.skip(page.viewportSize()?.width !== 1280, "One width is enough for the failure.");
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: () => Promise.reject(new Error("denied")) },
+      configurable: true,
+    });
+  });
+  await page.reload();
+  await addItem(page, "Share the plan");
+  await openItem(page, "Share the plan");
+  const pane = itemPane(page);
+  const copy = pane.getByRole("button", { name: /^Copy link to / });
+  await copy.click();
+  await expect(page.getByText("Couldn't copy the link.", { exact: true })).toBeVisible();
+  await expect(copy.locator("svg.lucide-link")).toHaveCount(1);
+  await expect(pane.getByRole("status").filter({ hasText: "Link copied" })).toHaveCount(0);
 });
 
 test("History opened on one item starts collapsed on the next", async ({ page }) => {
@@ -649,7 +707,8 @@ test("on a phone, need, effort and impact open sheets, and the bar holds the mai
   await expect(context.getByText("Venue, then dates", { exact: true })).toBeVisible();
   await expect(pane.getByRole("button", { name: /^(Edit|Add) context$/ })).toHaveCount(0);
   await expect(pane.getByRole("button", { name: /^(Need|Effort|Impact|Due|Tags): / })).toHaveCount(0);
-  await expect(bar.getByRole("button")).toHaveCount(2);
+  // Reopen is all a closed item can do, so the bar has no ⋯.
+  await expect(bar.getByRole("button")).toHaveCount(1);
   await expect(bar.getByRole("button").first()).toHaveText("Reopen");
 });
 

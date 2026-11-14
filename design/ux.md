@@ -56,8 +56,8 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
    re-ranks at the current time.
 5. **Coordinating.** See what others changed in the refreshed list, an item's history or the heap's Activity.
    Saving over a teammate's change shows a conflict and their version; redo the change if it still applies
-   (recovery). Point someone at an item with Copy link: it opens the item, after sign-in if needed, or says the item
-   can't be seen.
+   (recovery). Point someone at an item with its link, copied from the key in its header: it opens the item, after
+   sign-in if needed, or says the item can't be seen.
 6. **Admin basics** (setup, occasional). On the Team page: add members, make or unmake admins, remove someone; add,
    rename and archive heaps, with the archived banner to unarchive; custom parameters in the heap's Settings; leave,
    or read why the only admin can't.
@@ -349,18 +349,21 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 6. The main button is the likeliest next state: Start for open, Done for in progress, Unblock for blocked, Make it a task
    for a reminder that has arrived (its state's own choice then moves into ⋯), Reopen for a closed item while it can
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
-   always there, and holds, each only when the server allows it and in this order: the other state changes, Won't do,
-   Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked item, Copy link,
-   and the Stage choices.
+   there whenever it holds something, and holds, each only when the server allows it and in this order: the other state
+   changes, Won't do, Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked
+   item, and the Stage choices. With none of them, as for a reader's item, an archived heap's or a closed item, there
+   is no ⋯.
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
-   a popover (a sheet on a phone) and saves on a pick. Copy link confirms with a toast, "Link copied", as the menu has
-   closed by then. Make it a task asks first, naming the item, since a task can't go back to a note (or to a
-   reminder). A reminder has an exact Date in place of Due (point 16), which can be moved, also back into the future,
-   and not cleared; it has no steps and no Send to an agent button. Stage lists as written and with context, and defined on
+   a popover (a sheet on a phone) and saves on a pick. Make it a task asks first, naming the item, since a task can't
+   go back to a note (or to a reminder). A reminder has an exact Date in place of Due (point 16), which can be moved,
+   also back into the future, and not cleared; it has no steps and no Send to an agent button. Stage lists as written and with context, and defined on
    a task only (a note says "Defined needs a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
    change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
-8. The key (`k3x9a`) shows in the header, and Copy link is in ⋯. Nothing else has Copy link.
+8. The key (`k3x9a`) in the header, with a link icon after it, is the button that copies the item's short link
+   (`/h/<team>/<heap>/<key>`), named "Copy link to k3x9a", with "Copy link" on hover. The header stays in view, so the
+   icon turns into a check for 2 s to confirm, and a screen reader hears "Link copied"; a copy that fails (no
+   clipboard, or the browser refuses) says "Couldn't copy the link." in a toast. Nothing else copies the item's link.
 9. The rank chip, "#3" in the status line, is a button that opens "Why it's #3": a popover (a sheet on a phone) with
    the contributors and their `share_percent` as bars. Below them, "Held back by" lists what keeps the item from
    ranking higher: a low need, no due date, unset sizes, in that order, as lines of text without bars. What can fix
