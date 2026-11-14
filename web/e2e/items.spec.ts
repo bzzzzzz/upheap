@@ -511,6 +511,11 @@ test("a blocked item's reason is set, changed and removed from ⋯", async ({ pa
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("Couldn't save the reason.");
   await expect(dialog.getByLabel("Reason")).toHaveValue("Waiting for the bank");
+  // The first answer is the conflict, which brings the open item in; trying again says it isn't blocked.
+  await expect(status()).not.toContainText("Blocked");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Couldn't save the reason. This item isn't blocked any more.");
+  await expect(dialog.getByLabel("Reason")).toHaveValue("Waiting for the bank");
 });
 
 test("the Add dialog adds items in a row, with rough or exact due times", async ({ page }) => {

@@ -70,6 +70,7 @@ function actionsOf(item: Item) {
     wontDo: canChange && !isClosed(state),
     makeTask: allowed.includes("make_task") && !arrivedReminder,
     changeBlocker: item.state === "blocked" && canChange,
+    reasonLabel: item.blocked_reason ? "Change reason…" : "Add reason…",
     stages: item.stage_choices,
   };
 }
@@ -206,7 +207,7 @@ export function ItemActions({
           )}
           {actions.changeBlocker && (
             <MenuEntry id="edit_reason" onAction={openers.editReason}>
-              {item.blocked_reason ? "Change reason…" : "Add reason…"}
+              {actions.reasonLabel}
             </MenuEntry>
           )}
           <MenuEntry id="copy_link" onAction={copyLink}>
@@ -286,7 +287,7 @@ export function ItemActions({
         title="Why it's blocked"
         triggerRef={moreRef}
         isOpen={editingReason}
-        onClose={closeEditingReason}
+        onClose={() => !saveReason.isPending && closeEditingReason()}
         placement="bottom end"
         size="narrow"
       >
@@ -365,7 +366,7 @@ function MoreSheet({
         )}
         {actions.changeBlocker && (
           <button type="button" onClick={then(openers.editReason)} className={sheetRowClass}>
-            {item.blocked_reason ? "Change reason…" : "Add reason…"}
+            {actions.reasonLabel}
           </button>
         )}
         <button type="button" onClick={then(onCopyLink)} className={sheetRowClass}>

@@ -310,10 +310,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
    accent), and for a closed item when it closed, or "It can't be reopened." A blocked item says "Blocked by" and
    links to the item it waits for, which opens in the pane, or just "Blocked" while none is named. A reason in words
-   follows: "Blocked: <reason>", or "Blocked by <item>: <reason>" with both. It wraps, never shortened. ⋯ on a
-   blocked item has Add reason… or Change reason… under Change blocker…, which opens "Why it's blocked" (a popover, a
-   sheet on a phone): one line, where Enter saves, and Remove reason or an empty save clears it. It holds 300
-   characters, with a counter from 250. A failed save keeps the draft and says why, and a save shows no toast. Then
+   follows: "Blocked: <reason>", or "Blocked by <item>: <reason>" with both. It wraps, never shortened. On a
+   blocked item, Add reason… in ⋯ (Change reason… once one is set), under Change blocker…, opens "Why it's blocked"
+   (a popover, a sheet on a phone): one line, where Enter saves, and Remove reason or an empty save clears it. A
+   counter shows as the text nears the server's limit; past it Save is off and nothing is cut. It can't be closed
+   while it saves; a failed save keeps the draft and says why, and a save shows no toast. Then
    the chips: the item's place in the list, "#3" (point 9), and who has the item when an agent does, or the button that sends it to
    one when none does (point 15). A
    reminder still ahead has a line under it, "Joins the list on 12 March". The header bar names the section the item
