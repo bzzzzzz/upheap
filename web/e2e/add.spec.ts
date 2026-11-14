@@ -38,7 +38,8 @@ async function addNewTag(page: Page, name: string) {
   if (phone) await addDialog(page).getByRole("button", { name: "+ Tag" }).click();
   const scope = phone ? page.getByRole("dialog", { name: "Tags", exact: true }) : addDialog(page);
   await scope.getByLabel("Add a tag").fill(name);
-  await scope.getByRole("option", { name: `Create tag “${name}”` }).click();
+  // On a wider screen the matches float in a popover outside the dialog.
+  await (phone ? scope : page).getByRole("option", { name: `Create tag “${name}”` }).click();
   if (phone) await scope.getByRole("button", { name: "Close", exact: true }).click();
   await expect(addDialog(page).getByRole("button", { name: `Remove tag ${name}` })).toBeVisible();
 }
@@ -362,6 +363,50 @@ test("due starts at None in the Add dialog", async ({ page }) => {
   await dialog.getByLabel("Title").press("Enter");
   await expect(row(page, "Someday")).toBeVisible();
   await expect(row(page, "Someday")).not.toContainText("next week");
+});
+
+test("the tag suggestions show in full over the dialog's footer, and keep their keys", async ({ page }) => {
+  test.skip(isPhone(page), "A phone picks tags in their own sheet, with the suggestions in its flow.");
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await fillIn(page, "Sort the shed");
+  // Five tags of the heap that "chore" matches, taken off the item again so they are offered.
+  for (const name of ["chore-a", "chore-b", "chore-c", "chore-d", "chore-e"]) await addNewTag(page, name);
+  const input = dialog.getByLabel("Add a tag");
+  for (let left = 5; left > 0; left--) {
+    await input.press("Backspace");
+    await expect(dialog.getByRole("button", { name: /^Remove tag / })).toHaveCount(left - 1);
+  }
+
+  // Tags is near the dialog's foot: the five matches and Create tag all show, and the footer covers none of them.
+  await input.fill("chore");
+  const options = page.getByRole("listbox", { name: "Tags" }).getByRole("option");
+  await expect(options).toHaveCount(6);
+  for (const option of await options.all()) {
+    await expect(option).toBeInViewport({ ratio: 1 });
+    // Nothing covers it: what's drawn at its middle is the option itself.
+    await expect
+      .poll(() =>
+        option.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+        }),
+      )
+      .toBe(true);
+  }
+
+  // The keys work as they did: arrows move, Enter picks, Escape clears the text and leaves the dialog open.
+  await input.press("ArrowDown");
+  await input.press("Enter");
+  await expect(dialog.getByRole("button", { name: "Remove tag chore-b" })).toBeVisible();
+  await expect(input).toHaveValue("");
+  await input.fill("chore");
+  await expect(options).toHaveCount(5);
+  await input.press("Escape");
+  await expect(input).toHaveValue("");
+  await expect(options).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await expect(input).toBeFocused();
 });
 
 test("on a phone, Add is a sheet of one-tap chips, with More fields", async ({ page }) => {
