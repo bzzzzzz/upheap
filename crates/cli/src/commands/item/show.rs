@@ -8,7 +8,7 @@ use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use api_types::work::ItemRunDto;
 use clap::Args;
 
-use super::common::{kind_text, locate_item, state_text, state_with_agent_text};
+use super::common::{kind_text, locate_item, state_text, with_agent_text};
 use crate::commands::comment::comment_lines;
 use crate::commands::heap_api::{HeapApi, indented_context};
 use crate::commands::work::end_word;
@@ -377,7 +377,10 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
     if let Some(due) = item.due.as_ref().filter(|_| super::add::is_to_come(item, now)) {
         rows.push(vec![Cell::new("Joins list"), Cell::new(due.date.clone())]);
     }
-    rows.push(vec![Cell::new("State"), Cell::new(state_with_agent_text(item))]);
+    rows.push(vec![
+        Cell::new("State"),
+        Cell::new(format!("{}{}", state_text(item.state), with_agent_text(item))),
+    ]);
     rows.push(vec![Cell::new("Need"), Cell::new(need_text(item.need))]);
     if let Some(effort) = item.effort {
         rows.push(vec![Cell::new("Effort"), Cell::new(size_text(effort))]);

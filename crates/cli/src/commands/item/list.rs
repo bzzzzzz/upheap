@@ -19,7 +19,7 @@ use crate::lookup::{find_view, matches_text, resolve_parameter, resolve_tags};
 use crate::output::{Cell, Mode, Output, Tone, shorten};
 use crate::{App, CliError};
 
-use super::common::{due_cell, kind_text, sizes_text, state_text, state_with_agent_text, tags_text};
+use super::common::{due_cell, kind_text, sizes_text, state_text, tags_text, with_agent_text};
 
 /// Titles longer than this are cut short in the table, so the columns after them stay on screen.
 const TITLE_WIDTH: usize = 60;
@@ -399,11 +399,13 @@ fn ranked_row(row: &ShownRow<'_>) -> Vec<Cell> {
         .first()
         .map(|top| format!("{} ({}%)", top.label, top.share_percent))
         .unwrap_or_default();
-    // A blocked item says why, when it has a reason.
-    let state = match &item.blocked_reason {
-        Some(why) => format!("{}: {}", state_with_agent_text(item), shorten(why, REASON_WIDTH)),
-        None => state_with_agent_text(item),
-    };
+    // A blocked item says why, when it has a reason, before saying an agent has it.
+    let blocked_why = item
+        .blocked_reason
+        .as_ref()
+        .map(|why| format!(": {}", shorten(why, REASON_WIDTH)))
+        .unwrap_or_default();
+    let state = format!("{}{blocked_why}{}", state_text(item.state), with_agent_text(item));
     // Ticked of open and ticked steps, as the web row shows them; empty for a note and a task with none.
     let steps = item
         .step_progress

@@ -307,13 +307,9 @@ pub(super) fn state_text(state: StateDto) -> &'static str {
     }
 }
 
-/// The item's state, with ` · with an agent` when an agent has it: `open · with an agent`.
-pub(super) fn state_with_agent_text(item: &ItemDto) -> String {
-    if item.with_agent {
-        format!("{} · with an agent", state_text(item.state))
-    } else {
-        state_text(item.state).to_owned()
-    }
+/// ` · with an agent` when an agent has the item, to follow its state as in `open · with an agent`; empty otherwise.
+pub(super) fn with_agent_text(item: &ItemDto) -> &'static str {
+    if item.with_agent { " · with an agent" } else { "" }
 }
 
 pub(super) fn kind_text(kind: KindDto) -> &'static str {

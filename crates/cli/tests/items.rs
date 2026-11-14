@@ -169,18 +169,23 @@ async fn item_list_gives_a_blocked_items_reason_in_its_state_cell() -> Result<()
 }
 
 /// Ada's items, the first a task with two steps, one ticked, and a question open on it, and the second sent to an
-/// agent. Returns the two keys.
+/// agent. Returns Ada and the two keys.
 async fn ada_with_marked_items(server: &TestServer) -> Result<(common::TestUser, String, String)> {
     let (ada, items) = ada_with_items(server).await?;
     let cli = cli_in_heap(server, &ada).await?;
     let task = key(&items[0])?.to_owned();
     let sent = key(&items[1])?.to_owned();
     server.edit_item(&ada, HEAP, &task, json!({ "kind": "task" })).await?;
-    for title in ["One", "Two"] {
-        cli.run(&["step", "add", &task, title]).await;
+    let tick = format!("{task}.1");
+    for args in [
+        &["step", "add", &task, "One"][..],
+        &["step", "add", &task, "Two"],
+        &["step", "tick", &tick],
+        &["question", "ask", &task, "Which CA?"],
+    ] {
+        let ran = cli.run(args).await;
+        anyhow::ensure!(ran.exited(0), "{args:?}: {}", ran.stderr);
     }
-    cli.run(&["step", "tick", &format!("{task}.1")]).await;
-    cli.run(&["question", "ask", &task, "Which CA?"]).await;
     server
         .send(
             &ada,
