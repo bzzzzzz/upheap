@@ -1,7 +1,8 @@
 // A history from the audit log, as the server describes it. Entries and their changes come ready to show; this only
 // lays them out.
 import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Bot, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import type { AuditEntry } from "../api/client";
@@ -78,11 +79,17 @@ export function PagedHistory<Entry>({
 function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: boolean }) {
   const { data: me } = useMe();
   // The viewer's own changes read as theirs, as the phrase reads after any name: "You added item".
-  const actor = entry.actor.id === me?.user.id ? "You" : entry.actor.display_name;
+  const own = entry.actor.id === me?.user.id;
+  const actor = own ? "You" : entry.actor.display_name;
   return (
     <li className="py-2 text-sm wrap-anywhere">
       <p>
-        <span className="font-medium">{actor}</span> {entry.phrase}
+        {entry.run ? (
+          <AgentMark run={entry.run} who={own ? "Your agent" : `${entry.actor.display_name}'s agent`} />
+        ) : (
+          <span className="font-medium">{actor}</span>
+        )}{" "}
+        {entry.phrase}
         {showEntity && entry.names_entity && <span className="font-medium"> {entry.entity.label}</span>}
         <time dateTime={new Date(entry.created_at).toISOString()} className="ml-2 text-xs text-muted">
           {entry.created_label}
@@ -98,6 +105,34 @@ function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: b
         </ul>
       )}
     </li>
+  );
+}
+
+/**
+ * An agent's change reads as the agent's, not the person's whose sign-in it used (work-with-agents, W21): a robot and
+ * whose agent it is, linking to the run in its item when the caller may view that item.
+ */
+function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: string }) {
+  const words = (
+    <>
+      <Bot aria-hidden="true" className="mr-1 inline size-3.5 align-text-bottom" />
+      {who}
+    </>
+  );
+  if (!run.item) {
+    return <span className="font-medium">{words}</span>;
+  }
+  return (
+    <Link
+      to="/teams/$team/heaps/$heap/items/$item"
+      params={{ team: run.item.heap.team_slug, heap: run.item.heap.slug, item: run.item.key }}
+      hash={`run-${run.id}`}
+      search={true}
+      aria-label={`${who}, see the run`}
+      className="font-medium text-accent-ink outline-none hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+    >
+      {words}
+    </Link>
   );
 }
 
@@ -119,16 +154,23 @@ function ChangeValues({ before, after }: { before?: string | null; after?: strin
 export function Disclosure({
   label,
   className,
+  defaultOpen = false,
   children,
 }: {
   label: string;
   /** Where it sits: its margins, or how much of a row it takes. */
   className: string;
+  /** Whether it starts opened; a new `key` starts it again. */
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)} className={`group ${className}`}>
+    <details
+      open={defaultOpen}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className={`group ${className}`}
+    >
       <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
         <ChevronRight
           aria-hidden="true"

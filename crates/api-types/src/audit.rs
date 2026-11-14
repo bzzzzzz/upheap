@@ -198,6 +198,28 @@ pub struct AuditEntryDto {
     /// values set for creations.
     #[schema(value_type = Object)]
     pub diff: serde_json::Value,
+    /// The run an agent made the change in; null for a person's own change.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub run: Option<AuditRunDto>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AuditRun)]
+pub struct AuditRunDto {
+    pub id: Uuid,
+    /// The item the run worked on, with the heap it is in now; null when the caller can't view that heap.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub item: Option<AuditRunItemDto>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AuditRunItem)]
+pub struct AuditRunItemDto {
+    /// Unique within the heap; the item's path is `…/items/{key}`.
+    pub key: String,
+    pub heap: crate::waiting::ItemHeapDto,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

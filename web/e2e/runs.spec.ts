@@ -3,7 +3,7 @@
 // is made through the API, as a loop would: claim, then finish with a failure, three times. Server build only.
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, isPhone, itemPane, test } from "./fixtures";
+import { expect, isPhone, itemPane, openHistory, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -287,4 +287,36 @@ test("the item's Runs section shows a run with its cost, how it ended and why", 
   await expect(row).toContainText("failed");
   await expect(row).toContainText("$0.31");
   await expect(row).toContainText("The tool crashed");
+});
+
+test("History marks an agent's change with its run, and the link opens Runs at that run", async ({
+  page,
+  heapPath,
+}) => {
+  const certs = await seed(page, heapPath, "Rotate the certs");
+  const claimed = await page.request.post("/api/v1/work/runs", { headers, data: { heaps: [refOf(heapPath)] } });
+  expect(claimed.status()).toBe(201);
+  const { run } = await claimed.json();
+  const current = await (await page.request.get(certs.item)).json();
+  const patched = await page.request.patch(certs.item, {
+    headers: { ...headers, "upheap-run": run.id, "if-match": String(current.version) },
+    data: { description: "Came up while fixing the CA" },
+  });
+  expect(patched.status()).toBe(200);
+
+  await page.goto(`${heapPath}/items/${certs.key}`);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
+  const history = await openHistory(page);
+
+  // The agent's edit has the mark and the link; the person's own creation reads as before.
+  const agent = history.getByRole("link", { name: "Your agent, see the run" });
+  await expect(agent).toHaveCount(1);
+  await expect(history.getByRole("listitem").filter({ hasText: "You added" })).toBeVisible();
+  if (isPhone(page)) await expectTouchSize(agent);
+
+  await agent.click();
+
+  const runs = itemPane(page).getByRole("region", { name: "Runs", exact: true });
+  await expect(runs.locator("details")).toHaveAttribute("open");
+  await expect(runs.locator(`#run-${run.id}`)).toBeVisible();
 });
