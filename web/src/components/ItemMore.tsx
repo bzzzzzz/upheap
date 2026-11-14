@@ -15,8 +15,9 @@ import {
 } from "react-aria-components";
 
 import type { HeapRef, Item, ItemPatch, ItemState, Stage } from "../api/client";
-import { useBlockerCandidates } from "../api/queries";
+import { useBlockerCandidates, useUpdateItem } from "../api/queries";
 import { BlockerSelect } from "./BlockerSelect";
+import { BlockReasonEditor } from "./BlockReasonEditor";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { compactButtonClass } from "./buttons";
 import { shortLink, useCopyText } from "./copyLink";
@@ -41,7 +42,8 @@ type Main = { label: string; state: ItemState } | { label: "Make it a task"; sta
 /**
  * What the item's main button and ⋯ offer (ux.md, The item §6), each only when the server allows it. The main button
  * is the likeliest next state, Make it a task for a reminder that has arrived, or Reopen on a closed item. ⋯ holds the
- * other states, Won't do, Make it a task…, Send to an agent…, Change blocker…, Copy link and the Stage choices.
+ * other states, Won't do, Make it a task…, Send to an agent…, Change blocker…, Add reason… or Change reason…, Copy
+ * link and the Stage choices.
  */
 function actionsOf(item: Item) {
   const allowed = item.allowed_actions;
@@ -68,6 +70,7 @@ function actionsOf(item: Item) {
     wontDo: canChange && !isClosed(state),
     makeTask: allowed.includes("make_task") && !arrivedReminder,
     changeBlocker: item.state === "blocked" && canChange,
+    reasonLabel: item.blocked_reason ? "Change reason…" : "Add reason…",
     stages: item.stage_choices,
   };
 }
@@ -75,7 +78,7 @@ function actionsOf(item: Item) {
 /**
  * The item's main state button and its ⋯ (More), beside the title on a wide screen and a tablet and in the bar at the
  * bottom of a phone's sheet (ux.md, The item §6). ⋯ is a menu on a wide screen and a tablet, a sheet on a phone; what it
- * opens, Change blocker, opens under it as a popover, or as a sheet on a phone. Picking
+ * opens, Change blocker and the block reason's editor, open under it as a popover, or as a sheet on a phone. Picking
  * a stage saves at once and silently, like every change made in the item. Making a note a task asks first, since a
  * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. A state change
  * goes through `onState`, which may ask whether to take the item back from its agent first.
@@ -101,6 +104,9 @@ export function ItemActions({
   const { copy } = useCopyText();
   const [confirming, setConfirming] = useState(false);
   const [changing, setChanging] = useState(false);
+  const [editingReason, setEditingReason] = useState(false);
+  // Awaitable, and apart from `save`, so the editor says its own failure and the pane doesn't say it twice.
+  const saveReason = useUpdateItem(heapRef);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const actions = actionsOf(item);
   const bar = variant === "bar";
@@ -111,6 +117,10 @@ export function ItemActions({
   };
   const closeChanging = () => {
     setChanging(false);
+    focusAfterRender(() => moreRef.current);
+  };
+  const closeEditingReason = () => {
+    setEditingReason(false);
     focusAfterRender(() => moreRef.current);
   };
   const changeStage = (keys: Selection) => {
@@ -128,6 +138,10 @@ export function ItemActions({
       setConfirming(true);
     },
     changeBlocker: () => setChanging(true),
+    editReason: () => {
+      saveReason.reset();
+      setEditingReason(true);
+    },
   };
 
   const main = actions.main && (
@@ -189,6 +203,11 @@ export function ItemActions({
           {actions.changeBlocker && (
             <MenuEntry id="change_blocker" onAction={openers.changeBlocker}>
               Change blocker…
+            </MenuEntry>
+          )}
+          {actions.changeBlocker && (
+            <MenuEntry id="edit_reason" onAction={openers.editReason}>
+              {actions.reasonLabel}
             </MenuEntry>
           )}
           <MenuEntry id="copy_link" onAction={copyLink}>
@@ -263,6 +282,23 @@ export function ItemActions({
           />
         </PopoverSheet>
       )}
+      {/* Not tied to the item being blocked: a failed save refetches it, and the editor stays to say why. */}
+      <PopoverSheet
+        title="Why it's blocked"
+        triggerRef={moreRef}
+        isOpen={editingReason}
+        onClose={() => !saveReason.isPending && closeEditingReason()}
+        placement="bottom end"
+        size="narrow"
+      >
+        <BlockReasonEditor
+          reason={item.blocked_reason ?? null}
+          save={(blocked_reason) => saveReason.mutateAsync({ item, patch: { blocked_reason } })}
+          saving={saveReason.isPending}
+          error={saveReason.error}
+          onDone={closeEditingReason}
+        />
+      </PopoverSheet>
     </>
   );
 }
@@ -286,7 +322,7 @@ function MoreSheet({
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   onState: (state: ItemState) => void;
   onWontDo: () => void;
-  openers: { makeTask: () => void; changeBlocker: () => void };
+  openers: { makeTask: () => void; changeBlocker: () => void; editReason: () => void };
   onCopyLink: () => void;
   onStage: (keys: Selection) => void;
 }) {
@@ -326,6 +362,11 @@ function MoreSheet({
         {actions.changeBlocker && (
           <button type="button" onClick={then(openers.changeBlocker)} className={sheetRowClass}>
             Change blocker…
+          </button>
+        )}
+        {actions.changeBlocker && (
+          <button type="button" onClick={then(openers.editReason)} className={sheetRowClass}>
+            {actions.reasonLabel}
           </button>
         )}
         <button type="button" onClick={then(onCopyLink)} className={sheetRowClass}>
