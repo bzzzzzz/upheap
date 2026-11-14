@@ -2,7 +2,7 @@
 // Server build only, as it is the list of the account's heaps.
 import type { Page } from "@playwright/test";
 
-import { closeItem, expect, isPhone, itemPane, markDoneFromList, row, test } from "./fixtures";
+import { addItem, closeItem, expect, isPhone, itemPane, markDoneFromList, row, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -172,4 +172,24 @@ test("with nothing open there is a line saying so", async ({ page }) => {
   await page.goto("/all");
   await expect(page.getByRole("heading", { name: "All items", level: 1, exact: true })).toBeVisible();
   await expect(page.getByText("Nothing open in your heaps.")).toBeVisible();
+});
+
+test("Add on All items names the heap, not a place, and Open it opens the item over All items", async ({
+  page,
+  heapPath,
+}) => {
+  const personal = await heapName(page, heapPath);
+  await seed(page, heapPath, "Rotate the certs");
+  await page.goto("/all");
+  await expect(row(page, "Rotate the certs")).toBeVisible();
+
+  await addItem(page, "Water the plants");
+  // The item's place in its heap's list isn't its place here, so the toast has none.
+  const toast = page.getByRole("status").filter({ hasText: `Added “Water the plants” to ${personal}.` });
+  await expect(toast).toBeVisible();
+  await toast.getByRole("button", { name: "Open it" }).click();
+
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
+  await expect(page).toHaveURL((url) => url.pathname.endsWith("/all") && url.searchParams.has("item"));
+  await expect(page.getByRole("heading", { name: /^All items/, level: 1 })).toBeVisible();
 });

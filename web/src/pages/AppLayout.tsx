@@ -352,6 +352,8 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   // On the list, Add starts from its view; the heap's other pages have none.
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
+  // On All items there is no view to start from, but the item still opens over that page.
+  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
   const [more, setMore] = useState(false);
   // The heap's pages that only More leads to, so More shows as active on them.
   const onActivity = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
@@ -386,7 +388,15 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
         <Ellipsis aria-hidden="true" className="size-5 shrink-0" />
         <span>More</span>
       </button>
-      {adding && <AddItemDialog heapRef={heapRef} view={view} search={search} onClose={() => setAdding(false)} />}
+      {adding && (
+        <AddItemDialog
+          heapRef={heapRef}
+          view={view}
+          search={search}
+          acrossHeaps={onAll}
+          onClose={() => setAdding(false)}
+        />
+      )}
       <MoreSheet me={me} heapRef={heapRef} isOpen={more} onClose={() => setMore(false)} />
     </nav>
   );

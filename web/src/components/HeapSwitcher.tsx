@@ -126,10 +126,13 @@ function SwitcherBody({
   const phone = useMedia(PHONE);
   const coarse = useMedia(TOUCH);
   const entries: Entry[] = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
-  const current = entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
+  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
+  // On All items the kept heap is only where Add goes; only the All heaps row is the current one.
+  const current = onAll
+    ? undefined
+    : entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
   const long = entries.filter((e) => !e.heap.archived).length >= LONG_LIST;
   const several = me.teams.length > 1;
-  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
 
   const [text, setText] = useState("");
   const [folded, setFolded] = useState(readFoldedTeams);

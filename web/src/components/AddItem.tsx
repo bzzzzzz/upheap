@@ -11,7 +11,7 @@ import { DateField } from "./DateField";
 import { DuePicker } from "./DuePicker";
 import { itemProblem } from "./itemProblems";
 import { SIZE_LABELS, SIZES } from "./labels";
-import { listQueryFor, matchesSearch, placeOf, splitList, type ListSearch } from "./listView";
+import { itemAddress, listQueryFor, matchesSearch, placeOf, splitList, type ListSearch } from "./listView";
 import { PHONE, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
@@ -34,11 +34,14 @@ export function AddItem({
   heapRef,
   view,
   search,
+  acrossHeaps,
   disabled,
 }: {
   heapRef: HeapRef;
   view: ListSearch;
   search: string;
+  /** The list is the one across heaps: `view` is for the prefill only, and the item opens over that list. */
+  acrossHeaps?: boolean;
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -74,7 +77,15 @@ export function AddItem({
           N
         </kbd>
       </button>
-      {open && <AddItemDialog heapRef={heapRef} view={view} search={search} onClose={() => setOpen(false)} />}
+      {open && (
+        <AddItemDialog
+          heapRef={heapRef}
+          view={view}
+          search={search}
+          acrossHeaps={acrossHeaps}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }
@@ -176,6 +187,7 @@ export function AddItemDialog({
   heapRef,
   view,
   search = "",
+  acrossHeaps = false,
   onClose,
 }: {
   heapRef: HeapRef;
@@ -183,6 +195,11 @@ export function AddItemDialog({
   view: ListSearch | undefined;
   /** The text the list on screen is narrowed by, which may hide the new item. */
   search?: string;
+  /**
+   * The list the dialog opens over is the one across heaps: `view` only fills the form in. The item's place in its
+   * heap's list isn't its place there, so none is looked up, and Open it opens the item over that list.
+   */
+  acrossHeaps?: boolean;
   onClose: () => void;
 }) {
   const phone = useMedia(PHONE);
@@ -260,6 +277,15 @@ export function AddItemDialog({
   };
 
   const openItem = (item: Added) => {
+    if (acrossHeaps) {
+      void navigate({
+        to: "/all",
+        search: (prev) => ({ ...prev, item: itemAddress(item.heap, item.key) }),
+        resetScroll: false,
+        state: (prev) => ({ ...prev, closesBack: true }),
+      });
+      return;
+    }
     // Added to the heap of the list on screen; the phone's Add also opens on the heap's other pages, with no view.
     const overList = view !== undefined && sameHeap(item.heap, heapRef);
     void navigate({
@@ -376,7 +402,10 @@ export function AddItemDialog({
 
     // A reminder still to come is not in the ranked list, so there is no place to read from it.
     const joins = isToCome(item) && item.due ? formatDate(item.due.date) : undefined;
-    const list = add.onScreen && view && !joins ? await refetchList(heapRef, listQueryFor(view, search)) : undefined;
+    const list =
+      add.onScreen && view && !acrossHeaps && !joins
+        ? await refetchList(heapRef, listQueryFor(view, search))
+        : undefined;
     const place = list && placeOf(list, item.key);
     // Not a position the search on screen hides.
     const shown = place && matchesSearch(place.entry, search) ? place : undefined;

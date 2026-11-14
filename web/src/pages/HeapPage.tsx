@@ -1,6 +1,6 @@
-import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
 import { useMe, useRankedList, useUpdateItem } from "../api/queries";
@@ -9,7 +9,6 @@ import { AddItem } from "../components/AddItem";
 import {
   ComingRow,
   focusFirstRow,
-  focusRowOf,
   ItemRow,
   useRefocusStartedRow,
   type ChangeState,
@@ -22,6 +21,7 @@ import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
 import { titleTeam } from "../components/teamName";
 import { useToast } from "../components/UndoToast";
+import { useCloseItem } from "../components/useCloseItem";
 import {
   DEFAULT_MODES,
   filterCount,
@@ -59,7 +59,11 @@ export function HeapPage({
   const changeState = useChangeState(heapRef, list.data);
   // A change to an item an agent has asks first: every way of changing a state in the list goes through it.
   const agentConfirm = useConfirmAgentStateChange(changeState.run);
-  const closeItem = useCloseItem(heapRef, itemKey);
+  const listPage = useMemo<NavigateOptions>(
+    () => ({ to: "/teams/$team/heaps/$heap", params: heapRef, search: true }),
+    [heapRef],
+  );
+  const closeItem = useCloseItem(listPage, itemKey);
   useRefocusStartedRow(list.data);
 
   // The list's keys (ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
@@ -162,39 +166,6 @@ function nextToStart(list: RankedList, done: Item) {
   const othersInProgress = list.in_progress_count - (done.state === "in_progress" ? 1 : 0);
   if (othersInProgress > 0) return undefined;
   return everyEntry(list).find((entry) => entry.item.id !== done.id && entry.item.state === "open")?.item;
-}
-
-/**
- * Closes the open item. Back closes it when the app opened it, so the history doesn't gain an entry per look at an
- * item; opened from outside (a link, a reload), it goes to the list instead. Focus goes back to the item's row.
- */
-function useCloseItem(heapRef: HeapRef, itemKey: string | undefined) {
-  const router = useRouter();
-  const navigate = useNavigate();
-  const closesBack = useRouterState({ select: (state) => state.location.state.closesBack === true });
-  const close = useCallback(() => {
-    if (itemKey === undefined) return;
-    // The list was under the item all along, so it stays where it is now. Closing by navigating says so to the router;
-    // closing by Back can't, and on its way back the router scrolls to the top and the browser to where the list was
-    // when the item opened. So the window goes back to its place once both are done, before the next paint.
-    const { scrollX, scrollY } = window;
-    const list = router.buildLocation({ to: "/teams/$team/heaps/$heap", params: heapRef }).pathname;
-    // Focus the row once the page it goes back to has rendered: before then, the row found may be this heap list's, on
-    // its way out when the item was opened from another page, such as Waiting for me.
-    const unsubscribe = router.subscribe("onRendered", (event) => {
-      unsubscribe();
-      if (closesBack && event.toLocation.pathname === list) {
-        window.requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
-      }
-      window.setTimeout(() => focusRowOf(itemKey));
-    });
-    if (closesBack) {
-      router.history.back();
-    } else {
-      void navigate({ to: "/teams/$team/heaps/$heap", params: heapRef, search: true, resetScroll: false });
-    }
-  }, [router, navigate, closesBack, heapRef, itemKey]);
-  return itemKey === undefined ? undefined : close;
 }
 
 /** The list itself, with its controls. */

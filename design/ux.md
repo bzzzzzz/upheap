@@ -98,8 +98,8 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | Width                | Navigation                                                                                                                                                                                                                | List                                                     | Item                                                  |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
 | Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Closed, More                                                                       | Full width, compact rows                                 | Bottom sheet over the list                            |
-| Tablet, 640–1023 px  | An 80 px rail: Waiting, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me with its count and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
+| Tablet, 640–1023 px  | An 80 px rail: Waiting, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
 **More** on a phone holds Settings, Activity, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
@@ -123,7 +123,7 @@ or an item's change.
 items" in the sidebar with the person's open items on the right, "All" in the rail with no count. The count is the sum
 of the open counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when
 those do. On a phone the heap switcher's sheet starts with an "All heaps" row, the same count at its right, marked
-current on `/all`; the tablet's and wide screen's popovers don't have it, as they have the entry. The tabs and the top
+current on `/all`, where no heap's row is; the tablet's and wide screen's popovers don't have it, as they have the entry. The tabs and the top
 bar are as on Waiting for me.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
@@ -615,15 +615,17 @@ filter, heap filter, position numbers or reminders to come.
    `a`, the swipes and Undo work as in the list, in the item's own heap. Done offers no start of the next item.
 3. An item opens over the list as on a heap's list (a pane, a panel, a sheet), and nothing switches heap. The address
    is `/all?item=<team>/<heap>/<key>`, as a key is only unique within its heap, and a value that isn't that opens
-   nothing. The pane's ↑ and ↓ walk the rows on screen, across heaps. Closing goes back, or to `/all` with the rest of
+   nothing. The pane's ↑ and ↓ walk the rows on screen, across heaps, and its position is the one in this list. Closing goes back, or to `/all` with the rest of
    the search, and gives the focus to the row.
 4. The toolbar is the search and Filters. The panel has Show (Open, In progress and Blocked, each Pinned, Shown or
    Hidden, and the shown blocked items grouped or mixed in) and Narrow down: Need, Effort and Impact. Its chips, Reset
    all and the hidden note are the list's. The panel can't say how many items the filters leave out of the total, so it
-   shows only the number listed. The view is in the address.
+   shows the number the view matches. The view is in the address.
 5. Add opens the Add dialog in the heap the shell keeps (the one opened last), with the need, effort and impact
    filters filled in, and the dialog's title can change the heap. It is disabled when there is no such heap or it is
-   archived. On a phone the + in the tabs does the same, with no view.
+   archived. On a phone the + in the tabs does the same, with no view. Once added, the toast names the heap
+   ("Added “X” to Launch."), not a place, as the item's place in its heap's list isn't its place here, and Open it opens
+   the item over this page.
 6. Loading says "Loading…"; with nothing open, "Nothing open in your heaps."; with filters or a search that leave
    nothing, "No items match."; a failed first load shows its message. A failed refresh keeps the rows. The list is
    fetched again every 30 seconds and after any change that changes a heap's list, and keeps its order within the

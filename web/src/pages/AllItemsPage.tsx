@@ -1,12 +1,12 @@
-import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AcrossHeapsItem, AcrossHeapsList, HeapRef, RankedList } from "../api/client";
 import { useAcrossHeapsList, useMe } from "../api/queries";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
-import { focusFirstRow, focusRowOf, ItemRow, useRefocusStartedRow } from "../components/ItemRow";
+import { focusFirstRow, ItemRow, useRefocusStartedRow } from "../components/ItemRow";
 import { ItemPane } from "../components/ItemPane";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
 import { useListSearch } from "../components/listSearch";
@@ -21,8 +21,12 @@ import {
   type AcrossSearch,
 } from "../components/listView";
 import { titleTeam } from "../components/teamName";
+import { useCloseItem } from "../components/useCloseItem";
 import { keptHeap } from "./AppLayout";
 import { HiddenNote, Section, useChangeState } from "./HeapPage";
+
+/** The list the open item closes to: this page, without the item. */
+const ALL_ITEMS: NavigateOptions = { to: "/all", search: (prev) => ({ ...prev, item: undefined }) };
 
 /** What Add is for while the person has no heap: it is disabled then, and never opens. */
 const NO_HEAP: HeapRef = { team: "", heap: "" };
@@ -47,7 +51,7 @@ export function AllItemsPage({
   const list = useAcrossHeapsList(toListQuery(view));
   const [panel, setPanel] = useState<Panel>(null);
   const open = parseItemAddress(view.item);
-  const closeItem = useCloseItem(open);
+  const closeItem = useCloseItem(ALL_ITEMS, open?.key);
   // The rows' entries, as the heap list's are, for the refocus after a row is started.
   const entries = useMemo<Pick<RankedList, "pinned" | "ranked" | "blocked"> | undefined>(
     () =>
@@ -100,7 +104,7 @@ export function AllItemsPage({
     <ItemPane
       heapRef={{ team: open.team, heap: open.heap }}
       itemKey={open.key}
-      entry={place?.row.entry}
+      entry={place && { ...place.row.entry, position: place.row.position }}
       section={place?.section}
       listed={index >= 0}
       previousKey={previous && addressOf(previous)}
@@ -146,6 +150,7 @@ export function AllItemsPage({
               heapRef={kept ?? NO_HEAP}
               view={view}
               search={search}
+              acrossHeaps
               disabled={kept === undefined || keptArchived === true}
             />
           </div>
@@ -166,10 +171,10 @@ export function AllItemsPage({
                 panel={panel}
                 onPanel={setPanel}
                 // None while the previous view stands in for this one, so the panel never shows its counts as this view's.
-                counts={list.isPlaceholderData ? undefined : { listed, total: undefined }}
+                counts={list.isPlaceholderData ? undefined : { listed: data.count, total: undefined }}
               />
 
-              {changed && <FilterChips view={view} onChange={onViewChange} shown={listed} total={undefined} />}
+              {changed && <FilterChips view={view} onChange={onViewChange} shown={data.count} total={undefined} />}
 
               {search.trim() !== "" && (
                 <p role="status" className="sr-only">
@@ -275,36 +280,4 @@ function placeOf(list: AcrossHeapsList, address: string | undefined) {
     if (row) return { row, section };
   }
   return undefined;
-}
-
-/**
- * Closes the open item. Back closes it when the app opened it, so the history doesn't gain an entry per look at an
- * item; opened from outside (a link, a reload), it goes to the list instead. Focus goes back to the item's row.
- * The heap list's own is `useCloseItem` in HeapPage, which goes to a heap's list.
- */
-function useCloseItem(open: (HeapRef & { key: string }) | undefined) {
-  const router = useRouter();
-  const navigate = useNavigate();
-  const closesBack = useRouterState({ select: (state) => state.location.state.closesBack === true });
-  const key = open?.key;
-  const close = useCallback(() => {
-    if (key === undefined) return;
-    // The list was under the item all along, so it stays where it is now (see HeapPage's `useCloseItem`).
-    const { scrollX, scrollY } = window;
-    const list = router.buildLocation({ to: "/all" }).pathname;
-    // Focus the row once the page it goes back to has rendered.
-    const unsubscribe = router.subscribe("onRendered", (event) => {
-      unsubscribe();
-      if (closesBack && event.toLocation.pathname === list) {
-        window.requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
-      }
-      window.setTimeout(() => focusRowOf(key));
-    });
-    if (closesBack) {
-      router.history.back();
-    } else {
-      void navigate({ to: "/all", search: (prev) => ({ ...prev, item: undefined }), resetScroll: false });
-    }
-  }, [router, navigate, closesBack, key]);
-  return key === undefined ? undefined : close;
 }
