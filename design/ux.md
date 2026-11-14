@@ -844,6 +844,18 @@ moves to its heading, since the row it was on is gone. With none signed in, the 
 start with, with this server's address. The card is there when the server's `manage_sign_ins` action is. Ending a sign-in never touches the browser's own
 session.
 
+Below the sign-ins the card has a **Tokens** part for machines with no browser or keychain: a line saying so, and the
+user's personal tokens, one row each with a key icon, the name, "Made 3 Nov · last used never · expires 3 Feb" (or
+"never expires"), and a **Revoke** button named for the token. Revoke turns the row into an inline confirm, "Revoke ci?
+Anything using it stops working at once", and shares the one open confirm with the sign-ins. After a revoke the card
+says so in its status line and focus moves to its heading. With none, the part says "No tokens yet." **Make a token**
+opens a form in place of the button, with a name, an expiry (90 days by default) and Make token; Enter submits, and
+Cancel or Escape closes it and gives focus back to the button. A refusal shows in the form, which keeps what was typed.
+A made token replaces the form with a panel that says it is shown once, the secret in a read-only field that selects
+itself on focus, a Copy button that has focus (the field is selected for copying by hand when the clipboard isn't
+there), and the command to use it with the secret left as `<token>`. Done closes the panel and gives focus back to
+Make a token. The secret lives only in the page's state, so leaving the page drops it.
+
 ## Conflicts and errors
 
 1. **Conflicts say what was lost.** "Sam changed the due date a moment ago. You're seeing their version; your

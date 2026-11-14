@@ -37,7 +37,8 @@ mod m20261203_000031_step_origin;
 mod m20261204_000032_oidc;
 mod m20261205_000033_heap_priorities;
 mod m20261206_000034_heap_origin;
-mod m20261207_000035_reply_changed;
+mod m20261207_000035_personal_tokens;
+mod m20261208_000036_reply_changed;
 
 pub struct Migrator;
 
@@ -79,7 +80,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20261204_000032_oidc::Migration),
             Box::new(m20261205_000033_heap_priorities::Migration),
             Box::new(m20261206_000034_heap_origin::Migration),
-            Box::new(m20261207_000035_reply_changed::Migration),
+            Box::new(m20261207_000035_personal_tokens::Migration),
+            Box::new(m20261208_000036_reply_changed::Migration),
         ]
     }
 }
