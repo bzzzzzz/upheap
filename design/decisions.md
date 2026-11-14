@@ -441,3 +441,17 @@ its own ranking and its own questions of progress: does the parent rank by its c
 **Consequences.** Ranking stays flat: the tasks rank as any other. Nothing tracks "how much of the note is done"; the
 note's page lists what it became with their states. A blocker that became leaves what it blocks waiting for the
 person, as one closed as won't do does (§35).
+
+## 37. Mail goes out over SMTP, not a provider's HTTP API
+
+**Context.** Resetting a password by mail, confirming an address and changing one all need the server to send mail,
+and operators run Upheap on their own infrastructure with whichever provider they already use.
+
+**Decision.** The server speaks plain SMTP through lettre, set by one URL (`MAIL_URL`) and a sender (`MAIL_FROM`).
+SMTP always uses TLS, implicit or STARTTLS; there is no cleartext mode.
+
+**Instead of.** A provider's HTTP API such as Resend's or SES's, or several providers behind a trait.
+
+**Consequences.** Switching provider is changing two settings. There are no provider-specific features, such as bounce
+webhooks or templates. Cloud Run blocks port 25, so operators use 465 or 587. Delivery problems show up as SMTP errors
+in the log.

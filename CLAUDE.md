@@ -14,6 +14,8 @@ web app, on SQLite, MySQL or Postgres.
 - `crates/api`: axum handlers, error mapping, OpenAPI (utoipa), conversions from service views to `api-types`.
 - `crates/cli`: the `upheap` command-line client (lib + thin bin), over HTTP with `api-types`. Never depends on `api`,
   `service` or `store` outside its tests.
+- `crates/mail`: sending plain-text mail (SMTP, or files and the log for development). No IO beyond that; depends on
+  nothing in the workspace.
 - `crates/server`: the `upheap-server` binary (config, startup, `openapi` subcommand).
 - `web/`: React + TanStack Query client, with types generated from `openapi.json`.
 
