@@ -2,7 +2,7 @@
 //! and the words and cells that show an item.
 
 use api_types::common::DueInputDto;
-use api_types::common::{ItemDto, SizeDto, StateDto};
+use api_types::common::{ItemDto, KindDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
@@ -328,6 +328,20 @@ pub(super) fn state_text(state: StateDto) -> &'static str {
         StateDto::WontDo => "won't do",
         StateDto::Became => "became",
         StateDto::Unknown => "unknown",
+    }
+}
+
+/// ` · with an agent` when an agent has the item, to follow its state as in `open · with an agent`; empty otherwise.
+pub(super) fn with_agent_text(item: &ItemDto) -> &'static str {
+    if item.with_agent { " · with an agent" } else { "" }
+}
+
+pub(super) fn kind_text(kind: KindDto) -> &'static str {
+    match kind {
+        KindDto::Note => "note",
+        KindDto::Task => "task",
+        KindDto::Reminder => "reminder",
+        KindDto::Unknown => "unknown",
     }
 }
 

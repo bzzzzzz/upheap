@@ -76,3 +76,38 @@ pub struct SetPasswordRequestDto {
     /// characters. May equal the current one.
     pub password: String,
 }
+
+/// The OpenID Connect provider people may sign in through on this server.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = OidcProvider)]
+pub struct OidcProviderDto {
+    /// What the sign-in button names, such as `Acme SSO`.
+    pub label: String,
+}
+
+/// Who the provider vouched for, shown on the username step.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = OidcPending)]
+pub struct OidcPendingDto {
+    pub display_name: String,
+    pub email: String,
+}
+
+/// The username a person picks to finish a first sign-in through the provider.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[schema(as = OidcRegisterRequest)]
+pub struct OidcRegisterRequest {
+    /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of
+    /// the personal team, and can't be changed later.
+    #[schema(example = "eugene")]
+    pub username: String,
+}
+
+/// A user made through the provider, signed in.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = OidcRegistered)]
+pub struct OidcRegisteredDto {
+    pub user: crate::me::UserDto,
+    /// The app path the sign-in started from, to go to next, if it started from one.
+    pub redirect: Option<String>,
+}

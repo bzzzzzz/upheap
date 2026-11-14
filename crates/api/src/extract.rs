@@ -213,14 +213,19 @@ fn bearer_token(headers: &HeaderMap) -> Option<OAuthSecret> {
 
 /// The session token from the `Cookie` header, if there is one.
 pub(crate) fn session_token(headers: &HeaderMap) -> Option<SessionToken> {
+    cookie_value(headers, SESSION_COOKIE).map(SessionToken::from_client)
+}
+
+/// The value of the cookie called `name` in the `Cookie` headers, if there is one.
+fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
         .filter_map(|value| value.to_str().ok())
         .flat_map(|value| value.split(';'))
         .filter_map(|pair| pair.trim().split_once('='))
-        .find(|(name, _)| *name == SESSION_COOKIE)
-        .map(|(_, value)| SessionToken::from_client(value.to_owned()))
+        .find(|(cookie, _)| *cookie == name)
+        .map(|(_, value)| value.to_owned())
 }
 
 /// A `Set-Cookie` value that stores `token` as the session cookie.
@@ -313,4 +318,33 @@ pub(crate) async fn require_csrf_header(request: Request, next: Next) -> Respons
         return ApiError::CsrfHeaderMissing.into_response();
     }
     next.run(request).await
+}
+
+pub(crate) const OIDC_COOKIE: &str = "upheap_oidc";
+/// The cookie of a sign-in through the provider reaches only the endpoints that read it.
+const OIDC_COOKIE_PATH: &str = "/api/v1/auth/oidc";
+
+/// The state of the sign-in through the provider this browser started, from the `Cookie` header, if there is one.
+pub(crate) fn oidc_state(headers: &HeaderMap) -> Option<String> {
+    cookie_value(headers, OIDC_COOKIE)
+}
+
+/// A `Set-Cookie` value that keeps `state` for the 15 minutes a sign-in through the provider lasts. `Secure` when
+/// the session cookie is.
+pub(crate) fn oidc_cookie(state: &str, settings: &CookieSettings) -> Option<HeaderValue> {
+    let secure = if settings.secure { "; Secure" } else { "" };
+    let max_age = domain::oidc::PENDING_SIGN_IN_LIFETIME.as_seconds_ceil();
+    HeaderValue::from_str(&format!(
+        "{OIDC_COOKIE}={state}; Path={OIDC_COOKIE_PATH}; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}"
+    ))
+    .ok()
+}
+
+/// A `Set-Cookie` value that removes the sign-in cookie.
+pub(crate) fn clear_oidc_cookie(settings: &CookieSettings) -> HeaderValue {
+    let secure = if settings.secure { "; Secure" } else { "" };
+    HeaderValue::from_str(&format!(
+        "{OIDC_COOKIE}=; Path={OIDC_COOKIE_PATH}; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
+    ))
+    .unwrap_or_else(|_| HeaderValue::from_static("upheap_oidc=; Path=/api/v1/auth/oidc; Max-Age=0"))
 }

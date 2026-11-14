@@ -31,6 +31,8 @@ argon2 = "0.5"
 # Without `tokio` and `http1`: `server` and the CLI's tests add them, to serve with `axum::serve`.
 axum = { version = "0.8", default-features = false, features = ["form", "json", "macros", "matched-path", "original-uri", "query", "tower-log", "tracing"] }
 base64 = "0.22"
+# The OIDC tests sign ID tokens, whose times openidconnect takes as chrono dates; already in the tree through it.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The CLI's command line.
 clap = { version = "4", features = ["derive"] }
 # The CLI's config and data directories.
@@ -48,6 +50,8 @@ keyring = "4"
 # development, no connection pool.
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "tokio1-rustls-tls", "file-transport"] }
 mime_guess = "2"
+# OIDC sign-in: discovery, PKCE, nonce and ID token checks are security code, so the maintained crate does them.
+openidconnect = { version = "4", default-features = false, features = ["reqwest", "rustls-tls"] }
 # The server's allocator: musl's own, which the Alpine image would otherwise use, is slow under many threads.
 mimalloc = "0.1"
 owo-colors = "4"

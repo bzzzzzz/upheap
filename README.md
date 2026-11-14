@@ -80,6 +80,27 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | `LOG_FORMAT` | `json` | `json` or `pretty`; levels via `RUST_LOG` |
 | `MAIL_URL` | unset | Where mail goes: `smtps://user:pass@host:465`, `smtp://user:pass@host:587` (STARTTLS), or for development `file:///dir` or `log:`. Unset means no mail |
 | `MAIL_FROM` | unset | The sender, `Upheap <upheap@example.com>`. Required with `MAIL_URL` |
+| `UPHEAP_OIDC_ISSUER` | none | The issuer URL of an OpenID Connect provider (Okta, Google Workspace, Keycloak…), exactly as the provider names itself, trailing `/` included. Set it with the next three, or none of the four |
+| `UPHEAP_OIDC_CLIENT_ID` | none | The client ID the provider gave Upheap |
+| `UPHEAP_OIDC_CLIENT_SECRET` | none | The client secret the provider gave Upheap |
+| `UPHEAP_OIDC_LABEL` | none | What the sign-in button calls the provider: "Sign in with Acme SSO" |
+| `UPHEAP_OIDC_SCOPES` | `openid email profile` | Space-separated scopes to ask for; `openid` is always asked |
+
+### Signing in through a provider
+
+With the four `UPHEAP_OIDC_*` variables set, the sign-in and invite pages offer a button to sign in through the
+provider, next to local accounts. Register this redirect URI at the provider, as a confidential web client using the
+authorization code flow:
+
+```
+{BASE_URL}/api/v1/auth/oidc/callback
+```
+
+The provider must send a verified `email` claim (`email_verified: true`) in the ID token; a person without one is
+refused. A first sign-in asks for a username and makes the account, also when `ALLOW_REGISTRATION` is `false`. A
+person whose email already belongs to a local account is refused, not linked. People who sign in through the provider
+have no password in Upheap. The server doesn't contact the provider at startup, so a provider that is down never
+stops the server or local sign-in. Start with one setting missing and the server stops, naming it.
 
 ### Setting up mail
 

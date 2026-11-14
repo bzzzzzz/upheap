@@ -37,12 +37,14 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 
 /// What `GET /me` answers for `me`.
 fn to_me_dto(me: MeView) -> MeDto {
-    let allowed_actions = vec![
+    let mut allowed_actions = vec![
         MeActionDto::SignOut,
         MeActionDto::CreateTeam,
         MeActionDto::ManageSignIns,
-        MeActionDto::ChangePassword,
     ];
+    if me.has_password {
+        allowed_actions.push(MeActionDto::ChangePassword);
+    }
     let team = |view: TeamView| TeamDto {
         id: *view.team.id.as_uuid(),
         slug: view.team.slug.to_string(),

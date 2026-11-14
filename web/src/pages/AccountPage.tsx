@@ -6,7 +6,7 @@ import { useMe, useSignOut, useUpdateMe } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
-import { PasswordCard } from "../components/PasswordCard";
+import { NoPasswordCard, PasswordCard } from "../components/PasswordCard";
 import { ProblemText } from "../components/ProblemText";
 import { SignInsSection } from "../components/SignIns";
 import { useTheme, type Theme } from "../components/theme";
@@ -66,7 +66,11 @@ export function AccountPage() {
             </div>
           </dl>
         </section>
-        {me.allowed_actions.includes("change_password") && <PasswordCard inputClass={nameFormClasses.input} />}
+        {me.allowed_actions.includes("change_password") ? (
+          <PasswordCard inputClass={nameFormClasses.input} />
+        ) : (
+          <NoPasswordCard />
+        )}
         <AppearanceSection />
         {me.allowed_actions.includes("manage_sign_ins") && <SignInsSection />}
         {me.allowed_actions.includes("sign_out") && (

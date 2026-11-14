@@ -9,6 +9,8 @@
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
+pub mod oidc;
+
 use anyhow::{Context, Result};
 use api::{AppState, CookieSettings};
 use axum::Router;
@@ -83,6 +85,7 @@ fn test_settings(allow_registration: bool) -> Settings {
         allow_registration,
         session_ttl: Duration::from_days(30),
         sign_in_limit: SignInLimit::DEFAULT,
+        oidc: None,
     }
 }
 
@@ -121,7 +124,20 @@ impl TestApp {
     /// The same server with registration closed: a second router over the same database and clock. Set accounts up
     /// on `self`, and exercise the closed one.
     pub fn with_registration_closed(&self) -> TestApp {
-        let services = Services::new(self.db.clone(), self.clock.clone(), test_settings(false));
+        self.with_settings(test_settings(false))
+    }
+
+    /// The same server with registration closed and `oidc` as its provider: a second router over the same database
+    /// and clock.
+    pub fn with_oidc(&self, oidc: service::oidc::OidcSettings) -> TestApp {
+        self.with_settings(Settings {
+            oidc: Some(oidc),
+            ..test_settings(false)
+        })
+    }
+
+    fn with_settings(&self, settings: Settings) -> TestApp {
+        let services = Services::new(self.db.clone(), self.clock.clone(), settings);
         TestApp {
             router: api::router(AppState {
                 services: services.clone(),

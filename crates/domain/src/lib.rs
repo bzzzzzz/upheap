@@ -14,6 +14,7 @@ pub mod item;
 pub mod item_move;
 pub mod list_view;
 pub mod oauth;
+pub mod oidc;
 pub mod parameter;
 pub mod password_reset;
 pub mod permission;
