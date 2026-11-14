@@ -183,6 +183,7 @@ cargo run -p cli -- heap use personal                           # or team/heap
 cargo run -p cli -- heap show                                   # the heap's name, weights and context
 cargo run -p cli -- heap edit --context-file context.md         # or - for stdin, or --no-context
 cargo run -p cli -- heap weights --need 20 --parameter Area=30   # ranking weights, admins only; heap show prints them
+cargo run -p cli -- heap priority 3 work                        # your own priority for a heap, 1 to 10; orders it against your other heaps
 cargo run -p cli -- item list --effort s,m --tag infra
 cargo run -p cli -- item list --all-heaps
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'

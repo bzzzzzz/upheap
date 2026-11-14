@@ -493,6 +493,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         ValidationError::TooManyTags { .. } => ("too_many_tags", Some("tag_ids")),
         ValidationError::TooManyOptions { .. } => ("too_many_options", Some("param")),
         ValidationError::WeightOutOfRange { .. } => ("weight_out_of_range", Some("weight")),
+        ValidationError::PriorityOutOfRange { .. } => ("priority_out_of_range", Some("priority")),
         ValidationError::DuplicateParameter => ("duplicate_parameter", Some("parameters")),
         ValidationError::LimitOutOfRange { .. } => ("limit_out_of_range", Some("limit")),
         ValidationError::SortParameterMismatch => ("sort_parameter_mismatch", Some("sort_parameter")),

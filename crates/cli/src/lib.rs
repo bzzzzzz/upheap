@@ -306,6 +306,7 @@ enum HeapCommand {
     Edit(commands::heap::edit::EditArgs),
     /// Change a heap's ranking weights, its parameters' included, in one save
     Weights(commands::heap::weights::WeightsArgs),
+    Priority(commands::heap::priority::PriorityArgs),
 }
 
 #[derive(Subcommand)]
@@ -373,6 +374,7 @@ impl Command {
             Self::Heap(HeapCommand::Show(args)) => &args.shared,
             Self::Heap(HeapCommand::Edit(args)) => &args.shared,
             Self::Heap(HeapCommand::Weights(args)) => &args.shared,
+            Self::Heap(HeapCommand::Priority(args)) => &args.shared,
             Self::Auth(AuthCommand::Login(args)) => &args.shared,
             Self::Auth(AuthCommand::Logout(args)) => &args.shared,
             Self::Guide(GuideCommand::Show(_)) => return None,
@@ -533,6 +535,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Heap(HeapCommand::Show(args)) => commands::heap::show::run(args, app, out).await,
         Command::Heap(HeapCommand::Edit(args)) => commands::heap::edit::run(args, app, out).await,
         Command::Heap(HeapCommand::Weights(args)) => commands::heap::weights::run(args, app, out).await,
+        Command::Heap(HeapCommand::Priority(args)) => commands::heap::priority::run(args, app, out).await,
         Command::Auth(AuthCommand::Login(args)) => commands::auth::login::run(args, app, out).await,
         Command::Auth(AuthCommand::Logout(args)) => commands::auth::logout::run(args, app, out).await,
         Command::Guide(GuideCommand::Show(_)) => Ok(commands::guide::show::run(&Cli::command(), out)?),

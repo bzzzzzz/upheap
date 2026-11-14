@@ -28,6 +28,8 @@ pub enum ValidationError {
     TooManyOptions { max: usize },
     #[error("weight must be from 0 to {max}")]
     WeightOutOfRange { max: u16 },
+    #[error("priority must be from {min} to {max}")]
+    PriorityOutOfRange { min: u8, max: u8 },
     /// A weights save or preview names a parameter more than once.
     #[error("each parameter may be listed once")]
     DuplicateParameter,

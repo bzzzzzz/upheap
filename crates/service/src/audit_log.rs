@@ -442,6 +442,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::OptionArchived, _) => ("archived an option of", true),
         (AuditAction::InviteLinkCreated, _) => ("made an invite link", false),
         (AuditAction::InviteLinkRevoked, _) => ("revoked", true),
+        (AuditAction::HeapPriorityChanged, _) => ("changed their priority for a heap", false),
         (AuditAction::PasswordChanged, _) => ("changed their password", false),
         (AuditAction::PasswordResetLinkMade, _) => ("got a reset link from whoever runs the server", false),
         (AuditAction::PasswordReset, _) => ("set a new password with a reset link", false),
@@ -491,6 +492,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::HeapContextUpdated
         | AuditAction::HeapArchived
         | AuditAction::HeapUnarchived
+        | AuditAction::HeapPriorityChanged
         | AuditAction::ItemUpdated
         | AuditAction::ItemMoved
         | AuditAction::TurnReached

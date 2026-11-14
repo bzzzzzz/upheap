@@ -8,7 +8,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   blocker_not_in_heap: "That item isn't in this heap any more.",
   kind_change_not_allowed: "A task can't go back to a note.",
   stage_needs_task: "Only a task can be defined.",
-  item_not_blocked: "Only a blocked item can wait for another one.",
+  item_not_blocked: "This item isn't blocked any more.",
   item_closed: "This item is closed, so only its state can change.",
   option_not_in_parameter: "That option was archived meanwhile. Pick another one.",
   parameter_not_in_heap: "That parameter was archived meanwhile.",

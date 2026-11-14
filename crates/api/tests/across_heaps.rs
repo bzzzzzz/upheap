@@ -320,3 +320,49 @@ async fn a_row_matches_the_entry_its_heaps_own_list_gives() -> Result<()> {
     expect_that!(list["ranked"].as_array().map(Vec::len), some(eq(2)));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_heaps_priority_multiplies_its_scores_in_the_merge() -> Result<()> {
+    // Arrange: heap A's only item outscores heap B's.
+    let app = TestApp::start().await?;
+    let (session, a) = app.register("ada@example.test").await?;
+    let (_, b) = app.shared_heap(&session).await?;
+    item(&app, &session, &a, "In A", "critical").await?;
+    item(&app, &session, &b, "In B", "expected").await?;
+    let before = across(&app, &session, "").await?;
+
+    // Act
+    let set = app.set_priority(&session, &b, 10).await?;
+    let after = across(&app, &session, "").await?;
+
+    // Assert
+    expect_that!(set.status, eq(StatusCode::OK));
+    expect_that!(titles(&before, "ranked"), elements_are![eq("In A"), eq("In B")]);
+    expect_that!(titles(&after, "ranked"), elements_are![eq("In B"), eq("In A")]);
+    let rows = after["ranked"].as_array().context("rows")?;
+    expect_that!(rows[0]["heap_priority"], eq(&json!(10)));
+    expect_that!(rows[1]["heap_priority"], eq(&json!(1)));
+    expect_that!(before["ranked"][0]["heap_priority"], eq(&json!(1)));
+    // Positions within a heap and the count don't change.
+    expect_that!(after["count"], eq(&json!(2)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heaps_priority_leaves_the_order_within_the_heap_alone() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, a) = app.register("ada@example.test").await?;
+    item(&app, &session, &a, "Low", "idea").await?;
+    item(&app, &session, &a, "High", "critical").await?;
+
+    // Act
+    app.set_priority(&session, &a, 7).await?;
+    let list = across(&app, &session, "").await?;
+
+    // Assert
+    expect_that!(titles(&list, "ranked"), elements_are![eq("High"), eq("Low")]);
+    Ok(())
+}

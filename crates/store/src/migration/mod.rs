@@ -35,7 +35,8 @@ mod m20261201_000029_item_split;
 mod m20261202_000030_run_tool_times;
 mod m20261203_000031_step_origin;
 mod m20261204_000032_oidc;
-mod m20261205_000033_heap_origin;
+mod m20261205_000033_heap_priorities;
+mod m20261206_000034_heap_origin;
 
 pub struct Migrator;
 
@@ -75,7 +76,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20261202_000030_run_tool_times::Migration),
             Box::new(m20261203_000031_step_origin::Migration),
             Box::new(m20261204_000032_oidc::Migration),
-            Box::new(m20261205_000033_heap_origin::Migration),
+            Box::new(m20261205_000033_heap_priorities::Migration),
+            Box::new(m20261206_000034_heap_origin::Migration),
         ]
     }
 }

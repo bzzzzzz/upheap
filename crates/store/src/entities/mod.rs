@@ -1,6 +1,7 @@
 //! SeaORM entities, one per table. Rows only: conversion to domain types happens in the repository modules.
 
 pub mod audit_log;
+pub mod heap_priorities;
 pub mod heaps;
 pub mod invite_links;
 pub mod item_comments;

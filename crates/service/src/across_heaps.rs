@@ -2,7 +2,7 @@
 //! one list view. The mechanism is in architecture.md, Ranking, Across heaps.
 
 use domain::Timestamp;
-use domain::heap::Heap;
+use domain::heap::{Heap, HeapPriority};
 use domain::item::StateKind;
 use domain::list_view::ListView;
 use domain::team::Team;
@@ -24,6 +24,8 @@ pub struct AcrossHeapsEntry {
     pub entry: RankedEntry,
     pub heap: Heap,
     pub team: Team,
+    /// The caller's priority for the item's heap.
+    pub priority: HeapPriority,
 }
 
 /// The ranked items of all the caller's heaps, grouped as one [`ListView`] groups them.
@@ -48,14 +50,22 @@ pub struct AcrossHeapsList {
 /// An entry on its way to the merged list: the place of its heap in the store's heap order, and the heap.
 struct Candidate {
     heap_index: usize,
+    priority: HeapPriority,
     entry: RankedEntry,
+}
+
+impl Candidate {
+    /// What the merge orders by: the item's score in its own heap times the caller's priority for that heap.
+    fn sort_key(&self) -> f64 {
+        self.entry.score * self.priority.as_factor()
+    }
 }
 
 impl Services {
     /// The non-closed items of the active heaps of the caller's teams where their role may view the heap, ranked at
     /// one time and shown as `view` says. Each heap is ranked and grouped as its own list does
     /// ([`list_ranked`](Self::list_ranked)); then each group is merged across heaps, ordered by the item's score in
-    /// its own heap, highest first (every heap weighs the same for now), then by heap (by name, then ID), then by the
+    /// its own heap times the caller's priority for that heap, highest first, then by heap (by name, then ID), then by the
     /// item's position in its heap's group. So every heap's own relative order is kept. At most
     /// [`MAX_ACROSS_HEAPS_ROWS`] rows are returned, taken pinned first, then ranked, then blocked.
     ///
@@ -88,6 +98,7 @@ impl Services {
         let heap_ids: Vec<_> = viewable.iter().map(|viewable| viewable.heap.id).collect();
         let with_items = store::items::count_items_by_heap(&self.db, &heap_ids, &StateKind::OPEN, now).await?;
 
+        let priorities = store::heap_priorities::list_heap_priorities(&self.db, principal.user_id, &heap_ids).await?;
         let (mut pinned, mut ranked, mut blocked) = (Vec::new(), Vec::new(), Vec::new());
         let (mut hidden_count, mut in_progress_count) = (0_u32, 0_u32);
         for (heap_index, viewable) in viewable.iter().enumerate() {
@@ -104,6 +115,10 @@ impl Services {
             } = self
                 .rank_heap_list(viewable.heap.clone(), viewable.role, as_of, now, view)
                 .await?;
+            let priority = priorities
+                .get(&viewable.heap.id)
+                .copied()
+                .unwrap_or(HeapPriority::DEFAULT);
             hidden_count = hidden_count.saturating_add(heap_hidden);
             in_progress_count = in_progress_count.saturating_add(heap_in_progress);
             for (group, entries) in [
@@ -111,7 +126,11 @@ impl Services {
                 (&mut ranked, heap_ranked),
                 (&mut blocked, heap_blocked),
             ] {
-                group.extend(entries.into_iter().map(|entry| Candidate { heap_index, entry }));
+                group.extend(entries.into_iter().map(|entry| Candidate {
+                    heap_index,
+                    priority,
+                    entry,
+                }));
             }
         }
 
@@ -122,9 +141,8 @@ impl Services {
         let mut room = max_rows;
         let mut merge = |mut group: Vec<Candidate>| {
             group.sort_by(|a, b| {
-                b.entry
-                    .score
-                    .total_cmp(&a.entry.score)
+                b.sort_key()
+                    .total_cmp(&a.sort_key())
                     .then_with(|| a.heap_index.cmp(&b.heap_index))
                     .then_with(|| a.entry.position.cmp(&b.entry.position))
             });
@@ -140,6 +158,7 @@ impl Services {
                         entry: candidate.entry,
                         heap: owner.heap.clone(),
                         team: owner.team.clone(),
+                        priority: candidate.priority,
                     }
                 })
                 .collect::<Vec<_>>()

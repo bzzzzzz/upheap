@@ -63,6 +63,16 @@ impl HeapApi<'_> {
             .await?)
     }
 
+    /// `PUT` of `body` to `resource` under the heap, with no version: the request says what the resource should end up
+    /// as.
+    pub async fn put_declared<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<T>, CliError> {
+        Ok(self.client.put(&self.path(resource), body, self.token).await?)
+    }
+
     /// `PUT` of `body` to `resource` under the heap, which is at `version`.
     pub async fn put<T: DeserializeOwned>(
         &self,

@@ -1238,6 +1238,31 @@ export function useUpdateHeap(team: string) {
   });
 }
 
+/**
+ * Sets the caller's own priority for a heap of the team `team`, 1 to 10. Declarative, so no `If-Match`. Waiting for me
+ * is ordered by it, so it is fetched again.
+ */
+export function useSetHeapPriority(team: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ heap, priority }: { heap: Heap; priority: number }) =>
+      unwrap(
+        await api.PUT("/api/v1/teams/{team}/heaps/{heap}/priority", {
+          params: { path: { team, heap: heap.slug } },
+          body: { priority },
+        }),
+      ),
+    onSuccess: (saved) => queryClient.setQueryData(heapKey({ team, heap: saved.slug }), saved),
+    onSettled: (_saved, _error, { heap }) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: heapKey({ team, heap: heap.slug }) }),
+        // The team's heap list carries the priority too.
+        invalidateTeam(queryClient, team),
+        queryClient.invalidateQueries({ queryKey: waitingKey }),
+      ]),
+  });
+}
+
 /** Archives or unarchives a heap of the team `team`. */
 export function useSetHeapArchived(team: string) {
   const queryClient = useQueryClient();

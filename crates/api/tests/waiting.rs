@@ -485,3 +485,34 @@ async fn a_question_on_a_reminder_to_come_waits_after_the_ranked_ones_soonest_da
     expect_that!(waiting["count"], eq(&json!(3)));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_heaps_priority_multiplies_its_scores_among_the_waiting_rows() -> Result<()> {
+    // Arrange: heap A's question is on a higher scored item than heap B's.
+    let app = TestApp::start().await?;
+    let (session, a) = app.register("ada@example.test").await?;
+    let (_, b) = app.shared_heap(&session).await?;
+    for (heap, title, need) in [(&a, "In A", "critical"), (&b, "In B", "expected")] {
+        let key = item(&app, &session, heap, title, need).await?;
+        ask_text(&app, &session, heap, &key, "Which?").await?;
+    }
+    let before = waiting(&app, &session).await?;
+
+    // Act
+    app.set_priority(&session, &b, 10).await?;
+    let after = waiting(&app, &session).await?;
+
+    // Assert
+    expect_that!(
+        rows(&before),
+        elements_are![eq(&("In A".to_owned(), 1)), eq(&("In B".to_owned(), 1))]
+    );
+    expect_that!(
+        rows(&after),
+        elements_are![eq(&("In B".to_owned(), 1)), eq(&("In A".to_owned(), 1))]
+    );
+    expect_that!(after["rows"][0]["heap_priority"], eq(&json!(10)));
+    expect_that!(after["rows"][1]["heap_priority"], eq(&json!(1)));
+    Ok(())
+}

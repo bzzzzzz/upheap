@@ -442,7 +442,7 @@ From the steps above that ask something of the product.
 item, its **origin**. A heap is *defined* once the turn that made it ends, and *complete* while it has no open
 item. Both are read off its items; neither is stored.
 
-**Heap weight.** A number each person gives each of their heaps, one by default. It says how much that heap
+**Heap priority.** A whole number from 1 to 10 each person gives each of their heaps, 1 by default. It says how much that heap
 matters to them against their other heaps, and is theirs alone: teammates in a shared heap each have their own.
 
 **Item.** As today, and: a **kind** (note, task or reminder), a **context** (the description it has today, as
@@ -563,10 +563,10 @@ change it makes carries the run it was made in.
 
 1. An item is in the queue when it has an open turn, doesn't wait for the person, isn't blocked, isn't claimed,
    and is in a heap `upheap work` was given. A heap made from an item in a given heap counts as given, and starts
-   with its source's weight.
+   with its source's priority.
 2. The queue is one list over all the given heaps. An item's place is its priority score in its own heap,
-   times the weight the person running `upheap work` gave that heap. So the top items of every heap get worked,
-   and raising a heap's weight moves all of its items up.
+   times the priority the person running `upheap work` gave that heap. So the top items of every heap get worked,
+   and raising a heap's priority moves all of its items up.
 3. **Started work comes first.** An item whose turn already has a run, and which is ready to go on, gets a large
    boost in the queue: large enough that only something much more important passes it. Half-done work is
    finished before new work of about the same importance is begun. The size of the boost is a number in the
@@ -605,7 +605,7 @@ change it makes carries the run it was made in.
 4. A request closed as "can't be done" goes back to the agent like any answer. The agent finds another way, or
    asks what to do instead; it doesn't ask for the same thing again.
 5. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered as the
-   queue is: the item's score times the person's weight for its heap.
+   queue is: the item's score times the person's priority for its heap.
 
 **Review**
 
@@ -680,7 +680,7 @@ change it makes carries the run it was made in.
 Each walked by hand through the rules above.
 
 1. **An old idea against a new critical task.** A three-week-old idea note and a critical task added today both
-   have open turns, neither started. Queue §2: both are in one heap, so its weight changes nothing and the
+   have open turns, neither started. Queue §2: both are in one heap, so its priority changes nothing and the
    heap's ranking decides. Critical pulls far harder than three weeks of an idea's slow ageing, so the task is
    next. The idea is taken when nothing above it is in the queue.
 2. **A half-done task against something new.** Task A is mid-turn after an answer; note B gets a go-ahead.
@@ -718,7 +718,7 @@ Each walked by hand through the rules above.
 12. **Editing under the agent.** While an agent prepares a note, the person rewrites its title. Person §3: fine.
     The agent's write of the context is refused as stale; it reads the note again and writes a context for the
     new title.
-13. **Two heaps.** The person weights "Work" 2 and "House" 1. House's top item scores 50 and Work's third
+13. **Two heaps.** The person gives "Work" priority 2 and "House" 1. House's top item scores 50 and Work's third
     scores 30. Queue §2: 30 × 2 = 60 beats 50, so Work's third is taken before House's first. They raise House
     to 3: its top item is now 150 and leads the queue.
 14. **A split with nothing to go on.** A note with context is sent on and the agent finds two unrelated pieces
@@ -746,10 +746,10 @@ joining the queue; and need being settled for everything made from a note.
    progress page all read them.
 5. **Started work gets a boost in the ranking,** not a rule of its own. "Always finish first" would let a
    trivial half-done item hold up something critical; ranking alone leaves a pile of half-done things.
-6. **D. Heaps are compared by score times a weight the person sets,** not taken in a fixed order or one loop
+6. **D. Heaps are compared by score times a priority the person sets,** not taken in a fixed order or one loop
    per heap. The top of every heap gets attention, and one number moves a heap. It assumes scores from
    different heaps can be compared as they are, which holds while heaps keep similar factor weights; a heap
-   with unusual weights or many custom parameters will sit higher or lower than it should, and its heap weight
+   with unusual weights or many custom parameters will sit higher or lower than it should, and its heap priority
    is the correction. This is also the mechanism for the view across heaps (a note in the Upheap heap).
 7. **One blocker per item,** as today, not several. Chains cover the cases an agent produces, and several
    blockers change the ranking's inheritance.
@@ -817,7 +817,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | W11 | Navigation: Waiting for me and Agents | all | Constant | Core | Both are across heaps and have no place today |
 | W12 | Add: a reminder with its date | P1 | Weekly | Enabler | A reminder can't be made otherwise |
 | W13 | Heap settings: context, agents prepare | P8 | Once | Core | Golden path step 1 |
-| W14 | Heap settings: my weight for this heap | Queue §2 | Sometimes | Enabler | With two heaps it's the only way to say which comes first |
+| W14 | Heap settings: my priority for this heap | Queue §2 | Sometimes | Enabler | With two heaps it's the only way to say which comes first |
 | W15 | The list: reminders to come, and search finding them | P6 | Sometimes | Enabler | A reminder with a wrong date can't be found to fix |
 | W16 | Closed: items closed as became | P11 | Sometimes | Enabler | Reopening one within its week starts here |
 | W17 | Item: make a note or a reminder a task | P6, P7 | Weekly | Enabler | P6 dead-ends: a due reminder can't become a task |
@@ -863,7 +863,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 3. **In the item, what the person is likeliest to act on comes first:** an open question, then who has the item
    with the one action that fits, then the steps, then the context. What is read now and then (where it came
    from, closed questions, runs) is folded at the bottom, one step away.
-4. **Rare things are two steps away:** a heap's context, prepare and weight in its Settings, and changing an
+4. **Rare things are two steps away:** a heap's context, prepare and priority in its Settings, and changing an
    item's kind or stage under the item's ⋯.
 5. **An agent's common commands are one short line** with the item's key, and read as a sentence.
 
@@ -1040,13 +1040,13 @@ ALL WIDTHS · Heap settings, General (W13, W14)        sometimes · core
 │ Name, link name                                          as today      │
 │ Context                              rendered Markdown     [Edit]      │
 │ Agents prepare new notes             off / on                          │
-│ Your weight for this heap            1                                 │
+│ Your priority for this heap          1                                 │
 │ Agents' cost in this heap            $14.20                            │
 │ History, Archive heap                                    as today      │
 Context, empty: one line saying what belongs there: what the project is, where its repository and docs
          are, where its work is reviewed and what finishing a piece means.
 Prepare: an admin's control; everyone else reads the value. One line says what it does.
-Weight:  each person's own, with a line saying it's against their other heaps and nobody else sees it.
+Priority: each person's own, with a line saying it's against their other heaps and nobody else sees it.
 Cost:    the total of the runs on the heap's items, per unit when there is more than one.
 Activity, the heap's and the team's, marks an agent's change the same way an item's history does.
 ```
@@ -1085,7 +1085,7 @@ is the person's own.
 C1 · upheap work run --tool <tool> [--heap <heap>]... [--once] [--workers <N>] [--root <dir>]     constant · core
 
 $ upheap work run --tool claude --heap work --heap house
-Working in Work (weight 2) and House (weight 1) with claude. Ctrl-C stops after the current run.
+Working in Work (priority 2) and House (priority 1) with claude. Ctrl-C stops after the current run.
 14:02  k3x9a  Rotate the certs    Work    note → with context    reached   2m10s   $0.31
 14:05  p2m4q  Paint the fence     House   note → with context    asked     0m40s   $0.08
 14:06  w7d2c  Fix the footer      Work    task → defined (skipped with context)    reached   1m30s   $0.12
@@ -1152,7 +1152,7 @@ Questions
 Runs 3 · $1.20
 
 $ upheap heap show work
-Work · Acme · agents prepare new notes: on · your weight: 2
+Work · Acme · agents prepare new notes: on · your priority: 2
 
 Context
   <the Markdown, as written>
