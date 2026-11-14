@@ -2,7 +2,7 @@
 //!
 //! The CLI reads the item first, for the question's version and its choices, which it needs to turn what was typed
 //! into the indices the API takes. The server owns every other rule: how many picks, whether a comment is needed,
-//! an open question on an open item. Repeating a command is safe: a question answered already with this very reply
+//! a question not withdrawn, on an open item. Repeating a command is safe: a question answered already with this very reply
 //! is said to be, and makes no write. Another reply to an answered question changes it, sent with the question's
 //! version, so a change made meanwhile by someone else is refused rather than overwritten. A withdrawn question is
 //! refused.

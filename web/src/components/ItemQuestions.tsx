@@ -657,7 +657,8 @@ function AnsweredRow({
   question: Question;
   onChanged: () => void;
 }) {
-  const [changing, setChanging] = useState(false);
+  // The version the form opened on, sent with the change: a refetch while it is open doesn't move it.
+  const [changing, setChanging] = useState<number | null>(null);
   const reply = useReplyToQuestion(heapRef, item.key);
   const focusAfterRender = useFocusAfterRender();
   const row = useRef<HTMLLIElement>(null);
@@ -665,17 +666,17 @@ function AnsweredRow({
 
   const open = () => {
     reply.reset();
-    setChanging(true);
+    setChanging(question.version);
     focusAfterRender(() =>
       row.current?.querySelector<HTMLElement>("[data-changing] :is(input, textarea, button):not(:disabled)"),
     );
   };
   const close = () => {
-    setChanging(false);
+    setChanging(null);
     focusAfterRender(() => row.current?.querySelector<HTMLElement>("[data-change-reply]"));
   };
   const send = (body: QuestionReply) =>
-    reply.mutateAsync({ question, reply: body }).then(
+    reply.mutateAsync({ question, reply: body, version: changing ?? question.version }).then(
       () => {
         onChanged();
         close();
@@ -691,7 +692,7 @@ function AnsweredRow({
         question={question}
       />
       <Outcome question={question} />
-      {canChange && !changing && (
+      {canChange && changing === null && (
         <Button
           data-change-reply=""
           onPress={open}
@@ -700,7 +701,7 @@ function AnsweredRow({
           Change reply
         </Button>
       )}
-      {canChange && changing && (
+      {canChange && changing !== null && (
         <div data-changing="" className="flex flex-col gap-2">
           <ReplyControls
             describedBy={textId(item.id, question)}

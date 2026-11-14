@@ -426,7 +426,7 @@ pub enum QuestionError {
     TooMany { item_id: ItemId, max: usize },
     #[error("the item has no step {number}")]
     StepNotFound { number: StepNumber },
-    #[error("question {number} is already answered")]
+    #[error("question {number} was answered or its reply changed meanwhile")]
     Answered { number: QuestionNumber },
     #[error("question {number} was withdrawn when its item was closed")]
     Withdrawn { number: QuestionNumber },

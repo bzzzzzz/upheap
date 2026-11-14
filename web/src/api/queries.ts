@@ -412,16 +412,25 @@ export function useUpdateStep(heap: HeapRef, taskKey: string) {
  * Replies to a question of the item `itemId` (its key). Not optimistic: the item the server returns, with the question
  * answered, is written into the cache. A failure fetches the item again, so a question someone else answered meanwhile
  * shows as answered. Each question has its own version, which only a reply moves, so replies to different questions
- * don't wait for each other.
+ * don't wait for each other. Changing a reply passes `version`, the one its form opened on, so a change someone else made
+ * meanwhile is refused rather than overwritten.
  */
 export function useReplyToQuestion(heap: HeapRef, itemId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ question, reply }: { question: Question; reply: QuestionReply }) => {
+    mutationFn: async ({
+      question,
+      reply,
+      version: opened,
+    }: {
+      question: Question;
+      reply: QuestionReply;
+      version?: number;
+    }) => {
       const cached = queryClient
         .getQueryData<Item>(itemKey(heap, itemId))
         ?.questions?.find((candidate) => candidate.number === question.number);
-      const version = Math.max(question.version, cached?.version ?? 0);
+      const version = opened ?? Math.max(question.version, cached?.version ?? 0);
       return unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions/{question}", {
           params: {
@@ -439,7 +448,8 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
         waitingKey,
         (waiting) =>
           waiting && {
-            count: Math.max(0, waiting.count - 1),
+            // An answered question has no row there: changing its reply leaves the count alone.
+            count: question.state === "open" ? Math.max(0, waiting.count - 1) : waiting.count,
             rows: waiting.rows.filter((row) => !(row.item.id === saved.id && row.question?.number === question.number)),
           },
       );
