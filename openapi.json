@@ -7638,7 +7638,8 @@
         "description": "One changed field, ready to show.",
         "required": [
           "field",
-          "label"
+          "label",
+          "text_diff"
         ],
         "properties": {
           "after": {
@@ -7661,8 +7662,44 @@
           "label": {
             "type": "string",
             "description": "The field in words."
+          },
+          "text_diff": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditTextDiff",
+                "description": "The edit as a word diff. Only for an edited item title or context, step title or context, or heap context\nwith a value before and after; `null` otherwise, and when too little stayed the same, so both are shown in\nfull."
+              }
+            ]
           }
         }
+      },
+      "AuditDiffPiece": {
+        "type": "object",
+        "description": "A stretch of text that is the same, added or removed.",
+        "required": [
+          "kind",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AuditDiffPieceKind"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditDiffPieceKind": {
+        "type": "string",
+        "description": "Whether a piece of a text diff is in both versions, only the new one or only the old one.",
+        "enum": [
+          "same",
+          "added",
+          "removed"
+        ]
       },
       "AuditEntity": {
         "type": "object",
@@ -7812,6 +7849,27 @@
                 "description": "The item the run worked on, with the heap it is in now; null when the caller can't view that heap."
               }
             ]
+          }
+        }
+      },
+      "AuditTextDiff": {
+        "type": "object",
+        "description": "An edited text as a word diff, whitespace and line breaks kept.",
+        "required": [
+          "pieces",
+          "spacing_only"
+        ],
+        "properties": {
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditDiffPiece"
+            },
+            "description": "In order: the same and removed pieces make `before`, the same and added pieces make `after`. Neighbours are\nnever of the same kind."
+          },
+          "spacing_only": {
+            "type": "boolean",
+            "description": "Whether every word stayed and only the whitespace between them changed."
           }
         }
       },

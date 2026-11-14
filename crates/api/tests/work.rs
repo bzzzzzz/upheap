@@ -1802,9 +1802,9 @@ async fn a_task_set_to_defined_by_hand_after_agents_prepared_it_costs_no_run() -
     expect_that!(
         latest["changes"],
         eq(&json!([
-            { "field": "goal", "label": "Goal", "before": null, "after": "Defined" },
-            { "field": "how", "label": "How", "before": null, "after": "Stage set by hand" },
-            { "field": "stage", "label": "Stage", "before": "As written", "after": "Defined" },
+            { "field": "goal", "label": "Goal", "before": null, "after": "Defined", "text_diff": null },
+            { "field": "how", "label": "How", "before": null, "after": "Stage set by hand", "text_diff": null },
+            { "field": "stage", "label": "Stage", "before": "As written", "after": "Defined", "text_diff": null },
         ]))
     );
     Ok(())
@@ -2079,8 +2079,8 @@ async fn a_run_hands_the_turn_back_and_it_is_no_failure() -> Result<()> {
     expect_that!(
         latest["changes"],
         eq(&json!([
-            { "field": "goal", "label": "Goal", "before": null, "after": "With context" },
-            { "field": "reason", "label": "Reason", "before": null, "after": "Already has its context" },
+            { "field": "goal", "label": "Goal", "before": null, "after": "With context", "text_diff": null },
+            { "field": "reason", "label": "Reason", "before": null, "after": "Already has its context", "text_diff": null },
         ]))
     );
     Ok(())

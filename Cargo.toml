@@ -65,6 +65,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Query strings; already in the tree through axum and reqwest.
 serde_urlencoded = "0.7"
+# Word diffs of edited texts in history.
+similar = { version = "2", default-features = false, features = ["text"] }
 sha2 = "0.10"
 # Signalling a process group, which std and tokio can't: stopping an agent tool with everything it started.
 rustix = { version = "1", features = ["process"] }

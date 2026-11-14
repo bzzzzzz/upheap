@@ -1540,7 +1540,18 @@ export interface components {
             field: string;
             /** @description The field in words. */
             label: string;
+            text_diff: null | components["schemas"]["AuditTextDiff"];
         };
+        /** @description A stretch of text that is the same, added or removed. */
+        AuditDiffPiece: {
+            kind: components["schemas"]["AuditDiffPieceKind"];
+            text: string;
+        };
+        /**
+         * @description Whether a piece of a text diff is in both versions, only the new one or only the old one.
+         * @enum {string}
+         */
+        AuditDiffPieceKind: "same" | "added" | "removed";
         AuditEntity: {
             /** Format: uuid */
             id: string;
@@ -1589,6 +1600,16 @@ export interface components {
             /** Format: uuid */
             id: string;
             item: null | components["schemas"]["ItemOrigin"];
+        };
+        /** @description An edited text as a word diff, whitespace and line breaks kept. */
+        AuditTextDiff: {
+            /**
+             * @description In order: the same and removed pieces make `before`, the same and added pieces make `after`. Neighbours are
+             *     never of the same kind.
+             */
+            pieces: components["schemas"]["AuditDiffPiece"][];
+            /** @description Whether every word stayed and only the whitespace between them changed. */
+            spacing_only: boolean;
         };
         /**
          * @description Where shown blocked items go.

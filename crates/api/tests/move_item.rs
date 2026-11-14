@@ -359,7 +359,7 @@ async fn the_history_follows_the_item_to_the_new_heap() -> Result<()> {
     expect_that!(
         changes(pre_move_edit),
         contains(eq(
-            &json!({ "field": "tags", "label": "Tags", "before": null, "after": "infra" })
+            &json!({ "field": "tags", "label": "Tags", "before": null, "after": "infra", "text_diff": null })
         ))
     );
     let move_entry = &log["entries"][1];
@@ -368,13 +368,13 @@ async fn the_history_follows_the_item_to_the_new_heap() -> Result<()> {
     expect_that!(
         changes(move_entry),
         contains(eq(
-            &json!({ "field": "heap", "label": "Heap", "before": "Personal", "after": "Agent work" })
+            &json!({ "field": "heap", "label": "Heap", "before": "Personal", "after": "Agent work", "text_diff": null })
         ))
     );
     expect_that!(
         changes(move_entry),
         contains(eq(
-            &json!({ "field": "tags", "label": "Tags", "before": "infra", "after": null })
+            &json!({ "field": "tags", "label": "Tags", "before": "infra", "after": null, "text_diff": null })
         ))
     );
     // The entry is recorded in the heap the item went to, and the old heap's own log doesn't have it.
@@ -418,13 +418,13 @@ async fn the_plain_heap_logs_name_what_moved_between_the_heaps() -> Result<()> {
     expect_that!(
         changes(move_entry),
         contains(eq(
-            &json!({ "field": "heap", "label": "Heap", "before": "Personal", "after": "Agent work" })
+            &json!({ "field": "heap", "label": "Heap", "before": "Personal", "after": "Agent work", "text_diff": null })
         ))
     );
     expect_that!(
         changes(move_entry),
         contains(eq(
-            &json!({ "field": "tags", "label": "Tags", "before": "infra", "after": null })
+            &json!({ "field": "tags", "label": "Tags", "before": "infra", "after": null, "text_diff": null })
         ))
     );
     let item_entries: Vec<&Value> = source_log["entries"]

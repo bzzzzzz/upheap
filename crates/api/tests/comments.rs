@@ -263,8 +263,8 @@ async fn an_items_history_says_who_commented_and_what() -> Result<()> {
     expect_that!(
         entry["changes"],
         eq(&json!([
-            { "field": "comment", "label": "Comment", "before": null, "after": "c1" },
-            { "field": "comment_text", "label": "Comment text", "before": null, "after": "Use the internal CA." },
+            { "field": "comment", "label": "Comment", "before": null, "after": "c1", "text_diff": null },
+            { "field": "comment_text", "label": "Comment text", "before": null, "after": "Use the internal CA.", "text_diff": null },
         ]))
     );
     let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
