@@ -20,6 +20,7 @@ import {
   type AuthorizationRequest,
   type ClientSignIn,
   type NewComment,
+  type DataDays,
   type Heap,
   type HeapRef,
   type Item,
@@ -952,6 +953,23 @@ export function useTeam(team: string) {
   return useQuery({
     queryKey: teamKey(team),
     queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}", { params: { path: { team } } })),
+  });
+}
+
+/**
+ * What happened in the team's heaps over the last `days` days, or in its heap `heap` alone (ux.md, Data). Fetched on
+ * open, on focus and on each change of choice, not polled; the figures stay on screen while another choice loads.
+ */
+export function useTeamData(team: string, choice: { heap: string | undefined; days: DataDays }) {
+  return useQuery({
+    queryKey: [...teamKey(team), "data", choice.heap ?? null, choice.days] as const,
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/v1/teams/{team}/data", {
+          params: { path: { team }, query: { heap: choice.heap, days: choice.days } },
+        }),
+      ),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -456,6 +456,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::GET,
+            "/teams/{team}/data",
+            team(ViewTeam),
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
             Method::PATCH,
             "/teams/{team}",
             team(ManageTeam),

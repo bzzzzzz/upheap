@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { Item, ItemRun, RunEnd } from "../api/client";
 import { Disclosure } from "./AuditHistory";
-import { GOAL_LABELS, STAGE_LABELS } from "./labels";
+import { GOAL_LABELS, STAGE_LABELS, usd } from "./labels";
 
 const END_LABELS: Record<RunEnd, string> = {
   reached: "reached",
@@ -12,9 +12,6 @@ const END_LABELS: Record<RunEnd, string> = {
   taken_back: "taken back",
   handed_back: "handed back",
 };
-
-/** US dollars, as "$0.31". */
-const usd = (amount: number) => `$${amount.toFixed(2)}`;
 
 /** How the run ended, in a word; "running" while it hasn't. */
 const endWord = (run: ItemRun) => (run.end ? END_LABELS[run.end] : "running");

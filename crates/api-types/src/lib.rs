@@ -15,6 +15,7 @@ pub mod audit;
 pub mod auth;
 pub mod comments;
 pub mod common;
+pub mod data;
 pub mod due_choices;
 pub mod heaps;
 pub mod invite_links;

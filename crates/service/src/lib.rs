@@ -12,6 +12,7 @@ pub mod auth;
 mod clock;
 pub mod comments;
 mod error;
+mod figures;
 pub mod handles;
 pub mod heaps;
 pub mod items;
