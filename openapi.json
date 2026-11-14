@@ -1028,7 +1028,7 @@
           "me"
         ],
         "summary": "Changes the caller's password. Takes the session cookie only, never a bearer token: it is the person's decision\nin their browser, and a client holding a token must not be able to lock the person out of the rest.",
-        "description": "The session it is made from is replaced: the answer sets a new session cookie and the old one stops working, so\nthe browser stays signed in and a copy of its old cookie doesn't. Every other session of the user ends, and so\ndoes every sign-in by a client such as the command line: their tokens stop working at once. `ended_sign_ins`\ncounts the other ones that were still live. The new password may equal the current one, which ends the others\nwithout picking a new password.\n\nTries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password\nis checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count\ndoesn't block a change. A success starts both counts over.",
+        "description": "The session it is made from is replaced: the answer sets a new session cookie and the old one stops working, so\nthe browser stays signed in and a copy of its old cookie doesn't. Every other session of the user ends, and so\ndoes every sign-in by a client such as the command line, and every personal token: they stop working at once. `ended_sign_ins`\ncounts the other ones that were still live. The new password may equal the current one, which ends the others\nwithout picking a new password.\n\nTries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password\nis checked. A wrong current password also adds one to the account's sign-in attempts, but the account's count\ndoesn't block a change. A success starts both counts over.",
         "operationId": "change_password",
         "requestBody": {
           "content": {
@@ -1092,6 +1092,195 @@
                 "description": "Seconds until the session may try again"
               }
             },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/personal-tokens": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "The caller's live personal tokens, newest first: not revoked, and not expired. Takes the session cookie only; a\nrequest with a bearer token is refused with `401`.",
+        "operationId": "list_personal_tokens",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalTokenList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Makes a personal token: a bearer token that never rotates, for a machine with no browser or keychain. It has all\nof the caller's permissions, like a command-line sign-in. The `secret` is in this response only. Takes the\nsession cookie only, so a token can't make another.",
+        "operationId": "make_personal_token",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalTokenMake"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalTokenMade"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`: no session cookie, or the request carried a bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`field_empty` or `invalid_fields` (`field` `name`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/personal-tokens/{id}": {
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Revokes a personal token: it stops working at once. Succeeds when it was revoked or expired already. Takes the\nsession cookie only.",
+        "operationId": "revoke_personal_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The token's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked, or it was revoked or expired already"
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such token, or it isn't the caller's",
             "content": {
               "application/json": {
                 "schema": {
@@ -1638,7 +1827,7 @@
           "auth"
         ],
         "summary": "Sets a new password for the link's account, and signs this browser in as it. The link works for 60 minutes after\nthe operator made it, and once: it is used up by this call.",
-        "description": "Setting the password ends every sign-in of the account: its web sessions, in this browser or any other, and its\nclients such as the command line, whose tokens stop working at once. Then this browser gets a new session, in the\ncookie of the answer, which replaces any session cookie it had, even another account's. The new password may equal\nthe old one. The account's sign-in attempts start over.\n\nThe link is checked first, then the password: a link that doesn't work answers `409` whatever the password, and a\npassword that is refused leaves the link working. Not rate limited, as a token can't be guessed.",
+        "description": "Setting the password ends every sign-in of the account: its web sessions, in this browser or any other, and its\nclients such as the command line and its personal tokens, which stop working at once. Then this browser gets a new session, in the\ncookie of the answer, which replaces any session cookie it had, even another account's. The new password may equal\nthe old one. The account's sign-in attempts start over.\n\nThe link is checked first, then the password: a link that doesn't work answers `409` whatever the password, and a\npassword that is refused leaves the link working. Not rate limited, as a token can't be guessed.",
         "operationId": "reset_password",
         "parameters": [
           {
@@ -11578,7 +11767,7 @@
           "ended_sign_ins": {
             "type": "integer",
             "format": "int32",
-            "description": "How many other sign-ins the change ended that were still live: other browsers, and clients such as the\ncommand line. The browser it was made from stays signed in on a new session, and isn't counted.",
+            "description": "How many other sign-ins the change ended that were still live: other browsers, clients such as the\ncommand line, and personal tokens. The browser it was made from stays signed in on a new session, and isn't counted.",
             "minimum": 0
           }
         }
@@ -11644,6 +11833,125 @@
           "cancelled",
           "ended"
         ]
+      },
+      "PersonalToken": {
+        "type": "object",
+        "description": "One live personal token. The secret is never shown again after it is made.",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "created_label"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "created_label": {
+            "type": "string",
+            "description": "The day it was made, in the request's timezone: \"today\", \"yesterday\", \"3 Nov\", or \"3 Nov 2025\"."
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds. `null` for a token that never expires."
+          },
+          "expires_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The day it stops working, worded like `created_label`. `null` for a token that never expires."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Names the token in `DELETE /me/personal-tokens/{id}`."
+          },
+          "last_used_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds, precise to a minute. `null` until it is first used."
+          },
+          "last_used_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How long ago it was last used, in calendar days in the request's timezone: \"today\", \"2 days ago\". `null`\nuntil it is first used."
+          },
+          "name": {
+            "type": "string",
+            "description": "What the person called it."
+          }
+        }
+      },
+      "PersonalTokenExpiry": {
+        "type": "string",
+        "description": "How long a new personal token lasts.",
+        "enum": [
+          "30_days",
+          "90_days",
+          "1_year",
+          "never"
+        ]
+      },
+      "PersonalTokenList": {
+        "type": "object",
+        "description": "The caller's live personal tokens, newest first.",
+        "required": [
+          "tokens"
+        ],
+        "properties": {
+          "tokens": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonalToken"
+            }
+          }
+        }
+      },
+      "PersonalTokenMade": {
+        "type": "object",
+        "description": "A personal token just made.",
+        "required": [
+          "token",
+          "secret"
+        ],
+        "properties": {
+          "secret": {
+            "type": "string",
+            "description": "The secret, `uph_` and a random value, to give as `Authorization: Bearer`. Shown in this response only."
+          },
+          "token": {
+            "$ref": "#/components/schemas/PersonalToken"
+          }
+        }
+      },
+      "PersonalTokenMake": {
+        "type": "object",
+        "description": "What the signed-in user gives to make a personal token.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "expires_in": {
+            "$ref": "#/components/schemas/PersonalTokenExpiry",
+            "description": "How long it lasts. Defaults to `90_days`."
+          },
+          "name": {
+            "type": "string",
+            "description": "What to call it, to tell it from the others: at most 64 characters, trimmed, without control characters."
+          }
+        }
       },
       "Problem": {
         "type": "object",

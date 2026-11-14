@@ -8,6 +8,7 @@ import type { ClientSignIn } from "../api/client";
 import { BASE } from "../basePath";
 import { compactButtonClass } from "./buttons";
 import { ProblemText } from "./ProblemText";
+import { PersonalTokensSection } from "./PersonalTokens";
 import { useReturnFocus } from "./useConfirmation";
 
 const code = (text: string) => <code className="font-mono text-[0.92em]">{text}</code>;
@@ -16,25 +17,24 @@ export function SignInsSection() {
   const signIns = useSignIns();
   const end = useEndSignIn();
   const heading = useRef<HTMLHeadingElement>(null);
-  /** The sign-in whose Sign out is asking to be confirmed. One at a time. */
+  /** The sign-in or token whose Sign out or Revoke is asking to be confirmed. One at a time. */
   const [asking, setAsking] = useState<string | null>(null);
-  /** The name of the sign-in just ended. */
-  const [signedOut, setSignedOut] = useState<string | null>(null);
+  /** What was just ended: "Signed out ada-laptop." */
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const ask = (signIn: ClientSignIn) => {
+  const ask = (id: string) => {
     end.reset();
-    setSignedOut(null);
-    setAsking(signIn.id);
+    setNotice(null);
+    setAsking(id);
+  };
+  const ended = (message: string) => {
+    setAsking(null);
+    setNotice(message);
+    // The row, and the button that had focus, are gone.
+    heading.current?.focus();
   };
   const confirm = (signIn: ClientSignIn) =>
-    end.mutate(signIn, {
-      onSuccess: () => {
-        setAsking(null);
-        setSignedOut(signIn.label);
-        // The row, and the button that had focus, are gone.
-        heading.current?.focus();
-      },
-    });
+    end.mutate(signIn, { onSuccess: () => ended(`Signed out ${signIn.label}.`) });
 
   return (
     <section aria-labelledby="command-line" className="rounded-[14px] border border-line bg-surface p-5">
@@ -61,7 +61,7 @@ export function SignInsSection() {
               confirming={asking === signIn.id}
               pending={end.isPending}
               error={end.error}
-              onAsk={() => ask(signIn)}
+              onAsk={() => ask(signIn.id)}
               onCancel={() => {
                 end.reset();
                 setAsking(null);
@@ -71,9 +71,13 @@ export function SignInsSection() {
           ))}
         </ul>
       )}
-      <div role="status">
-        {signedOut !== null && <p className="mt-3 text-sm text-ink-soft">Signed out {signedOut}.</p>}
-      </div>
+      <PersonalTokensSection
+        asking={asking}
+        onAsk={ask}
+        onCancel={() => setAsking(null)}
+        onRevoked={(name) => ended(`Revoked ${name}.`)}
+      />
+      <div role="status">{notice !== null && <p className="mt-3 text-sm text-ink-soft">{notice}</p>}</div>
     </section>
   );
 }

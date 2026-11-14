@@ -43,6 +43,10 @@ id_type!(InviteLinkId);
 id_type!(ParameterId);
 id_type!(OptionId);
 id_type!(
+    /// A personal token (`domain::personal_token`).
+    PersonalTokenId
+);
+id_type!(
     /// The OAuth tokens of one sign-in by a client, and every pair refreshed from them (`domain::oauth`).
     TokenFamilyId
 );
