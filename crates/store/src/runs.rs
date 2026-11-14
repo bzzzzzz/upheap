@@ -257,15 +257,16 @@ struct RunWithGoal {
 }
 
 /// Up to `limit` runs that ended as reached on or after `since`, on the items of `heap_ids`, each with the goal of
-/// its turn, newest first (by end, then id), starting after `after`. Runs of `heap_ids` are read in one query per
-/// [`IN_LIST_CHUNK`] heaps, each as far as `limit`, and merged.
+/// its turn, newest first (by end, then id), starting after `after`. Each comes with how it ended, which a run that
+/// ended as reached always has. Runs of `heap_ids` are read in one query per [`IN_LIST_CHUNK`] heaps, each as far as
+/// `limit`, and merged.
 pub async fn list_reached_runs_in_heaps(
     db: &impl ConnectionTrait,
     heap_ids: &[HeapId],
     since: Timestamp,
     after: Option<ReachedCursor>,
     limit: u64,
-) -> Result<Vec<(Run, Goal)>, StoreError> {
+) -> Result<Vec<(Run, RunEnded, Goal)>, StoreError> {
     let ids: Vec<String> = heap_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
     let mut found = Vec::new();
     for chunk in ids.chunks(IN_LIST_CHUNK) {
@@ -311,13 +312,16 @@ pub async fn list_reached_runs_in_heaps(
                 id: &run.id,
             };
             let goal = Goal::from_code(&goal).ok_or_else(|| read.corrupt(format!("unknown goal {goal:?}")))?;
-            found.push((to_run(run)?, goal));
+            let run_id = run.id.clone();
+            let run = to_run(run)?;
+            let ended = run
+                .ended
+                .clone()
+                .ok_or_else(|| StoreError::corrupt(TABLE, &run_id, "a run that ended as reached has no end"))?;
+            found.push((run, ended, goal));
         }
     }
-    found.sort_by(|(a, _), (b, _)| {
-        let key = |run: &Run| (run.ended.as_ref().map(|ended| ended.at), *run.id.as_uuid());
-        key(b).cmp(&key(a))
-    });
+    found.sort_by_key(|(run, ended, _)| std::cmp::Reverse((ended.at, *run.id.as_uuid())));
     found.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
     Ok(found)
 }

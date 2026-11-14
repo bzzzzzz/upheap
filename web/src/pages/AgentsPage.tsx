@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { DecisionRow, HeapRef, Me, ResultRow } from "../api/client";
 import { useDecisions, useMe, useResults } from "../api/queries";
 import { readDecisionsFolded, writeDecisionsFolded } from "../components/agentsStorage";
-import { GOAL_LABELS, KIND_LABELS, STAGE_LABELS } from "../components/labels";
+import { KIND_LABELS, STAGE_LABELS } from "../components/labels";
 import { titleTeam } from "../components/teamName";
 
 /** How many Your decision rows show before "Show N more". */
@@ -153,24 +153,6 @@ function DecisionsSection({ me, count, rows }: { me: Me; count: number; rows: De
   );
 }
 
-const REACHED_WORDS = { with_context: "with context", defined: "defined", became: "became" } as const;
-
-/** What a history row says the run reached; "reached" alone when it wasn't recorded. */
-function reachedWords(row: ResultRow): string {
-  if (!row.reached) return "reached";
-  const state = REACHED_WORDS[row.reached];
-  const skipped = row.goal === "with_context" && row.reached === "defined";
-  return `reached: ${state}${skipped ? ` (skipped ${GOAL_LABELS[row.goal]})` : ""}`;
-}
-
-/** A pull request's link says so; any other shows its address without the scheme. */
-function linkWords(link: string): string {
-  const path = link.replace(/^https?:\/\/[^/]*/i, "");
-  return path.includes("/pull/") || path.includes("/merge_requests/")
-    ? "↗ pull request"
-    : link.replace(/^https?:\/\//i, "");
-}
-
 /** The runs that ended as reached, grouped by the day they ended on. */
 function HistorySection({
   me,
@@ -208,19 +190,19 @@ function HistorySection({
                   <ItemLink row={row} />
                   <span className="text-muted">{` · ${heapName(row, me)}`}</span>
                 </p>
-                <p className="text-xs text-muted">{reachedWords(row)}</p>
+                <p className="text-xs text-muted">{row.reached_label ? `reached: ${row.reached_label}` : "reached"}</p>
                 <p className="line-clamp-2 text-ink-soft">{row.result}</p>
                 {row.links.length > 0 && (
                   <p className="flex flex-wrap gap-x-3 text-xs">
                     {row.links.map((link) => (
                       <a
-                        key={link}
-                        href={link}
+                        key={link.url}
+                        href={link.url}
                         target="_blank"
                         rel="noreferrer"
                         className="break-all text-accent-ink underline underline-offset-2 pointer-coarse:py-3"
                       >
-                        {linkWords(link)}
+                        {link.pull_request ? `↗ ${link.label}` : link.label}
                       </a>
                     ))}
                   </p>

@@ -103,7 +103,42 @@ pub struct ResultRowDto {
     pub goal: GoalDto,
     /// What the run reached; `null` for a run that ended before this was recorded.
     pub reached: Option<RunReachedDto>,
+    /// What the run reached, in words: "with context", "defined", "defined (skipped with context)" when it went past
+    /// the goal of its turn, "became". `null` when `reached` is.
+    pub reached_label: Option<String>,
     /// What the run said it reached.
     pub result: String,
-    pub links: Vec<String>,
+    pub links: Vec<RunLinkDto>,
+}
+
+/// A link a run left.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = RunLink)]
+pub struct RunLinkDto {
+    /// The address.
+    pub url: String,
+    /// What to show for it: "pull request" for a pull or merge request, else the address without `https://`.
+    pub label: String,
+    /// Whether it is a pull or merge request.
+    pub pull_request: bool,
+}
+
+impl RunLinkDto {
+    pub fn new(url: &str) -> Self {
+        let path = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))
+            .map_or(url, |rest| rest.find('/').map_or("", |at| &rest[at..]));
+        let pull_request = path.contains("/pull/") || path.contains("/merge_requests/");
+        let label = if pull_request {
+            "pull request".to_owned()
+        } else {
+            url.strip_prefix("https://").unwrap_or(url).to_owned()
+        };
+        Self {
+            url: url.to_owned(),
+            label,
+            pull_request,
+        }
+    }
 }

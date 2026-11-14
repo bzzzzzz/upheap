@@ -90,13 +90,17 @@ impl World {
     }
 
     async fn send_turn(&self, heap: &str, key: &str) -> Result<()> {
+        self.send_turn_reaching(heap, key, "one").await
+    }
+
+    async fn send_turn_reaching(&self, heap: &str, key: &str, reach: &str) -> Result<()> {
         let sent = self
             .app
             .send(
                 Method::POST,
                 &format!("{}/turn", self.item_path_in(heap, key).await?),
                 Some(&self.session),
-                Some(json!({ "reach": "one" })),
+                Some(json!({ "reach": reach })),
             )
             .await?;
         anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
@@ -185,10 +189,15 @@ impl World {
     /// A note with a context, split in a run into one task with a step, then became. Returns the note's key and the
     /// task.
     async fn became_note(&self, title: &str) -> Result<(String, Value)> {
+        self.became_note_reaching(title, "one").await
+    }
+
+    /// [`became_note`](Self::became_note) where the note was sent on with `reach`.
+    async fn became_note_reaching(&self, title: &str, reach: &str) -> Result<(String, Value)> {
         let note = self.add(title).await?;
         let key = key_of(&note).to_owned();
         self.edit(&key, json!({ "stage": "with_context" })).await?;
-        self.send_turn(&self.heap, &key).await?;
+        self.send_turn_reaching(&self.heap, &key, reach).await?;
         let run = self.claim_in(&self.heap).await?;
         let items = format!("{}/items", self.app.heap_url(&self.heap).await?);
         let task = self
@@ -256,8 +265,11 @@ async fn a_run_records_what_it_reached_and_the_other_ends_record_nothing() -> Re
             Some(json!({ "title": "Order" })),
         )
         .await?;
-    w.reached_with(&past_run, json!({ "result": "Went straight on", "stage": "defined" }))
-        .await?;
+    w.reached_with(
+        &past_run,
+        json!({ "result": "Went straight on", "stage": "defined", "links": ["https://example.test/notes/3"] }),
+    )
+    .await?;
 
     w.became_note("Rotate the locks").await?;
 
@@ -288,6 +300,30 @@ async fn a_run_records_what_it_reached_and_the_other_ends_record_nothing() -> Re
     expect_that!(
         reached,
         unordered_elements_are![eq(&"with_context"), eq(&"defined"), eq(&"became")]
+    );
+    let labels: Vec<&str> = results.body["rows"]
+        .as_array()
+        .context("rows")?
+        .iter()
+        .filter_map(|row| row["reached_label"].as_str())
+        .collect();
+    expect_that!(
+        labels,
+        unordered_elements_are![
+            eq(&"with context"),
+            eq(&"defined (skipped with context)"),
+            eq(&"became")
+        ]
+    );
+    let past_row = results.body["rows"]
+        .as_array()
+        .context("rows")?
+        .iter()
+        .find(|row| row["run_id"] == json!(past_run))
+        .context("past run row")?;
+    expect_that!(
+        past_row["links"],
+        eq(&json!([{ "url": "https://example.test/notes/3", "label": "example.test/notes/3", "pull_request": false }]))
     );
     expect_that!(w.app.run_reached(&failed).await?, none());
     expect_that!(handed_back.status, eq(StatusCode::OK));
@@ -339,7 +375,15 @@ async fn results_hold_reached_runs_newest_first_with_what_they_reached() -> Resu
     expect_that!(rows[0]["goal"], eq(&json!("with_context")));
     expect_that!(rows[0]["reached"], eq(&json!("with_context")));
     expect_that!(rows[0]["result"], eq(&json!("Opened the pull request")));
-    expect_that!(rows[0]["links"], eq(&json!(["https://github.com/acme/app/pull/7"])));
+    expect_that!(rows[0]["reached_label"], eq(&json!("with context")));
+    expect_that!(
+        rows[0]["links"],
+        eq(&json!([{
+            "url": "https://github.com/acme/app/pull/7",
+            "label": "pull request",
+            "pull_request": true,
+        }]))
+    );
     expect_that!(rows[0]["day_label"], eq(&json!("today")));
     expect_that!(rows[0]["day"].as_str().map(str::len), some(eq(10)));
     expect_that!(rows[0]["time"].as_str().map(str::len), some(eq(5)));
@@ -557,5 +601,88 @@ async fn decisions_are_ordered_by_score_times_heap_priority_and_the_cap_keeps_th
         elements_are![eq(&"Idea, shared"), eq(&"Critical, personal")]
     );
     expect_that!(capped, eq((2, 1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_that_became_items_sent_all_the_way_is_not_a_decision() -> Result<()> {
+    // Arrange and act: a note sent all the way, split into a task in a run, and became. The task's turn opens as the
+    // note's ends.
+    let w = world().await?;
+    w.became_note_reaching("Certs are a mess", "all_the_way").await?;
+    let decisions = w.decisions().await?;
+
+    // Assert
+    expect_that!(decisions, eq(&json!({ "count": 0, "rows": [] })));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_that_became_a_heap_ranks_by_the_best_item_made_in_it() -> Result<()> {
+    // Arrange: a note with a context that an agent reached, and a note that became a heap holding a critical task.
+    let w = world().await?;
+    w.reached_note("Plain, expected").await?;
+    let note = w.add_in(&w.heap, "Move the blog", "critical").await?;
+    let key = key_of(&note).to_owned();
+    w.edit(&key, json!({ "stage": "with_context" })).await?;
+    w.send_turn(&w.heap, &key).await?;
+    let run = w.claim_in(&w.heap).await?;
+    let team = w.heap_ref(&w.heap).await?;
+    let team = team.split('/').next().context("team")?;
+    let heaps = format!("/api/v1/teams/{team}/heaps");
+    let made = w
+        .in_run(
+            &run,
+            Method::POST,
+            &heaps,
+            Some(json!({ "name": "Blog move", "context": "A move.", "origin_id": note["id"] })),
+        )
+        .await?;
+    anyhow::ensure!(made.status == StatusCode::CREATED, "heap failed: {}", made.body);
+    let items = format!("{heaps}/{}/items", made.body["slug"].as_str().context("slug")?);
+    let task = w
+        .in_run(
+            &run,
+            Method::POST,
+            &items,
+            Some(json!({
+                "title": "Move the posts",
+                "need": "critical",
+                "kind": "task",
+                "description": "Done when: they are moved.",
+                "origin": { "item_id": note["id"], "age": "keep" },
+            })),
+        )
+        .await?;
+    anyhow::ensure!(task.status == StatusCode::CREATED, "task failed: {}", task.body);
+    let step = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{items}/{}/steps", key_of(&task.body)),
+            Some(json!({ "title": "Move them" })),
+        )
+        .await?;
+    anyhow::ensure!(step.status == StatusCode::CREATED, "step failed: {}", step.body);
+    let became = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{}/became", w.item_path(&key).await?),
+            None,
+        )
+        .await?;
+    anyhow::ensure!(became.status == StatusCode::OK, "became failed: {}", became.body);
+
+    // Act
+    let decisions = w.decisions().await?;
+
+    // Assert: the note ranks by its critical task, above the plain row.
+    expect_that!(
+        titles(&decisions["rows"]),
+        elements_are![eq(&"Move the blog"), eq(&"Plain, expected")]
+    );
     Ok(())
 }

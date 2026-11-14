@@ -4,7 +4,7 @@ pub(crate) mod history;
 pub(crate) mod password;
 pub(crate) mod sign_ins;
 
-use api_types::agents::{DecisionRowDto, DecisionsDto, ResultRowDto, ResultsDto, ResultsQuery};
+use api_types::agents::{DecisionRowDto, DecisionsDto, ResultRowDto, ResultsDto, ResultsQuery, RunLinkDto};
 use api_types::common::HeapSummaryDto;
 use api_types::common::{ItemActionDto, ItemRefDto};
 use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
@@ -16,6 +16,8 @@ use axum::Json;
 use axum::extract::State;
 use domain::due::{describe_ago, describe_date};
 use domain::item::Item;
+use domain::run::RunReached;
+use domain::turn::Goal;
 use domain::user::DisplayName;
 use domain::{RunId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
@@ -258,10 +260,18 @@ fn to_decision_row_dto(row: DecisionRow, as_of: Timestamp, tz: &TimeZone) -> Dec
     }
 }
 
-fn to_result_row_dto(row: ResultRow, as_of: Timestamp, tz: &TimeZone) -> Option<ResultRowDto> {
-    let ended = row.run.ended?;
+fn to_result_row_dto(row: ResultRow, as_of: Timestamp, tz: &TimeZone) -> ResultRowDto {
+    let ended = row.ended;
     let local = ended.at.to_jiff().to_zoned(tz.clone());
-    Some(ResultRowDto {
+    let reached_label = ended.reached.map(|reached| match reached {
+        RunReached::WithContext => "with context".to_owned(),
+        RunReached::Defined if row.goal == Goal::WithContext => {
+            format!("defined (skipped {})", Goal::WithContext.phrase())
+        }
+        RunReached::Defined => "defined".to_owned(),
+        RunReached::Became => "became".to_owned(),
+    });
+    ResultRowDto {
         run_id: *row.run.id.as_uuid(),
         ended_at: ended.at.as_millis(),
         day: local.date().to_string(),
@@ -271,12 +281,13 @@ fn to_result_row_dto(row: ResultRow, as_of: Timestamp, tz: &TimeZone) -> Option<
         heap: to_item_heap_dto(&row.heap, &row.team),
         goal: row.goal.into(),
         reached: ended.reached.map(Into::into),
+        reached_label,
         result: ended
             .result
             .map(|result| result.as_str().to_owned())
             .unwrap_or_default(),
-        links: ended.links.iter().map(|link| link.as_str().to_owned()).collect(),
-    })
+        links: ended.links.iter().map(|link| RunLinkDto::new(link.as_str())).collect(),
+    }
 }
 
 /// What agents finished that waits for the signed-in user to decide: items an agent brought to a stable state (a
@@ -328,7 +339,7 @@ async fn get_results(
         rows: page
             .rows
             .into_iter()
-            .filter_map(|row| to_result_row_dto(row, as_of, &tz))
+            .map(|row| to_result_row_dto(row, as_of, &tz))
             .collect(),
         next_cursor: page
             .next

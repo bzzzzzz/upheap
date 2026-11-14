@@ -12493,7 +12493,7 @@
           "links": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RunLink"
             }
           },
           "reached": {
@@ -12506,6 +12506,13 @@
                 "description": "What the run reached; `null` for a run that ended before this was recorded."
               }
             ]
+          },
+          "reached_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the run reached, in words: \"with context\", \"defined\", \"defined (skipped with context)\" when it went past\nthe goal of its turn, \"became\". `null` when `reached` is."
           },
           "result": {
             "type": "string",
@@ -12670,6 +12677,29 @@
           "taken_back",
           "handed_back"
         ]
+      },
+      "RunLink": {
+        "type": "object",
+        "description": "A link a run left.",
+        "required": [
+          "url",
+          "label",
+          "pull_request"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "What to show for it: \"pull request\" for a pull or merge request, else the address without `https://`."
+          },
+          "pull_request": {
+            "type": "boolean",
+            "description": "Whether it is a pull or merge request."
+          },
+          "url": {
+            "type": "string",
+            "description": "The address."
+          }
+        }
       },
       "RunReached": {
         "type": "string",

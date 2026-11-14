@@ -3445,8 +3445,13 @@ export interface components {
             heap: components["schemas"]["ItemHeap"];
             /** @description The item at its stage now. */
             item: components["schemas"]["WaitingItem"];
-            links: string[];
+            links: components["schemas"]["RunLink"][];
             reached?: null | components["schemas"]["RunReached"];
+            /**
+             * @description What the run reached, in words: "with context", "defined", "defined (skipped with context)" when it went past
+             *     the goal of its turn, "became". `null` when `reached` is.
+             */
+            reached_label?: string | null;
             /** @description What the run said it reached. */
             result: string;
             /** Format: uuid */
@@ -3527,6 +3532,15 @@ export interface components {
          * @enum {string}
          */
         RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back";
+        /** @description A link a run left. */
+        RunLink: {
+            /** @description What to show for it: "pull request" for a pull or merge request, else the address without `https://`. */
+            label: string;
+            /** @description Whether it is a pull or merge request. */
+            pull_request: boolean;
+            /** @description The address. */
+            url: string;
+        };
         /**
          * @description What a run reached when it ended as reached. More can join.
          * @enum {string}

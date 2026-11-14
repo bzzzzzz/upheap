@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, Kind, StateKind};
-use domain::run::{Run, RunReached};
+use domain::run::{Run, RunEnded, RunReached};
 use domain::team::Team;
 use domain::turn::{Goal, Turn};
 use domain::{Duration, HeapId, ItemId, Timestamp, TurnId};
@@ -50,6 +50,8 @@ pub struct DecisionRow {
 #[derive(Debug)]
 pub struct ResultRow {
     pub run: Run,
+    /// How the run ended.
+    pub ended: RunEnded,
     /// The goal of the run's turn.
     pub goal: Goal,
     pub item: Item,
@@ -88,7 +90,8 @@ impl Services {
     /// The items an agent brought to a stable state that still wait for the caller, in the active heaps of their
     /// teams: the latest turn of the item ended as reached by a run that ended as reached, the item is not closed or
     /// in progress, and it is still at the stage the run reached. A note that became items or heaps is one row, until
-    /// one of what it made is started, closed or sent on. Ordered as Waiting for me orders its rows: the item's
+    /// one of what it made is started, closed or sent on (a turn opened at or after the note's turn ended). Ordered as
+    /// Waiting for me orders its rows: the item's
     /// score in its own heap times the caller's priority for that heap, highest first, then heap, then position. A
     /// became row takes the best of its made items that are ranked, or score 0.
     ///
@@ -135,9 +138,13 @@ impl Services {
             let (Some(run), Some(item)) = (reached_by.get(&turn.id), items.get(&turn.item_id)) else {
                 continue;
             };
-            let Some(arrived_at) = turn.ended.map(|ended| ended.at) else {
-                continue;
-            };
+            let arrived_at = turn.ended.map(|ended| ended.at).ok_or_else(|| {
+                store::StoreError::corrupt(
+                    "item_turns",
+                    &turn.id.to_string(),
+                    "a turn that ended as reached has no end",
+                )
+            })?;
             let reached = run.ended.as_ref().and_then(|ended| ended.reached);
             match item.state.kind() {
                 StateKind::Became => {
@@ -168,7 +175,11 @@ impl Services {
         let heap_has_row: BTreeSet<HeapId> = plain
             .iter()
             .map(|(item, _)| item.heap_id)
-            .chain(became.iter().map(|row| row.note.heap_id))
+            .chain(
+                became
+                    .iter()
+                    .flat_map(|row| std::iter::once(row.note.heap_id).chain(row.made.iter().map(|made| made.heap_id))),
+            )
             .collect();
         let mut ranks: HashMap<ItemId, (f64, u32)> = HashMap::new();
         for heap in viewable
@@ -252,9 +263,8 @@ impl Services {
         Ok(DecisionsView { count, rows })
     }
 
-    /// The notes of `notes` (each closed as became by a run, with the turn that ended) that became items or heaps
-    /// and still wait: nothing made from them is in progress or closed, or has a turn opened since the note's turn
-    /// ended.
+    /// The notes of `notes` (each closed as became by a run, with the turn that ended) that became items or heaps,
+    /// with what was made from them. The query for the turns already left out the notes that were sent on.
     async fn became_rows(&self, notes: Vec<(Item, Timestamp, Turn)>) -> Result<Vec<BecameRow>, ServiceError> {
         if notes.is_empty() {
             return Ok(Vec::new());
@@ -262,8 +272,6 @@ impl Services {
         let note_ids: Vec<ItemId> = notes.iter().map(|(note, ..)| note.id).collect();
         let made_items = store::items::list_items_made_from(&self.db, &note_ids, false).await?;
         let made_heaps = store::heaps::list_heaps_made_from(&self.db, &note_ids).await?;
-        let made_ids: Vec<ItemId> = made_items.iter().map(|item| item.id).collect();
-        let latest_turns = store::turns::list_latest_turns(&self.db, &made_ids).await?;
         let mut rows = Vec::new();
         for (note, arrived_at, _) in notes {
             let made: Vec<Item> = made_items
@@ -277,16 +285,6 @@ impl Services {
                 .collect();
             // A note that became a step made neither.
             if made.is_empty() && heaps.is_empty() {
-                continue;
-            }
-            let sent_on = made.iter().any(|item| {
-                item.state.kind() == StateKind::InProgress
-                    || item.is_closed()
-                    || latest_turns
-                        .get(&item.id)
-                        .is_some_and(|turn| turn.opened_at > arrived_at)
-            });
-            if sent_on {
                 continue;
             }
             let label = became_label(&made, &heaps);
@@ -332,15 +330,13 @@ impl Services {
         found.truncate(usize::try_from(page_size).unwrap_or(usize::MAX));
         let next = has_more
             .then(|| {
-                found.last().and_then(|(run, _)| {
-                    run.ended.as_ref().map(|ended| ReachedCursor {
-                        ended_at: ended.at,
-                        id: run.id,
-                    })
+                found.last().map(|(run, ended, _)| ReachedCursor {
+                    ended_at: ended.at,
+                    id: run.id,
                 })
             })
             .flatten();
-        let item_ids: Vec<ItemId> = found.iter().map(|(run, _)| run.item_id).collect();
+        let item_ids: Vec<ItemId> = found.iter().map(|(run, ..)| run.item_id).collect();
         let items: HashMap<ItemId, Item> = store::items::list_items_by_ids(&self.db, &item_ids)
             .await?
             .into_iter()
@@ -348,11 +344,12 @@ impl Services {
             .collect();
         let rows = found
             .into_iter()
-            .filter_map(|(run, goal)| {
+            .filter_map(|(run, ended, goal)| {
                 let item = items.get(&run.item_id)?.clone();
                 let viewable = viewable.iter().find(|viewable| viewable.heap.id == item.heap_id)?;
                 Some(ResultRow {
                     run,
+                    ended,
                     goal,
                     item,
                     heap: viewable.heap.clone(),

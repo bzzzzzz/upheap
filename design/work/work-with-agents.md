@@ -656,12 +656,9 @@ change it makes carries the run it was made in.
 
 **History**
 
-1. The agents' progress is the runs that ended as reached, newest first, each with its item, the state reached
-   and its result. Asked and failed runs are on the item only. A run that went past its turn's goal shows the
-   state it reached and the one it skipped: "defined (skipped with context)".
-2. Costs are added up per item and per heap, by the unit the agent tool reported them in.
-3. Every change an agent makes is in the audit log as the person's, marked as made by an agent, with its run.
-4. Contexts are part of the audit log like any field: each change keeps the text before and after.
+1. Costs are added up per item and per heap, by the unit the agent tool reported them in.
+2. Every change an agent makes is in the audit log as the person's, marked as made by an agent, with its run.
+3. Contexts are part of the audit log like any field: each change keeps the text before and after.
 
 **People**
 
@@ -848,11 +845,11 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | C17 | `work log`: the agents' progress | P10 | Sometimes | Polish | |
 | C18 | `step reopen`, `step move` | A1 | Sometimes | Polish | |
 
-**The first set** is W1 to W17, W21, W22 and C1 to C12. W18 to W20 and C13 to C18 are ideas.
+**The first set** is W1 to W9, W12 to W17, W21, W22 and C1 to C12. W18 to W20 and C13 to C18 are ideas.
 
 ### Layout follows frequency
 
-1. **Waiting for me and Agents are above the heaps,** since both are across heaps. Waiting carries its count. On
+1. **Waiting for me and Agents are above the heaps,** since both are across heaps. Waiting and Agents carry their counts. On
    a phone they take two of the four tabs, and Closed and Settings, used weekly and rarely, move into More.
 2. **A reply is given in the row,** in Waiting and in the item alike, without opening anything. The row
    shows the short question and its reply, so someone up to date answers at a glance. Opening it shows the
