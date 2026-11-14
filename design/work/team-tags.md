@@ -12,7 +12,7 @@ maintainer's design method. Step agreed: 2. Step 3 is drafted, for review.
 3. A heap belongs to exactly one team, and an item moves only between heaps of its team (Teams §5, Edit item §1).
 4. The stack in use: the Rust server on SQLite, MySQL or Postgres, the web app and the `upheap` CLI over one API.
 5. Done when a tag made once on the team can be put on items in two of its heaps, and renaming it changes it in
-   both (the owner, in yacb1).
+   both (the owner).
 
 Assumption: no deadline and nothing else fixed. The owner wasn't asked in this run; the review can add to this list.
 
