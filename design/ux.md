@@ -407,7 +407,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     and all are withdrawn. On an open item each answered question has **Change reply** under its reply (none for a
     viewer, in an archived heap or on a withdrawn question). It opens the reply controls of an open question, filled
     with the current reply, with **Cancel**; sending shows the new reply, and Cancel drops the draft. After either,
-    focus returns to Change reply, and a polite live region says Changed the reply to “<text>”. If it fails the
+    focus returns to Change reply; after a change a polite live region says Changed the reply to “<text>”. If it fails the
     controls stay with the draft and the reason shows under them.
 15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context" (or "Agent ·
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
