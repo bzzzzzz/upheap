@@ -16,6 +16,7 @@ import {
   ApiProblem,
   ensureOk,
   unwrap,
+  type AcrossHeapsQuery,
   type AuthorizationRequest,
   type ClientSignIn,
   type NewComment,
@@ -72,6 +73,8 @@ const teamKey = (team: string) => ["team", team] as const;
 const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
 const waitingKey = ["waiting"] as const;
+/** Every view of the list across heaps, by prefix. */
+const acrossHeapsKey = ["across-heaps"] as const;
 const usersKey = (query: string) => ["users", query] as const;
 
 /**
@@ -102,6 +105,25 @@ export function useRankedList(heap: HeapRef, view: ListViewQuery) {
     refetchInterval: POLL_INTERVAL,
   });
   return query;
+}
+
+/**
+ * The list across the person's heaps in one view, kept stable within a session like `useRankedList`'s: the first
+ * response's `as_of` is sent back on every refetch and view change. While a new view loads, the previous one stays on
+ * screen.
+ */
+export function useAcrossHeapsList(view: AcrossHeapsQuery) {
+  const asOf = useRef<number | undefined>(undefined);
+  return useQuery({
+    queryKey: [...acrossHeapsKey, view] as const,
+    queryFn: async () => {
+      const data = unwrap(await api.GET("/api/v1/me/items", { params: { query: { ...view, as_of: asOf.current } } }));
+      asOf.current = data.as_of;
+      return data;
+    },
+    placeholderData: keepPreviousData,
+    refetchInterval: POLL_INTERVAL,
+  });
 }
 
 /** Every non-closed item, unfiltered: what an item can be blocked by, whatever the list view shows. */
@@ -218,6 +240,7 @@ function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
   return Promise.all([
     // Every view of the list, by prefix.
     queryClient.invalidateQueries({ queryKey: rankedKey(heap) }),
+    queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
     queryClient.invalidateQueries({ queryKey: ["item"] }),
@@ -429,6 +452,7 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
     // moves it into the closed list.
     onSettled: (saved) => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
       if (saved && (saved.state === "done" || saved.state === "wont_do"))
         void queryClient.invalidateQueries({ queryKey: closedKey(heap) });
@@ -479,6 +503,7 @@ export function useSendToAgent(heap: HeapRef) {
     // which items an agent has, and a turn moves an item's allowed actions.
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
     },
   });
@@ -504,6 +529,7 @@ export function useTakeBack(heap: HeapRef) {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
     },
   });
@@ -533,6 +559,7 @@ export function useRetryTurn(heap: HeapRef) {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
     },
   });
@@ -565,6 +592,7 @@ export function useRedoTurn(heap: HeapRef) {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
     },
   });
@@ -634,11 +662,12 @@ export function useReopenItem(heap: HeapRef) {
   });
 }
 
-export function useTags(heap: HeapRef) {
+export function useTags(heap: HeapRef, enabled = true) {
   return useQuery({
     queryKey: tagsKey(heap),
     queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}/heaps/{heap}/tags", { params: { path: heap } })),
     staleTime: 30_000,
+    enabled,
   });
 }
 
@@ -668,12 +697,13 @@ export function useUpdateTag(heap: HeapRef) {
 }
 
 /** The heap's parameters: those in use and the archived ones, each by name. */
-export function useParameters(heap: HeapRef) {
+export function useParameters(heap: HeapRef, enabled = true) {
   return useQuery({
     queryKey: parametersKey(heap),
     queryFn: async () =>
       unwrap(await api.GET("/api/v1/teams/{team}/heaps/{heap}/parameters", { params: { path: heap } })),
     staleTime: 30_000,
+    enabled,
   });
 }
 

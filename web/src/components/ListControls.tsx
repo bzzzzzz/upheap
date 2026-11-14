@@ -29,8 +29,17 @@ import {
 
 export type Panel = "filters" | null;
 
-/** How many items the view lists (`listed`) and would list without its filters (`total`). */
-export type ListCounts = { listed: number; total: number };
+/**
+ * The heap the controls and chips are for, or none for the list across heaps, which has no sort, tags, parameters or
+ * reminders to come. Their queries are asked of this placeholder only while disabled, so it is never fetched.
+ */
+const NO_HEAP: HeapRef = { team: "", heap: "" };
+
+/**
+ * How many items the view lists (`listed`) and would list without its filters (`total`), when the list says: the one
+ * across heaps doesn't.
+ */
+export type ListCounts = { listed: number; total: number | undefined };
 
 /**
  * Search, sort, and one Filters panel for the filters and what the list shows (ux.md, The list §7). Everything
@@ -47,7 +56,7 @@ export function ListControls({
   onPanel,
   counts,
 }: {
-  heapRef: HeapRef;
+  heapRef?: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
   search: string;
@@ -58,7 +67,7 @@ export function ListControls({
   counts: ListCounts | undefined;
 }) {
   const phone = useMedia(PHONE);
-  const parameters = useParameters(heapRef);
+  const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
   const searchRef = useRef<HTMLInputElement>(null);
   const filtersRef = useRef<HTMLButtonElement>(null);
 
@@ -99,20 +108,22 @@ export function ListControls({
           aria-label="Search items"
           className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm placeholder:text-muted max-sm:h-11 max-sm:text-base pointer-coarse:h-11"
         />
-        <label className="inline-flex h-9 shrink-0 items-center rounded-lg border border-line bg-surface pl-3 text-sm max-sm:hidden pointer-coarse:h-11">
-          <span className="text-muted">Sort by</span>
-          <select
-            value={sortValue(view)}
-            onChange={(e) => onChange({ ...view, ...sortFrom(e.target.value) })}
-            className="h-full max-w-44 cursor-pointer rounded-lg bg-transparent pr-1.5 pl-1 font-medium text-ink outline-offset-2"
-          >
-            {sortOptions(view, parameters.data).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {heapRef && (
+          <label className="inline-flex h-9 shrink-0 items-center rounded-lg border border-line bg-surface pl-3 text-sm max-sm:hidden pointer-coarse:h-11">
+            <span className="text-muted">Sort by</span>
+            <select
+              value={sortValue(view)}
+              onChange={(e) => onChange({ ...view, ...sortFrom(e.target.value) })}
+              className="h-full max-w-44 cursor-pointer rounded-lg bg-transparent pr-1.5 pl-1 font-medium text-ink outline-offset-2"
+            >
+              {sortOptions(view, parameters.data).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           ref={filtersRef}
           type="button"
@@ -121,7 +132,7 @@ export function ListControls({
           aria-haspopup="dialog"
           // A label rather than hidden text: screen-reader-only spans are laid out as blocks, which puts a stray space
           // in the name ("Filters , 2 on").
-          aria-label={`${phone ? "Filters and sort" : "Filters"}${badge > 0 ? `, ${badge} on` : ""}`}
+          aria-label={`${phone && heapRef ? "Filters and sort" : "Filters"}${badge > 0 ? `, ${badge} on` : ""}`}
           className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium max-sm:relative max-sm:size-11 max-sm:px-0 pointer-coarse:h-11 ${
             badge > 0
               ? "border-accent/40 bg-accent-soft text-accent-ink"
@@ -143,7 +154,7 @@ export function ListControls({
       </div>
 
       <PopoverSheet
-        title={phone ? "Filters & sort" : "Filters"}
+        title={phone && heapRef ? "Filters & sort" : "Filters"}
         triggerRef={filtersRef}
         isOpen={panel === "filters"}
         onClose={close}
@@ -159,8 +170,8 @@ export function ListControls({
           )
         }
       >
-        {phone && <SortSection view={view} parameters={parameters.data} onChange={onChange} />}
-        <ShowSection view={view} onChange={onChange} />
+        {phone && heapRef && <SortSection view={view} parameters={parameters.data} onChange={onChange} />}
+        <ShowSection view={view} reminders={heapRef !== undefined} onChange={onChange} />
         <hr className="border-line" />
         <NarrowSection heapRef={heapRef} view={view} onChange={onChange} />
         <PanelFooter phone={phone} filtered={filterCount(view) > 0} counts={counts} onDone={close} />
@@ -181,14 +192,14 @@ export function FilterChips({
   shown,
   total,
 }: {
-  heapRef: HeapRef;
+  heapRef?: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
   shown: number;
   total: number | undefined;
 }) {
-  const tags = useTags(heapRef);
-  const parameters = useParameters(heapRef);
+  const tags = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
+  const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
   const options = [...(parameters.data?.parameters ?? []), ...(parameters.data?.archived ?? [])].flatMap((parameter) =>
     [...parameter.options, ...parameter.archived_options].map((option) => ({
       id: option.id,
@@ -300,7 +311,16 @@ function SortSection({
 }
 
 /** Where each state goes, and where shown blocked items go. A dot marks a state changed from the default. */
-function ShowSection({ view, onChange }: { view: ListSearch; onChange: (view: ListSearch) => void }) {
+function ShowSection({
+  view,
+  reminders,
+  onChange,
+}: {
+  view: ListSearch;
+  /** Whether the list has reminders to come to show. */
+  reminders: boolean;
+  onChange: (view: ListSearch) => void;
+}) {
   const blockedShown = isBlockedShown(view);
   const modes = STATE_MODES.map((mode) => ({ value: mode, label: MODE_LABELS[mode] }));
   return (
@@ -327,48 +347,52 @@ function ShowSection({ view, onChange }: { view: ListSearch; onChange: (view: Li
           onChange({ ...view, blocked_layout: layout === "grouped" ? undefined : layout })
         }
       />
-      <Segmented
-        label="Reminders to come"
-        changed={view.reminders !== undefined}
-        options={REMINDERS_MODES.map((mode) => ({ value: mode, label: REMINDERS_LABELS[mode] }))}
-        value={view.reminders ?? DEFAULT_REMINDERS}
-        onChange={(mode: RemindersMode) =>
-          onChange({ ...view, reminders: mode === DEFAULT_REMINDERS ? undefined : mode })
-        }
-      />
+      {reminders && (
+        <Segmented
+          label="Reminders to come"
+          changed={view.reminders !== undefined}
+          options={REMINDERS_MODES.map((mode) => ({ value: mode, label: REMINDERS_LABELS[mode] }))}
+          value={view.reminders ?? DEFAULT_REMINDERS}
+          onChange={(mode: RemindersMode) =>
+            onChange({ ...view, reminders: mode === DEFAULT_REMINDERS ? undefined : mode })
+          }
+        />
+      )}
     </Section>
   );
 }
 
-/** The filters: tags, need, effort, impact, then each custom parameter. */
+/** The filters: tags, need, effort, impact, then each custom parameter. The tags and parameters are a heap's. */
 function NarrowSection({
   heapRef,
   view,
   onChange,
 }: {
-  heapRef: HeapRef;
+  heapRef?: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
 }) {
-  const tags = useTags(heapRef);
-  const parameters = useParameters(heapRef);
+  const tags = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
+  const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
   const chosenTags = splitList(view.tag);
   const chosenNeeds = splitList(view.need);
   const chosenOptions = splitList(view.param);
   return (
     <Section title="Narrow down">
-      <PanelRow label="Tags (any)">
-        {tags.data?.tags.length === 0 && <span className="text-sm text-muted">This heap has no tags yet.</span>}
-        {tags.data?.tags.map((tag) => (
-          <Toggle
-            key={tag.id}
-            pressed={chosenTags.includes(tag.id)}
-            onClick={() => onChange({ ...view, tag: toggled(view.tag, tag.id) })}
-          >
-            {tag.name}
-          </Toggle>
-        ))}
-      </PanelRow>
+      {heapRef && (
+        <PanelRow label="Tags (any)">
+          {tags.data?.tags.length === 0 && <span className="text-sm text-muted">This heap has no tags yet.</span>}
+          {tags.data?.tags.map((tag) => (
+            <Toggle
+              key={tag.id}
+              pressed={chosenTags.includes(tag.id)}
+              onClick={() => onChange({ ...view, tag: toggled(view.tag, tag.id) })}
+            >
+              {tag.name}
+            </Toggle>
+          ))}
+        </PanelRow>
+      )}
       <PanelRow label="Need">
         {NEEDS.map((need) => (
           <Toggle

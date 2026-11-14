@@ -124,7 +124,7 @@ export function HeapPage({
  * (ux.md, The list §3). Undo puts back the state it had, and the blocker and the reason with it. After Done, when
  * nothing else is in progress, the toast also offers to start the top open item (ux.md, The list §10).
  */
-function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
+export function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const update = useUpdateItem(heapRef);
   const setToast = useToast();
   const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
@@ -395,7 +395,7 @@ const everyEntry = (list: Pick<RankedList, "pinned" | "ranked" | "blocked">) => 
  * hidden state back in the list, at its default (In progress pinned, Open shown), or shown for Blocked, which is
  * hidden by default. Under the default view that's the blocked items, and the note says so.
  */
-function HiddenNote({
+export function HiddenNote({
   count,
   view,
   onViewChange,
@@ -421,7 +421,7 @@ function HiddenNote({
   );
 }
 
-function Section({ title, children }: { title: string | undefined; children: ReactNode }) {
+export function Section({ title, children }: { title: string | undefined; children: ReactNode }) {
   return (
     <section aria-label={title} className="mt-6">
       {title && <h2 className="mb-1 px-2 text-xs font-semibold tracking-wide text-muted uppercase">{title}</h2>}

@@ -2,6 +2,7 @@
 // the API's query parameters, with lists comma-separated as the API takes them. Anything else in the URL is dropped.
 import type {
   BlockedLayout,
+  HeapRef,
   ItemState,
   ListSort,
   ListViewQuery,
@@ -138,6 +139,31 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
   // Unset keys stay out of the URL.
   return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined)) as ListSearch;
 }
+
+/**
+ * The search of the page listing every heap's items: the view settings that page has and need, effort and impact, and
+ * the open item as `team/heap/key`, since an item's key is only unique within its heap.
+ */
+export type AcrossSearch = Pick<
+  ListSearch,
+  "open" | "in_progress" | "blocked" | "blocked_layout" | "need" | "effort" | "impact"
+> & { item?: string };
+
+/** Keeps only what the page across heaps has of [`parseListSearch`], and the open item. */
+export function parseAcrossSearch(raw: Record<string, unknown>): AcrossSearch {
+  const { open, in_progress, blocked, blocked_layout, need, effort, impact } = parseListSearch(raw);
+  const search = { open, in_progress, blocked, blocked_layout, need, effort, impact, item: list(raw.item) };
+  return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined)) as AcrossSearch;
+}
+
+/** The item of an `item` value, `team/heap/key`: where it is and its key. `undefined` when the value isn't that. */
+export function parseItemAddress(raw: string | undefined): (HeapRef & { key: string }) | undefined {
+  const [team, heap, key, ...rest] = raw?.split("/") ?? [];
+  return team && heap && key && rest.length === 0 ? { team, heap, key } : undefined;
+}
+
+/** The `item` value for an item, as [`parseItemAddress`] reads it. */
+export const itemAddress = (heap: HeapRef, key: string) => `${heap.team}/${heap.heap}/${key}`;
 
 const ids = (raw: unknown) => joinList([...new Set(splitList(list(raw)))].sort());
 
