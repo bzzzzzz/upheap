@@ -1,7 +1,7 @@
 # Team tags: design
 
 Tags made once for a team and usable in every heap of it, beside each heap's own. In progress, by the steps of the
-maintainer's design method. Step agreed: 3. Step 4 is drafted, for review.
+maintainer's design method. Step agreed: 4. Step 5 is drafted, for review.
 
 ## Constraints
 
@@ -373,6 +373,275 @@ None. Each rule uses what the product already does: tag names unique ignoring ca
 a history per entity, and refusals with a hint.
 
 ## 5. Interface
+
+What each surface holds, in what order, and its states. The look, the final words and the components come with the
+mockup, before the web app is built. Most of it is today's tag surfaces with team tags beside heap tags; the new
+surfaces are the team's tags, the merge confirm and a team tag's history.
+
+### Inventory
+
+Rated by how often it's used (frequency) and what happens without it (necessity). A flow step names where it's
+used. Necessity is the same for the web app and the CLI unless the row says otherwise.
+
+| # | Entry | Flows | Frequency | Necessity |
+| --- | --- | --- | --- | --- |
+| W1 | Tag picker, on Add item and on the item's Tags field | A.1–4, B.1 | Constant | Core |
+| W2 | The list's tag filter and a row's tag chip | B.1–3 | Daily | Core |
+| W3 | A heap's Tags tab in Settings, with the team's tags beside the heap's | D.1, D′.1, E.1 | Sometimes | Core |
+| W4 | The team's tags, on the Team page | C.1–4, E.1, G.1 | Sometimes | Core |
+| W5 | The merge confirm | C.3, D.2, D″.1, E (rule 7) | Sometimes | Core |
+| W6 | A team tag's edit form, saying it changes in every heap | E.1–3 | Sometimes | Enabler |
+| W7 | A team tag's history | G.1, E′.1 | Sometimes | Enabler |
+| W8 | A refused heap tag name that is a team tag's (rule 3) | D′, scenario 2 | Sometimes | Enabler |
+| W9 | The item's history and the heap's Activity naming a merge | A′, rule 7 | Sometimes | Enabler |
+| W10 | The move, keeping team tags and naming dropped heap tags | F.2 | Sometimes | Nice to have |
+| W11 | The kind shown on a list row's tag chip | A, B | Constant | Polish |
+| C1 | `upheap tag list`, with the team's tags beside the heap's | H.3 | Daily (agents) | Core |
+| C2 | `--tag` and `--untag` naming a team tag on `item add`, `edit`, `list` | H.1–2 | Constant (agents) | Core |
+| C3 | `upheap tag add --team`, `tag promote`, `tag edit` on a team tag | I (C, D, E) | Sometimes | Core |
+| C4 | The confirm of a merge in the CLI | I (C.3, D.2) | Sometimes | Core |
+| C5 | The agent-loop refusal of a rename or merge beyond its heaps | rule 19, scenario 7 | Sometimes | Core |
+| C6 | `upheap tag history` | G for an agent | Sometimes | Nice to have |
+| A1 | API: the team's tags (list, make, rename, describe) | C, E, I | Sometimes | Core |
+| A2 | API: a heap's tags list and item tag writes accept team tags | A, B, H | Constant | Core |
+| A3 | API: promote a heap tag, and the reach of a merge before it's confirmed | C.3, D, I | Sometimes | Core |
+| A4 | API: a team tag's history | G | Sometimes | Enabler |
+
+Why each Core and Enabler:
+
+- W1, C2, A2: tagging an item is the loop (A, H); without team tags here nothing else matters.
+- W2: B is a loop, and the golden path's step 4 filters by a team tag.
+- W3: promoting starts from a heap's tags (D.1), and the heap's list of tags must show the team's, or a member
+  can't tell why a name is taken (rule 3).
+- W4, A1: the only place a team tag is made from nothing (C.1), and where its rename reaches every heap.
+- W5, C4, A3: a merge can't be undone (D″), and rule 9 requires the reach shown and confirmed first.
+- W6: a member is told a rename reaches every heap (user story 7); without it, E still works, but blind.
+- W7, A4: E′ is undone from the history; without it the member must guess who changed what.
+- W8: without the refusal naming the team tag, D′ dead-ends on an error that doesn't say what to do.
+- W9: rule 7 says an item's history keeps the merge; without it, a closed item's tag looks changed by nobody.
+- C1: an agent learns which tags a heap has from this list (H.3); without the team's, it refuses names that exist.
+- C3: flow I. C5: the agent loop's promise (product.md, The agent loop §4).
+
+W10 needs no change: the move already says which heap tags were dropped, and team tags never are (rule 16). W11
+and C6 go to Ideas.
+
+### The first set
+
+W1 to W9, C1 to C5, A1 to A4.
+
+Layout by frequency: the picker and the filter (constant, daily) are where they are today, with the team's tags in
+them. Everything else is Sometimes and sits one or two steps away: a heap's Tags tab (Settings, then Tags) and the
+team's tags (the team in the sidebar, then Tags).
+
+### Web app
+
+```
+W1 · TAG PICKER (Add item, item's Tags field)            constant · core
+┌──────────────────────────────┐
+│ [sec_                      ] │  typing filters
+│ security          team       │  heap's and team's tags together,
+│ secrets                      │  one list in name order, each team tag marked
+│ + Create heap tag "sec"      │  only when no tag has the name (rule 14)
+└──────────────────────────────┘
+States: no tags yet (a line, and Create), a name that only differs in case picks the tag that has it, saving,
+failed (the pick is undone, and why).
+Next likely action: pick, then close or pick another.
+```
+
+The mark says which kind a tag is (rule 13). Nothing else differs: a team tag picked in heap A is picked and
+saved as a heap tag is. "Create" says it makes a heap tag, because the team's tags are made on the team.
+
+```
+W2 · LIST: TAG FILTER, ROW CHIP                           daily · core
+Filter ▸ Tags:  [ ] billing   team
+                [ ] infra
+                [x] security  team
+Row:  Rotate the certs        [security] [infra]
+States: a saved view names the tag, not its name, so after a rename it shows the new name (rule 10).
+Next likely action: pick another tag, or clear.
+```
+
+The filter lists the heap's tags as W1 does, with the mark. A row's chip shows the name only, as today, and filters
+by the tag as today (W11 left out).
+
+```
+W3 · HEAP SETTINGS ▸ TAGS                                 sometimes · core
+┌───────────────────────────────────────────────┐
+│ New tag: Name · Description · [Add tag]        │  makes a heap tag
+│ 6 tags of this heap                            │
+│  [billing]  Invoices and payments   [Edit] [⋯] │  ⋯: Make a team tag, History
+│  …                                             │
+│ 3 tags of the team Acme  (used in every heap)  │
+│  [security] Anything with access    [Edit] [⋯] │  ⋯: History; link to the team's tags
+│  …                                             │
+└───────────────────────────────────────────────┘
+States: no heap tags, no team tags (a line saying where team tags are made); an archived heap (values only, as
+today; the team's tags still show their current names).
+Next likely action: Edit a tag, or Make a team tag.
+```
+
+- Two cards, the heap's first, then the team's, each with its count. A team tag is edited in place here, as on the
+  team's tags (flow E.1), with W6's line.
+- **Make a team tag** on a heap tag's ⋯ opens W5 for its name. It's under ⋯ because it's rare and can't be undone.
+- Adding or renaming a heap tag to a team tag's name is refused under the field (W8).
+
+```
+W4 · TEAM PAGE ▸ TAGS                                     sometimes · core
+┌───────────────────────────────────────────────┐
+│ Acme                                       [⋯] │
+│ Heaps …                                        │
+│ Tags   Used in every heap of Acme              │
+│   New team tag: Name · Description · [Add]     │
+│   [security] Anything with access    [Edit] [⋯]│  ⋯: History
+│   [billing]  Invoices and payments   [Edit] [⋯]│
+│ Members …                                      │
+└───────────────────────────────────────────────┘
+States: none yet (a line: a team tag can be used in every heap; heap tags can be made team tags from a heap's
+Tags), adding, a name that merges (W5 opens instead of adding), a failed add (under the field).
+Next likely action: Add, then go to a heap and use it.
+```
+
+- A Tags section on the Team page, between Heaps and Members, in the settings layout (ux.md Rules §3). Every
+  member sees it and may add and edit (the roles table), personal teams too.
+- Add with a name no heap tag has makes the tag at once (rule 5). With a name heap tags have, W5 opens first.
+- On a phone the rows are 52 px and Edit and History are in a row's ⋯ sheet, as heap rows are.
+
+```
+W5 · MERGE CONFIRM (dialog; sheet on a phone)             sometimes · core
+┌──────────────────────────────────────────────┐
+│ Make "billing" a team tag?                    │
+│ These heap tags become it, with their items:  │
+│   Launch     billing   12 items               │
+│   Support    Billing    3 items               │
+│   Old site   billing    5 items  (archived)   │
+│ Their items keep their history. This can't be │
+│ undone.                                       │
+│ Description: (from Launch's tag)              │
+│                  [Cancel] [Make team tag]     │
+└──────────────────────────────────────────────┘
+States: loading the reach; the reach changed (refused: the new list shows, marked as changed, and the button
+confirms that one); failed (why, and the dialog stays).
+Next likely action: confirm.
+```
+
+- Opened by W4's Add, W3's Make a team tag, and a team tag's rename to a name heap tags have (W6). The heading
+  names what's being done: making, promoting, or renaming into the name.
+- One row per heap the merge reaches, with that heap tag's name as written and how many items carry it, open and
+  closed. Archived heaps are marked, since rule 15 reaches them.
+- The description shown is the one the team tag will have (rule 8).
+- After confirming, a toast says how many items in how many heaps now carry the team tag.
+
+```
+W6 · EDIT A TEAM TAG (in W3 or W4)                        sometimes · enabler
+  Name [security-review]   Description [ … ]
+  Changes in every heap of Acme.
+  [Save] [Cancel]  History
+States: saving; a name heap tags have (W5 opens before anything saves); a version conflict, as for any tag;
+a name another team tag has (refused under the field).
+```
+
+```
+W7 · A TEAM TAG'S HISTORY (collapsed, under the tag's row)   sometimes · enabler
+  Made by Ana · 3 Nov
+  Merged Launch's and Support's "billing" (15 items) · by Ben · 4 Nov
+  Renamed "security" → "security-review" · by Sam · today
+```
+
+From W3's or W4's ⋯, like a heap tag's History. Each entry says who, when and what; a merge names the heaps and
+counts (concept "the team tag's history").
+
+```
+W8 · REFUSED NAME (heap tag Add or Edit)                  sometimes · enabler
+  Name [bug]
+  "bug" is a team tag of Acme. Use it on items here instead.
+```
+
+The refusal sits under the field and names the team tag (rule 3). Scenario 2's way out, putting the team tag on
+the items, is the member's.
+
+W9: the item's history says its heap tag became the team tag, who merged it and when ("billing, Launch's, became
+the team tag billing · by Ben"). It's a line the server writes, in the item's History as today.
+
+### Command line
+
+Tag commands work in a heap, as today (`--heap`, or the default). `--team <team>` works on the team's tags instead.
+
+```
+$ upheap tag list
+billing    Invoices and payments
+infra      Servers and deploys
+security   team   Anything with access
+```
+
+C1: the heap's tags and the team's, in one list in name order, the team's marked. `--quiet` prints names, `--json`
+the server's body, which says each tag's kind. `upheap tag list --team acme` lists the team's tags alone.
+
+C2: `--tag security` on `item add`, `item edit`, `item list` resolves to the heap's or the team's tag of that name,
+whichever there is (rule 1). Nothing else changes, and a name with no tag is refused, as today, with the hint to
+make a heap tag.
+
+```
+$ upheap tag add security --team acme --description "Anything with access"
+Made team tag security in Acme.
+
+$ upheap tag add billing --team acme
+Making team tag billing in Acme merges these heap tags into it:
+  launch     billing   12 items
+  support    Billing    3 items
+  old-site   billing    5 items  (archived)
+This can't be undone. To go ahead, run:
+  upheap tag add billing --team acme --confirm <reach>
+(exit 3)
+
+$ upheap tag promote billing          # a heap tag of the heap in use
+… the same reach and the line to confirm it
+
+$ upheap tag edit security --name security-review
+Renamed team tag security to security-review in every heap of Acme.
+```
+
+- C3: `tag add --team` makes a team tag; `tag promote <tag>` makes a heap tag a team tag; `tag edit` takes a team
+  tag by name in a heap, or with `--team`, as it takes a heap tag today.
+- C4: a write that would merge is refused (exit 3) with the reach and the exact line that confirms it. That line
+  names the reach shown, so if the reach changed it's refused again with the new one (rule 9). How the reach is
+  named is the API's (Parked). With `--json` the refusal is the problem body, with the reach in it.
+- A heap tag added or renamed to a team tag's name is refused (exit 3), naming the team tag (W8).
+
+```
+$ upheap tag edit ops --name operations
+Refused: renaming team tag ops reaches support, which this agent wasn't given.
+Hint: ask the person: upheap question request <key> "Rename the team tag ops to operations"
+(exit 3)
+```
+
+C5: in the agent loop, a rename, description or merge reaching a heap the agent wasn't given is refused (rule 19),
+naming those heaps, with the hint to ask its person.
+
+### API
+
+At the level of what each group offers; paths, shapes and how a reach is confirmed are below this step.
+
+- **A1, the team's tags:** list them, make one, rename and describe one, as the heap's tags work today.
+- **A2, a heap's tags:** the list returns the heap's and the team's, each with its kind. An item's tag writes and
+  the list's tag filter take a team tag's ID in any heap of its team. A saved view and a parameter's links take it
+  too (rule 12).
+- **A3, merges:** promoting a heap tag, and any make or rename that would merge, is refused with the reach until the
+  request confirms that reach (rule 9). A heap tag's `allowed_actions` says whether the caller may promote it.
+- **A4, history:** a team tag's history, read by every member of the team (rule 20).
+
+### Choices
+
+- **The team's tags live on the Team page,** as a section between Heaps and Members, rather than a page of their
+  own or a tab in every heap's Settings. A team's other shared things are there, and it's used sometimes. A page of
+  its own is the alternative if the section grows long (Open for now, "Many team tags").
+- **A heap's Tags tab lists the team's tags too, editable in place,** rather than read-only with a link. Flow E
+  starts "where a heap shows it", and a member who sees a name refused (W8) finds the tag on the same page.
+- **Promote is under a heap tag's ⋯,** not a button on the row: it's rare, and it can't be undone.
+- **A row's chip doesn't show the kind** (W11, Polish). The row is the most used layout, and a member needn't know
+  the kind to use a tag (commitment 8). The picker, the filter and the Tags tab show it.
+- **The CLI confirms a merge by running the printed line again,** not by a prompt: the CLI has no prompts (cli.md,
+  Goals 4), and the line names the reach the person saw.
+
 ## 6. Stages
 
 ## Parked
@@ -387,6 +656,7 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - Audit: where a team tag's entries are recorded, since the heap log reads only what is recorded against one heap.
 - Rule 9's confirm over the API: how a request states the reach it confirms.
 - An item's history naming a merged heap tag: what a read shows for an entry recorded against the old tag's ID.
+- A heap's Activity: whether a merge shows there as a line per heap, beside the team tag's history.
 
 ## Ideas
 
@@ -397,3 +667,5 @@ Outside the scope. Not commitments.
 - Demoting a team tag to a heap tag.
 - Merging two tags of different names into one.
 - Custom parameters defined once for the team.
+- Showing a tag's kind on a list row's chip.
+- `upheap tag history`, a tag's history in the CLI.
