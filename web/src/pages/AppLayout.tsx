@@ -197,6 +197,8 @@ function heapViews(heapRef: HeapRef, itemOpen: boolean) {
       params: heapRef,
       activeOptions: { exact: true, includeSearch: false },
       current: itemOpen,
+      // With an item open, Open closes it, and the list under it keeps its place.
+      resetScroll: !itemOpen,
     },
     closed: { to: "/teams/$team/heaps/$heap/closed", params: heapRef },
     activity: { to: "/teams/$team/heaps/$heap/activity", params: heapRef },
