@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, type LinkProps } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -35,7 +35,8 @@ const CLOSE_SPEED = 600;
  * as it's made. `entry` is the item's place in the list on screen, when it's there, for why it ranks where it does.
  * `previousKey` and `nextKey` are the items above and below it on screen, for walking the list without closing the
  * pane (ux.md, The item §7); `listed` is whether the item is a row on screen, a reminder to come included, which
- * has no `entry`.
+ * has no `entry`. A page whose list holds items of several heaps gives `walkLink`, the link to the item
+ * `previousKey` or `nextKey` names, which on that page is its address in the list.
  */
 export function ItemPane({
   heapRef,
@@ -45,6 +46,7 @@ export function ItemPane({
   listed,
   previousKey,
   nextKey,
+  walkLink,
   onClose,
 }: {
   heapRef: HeapRef;
@@ -54,6 +56,7 @@ export function ItemPane({
   listed: boolean;
   previousKey: string | undefined;
   nextKey: string | undefined;
+  walkLink?: (key: string) => LinkProps;
   onClose: () => void;
 }) {
   const item = useItem(heapRef, itemKey);
@@ -118,7 +121,14 @@ export function ItemPane({
               {(["Previous item", "Next item"] as const).map((label) => (
                 <WalkLink
                   key={label}
-                  heapRef={heapRef}
+                  link={
+                    walkLink ??
+                    ((key) => ({
+                      to: "/teams/$team/heaps/$heap/items/$item",
+                      params: { ...heapRef, item: key },
+                      search: true,
+                    }))
+                  }
                   itemKey={label === "Previous item" ? previousKey : nextKey}
                   label={label}
                   icon={label === "Previous item" ? ChevronUp : ChevronDown}
@@ -151,13 +161,13 @@ export function ItemPane({
  * and still focusable there, so focus that walked to the end stays put and a screen reader still finds it.
  */
 function WalkLink({
-  heapRef,
+  link,
   itemKey,
   label,
   icon: Icon,
   onWalk,
 }: {
-  heapRef: HeapRef;
+  link: (key: string) => LinkProps;
   itemKey: string | undefined;
   label: string;
   icon: typeof ChevronUp;
@@ -174,9 +184,7 @@ function WalkLink({
   }
   return (
     <Link
-      to="/teams/$team/heaps/$heap/items/$item"
-      params={{ ...heapRef, item: itemKey }}
-      search={true}
+      {...link(itemKey)}
       // In place of this item, so Back still closes the pane rather than walking back up the list.
       replace
       state={(prev) => prev}

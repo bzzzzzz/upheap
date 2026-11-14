@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, type LinkProps } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
@@ -69,6 +69,10 @@ export function rowOf(key: string) {
  * until the row is hovered or focused, with a mouse. A phone shows the state button only, and swipes instead (ux.md,
  * The list): right marks the row done, left shows the other states and Agent to pick. The kind and stage icons end the
  * row.
+ *
+ * Another page can show the row for its own list: `link` opens the item there instead of over its heap's list,
+ * `heapLabel` says which heap it is in, and without `filters` the row shows no tag or parameter chips, as there is no
+ * filter for them to join.
  */
 export function ItemRow({
   entry,
@@ -77,6 +81,8 @@ export function ItemRow({
   itemOpen,
   compact = false,
   filters,
+  link = { to: "/teams/$team/heaps/$heap/items/$item", params: { ...heapRef, item: entry.item.key }, search: true },
+  heapLabel,
   onChangeState,
 }: {
   entry: RankedItem;
@@ -84,10 +90,13 @@ export function ItemRow({
   selected: boolean;
   itemOpen: boolean;
   compact?: boolean;
-  filters: RowFilters;
+  filters?: RowFilters;
+  link?: LinkProps;
+  heapLabel?: string;
   onChangeState: ChangeState;
 }) {
   const { item, contributors } = entry;
+  const showContributors = !compact && contributors.length > 0;
   const canChangeState = item.allowed_actions.includes("change_state");
   const canSend = !item.turn && item.allowed_actions.includes("send_to_agent");
   const { sendWithUndo, pending: sending } = useSendWithUndo(heapRef);
@@ -195,9 +204,7 @@ export function ItemRow({
             {item.with_agent && <Bot aria-hidden="true" className="size-3.5 shrink-0 text-agent sm:hidden" />}
             {/* The link covers the whole row, under the buttons and tags. */}
             <Link
-              to="/teams/$team/heaps/$heap/items/$item"
-              params={{ ...heapRef, item: item.key }}
-              search={true}
+              {...link}
               replace={itemOpen}
               state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
               // The item opens over the list, which stays mounted, so the page keeps its place rather than going back
@@ -228,24 +235,35 @@ export function ItemRow({
               </span>
             )}
             {item.due && <DueChip due={item.due} />}
-            <TagChips tags={item.tags} active={filters.tags} onToggle={filters.toggleTag} />
+            {filters && <TagChips tags={item.tags} active={filters.tags} onToggle={filters.toggleTag} />}
+            {filters && (
+              <ParameterChips
+                parameters={item.parameters}
+                active={filters.options}
+                onToggle={filters.toggleOption}
+                className="hidden lg:inline-flex"
+              />
+            )}
+            {heapLabel && <span className="text-xs text-muted max-sm:hidden">{heapLabel}</span>}
+          </div>
+          {showContributors ? (
+            <p className="mt-0.5 text-xs text-muted">
+              {heapLabel && <span className="sm:hidden">{heapLabel} · </span>}
+              {contributors.map((c) => c.label).join(" · ")}
+            </p>
+          ) : (
+            // On a phone the heap label has the second line to itself.
+            heapLabel && <p className="mt-0.5 text-xs text-muted sm:hidden">{heapLabel}</p>
+          )}
+          {/* Under the contributors on a phone or tablet, where the first line has no room for them. */}
+          {filters && (
             <ParameterChips
               parameters={item.parameters}
               active={filters.options}
               onToggle={filters.toggleOption}
-              className="hidden lg:inline-flex"
+              className="mt-1 flex lg:hidden"
             />
-          </div>
-          {!compact && contributors.length > 0 && (
-            <p className="mt-0.5 text-xs text-muted">{contributors.map((c) => c.label).join(" · ")}</p>
           )}
-          {/* Under the contributors on a phone or tablet, where the first line has no room for them. */}
-          <ParameterChips
-            parameters={item.parameters}
-            active={filters.options}
-            onToggle={filters.toggleOption}
-            className="mt-1 flex lg:hidden"
-          />
         </div>
         {item.waits_for_you && (
           <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
@@ -639,7 +657,7 @@ let refocusAfterStart: string | undefined;
  * Gives the focus back to the row `s` or play started. Starting moves the row to another section, so it remounts and the
  * focus falls to the page. Call it with the list, so it runs after the render that shows the item in progress.
  */
-export function useRefocusStartedRow(list: RankedList | undefined) {
+export function useRefocusStartedRow(list: Pick<RankedList, "pinned" | "ranked" | "blocked"> | undefined) {
   useEffect(() => {
     const key = refocusAfterStart;
     if (key === undefined || !list) return;
