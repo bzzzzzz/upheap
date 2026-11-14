@@ -569,8 +569,9 @@ change it makes carries the run it was made in.
    and raising a heap's priority moves all of its items up.
 3. **Started work comes first.** An item whose turn already has a run, and which is ready to go on, gets a large
    boost in the queue: large enough that only something much more important passes it. Half-done work is
-   finished before new work of about the same importance is begun. The size of the boost is a number in the
-   formula, like the others.
+   finished before new work of about the same importance is begun. The boost is ×3, a number in the formula
+   like the others, and counts any run on the open turn, however it ended. It is the queue's only: the person's
+   lists keep the plain score.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
 5. A run ends in one of four ways: **reached**, with its result; **asked**, having attached at least one
@@ -604,8 +605,8 @@ change it makes carries the run it was made in.
    as new. On a closed item an answer can't be changed; the person reopens the item first.
 4. A request closed as "can't be done" goes back to the agent like any answer. The agent finds another way, or
    asks what to do instead; it doesn't ask for the same thing again.
-5. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered as the
-   queue is: the item's score times the person's priority for its heap.
+5. "What waits for me" is every item that waits for the person, across their heaps, in one list ordered by
+   the item's score times the person's priority for its heap, without the queue's boost for started work.
 
 **Review**
 
