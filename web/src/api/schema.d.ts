@@ -3972,7 +3972,7 @@ export interface components {
             reach: components["schemas"]["Reach"];
             /**
              * Format: int32
-             * @description How many runs the turn has had, ended or not. More than 0 means the work was started before.
+             * @description How many runs the turn has had, ended or not. Whether the work was started is `started`.
              */
             runs: number;
             /** @description Where the item is now. */

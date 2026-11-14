@@ -226,6 +226,7 @@ impl Services {
         store::runs::insert_run(&txn, &run).await?;
         txn.commit().await.map_err(StoreError::from)?;
         work.runs += 1;
+        work.started = true;
 
         tracing::info!(
             heap_id = %work.heap.id,
@@ -906,9 +907,6 @@ impl Services {
             .get(&turn.id)
             .copied()
             .unwrap_or(0);
-        let started = store::runs::sends_with_runs(db, &[turn.send_id])
-            .await?
-            .contains(&turn.send_id);
         Ok(RunView {
             run,
             work: WorkItem {
@@ -917,7 +915,8 @@ impl Services {
                 team,
                 turn,
                 runs,
-                started,
+                // The run viewed is on this turn, so its send has had one.
+                started: true,
             },
         })
     }
