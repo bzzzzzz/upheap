@@ -14,6 +14,7 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [work/work-with-agents.md](work/work-with-agents.md) | Work with agents, the design: context, tasks with steps, reminders, questions and the agent loop. Commitments, workflows, concepts and rules, interface, choices | The design changes, until it's built |
 | [work/email.md](work/email.md) | Email, the design: optional SMTP mail, reset by mail, confirming an address, changing an address. Commitments, workflows, rules, interface, stages | The design changes, until it's built |
 | [work/smaller-changes.md](work/smaller-changes.md) | Smaller changes, the design: why a feature touches so many files, the refactors that remove the repeats, and what stays as it is | The design changes, until it's built |
+| [work/team-tags.md](work/team-tags.md) | Team tags, the design: tags made once for a team and usable in all its heaps. Value, golden path and commitments so far | The design changes, until it's built |
 
 `work/` holds the designs of unbuilt work, each deleted once it's built. Plans, progress and ideas are in Upheap.
 Everything beside it is permanent.
