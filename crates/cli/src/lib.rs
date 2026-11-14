@@ -29,6 +29,7 @@ pub use crate::agent::{
     Access, AgentTools, Interrupt, ListenForInterrupts, SystemTools, Tool, ToolError, ToolReport, ToolStart, WorkDeps,
 };
 pub use crate::auth::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
+pub use crate::client::HttpClients;
 use crate::client::{ApiClient, ClientError};
 use crate::commands::{SharedArgs, UsageError};
 use crate::config::{ConfigError, ConfigFile, SettingError};
@@ -52,6 +53,8 @@ pub struct Deps {
     pub clock: Clock,
     /// What `upheap work run` takes from outside: the agent tools, interruptions and waits.
     pub work: WorkDeps,
+    /// The HTTP clients every request goes out on.
+    pub http: HttpClients,
 }
 
 /// The environment, read once at startup.
@@ -123,6 +126,7 @@ impl Deps {
             stderr: Box::new(std::io::stderr()),
             clock: Arc::new(jiff::Timestamp::now),
             work: WorkDeps::system(),
+            http: HttpClients::default(),
         }
     }
 }
@@ -388,6 +392,7 @@ where
         mut stderr,
         clock,
         work,
+        http,
     } = deps;
     let color = env.stdout_is_terminal && !env.no_color;
     let in_run = env.run.is_some();
@@ -416,7 +421,7 @@ where
         Command::Guide(GuideCommand::Show(_)) => {
             commands::guide::show::run(&Cli::command(), &mut out).map_err(CliError::from)
         }
-        command => match load_app(env, tokens, browser, stdin, clock) {
+        command => match load_app(env, tokens, browser, stdin, clock, http) {
             // Before any request, so a bad run ID is told of once, not as a refusal.
             Ok(app) => match check_run_env(&app.env) {
                 Ok(()) => dispatch(command, &app, work, &mut out).await,
@@ -450,6 +455,7 @@ fn load_app(
     browser: Box<dyn Browser>,
     stdin: Box<dyn Read + Send>,
     clock: Clock,
+    http: HttpClients,
 ) -> Result<App, ConfigError> {
     let config = match &env.config_dir {
         Some(dir) => config::load_config(dir)?,
@@ -462,6 +468,7 @@ fn load_app(
         stdin: Arc::new(Mutex::new(stdin)),
         config,
         clock,
+        http,
     })
 }
 
@@ -554,6 +561,7 @@ pub(crate) struct App {
     /// The time now, as opposed to `env.now`, when the command started: a loop that lives for hours must see its
     /// access token go stale. The wall clock, not time elapsed, which stands still while the machine sleeps.
     clock: Clock,
+    http: HttpClients,
 }
 
 impl App {
@@ -595,7 +603,7 @@ impl App {
     }
 
     pub fn client(&self, server: Url) -> Result<ApiClient, ClientError> {
-        ApiClient::new(server, self.env.time_zone.clone()).map(|client| client.in_run(self.env.run.clone()))
+        ApiClient::new(&self.http, server, self.env.time_zone.clone()).map(|client| client.in_run(self.env.run.clone()))
     }
 
     /// An access token for `client`'s server, refreshed when the stored one is stale.
