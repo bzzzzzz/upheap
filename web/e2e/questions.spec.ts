@@ -165,7 +165,10 @@ test("web addresses and Markdown links in the text and choices are links, and th
     {
       kind: "question",
       text: "Is **this** ready? See https://example.com/pr/1. Or [the mockup](https://example.com/mock) (javascript:x)",
-      choices: ["Yes, as in [the mockup](https://example.com/mock)", "No"],
+      choices: [
+        "Yes, as in [the mockup](https://example.com/mock)",
+        "No: [[web] Fix](https://example.com/pr/2), **https://example.com/pr/3**",
+      ],
     },
   ]);
   const row = waits(page).getByRole("listitem").filter({ hasText: "Is **this** ready?" });
@@ -189,12 +192,21 @@ test("web addresses and Markdown links in the text and choices are links, and th
   await tab.close();
   await expect(radios.getByRole("radio", { checked: true })).toHaveCount(0);
   await expect(row.getByRole("button", { name: "Reply", exact: true })).toBeDisabled();
+  // A label with brackets, and emphasis around a bare address, stay out of the link's text and address.
+  await expect(radios.getByRole("link", { name: "[web] Fix", exact: true })).toHaveAttribute(
+    "href",
+    "https://example.com/pr/2",
+  );
+  await expect(radios.getByRole("link", { name: "https://example.com/pr/3", exact: true })).toHaveAttribute(
+    "href",
+    "https://example.com/pr/3",
+  );
 
-  // Picked, the choice reads back with its link.
   // The words around the link pick the choice.
   await radios.getByText("Yes, as in", { exact: false }).click({ position: { x: 4, y: 4 } });
   await row.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(waits(page)).toHaveCount(0);
+  // Picked, the choice reads back with its link.
   const folded = answered(page);
   await folded.locator("summary").click();
   await expect(folded).toContainText("→ Yes, as in the mockup");

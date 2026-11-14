@@ -2,11 +2,14 @@ import type { ReactNode, SyntheticEvent } from "react";
 
 import { linkClass } from "./Markdown";
 
-/** A Markdown link to a web address, `[label](https://…)`, or a bare web address up to the next space. */
-const LINK = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s<>]+/g;
+/**
+ * A Markdown link to a web address, `[label](https://…)`, or a bare web address up to the next space or backtick. A
+ * label may hold one level of brackets ("[web] Fix links"), a target one level of parentheses (a wiki page's).
+ */
+const LINK = /\[((?:[^[\]\n]|\[[^[\]\n]*\])+)\]\((https?:\/\/(?:[^\s()]|\([^\s()]*\))+)\)|https?:\/\/[^\s<>`]+/g;
 
-/** Punctuation that ends a sentence after a bare address, kept out of the link. */
-const TRAILING = /[.,;:!?'"]+$/;
+/** Punctuation, closing quotes and Markdown emphasis after a bare address, kept out of the link. */
+const TRAILING = /[.,;:!?'"*_~”’»…。、]+$/u;
 
 /** A bare address's end: trailing punctuation, and a closing bracket the address didn't open, read as text. */
 function trimBare(url: string) {
