@@ -3836,7 +3836,7 @@ export interface operations {
             path: {
                 /**
                  * @description The app path to go to once signed in, such as `/invite/<token>`. Dropped unless it starts with a single `/`
-                 *     and holds no control character or space.
+                 *     and holds only printable ASCII (no space).
                  */
                 redirect: string | null;
             };
