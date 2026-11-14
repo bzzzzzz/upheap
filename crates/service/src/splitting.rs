@@ -16,12 +16,12 @@ use domain::question::QuestionState;
 use domain::run::{NotReached, RunEnd, RunResult, split_reached_check};
 use domain::step::{NewStep, Step, StepState, check_steps_editable, place_step};
 use domain::text::Context;
-use domain::turn::TakeBackWhy;
+use domain::turn::{TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, StepId, Timestamp, TurnId, ValidationError};
 use store::{StoreError, TransactionTrait};
 
 use crate::access::authorize_heap_write;
-use crate::audit::{describe_new_step, describe_new_turn, describe_reached, diff_items};
+use crate::audit::{GoalMetHow, describe_new_step, describe_new_turn, describe_reached, diff_items};
 use crate::items::{ItemChildren, ItemView, build_item_view, commit_if_in_run, in_run};
 use crate::work::RunScope;
 use crate::{Principal, ServiceError, Services};
@@ -39,8 +39,11 @@ impl Services {
     /// from) unless it has no open question and every open task made from it has a context and a step that isn't
     /// dropped (those still in the note's heap; one moved away is the person's). Otherwise each of those tasks becomes
     /// defined, the note closes as became, and the run and the turn end as reached; no next turn opens on the note.
-    /// When its turn was sent all the way, each of those tasks that isn't started and has no open turn gets one of
-    /// its own ([`domain::turn::Turn::passed_on`]).
+    /// Each of those tasks with an open turn that defined meets has it ended as reached, as a person's stage edit
+    /// would ([`Services::end_met_turn`], how `became`). When the note's turn was sent all the way, each of those
+    /// tasks that isn't started and has no open turn gets one of its own ([`domain::turn::Turn::passed_on`]),
+    /// including one whose ended turn was the heap's prepare turn, which the person didn't send; one whose ended
+    /// turn the person sent on stays as they left it, with no turn or with that turn's own follow-on.
     pub async fn became_item(&self, principal: Principal, item_id: ItemId) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let found = store::items::find_item(&txn, item_id)
@@ -72,6 +75,8 @@ impl Services {
         let mut questions_withdrawn = 0_usize;
         let mut defined: Vec<&Item> = Vec::new();
         let mut turns_opened = 0_usize;
+        let mut turns_ended = 0_usize;
+        let mut sent_on: Vec<ItemId> = Vec::new();
         if scope.is_some() {
             let open_questions = store::questions::list_questions_locking(&txn, note.id)
                 .await?
@@ -113,6 +118,26 @@ impl Services {
                     now,
                 );
                 store::audit::insert_audit_entry(&txn, &entry).await?;
+                let met = store::turns::find_open_turn_locking(&txn, saved.id)
+                    .await?
+                    .filter(|turn| turn.goal_met_by(saved.stage));
+                if let Some(turn) = met {
+                    if turn.source == TurnSource::GoAhead {
+                        sent_on.push(saved.id);
+                    }
+                    self.end_met_turn(
+                        &txn,
+                        heap,
+                        principal,
+                        &turn,
+                        &saved,
+                        task.stage,
+                        GoalMetHow::Became,
+                        now,
+                    )
+                    .await?;
+                    turns_ended += 1;
+                }
             }
         } else {
             turns_taken_back = self
@@ -145,11 +170,11 @@ impl Services {
             self.reach_turn(&txn, heap, principal, &scope, &saved, now).await?;
 
             // All the way §2: sent all the way, the note's turn goes on to the tasks it became, each defined by now.
-            // One the person has started or sent on already stays as the person left it.
-            for task in made
-                .iter()
-                .filter(|item| to_define(item, heap.id) && item.state.kind() != StateKind::InProgress)
-            {
+            // One the person has started or sent on already stays as the person left it, even when became just ended
+            // that turn.
+            for task in made.iter().filter(|item| {
+                to_define(item, heap.id) && item.state.kind() != StateKind::InProgress && !sent_on.contains(&item.id)
+            }) {
                 if store::turns::find_open_turn_locking(&txn, task.id).await?.is_some() {
                     continue;
                 }
@@ -186,6 +211,7 @@ impl Services {
             made = made.len(),
             tasks_defined = defined.len(),
             turns_taken_back,
+            turns_ended,
             turns_opened,
             questions_withdrawn,
             in_run = principal.run.is_some(),
