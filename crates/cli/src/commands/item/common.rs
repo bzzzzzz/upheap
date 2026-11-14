@@ -6,6 +6,7 @@ use api_types::common::{ItemDto, KindDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
+use api_types::turns::SendToAgentDto;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -58,15 +59,44 @@ impl HeapApi<'_> {
     /// `POST` to the item with `key`'s `became`: close the note as became. It says what the note should end up as, so
     /// it takes no version. A `404` is reported like [`get_item`](Self::get_item)'s.
     pub async fn became_item(&self, typed: &str, key: &str) -> Result<Fetched<ItemDto>, CliError> {
-        match self
+        let became = self
             .client
             .post(
                 &self.path(&["items", key, "became"]),
                 &serde_json::json!({}),
                 self.token,
             )
-            .await
-        {
+            .await;
+        self.named_if_missing(typed, became)
+    }
+
+    /// `POST` of `body` to the item with `key`'s `turn`: send it to an agent. It takes no version. A `404` is reported
+    /// like [`get_item`](Self::get_item)'s.
+    pub async fn send_item(&self, typed: &str, key: &str, body: &SendToAgentDto) -> Result<Fetched<ItemDto>, CliError> {
+        let sent = self
+            .client
+            .post(&self.path(&["items", key, "turn"]), body, self.token)
+            .await;
+        self.named_if_missing(typed, sent)
+    }
+
+    /// `DELETE` of the item with `key`'s `turn`: take it back from the agent that has it. It takes no version. A `404`
+    /// is reported like [`get_item`](Self::get_item)'s.
+    pub async fn take_back_item(&self, typed: &str, key: &str) -> Result<Fetched<ItemDto>, CliError> {
+        let taken = self
+            .client
+            .delete(&self.path(&["items", key, "turn"]), self.token)
+            .await;
+        self.named_if_missing(typed, taken)
+    }
+
+    /// `answer`, with a `404` reported as the item `typed` not being in the heap.
+    fn named_if_missing(
+        &self,
+        typed: &str,
+        answer: Result<Fetched<ItemDto>, ClientError>,
+    ) -> Result<Fetched<ItemDto>, CliError> {
+        match answer {
             Ok(item) => Ok(item),
             Err(source @ ClientError::Problem { .. }) if is_not_found(&source) => Err(CliError::NoSuchItem {
                 name: typed.to_owned(),
@@ -85,19 +115,11 @@ impl HeapApi<'_> {
         key: &str,
         body: &ItemToStepDto,
     ) -> Result<Fetched<ItemDto>, CliError> {
-        match self
+        let made = self
             .client
             .post(&self.path(&["items", key, "to-step"]), body, self.token)
-            .await
-        {
-            Ok(item) => Ok(item),
-            Err(source @ ClientError::Problem { .. }) if is_not_found(&source) => Err(CliError::NoSuchItem {
-                name: typed.to_owned(),
-                heap: self.heap.to_string(),
-                source,
-            }),
-            Err(err) => Err(err.into()),
-        }
+            .await;
+        self.named_if_missing(typed, made)
     }
 
     /// `PATCH` of `body` to the item with `key`, which is at `version`. A stale or closed item's refusal names the
