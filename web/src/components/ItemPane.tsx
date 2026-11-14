@@ -1,5 +1,5 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Link as LinkIcon, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
@@ -9,6 +9,7 @@ import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
 import { InlineConfirm } from "./InlineConfirm";
 import { ContextDraft, type FlushDraft } from "./contextDraft";
+import { shortLink, useCopyText } from "./copyLink";
 import { ItemContext } from "./ItemContext";
 import { ItemFieldList } from "./ItemFieldList";
 import { itemProblem } from "./itemProblems";
@@ -22,6 +23,7 @@ import { StatusLine } from "./ItemStatus";
 import { isClosed } from "./labels";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { Sheet } from "./Sheet";
+import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useUserName } from "./userName";
 
@@ -137,7 +139,8 @@ export function ItemPane({
               ))}
             </div>
           )}
-          <span className="px-2 font-mono text-xs text-ink-soft">{itemKey}</span>
+          {/* Keyed, so walking to the next item doesn't carry the check over. */}
+          <CopyKey key={itemKey} heapRef={heapRef} itemKey={itemKey} />
           <button
             type="button"
             onClick={onClose}
@@ -152,6 +155,37 @@ export function ItemPane({
           {body}
         </div>
       </motion.section>
+    </>
+  );
+}
+
+/**
+ * The item's key in the header, as the button that copies the item's short link (ux.md, The item §8). The header stays
+ * in view, so the icon turning into a check for two seconds confirms the copy, and a toast says only a failure.
+ */
+function CopyKey({ heapRef, itemKey }: { heapRef: HeapRef; itemKey: string }) {
+  const { copied, copy } = useCopyText();
+  const setToast = useToast();
+  const Icon = copied ? Check : LinkIcon;
+  return (
+    <>
+      <button
+        type="button"
+        title="Copy link"
+        aria-label={`Copy link to ${itemKey}`}
+        onClick={() =>
+          void copy(shortLink(heapRef.team, heapRef.heap, itemKey)).then(
+            (worked) => worked || setToast({ message: "Couldn't copy the link.", error: true }),
+          )
+        }
+        className="flex h-9 items-center gap-1.5 rounded-lg px-2 font-mono text-xs text-ink-soft hover:bg-sunken pointer-coarse:h-11"
+      >
+        {itemKey}
+        <Icon aria-hidden="true" className="size-3.5" />
+      </button>
+      <span role="status" className="sr-only">
+        {copied ? "Link copied" : ""}
+      </span>
     </>
   );
 }

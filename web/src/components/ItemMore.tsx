@@ -1,5 +1,5 @@
 import { Ellipsis } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   Button,
   Dialog,
@@ -20,13 +20,11 @@ import { BlockerSelect } from "./BlockerSelect";
 import { BlockReasonEditor } from "./BlockReasonEditor";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { compactButtonClass } from "./buttons";
-import { shortLink, useCopyText } from "./copyLink";
 import { changeLabel, isClosed, NEXT_STATES, STAGE_LABELS } from "./labels";
 import { MenuChoice, MenuEntry, MenuHeading, MenuPopover } from "./Menu";
 import { PopoverSheet } from "./PopoverSheet";
 import { isToCome } from "./reminders";
 import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
-import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /** The main state button is filled with the accent, the next action's colour, with dark text for contrast in both themes. */
@@ -42,8 +40,8 @@ type Main = { label: string; state: ItemState } | { label: "Make it a task"; sta
 /**
  * What the item's main button and ⋯ offer (ux.md, The item §6), each only when the server allows it. The main button
  * is the likeliest next state, Make it a task for a reminder that has arrived, or Reopen on a closed item. ⋯ holds the
- * other states, Won't do, Make it a task…, Send to an agent…, Change blocker…, Add reason… or Change reason…, Copy
- * link and the Stage choices.
+ * other states, Won't do, Make it a task…, Change blocker…, Add reason… or Change reason…, and
+ * the Stage choices; with none of them, as for a reader, there is no ⋯.
  */
 function actionsOf(item: Item) {
   const allowed = item.allowed_actions;
@@ -72,6 +70,12 @@ function actionsOf(item: Item) {
     changeBlocker: item.state === "blocked" && canChange,
     reasonLabel: item.blocked_reason ? "Change reason…" : "Add reason…",
     stages: item.stage_choices,
+    more:
+      others.length > 0 ||
+      (canChange && !isClosed(state)) ||
+      (allowed.includes("make_task") && !arrivedReminder) ||
+      (item.state === "blocked" && canChange) ||
+      item.stage_choices.length > 0,
   };
 }
 
@@ -100,8 +104,6 @@ export function ItemActions({
   const mainRef = useRef<HTMLButtonElement>(null);
   const asker = useRef<"main" | "more">("more");
   const focusAfterRender = useFocusAfterRender();
-  const setToast = useToast();
-  const { copy } = useCopyText();
   const [confirming, setConfirming] = useState(false);
   const [changing, setChanging] = useState(false);
   const [editingReason, setEditingReason] = useState(false);
@@ -110,6 +112,13 @@ export function ItemActions({
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const actions = actionsOf(item);
   const bar = variant === "bar";
+  // Done or Won't do picked from ⋯ closes the item, and a closed item has no ⋯: focus, given back to ⋯ as its menu
+  // closed, goes to the main button (Reopen) instead of falling to the page.
+  const hadMore = useRef(actions.more);
+  useEffect(() => {
+    if (hadMore.current && !actions.more && document.activeElement === document.body) mainRef.current?.focus();
+    hadMore.current = actions.more;
+  }, [actions.more]);
 
   const closeConfirm = () => {
     setConfirming(false);
@@ -127,11 +136,6 @@ export function ItemActions({
     const [picked] = keys === "all" ? [] : [...keys];
     if (picked !== undefined && picked !== item.stage) save({ stage: String(picked) as Stage });
   };
-  // The menu has closed by the time the link is copied, so a toast says it happened.
-  const copyLink = () =>
-    void copy(shortLink(heapRef.team, heapRef.heap, item.key)).then((copied) =>
-      setToast(copied ? { message: "Link copied" } : { message: "Couldn't copy the link.", error: true }),
-    );
   const openers = {
     makeTask: () => {
       asker.current = "more";
@@ -163,7 +167,7 @@ export function ItemActions({
     </button>
   );
 
-  const more = bar ? (
+  const more = !actions.more ? null : bar ? (
     <MoreSheet
       item={item}
       actions={actions}
@@ -171,7 +175,6 @@ export function ItemActions({
       onState={onState}
       onWontDo={() => onState("wont_do")}
       openers={openers}
-      onCopyLink={copyLink}
       onStage={changeStage}
     />
   ) : (
@@ -210,9 +213,6 @@ export function ItemActions({
               {actions.reasonLabel}
             </MenuEntry>
           )}
-          <MenuEntry id="copy_link" onAction={copyLink}>
-            Copy link
-          </MenuEntry>
           {actions.stages.length > 0 && (
             <MenuSection
               aria-label="Stage"
@@ -241,19 +241,21 @@ export function ItemActions({
 
   return (
     <>
-      <div
-        role="group"
-        aria-label="State"
-        {...(bar && { "data-state-bar": "" })}
-        className={
-          bar
-            ? "sticky bottom-0 z-10 -mx-4 flex gap-2 border-t border-line bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)]"
-            : "flex shrink-0 items-center gap-1.5"
-        }
-      >
-        {main}
-        {more}
-      </div>
+      {(main || more) && (
+        <div
+          role="group"
+          aria-label="State"
+          {...(bar && { "data-state-bar": "" })}
+          className={
+            bar
+              ? "sticky bottom-0 z-10 -mx-4 flex gap-2 border-t border-line bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)]"
+              : "flex shrink-0 items-center gap-1.5"
+          }
+        >
+          {main}
+          {more}
+        </div>
+      )}
       <MakeTaskDialog
         item={item}
         isOpen={confirming}
@@ -314,7 +316,6 @@ function MoreSheet({
   onState,
   onWontDo,
   openers,
-  onCopyLink,
   onStage,
 }: {
   item: Item;
@@ -323,7 +324,6 @@ function MoreSheet({
   onState: (state: ItemState) => void;
   onWontDo: () => void;
   openers: { makeTask: () => void; changeBlocker: () => void; editReason: () => void };
-  onCopyLink: () => void;
   onStage: (keys: Selection) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -369,9 +369,6 @@ function MoreSheet({
             {actions.reasonLabel}
           </button>
         )}
-        <button type="button" onClick={then(onCopyLink)} className={sheetRowClass}>
-          Copy link
-        </button>
         {actions.stages.length > 0 && (
           <>
             <h3 id={stageId} className="px-3 pt-2 text-xs font-medium text-muted">
