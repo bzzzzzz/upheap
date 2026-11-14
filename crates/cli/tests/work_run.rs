@@ -9,7 +9,10 @@ use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
 use cli::{Access, Interrupt, TokenStore, Tool, ToolError, ToolReport, ToolStart};
-use common::{Agent, Buffer, HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, cli_in_heap, key, wait_until};
+use common::{
+    Agent, Buffer, HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, item_key_of, key,
+    lines_with, wait_until,
+};
 use domain::Duration;
 use googletest::prelude::*;
 use serde_json::{Value, json};
@@ -23,7 +26,7 @@ const LOOP: &[&str] = &["work", "run", "--tool", "claude"];
 async fn with_preparing_heap() -> Result<(TestServer, TestUser)> {
     let server = TestServer::start().await?;
     let ada = server.register("ada", "Ada").await?;
-    change_heap(&server, &ada, json!({ "agents_prepare": true })).await?;
+    change_heap(&server, &ada, HEAP, json!({ "agents_prepare": true })).await?;
     Ok((server, ada))
 }
 
@@ -33,20 +36,6 @@ async fn with_prepared_note() -> Result<(TestServer, TestUser, TestCli, String)>
     let note = add_note(&server, &ada, "Rotate the certs").await?;
     let cli = cli_in_heap(&server, &ada).await?;
     Ok((server, ada, cli, note))
-}
-
-async fn change_heap(server: &TestServer, ada: &TestUser, patch: Value) -> Result<()> {
-    let heap = server.send(ada, "GET", "/teams/ada/heaps/personal", None).await?;
-    server
-        .send_with(
-            ada,
-            "PATCH",
-            "/teams/ada/heaps/personal",
-            Some(patch),
-            &[("if-match", &heap["version"].to_string())],
-        )
-        .await?;
-    Ok(())
 }
 
 async fn add_note(server: &TestServer, ada: &TestUser, title: &str) -> Result<String> {
@@ -100,16 +89,6 @@ fn context_writing_agent(agent: &Agent, cost: f64) -> StandIn {
             })
         }
     })
-}
-
-/// The key of the item a run works on, read from the brief's item heading line (`k3x9a  Rotate the certs`).
-fn item_key_of(start: &ToolStart) -> String {
-    let (_, after) = start.brief.split_once("# The item\n\n").unwrap_or_default();
-    after.split_whitespace().next().unwrap_or_default().to_owned()
-}
-
-fn lines_with<'a>(text: &'a str, needle: &str) -> Vec<&'a str> {
-    text.lines().filter(|line| line.contains(needle)).collect()
 }
 
 #[gtest]
@@ -178,7 +157,13 @@ async fn the_agent_gets_the_instructions_the_heap_the_item_the_goal_and_the_pers
     // Arrange: a heap that doesn't prepare, with a context, and a note sent to an agent with a line.
     let server = TestServer::start().await?;
     let ada = server.register("ada", "Ada").await?;
-    change_heap(&server, &ada, json!({ "context": "Certs live in the infra repo." })).await?;
+    change_heap(
+        &server,
+        &ada,
+        HEAP,
+        json!({ "context": "Certs live in the infra repo." }),
+    )
+    .await?;
     let note = add_note(&server, &ada, "Rotate the certs").await?;
     server
         .send(

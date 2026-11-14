@@ -89,6 +89,33 @@ pub async fn cli_in_heap(server: &TestServer, user: &TestUser) -> Result<TestCli
     Ok(cli)
 }
 
+/// The key of the item a run works on, read from the brief's item heading line (`k3x9a  Rotate the certs`).
+pub fn item_key_of(start: &ToolStart) -> String {
+    let (_, after) = start.brief.split_once("# The item\n\n").unwrap_or_default();
+    after.split_whitespace().next().unwrap_or_default().to_owned()
+}
+
+pub fn lines_with<'a>(text: &'a str, needle: &str) -> Vec<&'a str> {
+    text.lines().filter(|line| line.contains(needle)).collect()
+}
+
+/// Patches the heap at `heap` (`team/slug`) as `user`, at its current version.
+pub async fn change_heap(server: &TestServer, user: &TestUser, heap: &str, patch: Value) -> Result<()> {
+    let (team, slug) = heap.split_once('/').context("a heap is team/slug")?;
+    let path = format!("/teams/{team}/heaps/{slug}");
+    let current = server.send(user, "GET", &path, None).await?;
+    server
+        .send_with(
+            user,
+            "PATCH",
+            &path,
+            Some(patch),
+            &[("if-match", &current["version"].to_string())],
+        )
+        .await?;
+    Ok(())
+}
+
 /// The server, listening on a free localhost port until the test ends.
 pub struct TestServer {
     /// `http://127.0.0.1:<port>`.
