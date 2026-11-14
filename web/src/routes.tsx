@@ -27,6 +27,7 @@ import { HeapPage } from "./pages/HeapPage";
 import { HeapContextSettings, HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
 import { InvitePage } from "./pages/InvitePage";
 import { ParametersPage } from "./pages/ParametersPage";
+import { ProviderStepPage } from "./pages/ProviderStepPage";
 import { HeapRankingSettings } from "./pages/RankingPage";
 import { ResetPage } from "./pages/ResetPage";
 import { TagsPage } from "./pages/TagsPage";
@@ -87,7 +88,8 @@ const ITEM_KEY = /^(?=.*\d)[0-9a-hjkmnp-tv-z]{5}$/;
  * nothing when it isn't one. A crafted link such as `?redirect=//evil.example` mustn't send a user who signs in to
  * another site, and sign-in itself, or any other path outside the signed-in app, isn't worth returning to; the one
  * page outside it that is, is connecting a client such as the CLI. A path inside it that no page answers, such as
- * `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless.
+ * `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless. An invite link's page is
+ * one too: a sign-in that started on it comes back to it.
  */
 function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | undefined) {
   if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
@@ -95,11 +97,25 @@ function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | unde
   // `/.//evil.example` comes out as `//evil.example`. Check what it gives, not what came in.
   const url = new URL(redirect, window.location.origin);
   if (url.origin !== window.location.origin || url.pathname.startsWith("//")) return undefined;
-  // Only the signed-in app and connecting a client send users here; sign-in is outside both, whatever the case of
-  // `/LOGIN`.
+  // Only the signed-in app, connecting a client and an invite link send users here; sign-in is outside all of them,
+  // whatever the case of `/LOGIN`.
   const matches = router.matchRoutes(url.pathname, {});
-  if (!matches.some((match) => match.routeId === appRoute.id || match.routeId === authorizeRoute.id)) return undefined;
+  const known = matches.some(
+    (match) => match.routeId === appRoute.id || match.routeId === authorizeRoute.id || match.routeId === inviteRoute.id,
+  );
+  if (!known) return undefined;
   return { href: url.pathname + url.search + url.hash, matches, search: url.searchParams };
+}
+
+/**
+ * Leaves sign-in for `page`, as `toAppPage` read it from the `redirect` the sign-in started with, or for `/`: the
+ * login page's and the username step's way on once signed in.
+ */
+function goAfterSignIn(router: ReturnType<typeof useRouter>, page: ReturnType<typeof toAppPage>) {
+  // The consent page is loaded afresh, so its query arrives exactly as the client wrote it (see `pageHref`).
+  if (page?.matches.some((match) => match.routeId === authorizeRoute.id)) window.location.replace(BASE + page.href);
+  // With `href`, the router takes the whole location from it; without, it goes to `to`.
+  else void router.navigate({ to: "/", href: page?.href, replace: true });
 }
 
 /** The OAuth authorization request in a query, its values as they came. The server checks every one. */
@@ -123,11 +139,16 @@ function toAuthorizationRequest(search: Record<string, unknown>): AuthorizationR
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
-    typeof search.redirect === "string" ? { redirect: search.redirect } : {},
+  // `sign_in_error` and `login` come from the server's callback after a refused sign-in through the provider.
+  validateSearch: (search: Record<string, unknown>): { redirect?: string; sign_in_error?: string; login?: string } => ({
+    ...(typeof search.redirect === "string" && { redirect: search.redirect }),
+    ...(typeof search.sign_in_error === "string" && { sign_in_error: search.sign_in_error }),
+    ...(typeof search.login === "string" && { login: search.login }),
+  }),
   component: function LoginRoute() {
     const router = useRouter();
-    const page = toAppPage(router, loginRoute.useSearch().redirect);
+    const { redirect, sign_in_error: refusal, login } = loginRoute.useSearch();
+    const page = toAppPage(router, redirect);
     // The router's own matching says whether the link is to an item, and which.
     const item = page?.matches.find((match) => match.routeId === itemRoute.id);
     const segment = item && "item" in item.params ? String(item.params.item) : undefined;
@@ -140,13 +161,28 @@ const loginRoute = createRoute({
     let notice: string | undefined;
     if (connecting) notice = `Sign in to connect ${client?.display_name ?? "the app"}.`;
     else if (page) notice = itemKey ? `Sign in to open the link to ${itemKey}.` : "Sign in to open that page.";
-    const onSignedIn = () => {
-      // The consent page is loaded afresh, so its query arrives exactly as the client wrote it (see `pageHref`).
-      if (connecting && page) window.location.replace(BASE + page.href);
-      // With `href`, the router takes the whole location from it; without, it goes to `to`.
-      else void router.navigate({ to: "/", href: page?.href, replace: true });
-    };
-    return <AuthPage notice={notice} onSignedIn={onSignedIn} />;
+    return (
+      <AuthPage
+        notice={notice}
+        providerRedirect={page?.href}
+        refusal={refusal}
+        initialLogin={login}
+        onSignedIn={() => goAfterSignIn(router, page)}
+      />
+    );
+  },
+});
+
+/**
+ * The username step of a first sign-in through the provider, outside the app's shell like sign-in. It has no guard:
+ * the browser holds no session yet, and the page makes no request that a `401` could answer.
+ */
+const providerStepRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login/provider",
+  component: function ProviderStepRoute() {
+    const router = useRouter();
+    return <ProviderStepPage onSignedIn={(redirect) => goAfterSignIn(router, toAppPage(router, redirect))} />;
   },
 });
 
@@ -445,6 +481,7 @@ const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/accou
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  providerStepRoute,
   inviteRoute,
   resetRoute,
   authorizeRoute,

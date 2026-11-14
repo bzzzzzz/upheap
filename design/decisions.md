@@ -455,3 +455,23 @@ SMTP always uses TLS, implicit or STARTTLS; there is no cleartext mode.
 **Consequences.** Switching provider is changing two settings. There are no provider-specific features, such as bounce
 webhooks or templates. Cloud Run blocks port 25, so operators use 465 or 587. Delivery problems show up as SMTP errors
 in the log.
+
+## 38. External identities are matched by (issuer, subject); an email that matches a local account is refused, not linked
+
+**Context.** A server can have one OpenID Connect provider next to local accounts. A person who signs in through it
+for the first time may already have a local account with the same email, and the two have to be told apart.
+
+**Decision.** An identity is the pair of the issuer as configured and the provider's subject, and only that pair
+signs a person in. A first sign-in whose verified email belongs to a local account is refused, and the page says to
+sign in with that account's password. There is no linking for now. An email alone never links two accounts: whoever
+controls an account at the provider, or a provider that doesn't verify emails, could otherwise take over a local
+account by choosing its address.
+
+**Instead of.** Linking by email when the provider says it is verified, which trusts every provider's idea of
+"verified". Linking after the person proves the local password, which is safe but a flow of its own to build and test.
+
+**Consequences.** A person with both a local account and a provider account can't merge them yet; they sign in with
+the one that exists, and a provider user has no password. Changing the configured issuer makes everyone known at the
+old one new at the new one, and their emails then clash with their own accounts. The identity table keys on the issuer
+string, so it must be kept exactly as the provider names itself ([architecture.md](architecture.md#authentication-and-authorization)
+§3).

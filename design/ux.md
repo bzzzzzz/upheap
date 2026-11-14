@@ -627,7 +627,27 @@ many attempts, registration closed) shows above the button. A taken email offers
 to Sign in with the address carried over and focus on Password. Under Sign in's password, a small **Forgot your
 password?** button (`aria-expanded`) shows one line under it, "Whoever runs this Upheap server can send you a reset
 link.", and hides it again: no form and no request, since the server sends no email. Create account has none. The
-invite page's Sign in side has it too. A signed-out link says where it leads
+invite page's Sign in side has it too.
+
+When the server has an identity provider, the card starts with a bordered button, **Sign in with Acme SSO**, the width
+of the card (52 px on a phone, 44 px beyond), and under it an "or" rule, above the switch; the dark Sign in button
+stays the main one. It is a plain link that leaves for the provider, carrying the page to return to. Without a
+provider, or until the page knows, there is neither button nor rule. A sign-in the provider or the server refused comes
+back to this page with one line above the button (`role="alert"`) that says why: "An account with sam@acme.test
+exists. Sign in with its password below." (Sign in is selected, "Email or username" is filled and focus is on
+Password), "Acme SSO didn't share a verified email address, which Upheap needs.", "Acme SSO didn't sign you in. Try
+again.", "That sign-in took too long. Try again." or "Acme SSO can't be reached right now. Try again in a minute." The
+line goes when a form is submitted.
+
+A first sign-in through the provider continues at `/login/provider`, in the same card: **Pick a username**, "Signed in
+through Acme SSO as:" with the name and email as plain text, the Username input (the same hint, focused, empty),
+**Create account**, a **Cancel** button back to sign-in that sends nothing, and the footnote "You'll start in your own
+heap. Teams come next." A problem about the username shows under it with focus on it; any other, above the button.
+When the step has ended (a reload or a submit after 15 minutes, or after it was used) the page says "This step has
+ended." with a **Sign in again** button. Success goes where the sign-in began, or `/`; the invite page, where a sign-in
+that began there comes back, shows the signed-in Join step.
+
+A signed-out link says where it leads
 ("Sign in to open the link to k3x9a") and opens it after sign-in; an expired session returns the same way.
 
 ## Invite page
@@ -644,7 +664,8 @@ order, and the page only shows it:
 - **Removed:** "This link can't add you back. Ask one of the team's admins."
 - **Signed in:** "Join Acme?", who invited them, and who they're signed in as, with **Join Acme** and "Not you? Sign
   out", which reloads the same page signed out.
-- **Signed out:** "Join Acme" and who invited them, over the sign-in switch with Create account first
+- **Signed out:** "Join Acme" and who invited them, over the provider button (when the server has one; it returns
+  to this page signed in) and the sign-in switch with Create account first
   ([Sign in and create account](#sign-in-and-create-account)). Create account and join makes the account and joins in
   one act, also when registration is closed. A taken email offers **Sign in instead**, which carries the address
   over. Signing in leads to the signed-in state, where they press Join: it doesn't join by itself, so they see who
@@ -706,7 +727,9 @@ A success closes the form and shows a status line under the heading, "Password c
 Focus goes to Change password, and the Command line card is read again, since the change ended its sign-ins. The
 browser the change was made in stays signed in, on a new session cookie the server sets; another browser of the user
 lands on sign-in at its next request. A change also cancels the user's working reset link ([Reset page](#reset-page)),
-so a copy of it can't be used afterwards. The card is there when the server's `change_password` action is.
+so a copy of it can't be used afterwards. Without the server's `change_password` action, as for a person who signs
+in through the identity provider and has no password, the card keeps its heading and History, and where the button
+would be says "You sign in through Acme SSO." ("an identity provider" if the server has none).
 
 At the bottom of the card, whether the form is closed or open, is a collapsed **History** like the ones on a tag or a
 member, with the same chevron and touch target. It loads only when opened, and lists the user's password events newest

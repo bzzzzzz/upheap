@@ -704,5 +704,5 @@ saying so.
 1. **Tightens [Data](#data) §4 from prefer to must.** Nothing a person made is deleted: archive columns and state
    transitions, never `DELETE`, and no `ON DELETE CASCADE`. The one exception in domain data is a team membership,
    whose removal deletes the row while the audit log keeps the history ([architecture.md](architecture.md#data-model)).
-   Authentication plumbing that isn't domain data, ended sessions, sign-in attempt counts, and ended OAuth codes
-   and token families with their tokens, may be deleted.
+   Authentication plumbing that isn't domain data, ended sessions, sign-in attempt counts, sign-ins in flight through
+   the identity provider, and ended OAuth codes and token families with their tokens, may be deleted.

@@ -24,6 +24,9 @@ const PASSWORD: &str = "a long test password";
 enum Access {
     /// Anyone, signed in or not.
     Public,
+    /// Anyone, but only on a server with an OpenID Connect provider. This one has none, so every caller gets
+    /// `not_found`; `oidc.rs` tests the sign-in itself.
+    Provider,
     /// Any signed-in user; nothing is scoped to a team.
     SignedIn,
     /// Members of the heap's team holding `permission`. Writes are refused while the heap is archived.
@@ -116,6 +119,8 @@ enum RequestBody {
     Empty,
     Registration,
     SignIn,
+    /// The username step of a sign-in through the provider.
+    OidcUsername,
     NewItem,
     Rename,
     /// The second heap of [`Target::ItemAndSecondHeap`], to move the item to.
@@ -195,7 +200,7 @@ struct Endpoint {
 }
 
 fn endpoints() -> Vec<Endpoint> {
-    use Access::{Heap, Public, SharedTeam, SignedIn, Team};
+    use Access::{Heap, Provider, Public, SharedTeam, SignedIn, Team};
     use Permission::{ConfigureHeap, EditItems, LeaveTeam, ManageHeaps, ManageTeam, ViewHeap, ViewTeam};
     let view = Heap {
         permission: ViewHeap,
@@ -246,6 +251,46 @@ fn endpoints() -> Vec<Endpoint> {
             Target::FreshSession,
             RequestBody::Empty,
             StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::GET,
+            "/auth/oidc",
+            Provider,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::NOT_FOUND,
+        ),
+        row(
+            Method::GET,
+            "/auth/oidc/start",
+            Provider,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::NOT_FOUND,
+        ),
+        row(
+            Method::GET,
+            "/auth/oidc/callback",
+            Provider,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::NOT_FOUND,
+        ),
+        row(
+            Method::GET,
+            "/auth/oidc/pending",
+            Provider,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::NOT_FOUND,
+        ),
+        row(
+            Method::POST,
+            "/auth/oidc/register",
+            Provider,
+            Target::Nothing,
+            RequestBody::OidcUsername,
+            StatusCode::NOT_FOUND,
         ),
         row(
             Method::GET,
@@ -926,6 +971,7 @@ impl Outcome {
 fn expected_outcome(endpoint: &Endpoint, caller: Caller, archived: bool) -> Outcome {
     let (permission, writes) = match endpoint.access {
         Access::Public => return Outcome::success(endpoint.success),
+        Access::Provider => return Outcome::problem(StatusCode::NOT_FOUND, "not_found"),
         Access::SignedIn | Access::Heap { .. } | Access::Team { .. } | Access::SharedTeam { .. } | Access::OwnRun
             if matches!(caller, Caller::Anonymous) =>
         {
@@ -1423,6 +1469,7 @@ impl World {
                 Some(json!({ "email": email, "username": username, "display_name": "New", "password": PASSWORD }))
             }
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
+            RequestBody::OidcUsername => Some(json!({ "username": self.unique_name("oidc") })),
             RequestBody::NewItem => Some(json!({ "title": "New", "need": "expected" })),
             RequestBody::Rename => Some(json!({ "title": "Renamed" })),
             RequestBody::NoteToStep => Some(json!({ "task_id": parameter["id"] })),

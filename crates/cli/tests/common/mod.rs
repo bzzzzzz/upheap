@@ -181,6 +181,7 @@ impl TestServer {
                 allow_registration: true,
                 session_ttl: Duration::from_days(30),
                 sign_in_limit: SignInLimit::DEFAULT,
+                oidc: None,
             },
         )
         .with_random(random);

@@ -796,6 +796,44 @@ export function useRegister() {
 }
 
 /**
+ * The OpenID Connect provider people may sign in through on this server, or `null` when it has none (a `404`). Read
+ * once: the operator sets it with the server's configuration.
+ */
+export function useOidcProvider() {
+  return useQuery({
+    queryKey: ["oidc-provider"],
+    queryFn: async () => {
+      try {
+        return unwrap(await api.GET("/api/v1/auth/oidc"));
+      } catch (error) {
+        if (error instanceof ApiProblem && error.status === 404) return null;
+        throw error;
+      }
+    },
+    staleTime: Infinity,
+  });
+}
+
+/** Who the provider vouched for, for the username step. A `404` is the step having ended, which stays so. */
+export function useOidcPending() {
+  return useQuery({
+    queryKey: ["oidc-pending"],
+    queryFn: async () => unwrap(await api.GET("/api/v1/auth/oidc/pending")),
+    retry: false,
+  });
+}
+
+/** Finishes a first sign-in through the provider with the username picked; the response signs the browser in. */
+export function useRegisterOidc() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { username: string }) => unwrap(await api.POST("/api/v1/auth/oidc/register", { body })),
+    // As `useRegister`: nothing of a previous user's cache survives, and the guard loads `me` afresh.
+    onSuccess: () => queryClient.removeQueries(),
+  });
+}
+
+/**
  * The client an OAuth authorization request is from, once the server has checked the request; until then the
  * consent page shows no choice and sends the browser nowhere. Not retried: a bad request stays bad.
  */

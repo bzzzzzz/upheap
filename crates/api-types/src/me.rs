@@ -70,7 +70,7 @@ pub enum MeActionDto {
     CreateTeam,
     /// List and end the sign-ins of command-line and other clients (`/me/sign-ins`).
     ManageSignIns,
-    /// Change the password (`POST /me/password`).
+    /// Change the password (`POST /me/password`). Not for a user who signs in through a provider, who has none.
     ChangePassword,
 }
 
