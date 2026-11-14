@@ -453,6 +453,66 @@ test("a blocked item shows why in words, in the pane and on the row's padlock", 
   await expect(status()).not.toContainText("invoice");
 });
 
+test("a blocked item's reason is set, changed and removed from ⋯", async ({ page, heapPath }) => {
+  await addItem(page, "Renew the domain");
+  await openItem(page, "Renew the domain");
+  const status = () => itemPane(page).getByRole("group", { name: "Status" });
+  const editor = () => page.getByRole("dialog", { name: "Why it's blocked", exact: true });
+  const openEditor = async (entry: string) => {
+    await moreEntry(page, await openMore(page), entry).click();
+    await expect(editor()).toBeVisible();
+    return editor();
+  };
+  const more = itemPane(page).getByRole("group", { name: "State", exact: true }).getByRole("button", { name: "More" });
+
+  // Set. The status line has the text only once the server answered.
+  await changeState(page, "Block", "more");
+  await expect(status()).toContainText("Blocked");
+  let dialog = await openEditor("Add reason…");
+  await expect(dialog.getByLabel("Reason")).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Reason").fill("Waiting for the invoice");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(status()).toContainText("Blocked: Waiting for the invoice");
+  await expect(editor()).toHaveCount(0);
+  await expect(more).toBeFocused();
+
+  // Change, with Enter.
+  dialog = await openEditor("Change reason…");
+  await expect(dialog.getByLabel("Reason")).toHaveValue("Waiting for the invoice");
+  await dialog.getByLabel("Reason").fill("Waiting for the receipt");
+  await dialog.getByLabel("Reason").press("Enter");
+  await expect(status()).toContainText("Blocked: Waiting for the receipt");
+  await expect(editor()).toHaveCount(0);
+
+  // Too long: the counter and the error show, and Save is off.
+  dialog = await openEditor("Change reason…");
+  await dialog.getByLabel("Reason").fill("x".repeat(301));
+  await expect(dialog.getByText("301 / 300")).toBeVisible();
+  await expect(dialog.getByText("Keep it to 300 characters.")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(editor()).toHaveCount(0);
+  await expect(status()).toContainText("Blocked: Waiting for the receipt");
+
+  // Remove.
+  dialog = await openEditor("Change reason…");
+  await dialog.getByRole("button", { name: "Remove reason" }).click();
+  await expect(status()).not.toContainText("receipt");
+  await expect(status()).toContainText("Blocked");
+  await expect(editor()).toHaveCount(0);
+  await moreEntry(page, await openMore(page), "Add reason…").waitFor();
+  await page.keyboard.press("Escape");
+
+  // A refused save keeps the editor and the draft, and says so.
+  dialog = await openEditor("Add reason…");
+  await dialog.getByLabel("Reason").fill("Waiting for the bank");
+  await changeElsewhere(page, heapPath, { state: "open" });
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Couldn't save the reason.");
+  await expect(dialog.getByLabel("Reason")).toHaveValue("Waiting for the bank");
+});
+
 test("the Add dialog adds items in a row, with rough or exact due times", async ({ page }) => {
   // `N` works once the list is there. (On a phone the tabs' + is there sooner.)
   await expect(page.getByRole("heading", { level: 1 })).toBeAttached();
