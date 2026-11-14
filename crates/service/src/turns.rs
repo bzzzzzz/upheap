@@ -351,15 +351,16 @@ impl Services {
         Ok(true)
     }
 
-    /// Ends `turn`, which the caller read under the heap lock, as reached because its item is at the goal: `by` the
-    /// person (`principal`, outside a run), with a `turn_reached` entry saying how. `item_after` is the item as it
+    /// Ends `turn`, which the caller read under the heap lock, as reached because its item is at the goal: `by`
+    /// `principal` (the person, or a run whose became defined a task split from its note), with a `turn_reached`
+    /// entry saying how. `item_after` is the item as it
     /// stands, and `before` its stage before the edit that moved it (the same stage, for a claim that found it there).
     /// Says nothing was done, with `None`, when the turn had already ended.
     ///
     /// Like [`Self::take_back_turn`], the turn's unended runs end as taken back and the open questions asked in them
     /// are withdrawn, with `goal_met`. A turn sent all the way opens the next one, and it is returned. The caller holds
     /// the heap lock and writes the item's own entry first, so the history reads in the order things happened.
-    #[allow(clippy::too_many_arguments)] // Every one differs between the two callers.
+    #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
     pub(crate) async fn end_met_turn(
         &self,
         txn: &impl ConnectionTrait,

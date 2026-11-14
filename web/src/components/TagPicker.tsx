@@ -1,4 +1,5 @@
-import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Popover } from "react-aria-components";
 
 import { ApiProblem, type ItemTag, type HeapRef } from "../api/client";
 import { useCreateTag, useTags } from "../api/queries";
@@ -9,6 +10,9 @@ const MAX_SUGGESTIONS = 6;
 /**
  * Picks tags for an item. Typing filters the heap's tags; Enter adds the highlighted one, or creates a new tag
  * when nothing matches the typed name exactly. Backspace in the empty input removes the last tag.
+ *
+ * Unless `inline`, the matches float in a popover under the field, or above it when there's no room below, outside
+ * any scrolling panel around the picker, so a dialog's footer never covers them. Focus stays in the input throughout.
  */
 export function TagPicker({
   heapRef,
@@ -37,6 +41,13 @@ export function TagPicker({
   const listId = useId();
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);
+  // The floating matches close when focus leaves the input, and come back on typing or focus. The inline ones stay
+  // in the flow and need none of that.
+  const [dismissed, setDismissed] = useState(false);
+  // React Aria closes a non-modal popover when a panel around its field scrolls, since it doesn't follow the field.
+  // A new one is placed instead, so the matches stay by the field, as when typing scrolls it into view.
+  const [placing, setPlacing] = useState(0);
+  const fieldRef = useRef<HTMLDivElement>(null);
 
   const canCreate = tags.data?.allowed_actions.includes("create") ?? false;
   // While a new tag is being created the chosen tags are frozen, because the new tag is appended to the list as it
@@ -54,7 +65,7 @@ export function TagPicker({
   const alreadyChosen = value.some((tag) => tag.name.toLowerCase() === needle);
   const offerCreate = canCreate && query !== "" && !exact && !alreadyChosen;
   const optionCount = suggestions.length + (offerCreate ? 1 : 0);
-  const open = optionCount > 0;
+  const open = optionCount > 0 && (inline || !dismissed);
 
   const add = (tag: ItemTag) => {
     onChange([...value, { id: tag.id, name: tag.name }]);
@@ -102,9 +113,49 @@ export function TagPicker({
 
   const optionId = (index: number) => `${listId}-${index}`;
 
+  const list = (
+    <ul
+      id={listId}
+      role="listbox"
+      aria-label="Tags"
+      className={`py-1 text-sm text-ink ${inline ? "mt-1 rounded-lg border border-line bg-surface" : ""}`}
+    >
+      {suggestions.map((tag, index) => (
+        <li
+          key={tag.id}
+          id={optionId(index)}
+          role="option"
+          aria-selected={index === highlight}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            if (!busy) add(tag);
+          }}
+          className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
+        >
+          {tag.name}
+          {tag.description && <span className="ml-2 text-xs text-muted">{tag.description}</span>}
+        </li>
+      ))}
+      {offerCreate && (
+        <li
+          id={optionId(suggestions.length)}
+          role="option"
+          aria-selected={highlight === suggestions.length}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            createTag();
+          }}
+          className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
+        >
+          Create tag “{query}”
+        </li>
+      )}
+    </ul>
+  );
+
   return (
     <FieldFrame layout={layout} label={label}>
-      <div className="flex flex-wrap items-center gap-1">
+      <div ref={fieldRef} className="flex flex-wrap items-center gap-1">
         {value.map((tag) => (
           // To a finger, Remove is 44 px square around its 20 px circle. It stays inside the chip, which widens for it
           // and with its margins takes a 44 px line, so the target never covers the tag's name, the next chip or the
@@ -139,54 +190,37 @@ export function TagPicker({
           onChange={(e) => {
             setText(e.target.value);
             setHighlight(0);
+            setDismissed(false);
           }}
+          onFocus={() => setDismissed(false)}
+          onBlur={() => setDismissed(true)}
           onKeyDown={onKey}
           placeholder={canCreate ? "Type to add or create" : "Type to add"}
           autoComplete="off"
           className="h-9 min-w-32 flex-1 rounded-lg border border-line bg-surface px-2 text-sm text-ink pointer-coarse:h-11"
         />
       </div>
-      {open && (
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label="Tags"
-          className={`mt-1 rounded-lg border border-line bg-surface py-1 text-sm text-ink ${
-            inline ? "" : "absolute top-full right-0 left-0 z-10 shadow-md"
-          }`}
-        >
-          {suggestions.map((tag, index) => (
-            <li
-              key={tag.id}
-              id={optionId(index)}
-              role="option"
-              aria-selected={index === highlight}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                if (!busy) add(tag);
-              }}
-              className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
-            >
-              {tag.name}
-              {tag.description && <span className="ml-2 text-xs text-muted">{tag.description}</span>}
-            </li>
-          ))}
-          {offerCreate && (
-            <li
-              id={optionId(suggestions.length)}
-              role="option"
-              aria-selected={highlight === suggestions.length}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                createTag();
-              }}
-              className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
-            >
-              Create tag “{query}”
-            </li>
-          )}
-        </ul>
-      )}
+      {open &&
+        (inline ? (
+          list
+        ) : (
+          // Non-modal: it takes no focus and leaves the dialog around it in charge of Escape and outside clicks.
+          <Popover
+            key={placing}
+            triggerRef={fieldRef}
+            isOpen
+            isNonModal
+            placement="bottom start"
+            offset={4}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) setPlacing((n) => n + 1);
+            }}
+            // React Aria sets its max height to the room on that side; the list scrolls only if even that is short.
+            className="w-(--trigger-width) overflow-y-auto rounded-lg border border-line bg-surface shadow-md outline-none"
+          >
+            {list}
+          </Popover>
+        ))}
       {create.error && (
         <p role="alert" className="text-xs text-overdue-ink">
           {create.error instanceof ApiProblem && create.error.code === "tag_name_taken"

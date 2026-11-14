@@ -1,7 +1,7 @@
 # Team tags: design
 
 Tags made once for a team and usable in every heap of it, beside each heap's own. In progress, by the steps of the
-maintainer's design method. Step agreed: none. Steps 1 and 2 are drafted, for review together.
+maintainer's design method. Step agreed: 2. Step 3 is drafted, for review.
 
 ## Constraints
 
@@ -12,7 +12,7 @@ maintainer's design method. Step agreed: none. Steps 1 and 2 are drafted, for re
 3. A heap belongs to exactly one team, and an item moves only between heaps of its team (Teams §5, Edit item §1).
 4. The stack in use: the Rust server on SQLite, MySQL or Postgres, the web app and the `upheap` CLI over one API.
 5. Done when a tag made once on the team can be put on items in two of its heaps, and renaming it changes it in
-   both (the owner, in yacb1).
+   both (the owner).
 
 Assumption: no deadline and nothing else fixed. The owner wasn't asked in this run; the review can add to this list.
 
@@ -109,6 +109,119 @@ To Ideas, not commitments: archiving tags; a tag filter across heaps; demoting a
 tag; merging two tags of different names; team-level custom parameters; tag colours.
 
 ## 3. Workflows
+
+Members and team admins do the same here (the roles table), so the flows are a member's. An agent does what its
+person does, through the CLI or the API, and has the flows marked for it. A personal team's one person is its only
+member and has every flow.
+
+### A member
+
+**A. Tag an item** (loop, many times a day; it changes from today only in what is offered)
+
+1. In a heap, on Add item or in an item, they start typing a tag name.
+2. The heap's tags and the team's tags are offered together, each showing which kind it is.
+3. They pick one. The item carries it, and the item's history says so.
+4. A name that matches no tag makes a heap tag, as today (§9).
+
+**A′. Recovery: the wrong tag** (after A)
+
+1. They take the tag off the item and put the right one on, as today. The item's history shows both.
+
+**B. Narrow a heap's list by a team tag** (loop, daily)
+
+1. In a heap's list, they pick a team tag in the tag filter, or click its chip on a row.
+2. The list shows that heap's items that carry it, as with a heap tag.
+3. A saved view that holds the filter keeps the team tag, and still finds it after a rename.
+
+**C. Make a team tag** (setup, now and then, most often when the team starts using team tags)
+
+1. They open the team's tags and give a name and a description.
+2. If no heap tag of the team has that name, the team tag is made.
+3. If heap tags have it, they're shown first which heaps and how many items carry one, and that those become the
+   team tag (§7). They confirm, or step back.
+4. The tag is listed among the team's tags and offered in every heap of the team.
+
+**D. Promote a heap tag** (setup, a burst when a team that already drifted adopts team tags, rare after)
+
+1. From a heap's tags, they choose to make one a team tag.
+2. As C from step 3: they see which other heaps have a tag of that name and how many items, and confirm.
+3. The items that carried any of those heap tags carry the team tag, and their history is kept.
+
+**D′. Recovery: a name that drifted apart** (setup, before D, when heaps spell the same tag differently)
+
+1. In a heap whose tag says `bugs` where the others say `bug`, they rename that heap tag to `bug`, as today. Two
+   heaps may each have a heap tag of one name (§6), so this is allowed.
+2. Then they promote `bug` (D), and every heap's `bug` becomes the team tag.
+
+**D″. Recovery: a promotion made by mistake** (after C or D)
+
+1. The confirm in C step 3 is the guard: it shows what will merge before anything does.
+2. After it, there is no undo: demoting is out (Out). They rename the team tag if the name was the mistake, or take
+   it off the items it shouldn't be on, one by one.
+
+**E. Rename or describe a team tag** (sometimes)
+
+1. From the team's tags, or from the tag where a heap shows it, they rename it or edit its description.
+2. They're shown that it changes in every heap of the team.
+3. Every heap shows the new name at once: rows, the filter, saved views, linked parameters.
+
+**E′. Recovery: a rename that shouldn't have happened** (after E)
+
+1. They see it in the tag's history, who and when, and rename it back. The history keeps both.
+
+**F. Move an item to another heap** (sometimes; an existing flow, changed in what it keeps)
+
+1. They move the item, as today.
+2. Its team tags stay on it. Its heap tags carry over by name, or are dropped and the move says which (§10).
+
+**G. Look at a team tag's history** (sometimes, often after E′ or on a surprise)
+
+1. From the tag, they open its history: made, renamed, described, promoted, each with who and when.
+
+### An agent, for its person
+
+**H. Tag an item from the CLI or the API** (loop, many times a day)
+
+1. It adds or edits an item in a heap and names tags, as today.
+2. A name resolves to the heap's tag or the team's tag of that name, whichever there is: one name is one tag in a
+   heap (§6). A name with no tag is refused as today, with the hint that offers to make it.
+3. Listing a heap's tags shows the team's tags beside the heap's, with which kind each is.
+
+**I. Manage team tags from the CLI** (sometimes): C, D, E and G as the person does them, with the same "what this
+reaches" shown before a promotion, and confirmed before it happens.
+
+### User stories
+
+From the steps above that ask something of the product.
+
+1. A member typing a tag in a heap is offered the heap's tags and the team's together, and sees which kind each is.
+   (A.2)
+2. A member typing a name no tag has gets a heap tag, as today. (A.4)
+3. A member can filter a heap's list by a team tag, from the filter or a row's chip, and save it in a view that
+   survives a rename. (B)
+4. A member can make a team tag with a name and a description from the team's tags. (C.1)
+5. Before a team tag takes over heap tags of its name, a member sees which heaps and how many items, and can step
+   back. (C.3, D.2)
+6. A member can make a heap tag a team tag from that heap's tags. (D.1)
+7. A member can rename a team tag or edit its description once and see it change in every heap, and is told that
+   it will. (E)
+8. A member can read a team tag's history: what changed, who, when. (G, E′)
+9. A member moving an item keeps its team tags without a choice to make. (F)
+10. An agent names a team tag in a heap the way it names a heap tag, and sees team tags when it lists a heap's
+    tags. (H)
+11. An agent can make, promote, rename and describe team tags for its person. (I)
+
+### Not core
+
+Left out on purpose; each is under Out or Ideas.
+
+- Undoing a promotion (demoting a team tag): recovery is renaming, or taking it off items (D″).
+- Merging two tags of different names in one heap: D′ covers names that differ across heaps.
+- Suggesting which heap tags look like the same tag across heaps: the member spots them.
+- Filtering every heap of the team by a team tag at once.
+- A team admin approving team tags, or managing them alone.
+- Archiving a team tag that is no longer wanted.
+
 ## 4. Behaviours
 ## 5. Interface
 ## 6. Stages
@@ -124,6 +237,9 @@ Thoughts from a lower level than the step that met them. One line each, not disc
 - The CLI's `--tag` resolves names against the heap; with §6 a name still resolves to one tag.
 - A move today carries tags over by name (`domain::item_move::carry_over`); team tags need no lookup.
 - Audit: where a team tag's entries are recorded, since the heap log reads only what is recorded against one heap.
+- Renaming a team tag to a name some heap tags have (E): merge as in §7, or refuse. Renaming a heap tag to a team
+  tag's name: refused by §6, as a clash in one heap is today.
+- A saved view or a linked parameter holding a heap tag that is promoted (D): it should hold the team tag after.
 
 ## Ideas
 

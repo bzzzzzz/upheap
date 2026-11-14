@@ -82,6 +82,8 @@ pub struct Step {
     pub title: Title,
     pub context: Option<Context>,
     pub state: StepState,
+    /// The note this step was made from, when a note became it. Never changed.
+    pub origin_id: Option<ItemId>,
     pub created_at: Timestamp,
     pub version: Version,
 }
@@ -132,6 +134,7 @@ impl Step {
             title: fields.title,
             context: fields.context,
             state: StepState::Open,
+            origin_id: None,
             created_at: now,
             version: Version::INITIAL,
         }
@@ -274,6 +277,7 @@ mod tests {
             title: Title::parse("Run in staging").expect("valid"),
             context: None,
             state,
+            origin_id: None,
             created_at: Timestamp::EPOCH,
             version: Version::INITIAL,
         }

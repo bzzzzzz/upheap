@@ -284,6 +284,31 @@ test("History opened on one item starts collapsed on the next", async ({ page })
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Fix the gate");
   await expect(itemPane(page).getByRole("region", { name: "History" }).locator("details")).not.toHaveAttribute("open");
 });
+test("History shows an edited context as a diff, its long unchanged start folded", async ({ page }) => {
+  await addItem(page, "Plan the launch");
+  await openItem(page, "Plan the launch");
+  const start = Array.from({ length: 30 }, (_, i) => `step${i + 1}`).join(" ");
+  await (await editContext(page)).fill(`${start} then ship on Friday`);
+  await saveContext(page, "ship on Friday");
+  await (await editContext(page)).fill(`${start} then ship on Monday`);
+  await saveContext(page, "ship on Monday");
+
+  const history = await openHistory(page);
+  const edits = history.getByRole("listitem").filter({ hasText: "You edited item" });
+  const edit = edits.first();
+  await expect(edit.locator("del")).toHaveText("removed Friday");
+  await expect(edit.locator("ins")).toHaveText("added Monday");
+  // 33 unchanged words before the edit keep the last 8; the rest fold behind a button that shows them.
+  await expect(edit).not.toContainText("step1 ");
+  await edit.getByRole("button", { name: "… 25 more words" }).click();
+  await expect(edit).toContainText("step1 step2");
+  // The button goes, so focus moves to the stretch it unfolded.
+  await expect(edit.locator("span[tabindex='-1']")).toBeFocused();
+  // Setting the context from nothing has nothing to diff, so it shows in full.
+  await expect(edits.nth(1)).toContainText(`${start} then ship on Friday`);
+  await expect(edits.nth(1).locator("ins, del")).toHaveCount(0);
+});
+
 test("an item is closed from the list, undone, and reopened from Closed", async ({ page }) => {
   await addItem(page, "Write release notes");
 
@@ -924,4 +949,66 @@ test("a step's context edit that fails to save stays in the field, and Escape ne
   await field.press("Tab");
   await expect(field).toHaveCount(0);
   await expect(steps.getByText("New text")).toBeVisible();
+});
+
+test("the list keeps its place while items open, switch, walk and close over it", async ({ page, heapPath }) => {
+  const titles = Array.from({ length: 40 }, (_, i) => `Item ${String(i + 1).padStart(2, "0")}`);
+  for (const title of titles) {
+    const created = await page.request.post(`/api/v1${heapPath}/items`, {
+      headers: { "x-csrf-protection": "1" },
+      data: { title, need: "expected" },
+    });
+    expect(created.status()).toBe(201);
+  }
+  await page.goto(heapPath);
+  const rows = page.getByRole("listitem").filter({ has: page.locator("[data-row-link]") });
+  await expect(rows).toHaveCount(titles.length);
+
+  // Far down the list, with the row in the middle of the screen.
+  const far = rows.nth(30);
+  await far.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const scrolled = await page.evaluate(() => window.scrollY);
+  expect(scrolled).toBeGreaterThan(200);
+  const scrollY = () => page.evaluate(() => window.scrollY);
+  const title = (locator: typeof far) =>
+    locator.locator("[data-row-link]").evaluate((link) => link.firstChild?.textContent ?? "");
+
+  await openItem(page, await title(far));
+  await expect.poll(scrollY).toBe(scrolled);
+  await expect(far).toBeInViewport();
+
+  if (!isPhone(page)) {
+    // Another row, opened in place of this item. From the keyboard: a click retried while the pane still slides in
+    // scrolls the row into view itself.
+    const next = rows.nth(31);
+    await next.locator("[data-row-link]").evaluate((link: HTMLElement) => link.focus({ preventScroll: true }));
+    await page.keyboard.press("Enter");
+    await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(await title(next));
+    await expect.poll(scrollY).toBe(scrolled);
+
+    // The pane's ↑ walks back to the row before.
+    await itemPane(page).getByRole("link", { name: "Previous item" }).click();
+    await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(await title(far));
+    await expect.poll(scrollY).toBe(scrolled);
+  }
+
+  // Scrolled a little while the item is open, closing goes Back to the list where it is now. With Escape, as a click
+  // on ✕ retried while the pane still slides in scrolls the window to bring it into view.
+  await page.evaluate(() => window.scrollBy(0, -100));
+  const moved = scrolled - 100;
+  await expect.poll(scrollY).toBe(moved);
+  await page.keyboard.press("Escape");
+  await expect(itemPane(page)).toHaveCount(0);
+  await expect.poll(scrollY).toBe(moved);
+
+  // Opened from a link, the item closes to the list, which stays where it was scrolled to meanwhile.
+  await openItem(page, await title(far));
+  await page.goto(page.url());
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(await title(far));
+  await far.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const reloaded = await scrollY();
+  expect(reloaded).toBeGreaterThan(200);
+  await page.keyboard.press("Escape");
+  await expect(itemPane(page)).toHaveCount(0);
+  await expect.poll(scrollY).toBe(reloaded);
 });

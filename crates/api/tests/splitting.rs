@@ -367,7 +367,7 @@ async fn a_note_sent_all_the_way_passes_its_turn_to_the_tasks_split_from_it() ->
 
 #[gtest]
 #[tokio::test]
-async fn a_split_task_the_person_sent_on_already_keeps_its_turn() -> Result<()> {
+async fn became_ends_the_turn_the_person_sent_on_a_split_task_and_passes_none_on() -> Result<()> {
     // Arrange: a note sent all the way; its run makes task A, and the person sends A on, one state, before it became.
     let w = world().await?;
     let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
@@ -378,9 +378,46 @@ async fn a_split_task_the_person_sent_on_already_keeps_its_turn() -> Result<()> 
     // Act
     let became = w.became_in_run(&run, key_of(&note)).await?;
 
+    // Assert: defined meets A's turn, so it ended as reached, and A gets no turn from the note.
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(w.get(key_of(&a.body)).await?["turn"], eq(&Value::Null));
+    let entries = w.app.audit_entries(a.body["id"].as_str().context("id")?).await?;
+    let reached = entries
+        .iter()
+        .find(|(action, _)| action == "turn_reached")
+        .context("no turn_reached entry")?;
+    expect_that!(reached.1["how"], eq(&json!("became")));
+    expect_that!(reached.1["goal"], eq(&json!("defined")));
+    expect_that!(
+        entries.iter().filter(|(action, _)| action == "turn_opened").count(),
+        eq(1)
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_split_task_s_turn_to_done_stays_open_through_became() -> Result<()> {
+    // Arrange: a note sent all the way; its run makes task A, which the person defines and sends on, to done, then
+    // sets back to with context, so became defines it again.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&a.body)).await?;
+    let defined = w.edit(key_of(&a.body), json!({ "stage": "defined" })).await?;
+    anyhow::ensure!(defined.status == StatusCode::OK, "stage failed: {}", defined.body);
+    w.send_turn(key_of(&a.body)).await?;
+    let lowered = w.edit(key_of(&a.body), json!({ "stage": "with_context" })).await?;
+    anyhow::ensure!(lowered.status == StatusCode::OK, "stage failed: {}", lowered.body);
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
     // Assert
     expect_that!(became.status, eq(StatusCode::OK));
-    expect_that!(w.get(key_of(&a.body)).await?["turn"]["reach"], eq(&json!("one")));
+    let turn = &w.get(key_of(&a.body)).await?["turn"];
+    expect_that!(turn["reach"], eq(&json!("one")));
+    expect_that!(turn["goal"], eq(&json!("done")));
     Ok(())
 }
 
@@ -963,5 +1000,370 @@ async fn a_run_tried_again_adds_steps_to_the_tasks_the_failed_run_of_its_turn_sp
     expect_that!(stepped.status, eq(StatusCode::CREATED));
     expect_that!(became.status, eq(StatusCode::OK));
     expect_that!(became.body["state"], eq(&json!("became")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn became_ends_the_prepare_turn_of_a_task_the_person_split_and_passes_the_note_s_turn_on() -> Result<()> {
+    // Arrange: a note sent all the way and claimed; then the heap prepares new items, so the task the person makes
+    // from the note gets a prepare turn to defined. The run adds its step.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    set_prepare(&w).await?;
+    let task = w
+        .split(
+            &note,
+            "Rotate staging",
+            json!({ "description": "Done when: it works." }),
+        )
+        .await?;
+    anyhow::ensure!(task.status == StatusCode::CREATED, "split failed: {}", task.body);
+    expect_that!(task.body["turn"]["goal"], eq(&json!("defined")));
+    w.add_step_in_run(&run, key_of(&task.body)).await?;
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: the prepare turn ended as reached, and the task has the note's turn, all the way to done.
+    expect_that!(became.status, eq(StatusCode::OK));
+    let entries = w.app.audit_entries(task.body["id"].as_str().context("id")?).await?;
+    let reached = entries
+        .iter()
+        .find(|(action, _)| action == "turn_reached")
+        .context("no turn_reached entry")?;
+    expect_that!(reached.1["how"], eq(&json!("became")));
+    expect_that!(reached.1["goal"], eq(&json!("defined")));
+    let turn = &w.get(key_of(&task.body)).await?["turn"];
+    expect_that!(turn["reach"], eq(&json!("all_the_way")));
+    expect_that!(turn["goal"], eq(&json!("done")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn became_ends_the_prepare_turn_of_a_task_the_person_split_from_a_note_sent_one_state() -> Result<()> {
+    // Arrange: as above, with the note sent one state.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run("critical").await?;
+    set_prepare(&w).await?;
+    let task = w
+        .split(
+            &note,
+            "Rotate staging",
+            json!({ "description": "Done when: it works." }),
+        )
+        .await?;
+    anyhow::ensure!(task.status == StatusCode::CREATED, "split failed: {}", task.body);
+    w.add_step_in_run(&run, key_of(&task.body)).await?;
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: the prepare turn ended as reached, and no turn is left on the task.
+    expect_that!(became.status, eq(StatusCode::OK));
+    let entries = w.app.audit_entries(task.body["id"].as_str().context("id")?).await?;
+    expect_that!(
+        entries
+            .iter()
+            .any(|(action, diff)| action == "turn_reached" && diff["how"] == json!("became")),
+        eq(true)
+    );
+    expect_that!(w.get(key_of(&task.body)).await?["turn"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_split_task_the_person_sent_all_the_way_goes_on_with_its_own_turn() -> Result<()> {
+    // Arrange: a note sent all the way; its run makes task A, and the person sends A all the way too.
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run_reaching("critical", "all_the_way").await?;
+    let a = w.split_in_run(&run, &note, "Rotate staging", json!({})).await?;
+    w.add_step_in_run(&run, key_of(&a.body)).await?;
+    w.send_turn_reaching(key_of(&a.body), "all_the_way").await?;
+    let sent = w.get(key_of(&a.body)).await?["turn"].clone();
+
+    // Act
+    let became = w.became_in_run(&run, key_of(&note)).await?;
+
+    // Assert: A's turn to defined ended as reached and its own follow-on goes to done; the note passes none on.
+    expect_that!(became.status, eq(StatusCode::OK));
+    expect_that!(sent["goal"], eq(&json!("defined")));
+    expect_that!(w.get(key_of(&a.body)).await?["turn"]["goal"], eq(&json!("done")));
+    let entries = w.app.audit_entries(a.body["id"].as_str().context("id")?).await?;
+    expect_that!(
+        entries.iter().filter(|(action, _)| action == "turn_opened").count(),
+        eq(2)
+    );
+    Ok(())
+}
+
+impl World {
+    async fn task(&self, title: &str) -> Result<Value> {
+        self.app
+            .new_item(&self.session, &self.heap, json!({ "title": title, "kind": "task" }))
+            .await
+    }
+
+    async fn to_step(&self, note: &Value, task: &Value) -> Result<TestResponse> {
+        self.app
+            .send(
+                Method::POST,
+                &format!("{}/to-step", self.item_path(key_of(note)).await?),
+                Some(&self.session),
+                Some(json!({ "task_id": id(task) })),
+            )
+            .await
+    }
+
+    async fn to_step_in_run(&self, run: &str, note: &Value, task: &Value) -> Result<TestResponse> {
+        self.in_run(
+            run,
+            Method::POST,
+            &format!("{}/to-step", self.item_path(key_of(note)).await?),
+            Some(json!({ "task_id": id(task) })),
+        )
+        .await
+    }
+
+    async fn ask(&self, key: &str) -> Result<()> {
+        let asked = self
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/questions", self.item_path(key).await?),
+                Some(&self.session),
+                Some(json!({ "kind": "question", "text": "Which CA?" })),
+            )
+            .await?;
+        anyhow::ensure!(asked.status == StatusCode::CREATED, "ask failed: {}", asked.body);
+        Ok(())
+    }
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_person_makes_a_note_a_step_of_a_task() -> Result<()> {
+    // Arrange: a note with a context, an open turn and an open question, and a task with a step.
+    let w = world().await?;
+    let note = w.add_note("Certs are a mess", "expected").await?;
+    let task = w.task("Rotate the certs").await?;
+    w.app
+        .send(
+            Method::POST,
+            &format!("{}/steps", w.item_path(key_of(&task)).await?),
+            Some(&w.session),
+            Some(json!({ "title": "Order it" })),
+        )
+        .await?;
+    w.send_turn(key_of(&note)).await?;
+    w.ask(key_of(&note)).await?;
+
+    // Act
+    let moved = w.to_step(&note, &task).await?;
+
+    // Assert: the note became, naming the step and its task, and nothing is left open on it.
+    expect_that!(moved.status, eq(StatusCode::OK));
+    expect_that!(moved.body["state"], eq(&json!("became")));
+    expect_that!(moved.body["turn"], eq(&Value::Null));
+    expect_that!(moved.body["questions"][0]["state"], eq(&json!("withdrawn")));
+    expect_that!(moved.body["became"], eq(&json!([])));
+    expect_that!(moved.body["became_steps"][0]["number"], eq(&json!(2)));
+    expect_that!(moved.body["became_steps"][0]["title"], eq(&json!("Certs are a mess")));
+    expect_that!(moved.body["became_steps"][0]["state"], eq(&json!("open")));
+    expect_that!(moved.body["became_steps"][0]["task"]["key"], eq(&task["key"]));
+    expect_that!(
+        moved.body["became_steps"][0]["task"]["heap"]["id"],
+        eq(&json!(w.heap.as_str()))
+    );
+
+    // Assert: the task has the step at the end, with the note's context and its origin; its own state is unchanged.
+    let task_now = w.get(key_of(&task)).await?;
+    expect_that!(task_now["steps"][1]["title"], eq(&json!("Certs are a mess")));
+    expect_that!(task_now["steps"][1]["context"], eq(&json!("Everything is a mess.")));
+    expect_that!(task_now["steps"][1]["origin"]["key"], eq(&note["key"]));
+    expect_that!(task_now["steps"][0]["origin"], eq(&Value::Null));
+    expect_that!(task_now["state"], eq(&json!("open")));
+    expect_that!(task_now["version"], eq(&task["version"]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_becomes_a_step_only_of_an_open_task_of_its_heap() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let note = w.add_note("Certs are a mess", "expected").await?;
+    let (_, other_heap) = w.app.shared_heap(&w.session).await?;
+    let elsewhere = w
+        .app
+        .new_item(&w.session, &other_heap, json!({ "title": "Elsewhere", "kind": "task" }))
+        .await?;
+    let a_note = w.add_note("Just a note", "expected").await?;
+    let closed_task = w.task("Closed task").await?;
+    w.edit(key_of(&closed_task), json!({ "state": "done" })).await?;
+    let task = w.task("Rotate the certs").await?;
+    let unknown = json!({ "id": "018f0000-0000-7000-8000-000000000000" });
+
+    // Act
+    let in_other_heap = w.to_step(&note, &elsewhere).await?;
+    let unknown_task = w.to_step(&note, &unknown).await?;
+    let to_a_note = w.to_step(&note, &a_note).await?;
+    let to_a_closed_task = w.to_step(&note, &closed_task).await?;
+    let from_a_task = w.to_step(&task, &task).await?;
+    let first = w.to_step(&note, &task).await?;
+    let again = w.to_step(&note, &task).await?;
+    let from_closed = w.to_step(&closed_task, &task).await?;
+
+    // Assert
+    expect_that!(in_other_heap.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&in_other_heap), some(eq("step_task_not_in_heap")));
+    expect_that!(in_other_heap.body["field"], eq(&json!("task_id")));
+    expect_that!(unknown_task.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&unknown_task), some(eq("step_task_not_in_heap")));
+    expect_that!(to_a_note.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&to_a_note), some(eq("steps_need_task")));
+    expect_that!(to_a_closed_task.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&to_a_closed_task), some(eq("item_closed")));
+    expect_that!(from_a_task.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&from_a_task), some(eq("became_needs_note")));
+    expect_that!(first.status, eq(StatusCode::OK));
+    expect_that!(again.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&again), some(eq("item_closed")));
+    expect_that!(from_closed.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&from_closed), some(eq("became_needs_note")));
+    // Only the one step was added, and the refused moves left the note open.
+    expect_that!(
+        w.get(key_of(&task)).await?["steps"].as_array().map(Vec::len),
+        some(eq(1))
+    );
+    expect_that!(w.get(key_of(&a_note)).await?["state"], eq(&json!("open")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_closed_note_is_not_made_a_step() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let note = w.add_note("Certs are a mess", "expected").await?;
+    w.edit(key_of(&note), json!({ "state": "wont_do" })).await?;
+    let task = w.task("Rotate the certs").await?;
+
+    // Act
+    let refused = w.to_step(&note, &task).await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&refused), some(eq("item_closed")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_closed_list_and_the_step_carry_where_a_note_became_a_step() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let note = w.add_note("Certs are a mess", "expected").await?;
+    let task = w.task("Rotate the certs").await?;
+    w.to_step(&note, &task).await?;
+
+    // Act
+    let closed = w
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/closed", w.items_path().await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(closed.body["items"][0]["became"], eq(&json!([])));
+    expect_that!(
+        closed.body["items"][0]["became_steps"][0]["task"]["title"],
+        eq(&json!("Rotate the certs"))
+    );
+    // A list row doesn't carry them.
+    let ranked = w
+        .app
+        .send(Method::GET, &w.items_path().await?, Some(&w.session), None)
+        .await?;
+    expect_that!(ranked.body["items"][0]["became_steps"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_makes_its_note_a_step_and_reaches_the_turn() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run("expected").await?;
+    let task = w.task("Rotate the certs").await?;
+
+    // Act
+    let moved = w.to_step_in_run(&run, &note, &task).await?;
+
+    // Assert
+    expect_that!(moved.status, eq(StatusCode::OK));
+    expect_that!(moved.body["state"], eq(&json!("became")));
+    expect_that!(moved.body["turn"], eq(&Value::Null));
+    let note_now = w.get(key_of(&note)).await?;
+    expect_that!(note_now["runs"][0]["end"], eq(&json!("reached")));
+    expect_that!(
+        note_now["runs"][0]["result"],
+        eq(&json!(format!(
+            "Became step {0}.1 \"Certs are a mess\" of {0} \"Rotate the certs\"",
+            key_of(&task)
+        )))
+    );
+    // The task has the step, and no turn opens on it.
+    let task_now = w.get(key_of(&task)).await?;
+    expect_that!(task_now["steps"][0]["origin"]["key"], eq(&note["key"]));
+    expect_that!(task_now["turn"], eq(&Value::Null));
+    expect_that!(task_now["version"], eq(&task["version"]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_makes_only_its_own_note_a_step() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (_note, run) = w.note_in_a_run("expected").await?;
+    let other = w.add_note("Another note", "expected").await?;
+    let task = w.task("Rotate the certs").await?;
+
+    // Act
+    let refused = w.to_step_in_run(&run, &other, &task).await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&refused), some(eq("run_wrong_item")));
+    expect_that!(w.get(key_of(&task)).await?["steps"], eq(&json!([])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_with_an_open_question_on_its_note_does_not_make_it_a_step() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (note, run) = w.note_in_a_run("expected").await?;
+    let task = w.task("Rotate the certs").await?;
+    w.ask(key_of(&note)).await?;
+
+    // Act
+    let refused = w.to_step_in_run(&run, &note, &task).await?;
+
+    // Assert: nothing was written.
+    expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(code(&refused), some(eq("not_reached")));
+    expect_that!(w.get(key_of(&task)).await?["steps"], eq(&json!([])));
+    let note_now = w.get(key_of(&note)).await?;
+    expect_that!(note_now["state"], eq(&json!("open")));
+    expect_that!(note_now["turn"].is_object(), eq(true));
     Ok(())
 }

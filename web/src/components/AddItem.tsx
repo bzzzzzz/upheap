@@ -259,14 +259,19 @@ export function AddItemDialog({
     }
   };
 
-  const openItem = (item: Added) =>
+  const openItem = (item: Added) => {
+    // Added to the heap of the list on screen; the phone's Add also opens on the heap's other pages, with no view.
+    const overList = view !== undefined && sameHeap(item.heap, heapRef);
     void navigate({
       to: "/teams/$team/heaps/$heap/items/$item",
       params: { ...item.heap, item: item.key },
-      // In the list's heap, the item opens over the list as it is by then.
-      search: sameHeap(item.heap, heapRef) ? (prev) => prev : {},
+      // Over the list, the item opens over it as it is by then, and the page keeps its place; elsewhere, the list
+      // starts afresh at the top.
+      search: overList ? (prev) => prev : {},
+      resetScroll: !overList,
       state: (prev) => ({ ...prev, closesBack: true }),
     });
+  };
 
   // Open it in the dialog leaves the draft behind, so with a title typed it asks first.
   const onOpenAdded = (event: MouseEvent, item: Added) => {

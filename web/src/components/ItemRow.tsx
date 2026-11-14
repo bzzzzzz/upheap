@@ -200,6 +200,9 @@ export function ItemRow({
               search={true}
               replace={itemOpen}
               state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+              // The item opens over the list, which stays mounted, so the page keeps its place rather than going back
+              // to the top as a move to another page does.
+              resetScroll={false}
               onKeyDown={onKeyDown}
               // A swipe moves the row, not a dragged copy of the link.
               draggable={false}
@@ -310,6 +313,7 @@ export function ComingRow({
               search={true}
               replace={itemOpen}
               state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+              resetScroll={false}
               onKeyDown={onKeyDown}
               {...{ [ROW_LINK]: item.key }}
               aria-current={selected ? "true" : undefined}

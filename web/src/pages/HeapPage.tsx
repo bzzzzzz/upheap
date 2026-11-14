@@ -174,16 +174,24 @@ function useCloseItem(heapRef: HeapRef, itemKey: string | undefined) {
   const closesBack = useRouterState({ select: (state) => state.location.state.closesBack === true });
   const close = useCallback(() => {
     if (itemKey === undefined) return;
+    // The list was under the item all along, so it stays where it is now. Closing by navigating says so to the router;
+    // closing by Back can't, and on its way back the router scrolls to the top and the browser to where the list was
+    // when the item opened. So the window goes back to its place once both are done, before the next paint.
+    const { scrollX, scrollY } = window;
+    const list = router.buildLocation({ to: "/teams/$team/heaps/$heap", params: heapRef }).pathname;
     // Focus the row once the page it goes back to has rendered: before then, the row found may be this heap list's, on
     // its way out when the item was opened from another page, such as Waiting for me.
-    const unsubscribe = router.subscribe("onRendered", () => {
+    const unsubscribe = router.subscribe("onRendered", (event) => {
       unsubscribe();
+      if (closesBack && event.toLocation.pathname === list) {
+        window.requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
+      }
       window.setTimeout(() => focusRowOf(itemKey));
     });
     if (closesBack) {
       router.history.back();
     } else {
-      void navigate({ to: "/teams/$team/heaps/$heap", params: heapRef, search: true });
+      void navigate({ to: "/teams/$team/heaps/$heap", params: heapRef, search: true, resetScroll: false });
     }
   }, [router, navigate, closesBack, heapRef, itemKey]);
   return itemKey === undefined ? undefined : close;

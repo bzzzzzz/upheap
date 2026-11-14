@@ -27,6 +27,7 @@ pub mod step;
 pub mod tag;
 pub mod team;
 pub mod text;
+pub mod text_diff;
 pub mod time;
 pub mod turn;
 pub mod user;

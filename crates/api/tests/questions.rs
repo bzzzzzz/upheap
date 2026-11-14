@@ -992,10 +992,10 @@ async fn an_items_history_describes_the_questions_asked_and_answered() -> Result
     expect_that!(
         answered["changes"],
         eq(&json!([
-            { "field": "question", "label": "Question", "before": null, "after": "q1" },
-            { "field": "question_text", "label": "Question text", "before": null, "after": "Which CA?" },
-            { "field": "reply", "label": "Reply", "before": null, "after": "Internal, Let's Encrypt" },
-            { "field": "reply_comment", "label": "Comment", "before": null, "after": "Both" },
+            { "field": "question", "label": "Question", "before": null, "after": "q1", "text_diff": null },
+            { "field": "question_text", "label": "Question text", "before": null, "after": "Which CA?", "text_diff": null },
+            { "field": "reply", "label": "Reply", "before": null, "after": "Internal, Let's Encrypt", "text_diff": null },
+            { "field": "reply_comment", "label": "Comment", "before": null, "after": "Both", "text_diff": null },
         ]))
     );
     let asked = &history.body["entries"][1];
@@ -1003,11 +1003,11 @@ async fn an_items_history_describes_the_questions_asked_and_answered() -> Result
     expect_that!(
         asked["changes"],
         eq(&json!([
-            { "field": "question", "label": "Question", "before": null, "after": "q1" },
-            { "field": "question_kind", "label": "Kind", "before": null, "after": "Question" },
-            { "field": "question_text", "label": "Question text", "before": null, "after": "Which CA?" },
-            { "field": "question_choices", "label": "Choices", "before": null, "after": "Internal, Let's Encrypt" },
-            { "field": "question_many", "label": "Pick any", "before": null, "after": "yes" },
+            { "field": "question", "label": "Question", "before": null, "after": "q1", "text_diff": null },
+            { "field": "question_kind", "label": "Kind", "before": null, "after": "Question", "text_diff": null },
+            { "field": "question_text", "label": "Question text", "before": null, "after": "Which CA?", "text_diff": null },
+            { "field": "question_choices", "label": "Choices", "before": null, "after": "Internal, Let's Encrypt", "text_diff": null },
+            { "field": "question_many", "label": "Pick any", "before": null, "after": "yes", "text_diff": null },
         ]))
     );
     let actions: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();

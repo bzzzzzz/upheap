@@ -13,6 +13,7 @@ use domain::permission::{Permission, visible_audit_actions};
 use domain::question::QuestionKind;
 use domain::step::StepState;
 use domain::team::Role;
+use domain::text_diff::{WordDiff, diff_words};
 use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, RunId, SavedViewId, TeamId, Timestamp, UserId};
 use jiff::tz::TimeZone;
@@ -83,6 +84,10 @@ pub struct AuditChange {
     /// `None` when it had no value, and for values with no short form, such as what a saved view shows.
     pub before: Option<String>,
     pub after: Option<String>,
+    /// The edit as a word diff, for an edited text with a value before and after: an item's title and context, a
+    /// step's title and context, a heap's context. `None` for any other change, and when too little stayed the same
+    /// to read well as a diff.
+    pub text_diff: Option<WordDiff>,
 }
 
 /// Which history to read and from where.
@@ -598,11 +603,20 @@ fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<Aud
         if has_no_value(before) && has_no_value(after) {
             continue;
         }
+        let before = describe_value(field, before, names, tz);
+        let after = describe_value(field, after, names, tz);
+        let text_diff = match (&shape, &before, &after) {
+            (DiffShape::Changed, Some(before), Some(after)) if is_diffed_text(field, entry.entity_type) => {
+                diff_words(before, after)
+            }
+            _ => None,
+        };
         let change = AuditChange {
             field: field.clone(),
             label: describe_field(field, entry.entity_type).to_owned(),
-            before: describe_value(field, before, names, tz),
-            after: describe_value(field, after, names, tz),
+            before,
+            after,
+            text_diff,
         };
         // A created value with no short form, such as what a new saved view shows, would only say "changed".
         if matches!(shape, DiffShape::Created) && change.after.is_none() {
@@ -611,6 +625,21 @@ fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<Aud
         changes.push(change);
     }
     changes
+}
+
+/// Whether an edit of `field` shows as a word diff: the texts people edit, an item's title and context, a step's,
+/// and a heap's context. Other text, such as a tag's name, shows in full.
+fn is_diffed_text(field: &str, entity_type: EntityType) -> bool {
+    match entity_type {
+        EntityType::Item => matches!(field, "title" | "description" | "step_title" | "step_context"),
+        EntityType::Heap => field == "context",
+        EntityType::User
+        | EntityType::Team
+        | EntityType::Tag
+        | EntityType::SavedView
+        | EntityType::Parameter
+        | EntityType::InviteLink => false,
+    }
 }
 
 /// One change per parameter whose value differs, from maps of parameter ID to option ID.
@@ -634,6 +663,7 @@ fn describe_parameter_values(before: &Value, after: &Value, names: &Names) -> Ve
                 label: names.of_value(&Value::String(parameter.clone()), "Unknown parameter"),
                 before: option(before),
                 after: option(after),
+                text_diff: None,
             }
         })
         .collect()
@@ -837,6 +867,7 @@ fn describe_how(code: &str) -> Option<&'static str> {
     match code {
         "stage_set" => Some("Stage set by hand"),
         "already_met" => Some("Already at the goal"),
+        "became" => Some("Defined when its note became"),
         _ => None,
     }
 }
@@ -883,10 +914,18 @@ const fn describe_role(role: Role) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use domain::text_diff::{DiffPiece, DiffPieceKind};
     use googletest::prelude::*;
     use serde_json::json;
 
     use super::*;
+
+    fn piece(kind: DiffPieceKind, text: &str) -> DiffPiece {
+        DiffPiece {
+            kind,
+            text: text.to_owned(),
+        }
+    }
 
     fn entry(action: AuditAction, entity_type: EntityType, diff: Value) -> AuditEntry {
         AuditEntry {
@@ -909,6 +948,7 @@ mod tests {
             label: label.to_owned(),
             before: before.map(str::to_owned),
             after: after.map(str::to_owned),
+            text_diff: None,
         }
     }
 
@@ -1130,12 +1170,17 @@ mod tests {
             changes,
             elements_are![
                 eq(&change("step", "Step", None, Some("Run in prod"))),
-                eq(&change(
-                    "step_title",
-                    "Step title",
-                    Some("Run in staging"),
-                    Some("Run in prod")
-                )),
+                eq(&AuditChange {
+                    text_diff: Some(WordDiff {
+                        pieces: vec![
+                            piece(DiffPieceKind::Same, "Run in "),
+                            piece(DiffPieceKind::Removed, "staging"),
+                            piece(DiffPieceKind::Added, "prod"),
+                        ],
+                        spacing_only: false,
+                    }),
+                    ..change("step_title", "Step title", Some("Run in staging"), Some("Run in prod"))
+                }),
                 eq(&change("step_context", "Step context", Some("old"), None)),
                 eq(&change("step_state", "Step state", Some("Open"), Some("Ticked"))),
             ]
@@ -1144,5 +1189,95 @@ mod tests {
             describe_action(AuditAction::StepUpdated, false),
             eq(("changed a step of", true))
         );
+    }
+
+    #[gtest]
+    fn an_edited_context_comes_with_a_word_diff() {
+        let diff = json!({
+            "description": { "before": "Ship it on Friday.\nTell the team.", "after": "Ship it on Monday.\nTell the team." },
+            "title": { "before": "Launch", "after": "Launch day" },
+        });
+
+        let changes = describe_changes(
+            &entry(AuditAction::ItemUpdated, EntityType::Item, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![
+                field!(
+                    AuditChange.text_diff,
+                    some(field!(
+                        WordDiff.pieces,
+                        elements_are![
+                            eq(&piece(DiffPieceKind::Same, "Launch")),
+                            eq(&piece(DiffPieceKind::Added, " day")),
+                        ]
+                    ))
+                ),
+                field!(
+                    AuditChange.text_diff,
+                    some(field!(
+                        WordDiff.pieces,
+                        elements_are![
+                            eq(&piece(DiffPieceKind::Same, "Ship it on ")),
+                            eq(&piece(DiffPieceKind::Removed, "Friday.")),
+                            eq(&piece(DiffPieceKind::Added, "Monday.")),
+                            eq(&piece(DiffPieceKind::Same, "\nTell the team.")),
+                        ]
+                    ))
+                ),
+            ]
+        );
+    }
+
+    #[gtest]
+    fn a_heaps_edited_context_comes_with_a_word_diff() {
+        let diff =
+            json!({ "context": { "before": "Planning for the web app", "after": "Planning for the whole web app" } });
+
+        let changes = describe_changes(
+            &entry(AuditAction::HeapContextUpdated, EntityType::Heap, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![field!(
+                AuditChange.text_diff,
+                some(field!(
+                    WordDiff.pieces,
+                    contains(eq(&piece(DiffPieceKind::Added, "whole ")))
+                ))
+            )]
+        );
+    }
+
+    #[gtest]
+    fn a_change_that_cant_be_diffed_shows_in_full() {
+        let item_edit = json!({
+            // Set from nothing, cleared to nothing, and rewritten: nothing to diff, or too little kept.
+            "description": { "before": null, "after": "A new context" },
+            "step_context": { "before": "Old notes here", "after": null },
+            "title": { "before": "Fix the login page", "after": "Write the release notes" },
+            "state": { "before": "open", "after": "in_progress" },
+        });
+        let tag_edit = json!({ "name": { "before": "back end work", "after": "back end" } });
+        let item_created = json!({ "title": "Fix the login page" });
+
+        let changes: Vec<AuditChange> = [
+            entry(AuditAction::ItemUpdated, EntityType::Item, item_edit),
+            entry(AuditAction::TagUpdated, EntityType::Tag, tag_edit),
+            entry(AuditAction::ItemCreated, EntityType::Item, item_created),
+        ]
+        .iter()
+        .flat_map(|entry| describe_changes(entry, &Names::default(), &TimeZone::UTC))
+        .collect();
+
+        expect_that!(changes, len(eq(6)));
+        expect_that!(changes, each(field!(AuditChange.text_diff, none())));
     }
 }

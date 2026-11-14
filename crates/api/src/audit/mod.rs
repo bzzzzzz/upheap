@@ -36,6 +36,7 @@ fn to_audit_change_dto(change: AuditChange) -> AuditChangeDto {
         label: change.label,
         before: change.before,
         after: change.after,
+        text_diff: change.text_diff.map(Into::into),
     }
 }
 

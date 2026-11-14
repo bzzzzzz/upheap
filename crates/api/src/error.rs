@@ -216,6 +216,14 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("origin"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "origin_not_in_heap", Category::Caller)
         },
+        ServiceError::StepTaskNotInHeap { .. } => Classified {
+            field: Some("task_id"),
+            ..simple(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "step_task_not_in_heap",
+                Category::Caller,
+            )
+        },
         ServiceError::OriginNotANote { .. } => Classified {
             field: Some("origin"),
             ..simple(StatusCode::CONFLICT, "origin_not_a_note", Category::Conflict)

@@ -91,7 +91,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   loading the steps. Progress is ticked of open plus ticked, so dropped steps don't count. A step write takes the
   heap lock like any item write, then reads the item and its steps again with locking reads (see
   [Cycle detection and locking](#cycle-detection-and-locking)), and answers with the whole item. Steps of a closed
-  item are read-only, and come back editable, unchanged, when it is reopened.
+  item are read-only, and come back editable, unchanged, when it is reopened. A step made from a note
+  (`POST …/to-step`) keeps it in `item_steps.origin_id`, set once and never changed; an index on it serves the
+  lookup of the steps a note became, which the note and the closed list show as `became_steps`. The note was in the
+  task's heap then and a move stays in the team, so whoever sees the task sees the note.
 - **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
   a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
   highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
@@ -171,7 +174,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   failure, and withdraws the open questions asked in a run of it; the person's own stay open. A turn also ends as
   reached, with no run, when its item's stage is at the turn's goal (`Turn::goal_met_by`; never for done): at the
   person's edit that sets the stage (`how: stage_set`), or, as a safety net for any other way an item got there, when
-  a claim finds it (`already_met`) before choosing, so a met turn never costs a run; `next` skips such turns without
+  a claim finds it (`already_met`) before choosing, so a met turn never costs a run, or when a run's became
+  defines a task split from its note (`became`, below); `next` skips such turns without
   writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
   ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
@@ -184,16 +188,19 @@ The tables and columns are in the migrations. These are the conventions they fol
   `claim_run` and `move_item` do), then reads the run under lock and checks it is live; it refuses a reminder and an
   item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
   opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run, or that was split from
-  the run's item (`check_run_step_add`), and no other write to it. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
+  the run's item (`check_run_step_add`), and no other write to it. The one write outside those is `POST …/to-step`:
+  the run's own note becomes a step of any open task in its heap, which ends the run and the turn as reached. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
   shows to everyone. **A run splits its note:** an item made with an `origin` (`item add --from`) in a run must name
   the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn split
   from the note (`made_in_split`, `origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run
   checks that no question is open and every open task split from the note, in the note's heap, has a context and
   a step
   (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
-  run and turn end as reached with no follow-on on the note. If that turn was sent all the way, each of those tasks
-  not started and without an open turn gets one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener,
-  to done); a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
+  run and turn end as reached with no follow-on on the note. A task's own open turn that defined meets (the heap's
+  prepare turn, or one the person sent) ends as reached there too, as a stage edit ends it (`end_met_turn`, how
+  `became`). If the note's turn was sent all the way, each of those tasks not started and without an open turn gets
+  one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener, to done), but not one
+  whose ended turn the person sent: that task stays as they left it; a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
   `audit_log.run_id`, and so does a question (`item_questions.run_id`). The audit API sends an entry's run (`run`, with
   the run's item and its heap now when the caller may view that heap) and the web app marks the entry as the agent's;
   a question's run isn't shown yet. `work reached` checks
@@ -645,7 +652,10 @@ the remaining admins.
    tags and parameters named. The log is per team, so an item can only move within its team.
 5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone,
    a `phrase` to read after the actor's name, and `changes`, one per changed field with the values before and after
-   as text and IDs replaced by current names. The raw `diff` is returned too.
+   as text and IDs replaced by current names. The raw `diff` is returned too. An edited text people write (an
+   item's title and context, a step's, a heap's context) also comes with `text_diff`, a word diff computed when the
+   log is read (`domain::text_diff`), so nothing extra is stored and old entries get it too. It is the server's, not
+   the web app's, so every client shows the same diff, and none when too little stayed the same.
 6. A step's changes are recorded against its item (`StepAdded`, `StepUpdated`, with the item as the entity), so they
    read in the item's History and the heap's Activity, shown to those who may edit items. The diff names the step
    by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A comment is
