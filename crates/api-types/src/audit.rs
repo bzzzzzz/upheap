@@ -1,6 +1,7 @@
 //! Reading the audit log: a heap's history and a team's history, or one entity's within them.
 
 use domain::audit::{AuditAction, EntityType};
+use domain::text_diff::{DiffPiece, DiffPieceKind};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -175,6 +176,42 @@ pub struct AuditChangeDto {
     /// `null` when it had no value, and for values with no short form, such as what a saved view shows.
     pub before: Option<String>,
     pub after: Option<String>,
+    /// The edit as a word diff, whitespace and line breaks kept: the same and removed pieces make `before`, the same
+    /// and added pieces make `after`. Only for an edited item title or context, step title or context, or heap
+    /// context with a value before and after; `null` otherwise, and when too little stayed the same, so both are
+    /// shown in full.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub text_diff: Option<Vec<AuditDiffPieceDto>>,
+}
+
+/// Whether a piece of a text diff is in both versions, only the new one or only the old one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = AuditDiffPieceKind)]
+pub enum AuditDiffPieceKindDto {
+    Same,
+    Added,
+    Removed,
+}
+
+/// A stretch of text that is the same, added or removed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[schema(as = AuditDiffPiece)]
+pub struct AuditDiffPieceDto {
+    pub kind: AuditDiffPieceKindDto,
+    pub text: String,
+}
+
+impl From<DiffPiece> for AuditDiffPieceDto {
+    fn from(piece: DiffPiece) -> Self {
+        let kind = match piece.kind {
+            DiffPieceKind::Same => AuditDiffPieceKindDto::Same,
+            DiffPieceKind::Added => AuditDiffPieceKindDto::Added,
+            DiffPieceKind::Removed => AuditDiffPieceKindDto::Removed,
+        };
+        Self { kind, text: piece.text }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

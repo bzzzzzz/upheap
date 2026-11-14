@@ -1540,7 +1540,24 @@ export interface components {
             field: string;
             /** @description The field in words. */
             label: string;
+            /**
+             * @description The edit as a word diff, whitespace and line breaks kept: the same and removed pieces make `before`, the same
+             *     and added pieces make `after`. Only for an edited item title or context, step title or context, or heap
+             *     context with a value before and after; `null` otherwise, and when too little stayed the same, so both are
+             *     shown in full.
+             */
+            text_diff: components["schemas"]["AuditDiffPiece"][] | null;
         };
+        /** @description A stretch of text that is the same, added or removed. */
+        AuditDiffPiece: {
+            kind: components["schemas"]["AuditDiffPieceKind"];
+            text: string;
+        };
+        /**
+         * @description Whether a piece of a text diff is in both versions, only the new one or only the old one.
+         * @enum {string}
+         */
+        AuditDiffPieceKind: "same" | "added" | "removed";
         AuditEntity: {
             /** Format: uuid */
             id: string;
