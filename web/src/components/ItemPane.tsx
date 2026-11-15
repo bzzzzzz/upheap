@@ -22,6 +22,7 @@ import { ItemSteps } from "./ItemSteps";
 import { StatusLine } from "./ItemStatus";
 import { isClosed } from "./labels";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
+import { useOverListLink } from "./overList";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
@@ -507,6 +508,7 @@ function AddedBy({ item }: { item: Item }) {
  */
 function ItemFrom({ item }: { item: Item }) {
   const { origin, added_in_run: addedInRun } = item;
+  const overList = useOverListLink();
   if (!origin && !addedInRun) return null;
   if (!origin) return <p className="text-sm text-ink-soft">Added by an agent</p>;
   return (
@@ -516,6 +518,7 @@ function ItemFrom({ item }: { item: Item }) {
         to="/teams/$team/heaps/$heap/items/$item"
         params={{ team: origin.heap.team_slug, heap: origin.heap.slug, item: origin.key }}
         search={true}
+        {...overList({ team: origin.heap.team_slug, heap: origin.heap.slug }, origin.key)}
         className="text-accent-ink underline"
       >
         “{origin.title}”, a {origin.kind}

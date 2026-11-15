@@ -7,6 +7,7 @@ import { useState, type ReactNode } from "react";
 
 import type { AuditChange, AuditEntry } from "../api/client";
 import { useAuditLog, useMe, type AuditScope } from "../api/queries";
+import { useOverListLink } from "./overList";
 import { TextDiff } from "./TextDiff";
 
 /**
@@ -121,6 +122,7 @@ function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: str
     </>
   );
   const open = useParams({ strict: false });
+  const overList = useOverListLink();
   if (!run.item) {
     return <span className="font-medium">{words}</span>;
   }
@@ -134,6 +136,7 @@ function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: str
       hash={`run-${run.id}`}
       search={true}
       replace={itemOpen}
+      {...overList({ team, heap }, run.item.key)}
       // A fresh value on each click makes each one a new location, which the item's Runs section acts on.
       state={(prev) => ({
         ...prev,
