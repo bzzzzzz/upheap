@@ -13,7 +13,8 @@ import {
   SearchField,
 } from "react-aria-components";
 
-import type { HeapRef, Me } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Me } from "../api/schema";
 import { useCreateHeap, useTeam } from "../api/queries";
 import { readFoldedTeams, readRecentHeaps, writeFoldedTeams } from "./heapSwitcherStorage";
 import { PHONE, TOUCH, useMedia } from "./media";

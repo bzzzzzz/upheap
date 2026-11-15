@@ -3,7 +3,8 @@ import { Check, ChevronRight, CircleMinus, Ellipsis, Minus, Plus, Undo2 } from "
 import { useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
 
-import type { HeapRef, Item, Step, StepPatch } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Item, Step, StepPatch } from "../api/schema";
 import { useAddStep, useUpdateStep } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";

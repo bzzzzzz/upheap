@@ -4,7 +4,7 @@ import { Terminal } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
 import { useEndSignIn, useSignIns } from "../api/queries";
-import type { ClientSignIn } from "../api/client";
+import type { ClientSignIn } from "../api/schema";
 import { BASE } from "../basePath";
 import { compactButtonClass } from "./buttons";
 import { ProblemText } from "./ProblemText";

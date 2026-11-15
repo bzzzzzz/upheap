@@ -11,47 +11,41 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 
-import {
-  api,
-  ApiProblem,
-  ensureOk,
-  unwrap,
-  type AcrossHeapsQuery,
-  type AuthorizationRequest,
-  type ClientSignIn,
-  type NewComment,
-  type DataDays,
-  type Heap,
-  type HeapRef,
-  type Item,
-  type ItemPatch,
-  type ListViewQuery,
-  type NewItem,
-  type NewParameter,
-  type NewStep,
-  type PersonalToken,
-  type PersonalTokenExpiry,
-  type NewTag,
-  type Parameter,
-  type ParameterList,
-  type ParameterOption,
-  type RankedList,
-  type ParameterPatch,
-  type RankingPreviewRequest,
-  type Role,
-  type SendToAgent,
-  type Question,
-  type QuestionReply,
-  type Step,
-  type StepPatch,
-  type Tag,
-  type TagPatch,
-  type Team,
-  type User,
-  type Waiting,
-  type WaitingRow,
-  type WeightsPatch,
-} from "./client";
+import { api, ApiProblem, ensureOk, unwrap, type AcrossHeapsQuery, type HeapRef, type ListViewQuery } from "./client";
+import type {
+  AddCommentRequest,
+  AddStepRequest,
+  ClientSignIn,
+  CreateItemRequest,
+  CreateParameterRequest,
+  CreateTagRequest,
+  DataDays,
+  Heap,
+  HeapWeightsPatchRequest,
+  Item,
+  ItemPatchRequest,
+  OAuthAuthorizationRequest,
+  Parameter,
+  ParameterList,
+  ParameterOption,
+  ParameterPatchRequest,
+  PersonalToken,
+  PersonalTokenExpiry,
+  Question,
+  QuestionReplyRequest,
+  RankedList,
+  RankingPreviewRequest,
+  Role,
+  SendToAgentRequest,
+  Step,
+  StepPatch,
+  Tag,
+  TagPatchRequest,
+  Team,
+  User,
+  Waiting,
+  WaitingRow,
+} from "./schema";
 
 export const meQuery = queryOptions({
   queryKey: ["me"],
@@ -325,7 +319,7 @@ export function useRefetchRankedList() {
 export function useCreateItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ heap, body }: { heap: HeapRef; body: NewItem }) =>
+    mutationFn: async ({ heap, body }: { heap: HeapRef; body: CreateItemRequest }) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
     // Not returned: the mutation is done once the server has the item, and the lists catch up after.
     onSettled: (_item, _error, { heap }) => {
@@ -344,7 +338,7 @@ export function useUpdateItem(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: { id: "item-edits" },
-    mutationFn: async ({ item, patch }: { item: Item; patch: ItemPatch }) => {
+    mutationFn: async ({ item, patch }: { item: Item; patch: ItemPatchRequest }) => {
       const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
       return unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}", {
@@ -376,7 +370,7 @@ export function useAddStep(heap: HeapRef, taskKey: string) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: stepScope(heap, taskKey),
-    mutationFn: async (body: NewStep) =>
+    mutationFn: async (body: AddStepRequest) =>
       unwrap(
         await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/steps", {
           params: { path: { ...heap, item: taskKey } },
@@ -396,7 +390,7 @@ export function useAddStep(heap: HeapRef, taskKey: string) {
 export function useAddComment(heap: HeapRef, key: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: NewComment) =>
+    mutationFn: async (body: AddCommentRequest) =>
       unwrap(
         await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/comments", {
           params: { path: { ...heap, item: key } },
@@ -456,7 +450,7 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
       version: opened,
     }: {
       question: Question;
-      reply: QuestionReply;
+      reply: QuestionReplyRequest;
       version?: number;
     }) => {
       const cached = queryClient
@@ -526,7 +520,7 @@ function replaceListedItem(queryClient: QueryClient, heap: HeapRef, saved: Item)
 export function useSendToAgent(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ item, body }: { item: Item; body: SendToAgent }) =>
+    mutationFn: async ({ item, body }: { item: Item; body: SendToAgentRequest }) =>
       unwrap(
         await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/turn", {
           params: { path: { ...heap, item: item.key } },
@@ -717,7 +711,7 @@ export function useTags(heap: HeapRef, enabled = true) {
 export function useCreateTag(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: NewTag) =>
+    mutationFn: async (body: CreateTagRequest) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/tags", { params: { path: heap }, body })),
     onSettled: () => queryClient.invalidateQueries({ queryKey: tagsKey(heap) }),
   });
@@ -726,7 +720,7 @@ export function useCreateTag(heap: HeapRef) {
 export function useUpdateTag(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ tag, patch }: { tag: Tag; patch: TagPatch }) =>
+    mutationFn: async ({ tag, patch }: { tag: Tag; patch: TagPatchRequest }) =>
       unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/tags/{tag_id}", {
           params: { path: { ...heap, tag_id: tag.id }, header: { "If-Match": `"${tag.version}"` } },
@@ -762,7 +756,7 @@ function invalidateParameters(queryClient: QueryClient, heap: HeapRef, itemsToo 
 export function useCreateParameter(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: NewParameter) =>
+    mutationFn: async (body: CreateParameterRequest) =>
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/parameters", { params: { path: heap }, body })),
     onSettled: () => invalidateParameters(queryClient, heap),
   });
@@ -770,7 +764,7 @@ export function useCreateParameter(heap: HeapRef) {
 
 /** Every change to one parameter that takes its version: name and weight, options, tags. */
 export type ParameterChange =
-  | { kind: "patch"; patch: ParameterPatch }
+  | { kind: "patch"; patch: ParameterPatchRequest }
   | { kind: "add_option"; label: string }
   | { kind: "arrange_options"; options: ParameterOption[] }
   | { kind: "link_tags"; tagIds: string[] };
@@ -926,7 +920,10 @@ export function useRegisterOidc() {
  * The client an OAuth authorization request is from, once the server has checked the request; until then the
  * consent page shows no choice and sends the browser nowhere. Not retried: a bad request stays bad.
  */
-export function useAuthorizationCheck(request: AuthorizationRequest, { enabled = true }: { enabled?: boolean } = {}) {
+export function useAuthorizationCheck(
+  request: OAuthAuthorizationRequest,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: ["oauth-authorization", request],
     queryFn: async () => unwrap(await api.GET("/api/v1/oauth/authorize", { params: { query: request } })),
@@ -939,7 +936,7 @@ export function useAuthorizationCheck(request: AuthorizationRequest, { enabled =
 /** Approves an authorization request for the signed-in user; the answer says where to send the browser. */
 export function useApproveAuthorization() {
   return useMutation({
-    mutationFn: async (body: AuthorizationRequest) => unwrap(await api.POST("/api/v1/oauth/authorize", { body })),
+    mutationFn: async (body: OAuthAuthorizationRequest) => unwrap(await api.POST("/api/v1/oauth/authorize", { body })),
   });
 }
 
@@ -1439,7 +1436,7 @@ export function useSetHeapArchived(team: string) {
 export function useUpdateWeights(heapRef: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ heap, body }: { heap: Heap; body: WeightsPatch }) =>
+    mutationFn: async ({ heap, body }: { heap: Heap; body: HeapWeightsPatchRequest }) =>
       unwrap(
         await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/weights", {
           params: { path: heapRef, header: { "If-Match": `"${heap.version}"` } },

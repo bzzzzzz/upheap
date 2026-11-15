@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 
-import type { ItemParameter, Parameter } from "../api/client";
+import type { ItemParameter, Parameter } from "../api/schema";
 import { ChoiceButtons, FieldFrame, type FieldLayout } from "./ChoiceButtons";
 
 /**

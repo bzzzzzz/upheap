@@ -1,4 +1,4 @@
-import type { ItemRef } from "../api/client";
+import type { ItemRef } from "../api/schema";
 import { isClosed, STATE_LABELS } from "./labels";
 
 /**

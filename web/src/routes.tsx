@@ -13,7 +13,8 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 
-import { isUnauthenticated, type AuthorizationRequest } from "./api/client";
+import { isUnauthenticated } from "./api/client";
+import type { OAuthAuthorizationRequest } from "./api/schema";
 import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queries";
 import { BASE } from "./basePath";
 import { parseAcrossSearch, parseListSearch } from "./components/listView";
@@ -122,7 +123,7 @@ function goAfterSignIn(router: ReturnType<typeof useRouter>, page: ReturnType<ty
 }
 
 /** The OAuth authorization request in a query, its values as they came. The server checks every one. */
-function toAuthorizationRequest(search: Record<string, unknown>): AuthorizationRequest {
+function toAuthorizationRequest(search: Record<string, unknown>): OAuthAuthorizationRequest {
   const keys = [
     "response_type",
     "client_id",
@@ -131,7 +132,7 @@ function toAuthorizationRequest(search: Record<string, unknown>): AuthorizationR
     "code_challenge_method",
     "state",
   ] as const;
-  const request: AuthorizationRequest = {};
+  const request: OAuthAuthorizationRequest = {};
   for (const key of keys) {
     const value = search[key];
     if (typeof value === "string") request[key] = value;

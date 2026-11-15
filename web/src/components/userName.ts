@@ -1,4 +1,4 @@
-import type { UserRef } from "../api/client";
+import type { UserRef } from "../api/schema";
 import { useMe } from "../api/queries";
 
 /**

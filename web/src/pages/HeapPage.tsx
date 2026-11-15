@@ -2,7 +2,8 @@ import { type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { ApiProblem, type Item, type ItemPatch, type RankedItem, type RankedList, type HeapRef } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { Item, ItemPatchRequest, RankedItem, RankedList } from "../api/schema";
 import { useMe, useRankedList, useUpdateItem } from "../api/queries";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
@@ -139,7 +140,7 @@ export function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
     // TanStack drops a call's callbacks once the component that made it has unmounted.
     update.mutateAsync({ item, patch: { state } }).then(
       (saved) => {
-        const restore: ItemPatch = { state: item.state };
+        const restore: ItemPatchRequest = { state: item.state };
         if (item.state === "blocked" && item.blocked_by) restore.blocked_by_item_id = item.blocked_by.id;
         if (item.state === "blocked" && item.blocked_reason) restore.blocked_reason = item.blocked_reason;
         setToast({

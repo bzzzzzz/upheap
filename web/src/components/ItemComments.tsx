@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { Button, Label, TextArea, TextField } from "react-aria-components";
 
-import type { HeapRef, Item } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Item } from "../api/schema";
 import { useAddComment } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";

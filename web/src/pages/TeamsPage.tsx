@@ -1,7 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { ApiProblem, type Me } from "../api/client";
+import { ApiProblem } from "../api/client";
+import type { Me } from "../api/schema";
 import { useCreateTeam, useMe } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";

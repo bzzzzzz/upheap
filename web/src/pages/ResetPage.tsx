@@ -1,7 +1,8 @@
 import { useRouter } from "@tanstack/react-router";
 import { useRef, useState, type FormEvent } from "react";
 
-import { ApiProblem, type PasswordReset, type PasswordResetAccount } from "../api/client";
+import { ApiProblem } from "../api/client";
+import type { PasswordReset, PasswordResetAccount } from "../api/schema";
 import { usePasswordReset, useResetPassword } from "../api/queries";
 import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";

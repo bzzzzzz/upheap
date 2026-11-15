@@ -1,4 +1,5 @@
-import type { HeapRef, Me } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Me } from "../api/schema";
 import { useMe } from "../api/queries";
 
 type NamedTeam = { name: string; personal: boolean };

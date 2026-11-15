@@ -1,7 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
-import type { Item, ItemState } from "../api/client";
+import type { Item, ItemState } from "../api/schema";
 import { compactButtonClass } from "./buttons";
 import { isClosed } from "./labels";
 import { rowOf, type ChangeState } from "./ItemRow";

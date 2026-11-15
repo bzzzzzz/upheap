@@ -1,4 +1,4 @@
-import type { ItemTag } from "../api/client";
+import type { ItemTag } from "../api/schema";
 
 /**
  * An item's tags in a list row, in the order the server sends them, as grey chips (violet is kept for parameters).

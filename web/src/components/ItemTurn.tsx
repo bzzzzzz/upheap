@@ -2,7 +2,8 @@ import { Bot } from "lucide-react";
 import { useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
-import { ApiProblem, type Goal, type HeapRef, type Item, type Reach, type Turn } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { Goal, Item, Reach, Turn } from "../api/schema";
 import { useRedoTurn, useSendToAgent, useTakeBack } from "../api/queries";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { chipClass, compactButtonClass } from "./buttons";

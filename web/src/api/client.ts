@@ -1,97 +1,9 @@
-// Typed API client. Types come from the generated schema only; never write API types by hand.
+// Typed API client. Types come from the generated schema only; never write API types by hand. Schema types are
+// imported from `./schema` under their own names.
 import createClient, { type Middleware } from "openapi-fetch";
 
-import type { components, paths } from "./schema";
+import type { paths, Problem } from "./schema";
 
-export type Schemas = components["schemas"];
-export type Item = Schemas["Item"];
-export type RankedItem = Schemas["RankedItem"];
-export type RankedList = Schemas["RankedList"];
-export type AcrossHeapsList = Schemas["AcrossHeapsList"];
-export type AcrossHeapsItem = Schemas["AcrossHeapsItem"];
-export type ClosedItems = Schemas["ClosedItems"];
-export type Me = Schemas["Me"];
-export type ClientSignIn = Schemas["ClientSignIn"];
-export type PersonalToken = Schemas["PersonalToken"];
-export type PersonalTokenMade = Schemas["PersonalTokenMade"];
-export type PersonalTokenExpiry = Schemas["PersonalTokenExpiry"];
-export type Size = Schemas["Size"];
-export type Need = Schemas["Need"];
-export type Kind = Schemas["Kind"];
-export type Stage = Schemas["Stage"];
-export type ItemState = Schemas["ItemState"];
-export type ClosedGroup = Schemas["ClosedGroup"];
-export type ItemPatch = Schemas["ItemPatchRequest"];
-export type NewItem = Schemas["CreateItemRequest"];
-export type Step = Schemas["Step"];
-export type StepState = Schemas["StepState"];
-export type StepPatch = Schemas["StepPatch"];
-export type StepProgress = Schemas["StepProgress"];
-export type NewStep = Schemas["AddStepRequest"];
-export type Question = Schemas["Question"];
-export type Comment = Schemas["Comment"];
-export type ItemRun = Schemas["ItemRun"];
-export type RunEnd = Schemas["RunEnd"];
-export type NewComment = Schemas["AddCommentRequest"];
-export type Turn = Schemas["Turn"];
-export type Reach = Schemas["Reach"];
-export type Goal = Schemas["Goal"];
-export type AgentState = Schemas["AgentState"];
-export type SendToAgent = Schemas["SendToAgentRequest"];
-export type Decisions = Schemas["Decisions"];
-export type DecisionRow = Schemas["DecisionRow"];
-export type Results = Schemas["Results"];
-export type ResultRow = Schemas["ResultRow"];
-export type Waiting = Schemas["Waiting"];
-export type WaitingRow = Schemas["WaitingRow"];
-export type WaitingStuck = Schemas["WaitingStuck"];
-export type WaitingBlocker = Schemas["WaitingBlocker"];
-export type BlockerGone = Schemas["BlockerGone"];
-export type QuestionReply = Schemas["QuestionReplyRequest"];
-export type Tag = Schemas["Tag"];
-export type TagList = Schemas["TagList"];
-export type ItemTag = Schemas["ItemTag"];
-export type ItemRef = Schemas["ItemRef"];
-export type TagPatch = Schemas["TagPatchRequest"];
-export type NewTag = Schemas["CreateTagRequest"];
-export type StateMode = Schemas["StateMode"];
-export type RemindersMode = Schemas["RemindersMode"];
-export type BlockedLayout = Schemas["BlockedLayout"];
-export type ListSort = Schemas["ListSort"];
-export type Team = Schemas["Team"];
-export type TeamMember = Schemas["TeamMember"];
-export type Role = Schemas["Role"];
-export type InviteLink = Schemas["InviteLink"];
-export type Invitation = Schemas["Invitation"];
-export type PasswordReset = Schemas["PasswordReset"];
-export type PasswordResetAccount = Schemas["PasswordResetAccount"];
-export type Heap = Schemas["Heap"];
-export type UserMatch = Schemas["UserMatch"];
-export type User = Schemas["User"];
-export type UserRef = Schemas["UserRef"];
-export type Parameter = Schemas["Parameter"];
-export type ParameterList = Schemas["ParameterList"];
-export type ParameterOption = Schemas["ParameterOption"];
-export type ItemParameter = Schemas["ItemParameter"];
-export type NewParameter = Schemas["CreateParameterRequest"];
-export type ParameterPatch = Schemas["ParameterPatchRequest"];
-export type HeapWeights = Schemas["HeapWeights"];
-export type WeightsPatch = Schemas["HeapWeightsPatchRequest"];
-export type RankingPreviewRequest = Schemas["RankingPreviewRequest"];
-export type RankingPreview = Schemas["RankingPreview"];
-export type TeamData = Schemas["TeamData"];
-export type DataBucket = Schemas["DataBucket"];
-export type DataDays = Schemas["DataDays"];
-export type AuditEntry = Schemas["AuditEntry"];
-export type AuditChange = Schemas["AuditChange"];
-export type AuditTextDiff = Schemas["AuditTextDiff"];
-export type AccountEvent = Schemas["AccountEvent"];
-export type AuditAction = Schemas["AuditAction"];
-export type AuditEntityType = Schemas["AuditEntityType"];
-export type DueInput = Schemas["DueInput"];
-export type DueChoice = Schemas["DueChoice"];
-/** An OAuth authorization request, as a client such as the CLI puts it in the consent page's address. */
-export type AuthorizationRequest = Schemas["OAuthAuthorizationRequest"];
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
   NonNullable<paths["/api/v1/teams/{team}/heaps/{heap}/items"]["get"]["parameters"]["query"]>,
@@ -106,7 +18,6 @@ export type AcrossHeapsQuery = Omit<NonNullable<paths["/api/v1/me/items"]["get"]
  * of the heap's API routes, so it goes into `params.path` as it is.
  */
 export type HeapRef = { team: string; heap: string };
-type Problem = Schemas["Problem"];
 
 /** A failed API call. Branch on `code`, never on `message`. */
 export class ApiProblem extends Error {

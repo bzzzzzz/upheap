@@ -3,7 +3,8 @@ import { Bot } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
-import type { HeapRef, Item, ItemState, RankedItem, RankedList, Turn } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Item, ItemState, RankedItem, RankedList, Turn } from "../api/schema";
 import { useSendWithUndo } from "./ItemTurn";
 import { KindIcon, StageIcon, TargetIcon } from "./kindIcons";
 import { GOAL_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";

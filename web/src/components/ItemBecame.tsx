@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import type { Item, StepState } from "../api/client";
+import type { Item, StepState } from "../api/schema";
 import { useOverListLink } from "./overList";
 import { becameWords, STATE_LABELS } from "./labels";
 

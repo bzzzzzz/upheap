@@ -3,7 +3,8 @@ import { Check, ChevronDown, ChevronUp, Link as LinkIcon, X } from "lucide-react
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { ApiProblem, type Item, type ItemPatch, type ItemState, type RankedItem, type HeapRef } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { Item, ItemPatchRequest, ItemState, RankedItem } from "../api/schema";
 import { useItem, useUpdateItem } from "../api/queries";
 import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
@@ -289,7 +290,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   const closed = isClosed(item.state);
   const canEdit = item.allowed_actions.includes("edit") && !closed;
   const canReopen = item.allowed_actions.includes("reopen");
-  const save = (patch: ItemPatch) => update.mutate({ item, patch });
+  const save = (patch: ItemPatchRequest) => update.mutate({ item, patch });
   // A change to a state that takes the item back from the agent that has it asks first (ux.md, The item); the server
   // does the take back with the change.
   const [askState, setAskState] = useState<ItemState | null>(null);

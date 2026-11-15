@@ -11,7 +11,7 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "gen:api": "openapi-typescript ../openapi.json -o src/api/schema.d.ts",
+    "gen:api": "openapi-typescript ../openapi.json -o src/api/schema.d.ts --root-types --root-types-no-schema-prefix",
     "e2e": "playwright test"
   },
   "dependencies": {

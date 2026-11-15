@@ -1,7 +1,7 @@
 import { ChevronRight, Ellipsis, History, Link as LinkIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { InviteLink, Team } from "../api/client";
+import type { InviteLink, Team } from "../api/schema";
 import { useCreateInviteLink, useInviteLinks, useMe, useRevokeInviteLink } from "../api/queries";
 import { AuditHistory } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";

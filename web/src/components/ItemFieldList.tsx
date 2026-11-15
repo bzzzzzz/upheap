@@ -2,7 +2,8 @@ import { ChevronDown } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { ToggleButtonGroup } from "react-aria-components";
 
-import type { HeapRef, Item, ItemPatch, Need, RankedItem, Size } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Item, ItemPatchRequest, Need, RankedItem, Size } from "../api/schema";
 import { useParameters } from "../api/queries";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DateField } from "./DateField";
@@ -40,7 +41,7 @@ export function ItemFieldList({
   item: Item;
   entry: RankedItem | undefined;
   canEdit: boolean;
-  save: (patch: ItemPatch) => void;
+  save: (patch: ItemPatchRequest) => void;
 }) {
   const parameters = useParameters(heapRef);
   const reminder = item.kind === "reminder";

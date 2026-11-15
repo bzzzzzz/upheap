@@ -1,4 +1,4 @@
-import type { ItemRef, RankedItem } from "../api/client";
+import type { ItemRef, RankedItem } from "../api/schema";
 
 /**
  * The items each item may wait for: every listed item except itself and those that already wait for it, directly

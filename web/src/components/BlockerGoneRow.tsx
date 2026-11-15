@@ -2,7 +2,8 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Button } from "react-aria-components";
 
-import { ApiProblem, type BlockerGone, type HeapRef, type WaitingBlocker } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { BlockerGone, WaitingBlocker } from "../api/schema";
 import { useUnblock } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";

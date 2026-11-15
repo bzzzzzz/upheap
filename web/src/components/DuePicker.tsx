@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components";
 
-import type { DueInput } from "../api/client";
+import type { DueInput } from "../api/schema";
 import { useDueChoices } from "../api/queries";
 import { choiceButtonClass, FieldFrame, FieldLabel, type FieldLayout } from "./ChoiceButtons";
 import { SheetChoice } from "./Sheet";

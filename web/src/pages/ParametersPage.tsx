@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-import type { HeapRef, ItemTag, Parameter, ParameterOption } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { ItemTag, Parameter, ParameterOption } from "../api/schema";
 import {
   useArchiveOption,
   useArchiveParameter,
