@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 import type { Item, StepState } from "../api/client";
+import { useOverListLink } from "./overList";
 import { becameWords, STATE_LABELS } from "./labels";
 
 const linkClass =
@@ -22,6 +23,7 @@ export function ItemBecame({ item }: { item: Item }) {
   const made = item.became ?? [];
   const steps = item.became_steps ?? [];
   const heaps = item.became_heaps ?? [];
+  const overList = useOverListLink();
   if (made.length === 0 && steps.length === 0 && heaps.length === 0) return null;
   return (
     <section aria-label="Became" className="flex flex-col gap-1 text-sm">
@@ -36,6 +38,7 @@ export function ItemBecame({ item }: { item: Item }) {
               to="/teams/$team/heaps/$heap/items/$item"
               params={{ team: child.heap.team_slug, heap: child.heap.slug, item: child.key }}
               search={true}
+              {...overList({ team: child.heap.team_slug, heap: child.heap.slug }, child.key)}
               className={linkClass}
             >
               {child.title}
@@ -51,6 +54,7 @@ export function ItemBecame({ item }: { item: Item }) {
                 to="/teams/$team/heaps/$heap/items/$item"
                 params={{ team: step.task.heap.team_slug, heap: step.task.heap.slug, item: step.task.key }}
                 search={true}
+                {...overList({ team: step.task.heap.team_slug, heap: step.task.heap.slug }, step.task.key)}
                 className={linkClass}
               >
                 “{step.task.title}”
