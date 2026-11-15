@@ -78,6 +78,15 @@ coded_enum! {
 }
 
 impl Kind {
+    /// The kind as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Note => "Note",
+            Self::Task => "Task",
+            Self::Reminder => "Reminder",
+        }
+    }
+
     /// Whether an item of this kind can be at `stage`. Only a task can be defined.
     pub const fn allows(self, stage: Stage) -> bool {
         match self {
@@ -97,6 +106,17 @@ coded_enum! {
         WithContext = "with_context",
         /// Clear enough to start on. Only a task can be here.
         Defined = "defined",
+    }
+}
+
+impl Stage {
+    /// The stage as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::AsWritten => "As written",
+            Self::WithContext => "With context",
+            Self::Defined => "Defined",
+        }
     }
 }
 
@@ -175,6 +195,18 @@ impl StateKind {
 
     pub const fn is_closed(self) -> bool {
         matches!(self, Self::Done | Self::WontDo | Self::Became)
+    }
+
+    /// The state as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Open => "Open",
+            Self::InProgress => "In progress",
+            Self::Blocked => "Blocked",
+            Self::Done => "Done",
+            Self::WontDo => "Won't do",
+            Self::Became => "Became",
+        }
     }
 }
 
