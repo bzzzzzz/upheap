@@ -597,7 +597,7 @@ async fn the_agent_filter_keeps_items_with_an_agent_that_is_queued_or_running() 
 
     // Assert
     expect_that!(titles(&queued.body["ranked"]), elements_are![eq("Sent")]);
-    expect_that!(queued.body["ranked"][0]["item"]["turn"]["running"], eq(&json!(false)));
+    expect_that!(queued.body["ranked"][0]["item"]["agent_state"], eq(&json!("queued")));
     expect_that!(titles(&none.body["ranked"]), elements_are![eq("Unsent")]);
     expect_that!(unknown.status, eq(StatusCode::BAD_REQUEST));
     Ok(())
@@ -628,7 +628,7 @@ async fn a_claimed_item_is_running_and_no_longer_queued() -> Result<()> {
 
     // Assert
     expect_that!(titles(&running.body["ranked"]), elements_are![eq("Sent")]);
-    expect_that!(running.body["ranked"][0]["item"]["turn"]["running"], eq(&json!(true)));
+    expect_that!(running.body["ranked"][0]["item"]["agent_state"], eq(&json!("running")));
     expect_that!(titles(&queued.body["ranked"]), is_empty());
     Ok(())
 }
@@ -649,5 +649,42 @@ async fn going_to_done_matches_a_note_sent_all_the_way() -> Result<()> {
     // Assert
     expect_that!(titles(&done.body["ranked"]), elements_are![eq("Sent")]);
     expect_that!(titles(&with_context.body["ranked"]), is_empty());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_open_question_makes_the_item_wait_and_a_blocked_item_with_a_turn_is_queued() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let asked = note(&app, &session, &heap, "Asked").await?;
+    let blocked = note(&app, &session, &heap, "Blocked").await?;
+    send_to_agent(&app, &session, &asked, "one").await?;
+    send_to_agent(&app, &session, &blocked, "one").await?;
+    move_to(&app, &session, &blocked, "blocked").await?;
+    let question = app
+        .send(
+            Method::POST,
+            &format!("{}/questions", app.item_url(&asked).await?),
+            Some(&session),
+            Some(json!({ "kind": "question", "text": "Which CA?" })),
+        )
+        .await?;
+    anyhow::ensure!(question.status == StatusCode::CREATED, "ask failed: {}", question.body);
+
+    // Act
+    let waits = list(&app, &session, &heap, "agent=waits").await?;
+    let queued = list(&app, &session, &heap, "agent=queued").await?;
+    let queued_with_blocked = list(&app, &session, &heap, "agent=queued&blocked=shown").await?;
+
+    // Assert
+    expect_that!(titles(&waits.body["ranked"]), elements_are![eq("Asked")]);
+    expect_that!(waits.body["ranked"][0]["item"]["agent_state"], eq(&json!("waits")));
+    expect_that!(titles(&queued.body["ranked"]), is_empty());
+    expect_that!(
+        titles(&queued_with_blocked.body["blocked"]),
+        elements_are![eq("Blocked")]
+    );
     Ok(())
 }

@@ -98,6 +98,8 @@ pub struct ItemView {
     pub turn: Option<TurnView>,
     /// Whether an agent has the item (see [`domain::turn::with_agent`]).
     pub with_agent: bool,
+    /// Where the item stands with the agents (see [`domain::turn::agent_state`]).
+    pub agent_state: AgentState,
     /// The item this one was made from, when the caller may see the heap it is in. `None` otherwise, and in lists,
     /// which don't look it up: the item's own view does.
     pub origin: Option<ItemOrigin>,
@@ -454,6 +456,7 @@ impl Services {
                 waits_for_you: false,
                 turn: None,
                 with_agent: false,
+                agent_state: AgentState::None,
                 origin: None,
                 step_origins: HashMap::new(),
             }
@@ -532,6 +535,12 @@ impl Services {
             let blocker_gone = view.blocker_gone.is_some();
             view.waits_for_you = waits_for_you(&view.item, &heap, open_questions, stuck, blocker_gone);
             view.with_agent = with_agent(&view.item, &heap, open_questions, turn.is_some(), stuck, blocker_gone);
+            view.agent_state = agent_state(
+                turn.is_some(),
+                stuck,
+                view.with_agent,
+                turn.as_ref().is_some_and(|turn| turn.running),
+            );
             view.allowed_actions = allowed_item_actions(&view.item, &heap, role, turn.is_some(), stuck, now);
             view.turn = turn;
         }
@@ -675,6 +684,7 @@ impl Services {
                     waits_for_you: false,
                     turn: None,
                     with_agent: false,
+                    agent_state: AgentState::None,
                     origin: None,
                     step_origins: HashMap::new(),
                 }
@@ -847,6 +857,11 @@ impl Services {
             waits_for_you: false,
             // A new item has no questions, so an open turn is an agent having it.
             with_agent: turn.is_some(),
+            agent_state: if turn.is_some() {
+                AgentState::Queued
+            } else {
+                AgentState::None
+            },
             turn,
             origin,
             step_origins: HashMap::new(),
@@ -1384,6 +1399,12 @@ pub(crate) async fn build_item_view(
         comments: Some(comments),
         runs: Some(runs),
         waits_for_you,
+        agent_state: agent_state(
+            turn.is_some(),
+            stuck,
+            with_agent,
+            turn.as_ref().is_some_and(|turn| turn.running),
+        ),
         turn,
         with_agent,
     })

@@ -133,6 +133,7 @@ pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -
         next_goal,
         goal_choices,
         with_agent: view.with_agent,
+        agent_state: view.agent_state.into(),
         origin: view.origin.map(to_item_origin_dto),
         added_in_run: item.created_run_id.is_some(),
         version: item.version.get(),
@@ -174,7 +175,6 @@ pub(crate) fn to_turn_dto(view: TurnView, as_of: Timestamp, tz: &TimeZone) -> Tu
         describe_since(view.turn.opened_at, as_of, tz),
         view.runs,
         view.stuck_reason,
-        view.running,
     )
 }
 

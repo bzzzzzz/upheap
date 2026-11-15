@@ -489,6 +489,7 @@ function NarrowSection({
         {GOING_TO.map((goal) => (
           <Toggle
             key={goal}
+            label={`Going to: ${GOING_TO_LABELS[goal]}`}
             pressed={splitList(view.going_to).includes(goal)}
             onClick={() => onChange({ ...view, going_to: toggled(view.going_to, goal) })}
           >
@@ -572,11 +573,23 @@ const chipClass = "inline-flex h-8 items-center rounded-full border px-3 text-sm
 const chipOffClass = "border-line text-ink-soft hover:border-muted";
 const chipOnClass = "border-accent/40 bg-accent-soft font-semibold text-accent-ink";
 
-function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
+function Toggle({
+  pressed,
+  onClick,
+  label,
+  children,
+}: {
+  pressed: boolean;
+  onClick: () => void;
+  /** The accessible name, when the visible text alone is ambiguous in the panel. */
+  label?: string;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
       aria-pressed={pressed}
+      aria-label={label}
       onClick={onClick}
       className={`${chipClass} ${pressed ? chipOnClass : chipOffClass}`}
     >

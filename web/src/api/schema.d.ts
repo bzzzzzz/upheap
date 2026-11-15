@@ -2547,6 +2547,11 @@ export interface components {
         Item: {
             /** @description Whether an agent run added the item. Unlike `origin`, it is set for a caller who can't see the origin. */
             added_in_run: boolean;
+            /**
+             * @description Where the item stands with the agents: `running`, `queued`, `waits` (an open turn that waits for the person),
+             *     `stuck` or `none` (no open turn). On every response, lists included.
+             */
+            agent_state: components["schemas"]["AgentState"];
             allowed_actions: components["schemas"]["ItemAction"][];
             /**
              * Format: int64
@@ -3937,6 +3942,8 @@ export interface components {
              */
             failed_runs: number;
             goal: components["schemas"]["Goal"];
+            /** @description Where the turn ends: `goal`, or `done` for a turn sent all the way. */
+            going_to: components["schemas"]["Goal"];
             /** @description What the person told the agent: plain text, at most 2,000 characters; `null` when they said nothing. */
             line?: string | null;
             /**
@@ -3951,11 +3958,6 @@ export interface components {
              */
             opened_label: string;
             reach: components["schemas"]["Reach"];
-            /**
-             * @description Whether the turn has a run that is live now: not ended, and heard from recently. Read when the response is
-             *     made.
-             */
-            running: boolean;
             /**
              * Format: int32
              * @description How many runs the turn has had.

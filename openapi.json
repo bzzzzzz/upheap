@@ -10325,6 +10325,7 @@
           "next_goal",
           "goal_choices",
           "with_agent",
+          "agent_state",
           "origin",
           "added_in_run",
           "version",
@@ -10334,6 +10335,10 @@
           "added_in_run": {
             "type": "boolean",
             "description": "Whether an agent run added the item. Unlike `origin`, it is set for a caller who can't see the origin."
+          },
+          "agent_state": {
+            "$ref": "#/components/schemas/AgentState",
+            "description": "Where the item stands with the agents: `running`, `queued`, `waits` (an open turn that waits for the person),\n`stuck` or `none` (no open turn). On every response, lists included."
           },
           "allowed_actions": {
             "type": "array",
@@ -13738,11 +13743,11 @@
         "required": [
           "reach",
           "goal",
+          "going_to",
           "source",
           "opened_at",
           "opened_label",
           "stuck",
-          "running",
           "failed_runs",
           "stuck_reason",
           "runs"
@@ -13756,6 +13761,10 @@
           },
           "goal": {
             "$ref": "#/components/schemas/Goal"
+          },
+          "going_to": {
+            "$ref": "#/components/schemas/Goal",
+            "description": "Where the turn ends: `goal`, or `done` for a turn sent all the way."
           },
           "line": {
             "type": [
@@ -13786,10 +13795,6 @@
           },
           "reach": {
             "$ref": "#/components/schemas/Reach"
-          },
-          "running": {
-            "type": "boolean",
-            "description": "Whether the turn has a run that is live now: not ended, and heard from recently. Read when the response is\nmade."
           },
           "runs": {
             "type": "integer",

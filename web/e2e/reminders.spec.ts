@@ -29,10 +29,7 @@ async function showReminders(page: Page, mode: "Shown" | "Hidden") {
   await page.getByRole("button", { name: /^Filters/ }).click();
   const panel = page.getByRole("dialog", { name: isPhone(page) ? "Filters & sort" : "Filters" });
   await panel.getByRole("radiogroup", { name: "Reminders to come" }).getByText(mode, { exact: true }).click();
-  await panel
-    .getByRole("button", { name: isPhone(page) ? /^Show / : "Done" })
-    .last()
-    .click();
+  await panel.getByRole("button", { name: isPhone(page) ? /^Show / : "Done", exact: true }).click();
   await expect(panel).toHaveCount(0);
 }
 
