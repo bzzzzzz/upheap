@@ -3410,7 +3410,8 @@ export interface components {
         QueuedItem: {
             /**
              * Format: int32
-             * @description The item's 1-based position in its own heap's ranking.
+             * @description The item's 1-based position in its heap's list as the person sees it by default, within its group: in
+             *     progress, or open.
              */
             heap_position: number;
             /**

@@ -12,6 +12,7 @@ use domain::audit::AuditAction;
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, Kind, NewItem, Stage, StateKind};
+use domain::list_view::ListView;
 use domain::permission::Permission;
 use domain::run::{
     LAPSE_FAILURE, MAX_QUEUE_HEAPS, Run, RunEnd, RunError, RunForbidden, RunLink, RunReached, RunResult, STARTED_BOOST,
@@ -48,7 +49,8 @@ pub struct WorkItem {
 #[derive(Debug)]
 pub struct QueuedItem {
     pub work: WorkItem,
-    /// The item's 1-based position in its own heap's ranking.
+    /// The item's 1-based position in its heap's list as the person sees it by default, within its group: in
+    /// progress, or open.
     pub heap_position: u32,
     /// The caller's priority for the item's heap.
     pub heap_priority: HeapPriority,
@@ -772,9 +774,10 @@ impl Services {
 
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
-    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The candidates come best first: the highest
-    /// score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already worked on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split from),
-    /// then by heap, then by position.
+    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The candidates come best
+    /// first: the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has
+    /// already worked on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split
+    /// from), then by heap, then by position.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
@@ -833,18 +836,30 @@ impl Services {
         let started_sends = store::runs::sends_with_runs(db, &candidate_sends).await?;
 
         // Each candidate with its sort key: score times the person's heap priority, boosted when started, then heap
-        // index, then position.
+        // index, then position. Its runs are counted below, in one query for all of them.
         let mut met = Vec::new();
-        let mut candidates_in_order: Vec<((f64, usize, u32), Item, Turn)> = Vec::new();
+        let mut candidates: Vec<((f64, usize, u32), QueuedItem)> = Vec::new();
+        let list = ListView::default();
         for (heap_index, queue) in heaps.iter().enumerate() {
-            let Some(candidates) = by_heap.remove(&queue.heap.id) else {
+            let Some(in_heap) = by_heap.remove(&queue.heap.id) else {
                 continue;
             };
             let priority = queue.priority;
             let OpenRanking { items, ranking, .. } = rank_open_items(db, &queue.heap, now, now).await?;
             let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
+            // The position the person sees is within the item's group of the heap's default list (in progress
+            // pinned, open, blocked hidden): how many items of each group came so far.
+            let mut listed = [0_u32; 3];
             for ranked in &ranking {
-                let (Some(turn), Some(item)) = (candidates.get(&ranked.item_id), by_id.get(&ranked.item_id)) else {
+                let Some(item) = by_id.get(&ranked.item_id) else {
+                    continue;
+                };
+                let list_position = list.group_of(item.state.kind()).map(|group| {
+                    let count = &mut listed[group as usize];
+                    *count += 1;
+                    *count
+                });
+                let Some(turn) = in_heap.get(&ranked.item_id) else {
                     continue;
                 };
                 if item.state.kind() == StateKind::Blocked {
@@ -854,40 +869,41 @@ impl Services {
                     met.push((heap_index, (*item).clone(), turn.clone()));
                     continue;
                 }
-                let boost = if started_sends.contains(&turn.send_id) {
-                    STARTED_BOOST
-                } else {
-                    1.0
-                };
+                let started = started_sends.contains(&turn.send_id);
+                let boost = if started { STARTED_BOOST } else { 1.0 };
                 let key = (ranked.score * priority.as_factor() * boost, heap_index, ranked.position);
-                candidates_in_order.push((key, (*item).clone(), turn.clone()));
+                candidates.push((
+                    key,
+                    QueuedItem {
+                        // An item that isn't blocked is always in the default list.
+                        heap_position: list_position.unwrap_or(ranked.position),
+                        heap_priority: priority,
+                        work: WorkItem {
+                            item: (*item).clone(),
+                            heap: queue.heap.clone(),
+                            team: queue.team.clone(),
+                            turn: turn.clone(),
+                            runs: 0,
+                            started,
+                        },
+                    },
+                ));
             }
         }
 
-        candidates_in_order.sort_by(|(a, ..), (b, ..)| {
+        candidates.sort_by(|(a, _), (b, _)| {
             a.0.total_cmp(&b.0)
                 .reverse()
                 .then_with(|| a.1.cmp(&b.1))
                 .then_with(|| a.2.cmp(&b.2))
         });
-        let turn_ids: Vec<TurnId> = candidates_in_order.iter().map(|(_, _, turn)| turn.id).collect();
+        let turn_ids: Vec<TurnId> = candidates.iter().map(|(_, queued)| queued.work.turn.id).collect();
         let run_counts = store::runs::count_runs_for_turns(db, &turn_ids).await?;
-        let items = candidates_in_order
+        let items = candidates
             .into_iter()
-            .map(|((_, heap_index, heap_position), item, turn)| {
-                let queue = &heaps[heap_index];
-                QueuedItem {
-                    heap_position,
-                    heap_priority: queue.priority,
-                    work: WorkItem {
-                        item,
-                        heap: queue.heap.clone(),
-                        team: queue.team.clone(),
-                        started: started_sends.contains(&turn.send_id),
-                        runs: run_counts.get(&turn.id).copied().unwrap_or(0),
-                        turn,
-                    },
-                }
+            .map(|(_, mut queued)| {
+                queued.work.runs = run_counts.get(&queued.work.turn.id).copied().unwrap_or(0);
+                queued
             })
             .collect();
         Ok(Queue {

@@ -75,7 +75,8 @@ pub struct WorkQueueDto {
 #[schema(as = QueuedItem)]
 pub struct QueuedItemDto {
     pub item: WorkItemDto,
-    /// The item's 1-based position in its own heap's ranking.
+    /// The item's 1-based position in its heap's list as the person sees it by default, within its group: in
+    /// progress, or open.
     pub heap_position: u32,
     /// The caller's priority for the item's heap, 1 to 10.
     pub heap_priority: u8,
