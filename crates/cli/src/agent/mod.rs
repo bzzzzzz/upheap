@@ -4,6 +4,7 @@
 
 mod claude;
 pub(crate) mod leftovers;
+mod process;
 
 use std::ffi::OsString;
 use std::future::Future;
@@ -232,7 +233,7 @@ pub struct SystemTools {
     /// The program to start for [`Tool::Claude`] in place of the one on `PATH`. For tests.
     claude: Option<PathBuf>,
     /// The tools stopped and not yet ended.
-    stops: claude::StopTracker,
+    stops: process::StopTracker,
     /// How long a tool may print nothing before it is stopped and its run failed. 30 minutes in the binary.
     silence_limit: Duration,
 }
@@ -241,7 +242,7 @@ impl SystemTools {
     pub fn new() -> Self {
         Self {
             claude: None,
-            stops: claude::StopTracker::new(),
+            stops: process::StopTracker::new(),
             silence_limit: SILENCE_LIMIT,
         }
     }
@@ -250,7 +251,7 @@ impl SystemTools {
     pub fn with_claude(path: PathBuf) -> Self {
         Self {
             claude: Some(path),
-            stops: claude::StopTracker::new(),
+            stops: process::StopTracker::new(),
             silence_limit: SILENCE_LIMIT,
         }
     }

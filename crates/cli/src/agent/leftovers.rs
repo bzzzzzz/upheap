@@ -122,7 +122,7 @@ fn end(refresh: sysinfo::ProcessRefreshKind, matches: impl Fn(&sysinfo::Process)
         return ended;
     }
     signal(&ended, Signal::TERM);
-    let deadline = std::time::Instant::now() + super::claude::STOP_GRACE;
+    let deadline = std::time::Instant::now() + super::process::STOP_GRACE;
     let last = loop {
         std::thread::sleep(RESCAN_EVERY);
         let found = scan();

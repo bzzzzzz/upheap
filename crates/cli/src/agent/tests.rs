@@ -231,7 +231,7 @@ mod processes {
         )?;
         verify_that!(
             std::fs::read_to_string(run_dir.join("CLAUDE.md"))?,
-            eq(claude::WORKSPACE_INSTRUCTIONS)
+            eq(process::WORKSPACE_INSTRUCTIONS)
         )
     }
 
@@ -378,7 +378,7 @@ mod processes {
 
         // Assert: the thread was free at once, and both were killed after the grace.
         verify_that!(started.is_ok(), eq(true))?;
-        verify_that!(took, lt(claude::STOP_GRACE / 3))?;
+        verify_that!(took, lt(process::STOP_GRACE / 3))?;
         for dir in &dirs {
             let pid = std::fs::read_to_string(dir.path().join("pid"))?.trim().to_owned();
             let gone = tokio::time::timeout(Duration::from_secs(10), async {
@@ -434,7 +434,7 @@ mod processes {
         // Assert: it waited for the kill after the grace, and the process is gone.
         verify_that!(started.is_ok(), eq(true))?;
         verify_that!(settled.is_ok(), eq(true))?;
-        verify_that!(took, ge(claude::STOP_GRACE / 2))?;
+        verify_that!(took, ge(process::STOP_GRACE / 2))?;
         verify_that!(alive, eq(false))
     }
 
@@ -577,7 +577,7 @@ mod processes {
             report.failure.as_deref(),
             eq(Some("The agent showed no activity for 2 seconds."))
         )?;
-        verify_that!(took, ge(claude::STOP_GRACE))?;
+        verify_that!(took, ge(process::STOP_GRACE))?;
         verify_that!(is_alive(std::fs::read_to_string(&pid_file)?.trim()), eq(false))
     }
 
