@@ -1,11 +1,10 @@
-# Releases the `upheap` CLI (design/operations.md, "Releasing the CLI and the server"). Pushing a tag `vX.Y.Z` that
-# matches the workspace version, on a commit of main, builds static binaries for Apple silicon macOS and x86_64 and
-# aarch64 Linux on native runners, publishes them as a GitHub Release, and updates the Homebrew cask in
-# bzzzzzz/homebrew-tap. It also builds `upheap-server` (web app embedded) and publishes it with the CLI; the cask stays
-# CLI-only. A
-# pull request that changes this workflow, the packaging, or the CLI and its dependencies, and a manual run, do
-# everything up to the release (build, smoke test, package, render and style-check the cask) and publish nothing, so a
-# broken release, such as a new dependency that stops the musl build being static, is found before a tag.
+# Releases the `upheap` CLI and the `upheap-server` binary (design/operations.md, "Releasing the CLI and the server").
+# Pushing a tag `vX.Y.Z` that matches the workspace version, on a commit of main, builds static binaries of both for
+# Apple silicon macOS and x86_64 and aarch64 Linux on native runners, the server with the web app embedded, publishes
+# them as a GitHub Release, and updates the Homebrew cask in bzzzzzz/homebrew-tap, which installs only the CLI. A pull
+# request that changes this workflow, the packaging, or the CLI and its dependencies, and a manual run, do everything
+# up to the release (build, smoke test, package, render and style-check the cask) and publish nothing, so a broken
+# release, such as a new dependency that stops the musl build being static, is found before a tag.
 #
 # It ships binaries, so every action is pinned to a commit, and release builds use no cache another ref could have
 # written. The tap is pushed to with a deploy key, secret HOMEBREW_TAP_DEPLOY_KEY.

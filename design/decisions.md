@@ -372,8 +372,8 @@ Linux), a GitHub Release with the CLI and the server as archives, and a cask for
 versioned names.
 
 **Consequences.** A published release's assets are never replaced: a bad release is fixed by a new patch version.
-The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli-and-the-server)). Release builds
-use no cache, so they take a few minutes longer.
+The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli-and-the-server)).
+Release builds use no cache, so they take a few minutes longer.
 
 ## 33. The CLI shares the API's Rust types instead of generating a client
 
