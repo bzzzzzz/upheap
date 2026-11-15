@@ -685,9 +685,9 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         | AuditField::MadeBy
         | AuditField::Priority
         | AuditField::Slug
-        | AuditField::Username
-        | AuditField::ArchivedAt
-        | AuditField::Parameters => field.code(),
+        | AuditField::Username => field.code(),
+        // Never shown as one change of their own (see `reading`).
+        AuditField::ArchivedAt | AuditField::Parameters => field.code(),
     }
 }
 

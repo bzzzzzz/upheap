@@ -1,4 +1,5 @@
-//! Audit actions. Stored as stable strings; the application only ever inserts audit entries.
+//! Audit actions, the kinds of entity they are about, and the fields of their diffs, each stored as a stable code.
+//! The application only ever inserts audit entries.
 
 use crate::ids::coded_enum;
 

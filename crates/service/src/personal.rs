@@ -101,7 +101,10 @@ impl Services {
                 EntityType::User,
                 *user.id.as_uuid(),
                 None,
-                json!({ AuditField::Username.code(): user.username.as_str(), AuditField::DisplayName.code(): user.display_name.as_str() }),
+                json!({
+                    AuditField::Username.code(): user.username.as_str(),
+                    AuditField::DisplayName.code(): user.display_name.as_str(),
+                }),
             ),
             entry(
                 AuditAction::TeamCreated,

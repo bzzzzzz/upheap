@@ -288,7 +288,12 @@ impl Services {
             AuditAction::InviteLinkRevoked,
             EntityType::InviteLink,
             *link.id.as_uuid(),
-            json!({ AuditField::State.code(): { "before": InviteLinkState::Working.code(), "after": InviteLinkState::Revoked.code() } }),
+            json!({
+                AuditField::State.code(): {
+                    "before": InviteLinkState::Working.code(),
+                    "after": InviteLinkState::Revoked.code(),
+                },
+            }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
