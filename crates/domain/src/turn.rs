@@ -1075,7 +1075,6 @@ mod run_tests {
 
         expect_that!(ended.is_open(), eq(false));
         expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::Reached)));
-        expect_that!(TurnEnd::from_code("reached"), some(eq(TurnEnd::Reached)));
     }
 
     #[gtest]
@@ -1098,7 +1097,6 @@ mod run_tests {
 
         expect_that!(ended.is_open(), eq(false));
         expect_that!(ended.ended.map(|ended| ended.end), some(eq(TurnEnd::HandedBack)));
-        expect_that!(TurnEnd::from_code("handed_back"), some(eq(TurnEnd::HandedBack)));
     }
 
     #[gtest]

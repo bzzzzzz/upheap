@@ -51,14 +51,14 @@ macro_rules! coded_enum {
             /// Every value, in the order they are declared.
             pub const ALL: [Self; [$(Self::$variant),+].len()] = [$(Self::$variant),+];
 
-            /// Stable code used in storage, audit diffs and the API. Never renamed.
+            /// The value's stable code, as it is stored or sent. Never renamed.
             pub const fn code(self) -> &'static str {
                 match self {
                     $( Self::$variant => $code, )+
                 }
             }
 
-            /// The value stored as `code`, or `None` for a code no version of the application wrote.
+            /// The value whose code is `code`, or `None` for a code no version of the application wrote.
             pub fn from_code(code: &str) -> Option<Self> {
                 Self::ALL.into_iter().find(|value| value.code() == code)
             }
