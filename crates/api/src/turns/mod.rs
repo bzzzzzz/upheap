@@ -25,9 +25,10 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 
 /// Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
 /// item. Any member may. The turn goes to the item's `next_goal`, worked out from the item, unless the request picks
-/// a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`, with reach `one`. It needs no
-/// `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
-/// and the item waits as before. A blocked item can't be sent until it is unblocked.
+/// a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`. A note as written sent
+/// `all_the_way` opens at `defined` whichever goal it names, in one run. It needs no `If-Match`, and the item's
+/// `version` doesn't change. An item with an open question may be sent: the turn opens, and the item waits as before.
+/// A blocked item can't be sent until it is unblocked.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/turn", tag = "items", security(("session" = [])),
     params(ItemParams, TimeZoneHeader), request_body = SendToAgentDto,
     responses(
@@ -35,7 +36,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         (status = 400, description = "`invalid_body`, such as an unknown field", body = Problem),
         (status = 404, body = Problem),
         (status = 409, description = "`heap_archived`, `item_closed`, `turn_item_blocked` (unblock the item first) or `turn_open` (an agent already has the item)", body = Problem),
-        (status = 422, description = "Invalid fields: a `line` over 2,000 characters, a `reach` or `goal` this server doesn't know, or a `goal` the item can't be sent to, or one past the next stable state with `all_the_way`", body = Problem),
+        (status = 422, description = "Invalid fields: a `line` over 2,000 characters, a `reach` or `goal` this server doesn't know, or a `goal` the item can't be sent to", body = Problem),
     ))]
 async fn send_to_agent(
     State(state): State<AppState>,

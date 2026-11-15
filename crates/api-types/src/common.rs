@@ -916,13 +916,15 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub turn: Option<TurnDto>,
-    /// The goal a turn opened now would have (`GoalDto` says what each is), so a client can show it before the item
-    /// is sent. `null` on a closed item and on a reminder (no turn opens on one).
+    /// The goal a turn of reach `one` opened now would have (`GoalDto` says what each is), so a client can show it
+    /// before the item is sent. A note as written sent `all_the_way` opens at `defined` instead. `null` on a closed
+    /// item and on a reminder (no turn opens on one).
     #[serde(default)]
     #[schema(required = true)]
     pub next_goal: Option<GoalDto>,
-    /// The goals a turn opened now may go to, `next_goal` first: also `defined` on a note as written. Empty when
-    /// `next_goal` is null. Whether the item may be sent at all is `allowed_actions` (`send_to_agent`).
+    /// The goals a turn of reach `one` opened now may go to, `next_goal` first: also `defined` on a note as written
+    /// (which `all_the_way` opens at, whichever is asked). Empty when `next_goal` is null. Whether the item may be
+    /// sent at all is `allowed_actions` (`send_to_agent`).
     #[serde(default)]
     #[schema(required = true)]
     pub goal_choices: Vec<GoalDto>,

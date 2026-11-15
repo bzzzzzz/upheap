@@ -28,7 +28,7 @@ use crate::{Principal, ServiceError, Services};
 impl Services {
     /// Sends an item to an agent: opens a turn of `reach` with an optional `line` from the person, going to the
     /// next stable state, or to the `goal` the person picked (see [`pick_goal`]: a note as written may go straight to
-    /// defined, with reach one). Any member may.
+    /// defined, and opens there when sent all the way). Any member may.
     ///
     /// Fails with [`ItemError::Closed`] on a closed item, [`TurnError::NeedsNoteOrTask`] on a reminder, to come or
     /// not (it must become a task first), [`TurnError::Blocked`] on a blocked item (it must be unblocked first),

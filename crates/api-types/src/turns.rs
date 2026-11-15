@@ -262,8 +262,9 @@ impl RedoTurnDto {
 pub struct SendToAgentDto {
     pub reach: ReachDto,
     /// Where the turn goes to. Absent or `null` means the item's `next_goal`. Otherwise one of the item's
-    /// `goal_choices`: the default goal with either reach, or another with reach `one` only (today, `defined` on a
-    /// note as written). A goal the item can't be sent to, or another goal with `all_the_way`, is `field_not_allowed`.
+    /// `goal_choices`: with reach `one` the turn goes to it; with `all_the_way` a note as written opens at `defined`
+    /// whichever goal it names, and any other item at its `next_goal`. A goal the item can't be sent to is
+    /// `field_not_allowed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal: Option<GoalDto>,
     /// Something to tell the agent: plain text, at most 2,000 characters, line breaks allowed; blank or `null` means

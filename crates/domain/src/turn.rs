@@ -492,6 +492,7 @@ pub const fn goal_for(item: &Item) -> Goal {
 
 /// The goals a person may send an open `item` to, [`goal_for`] first: also `defined` for a note as written, which
 /// the agent turns straight into a defined task (the person has seen enough to skip the stop at with context).
+/// All the way opens a note as written at `defined` whichever it asks for ([`pick_goal`]).
 /// Empty for a reminder, which no turn opens on. A closed item has none either, but this rule can't see that from
 /// the item's kind and stage alone; the callers (`send_to_agent`, the item response) check it first.
 pub fn goal_choices(item: &Item) -> Vec<Goal> {
@@ -507,18 +508,19 @@ pub fn goal_choices(item: &Item) -> Vec<Goal> {
 
 /// The goal of a turn a person opens on `item` with `reach`, asking for `requested` (`None` is [`goal_for`]).
 ///
-/// A goal outside [`goal_choices`] is refused. One other than [`goal_for`] goes one turn only: with
-/// [`Reach::AllTheWay`] it is refused too, because all the way would go on past the stop the person chose.
-/// Asking for the default goal is always fine, so a client may always send it.
+/// A goal outside [`goal_choices`] is refused. With [`Reach::One`] the turn goes to the goal asked for. With
+/// [`Reach::AllTheWay`] the stops on the way are passed anyway, so a note as written opens straight at `defined`, in
+/// one run instead of two, whichever of its choices was asked for; any other item opens at [`goal_for`], its only
+/// choice.
 pub fn pick_goal(item: &Item, reach: Reach, requested: Option<Goal>) -> Result<Goal, ValidationError> {
-    let default = goal_for(item);
-    let Some(goal) = requested else {
-        return Ok(default);
-    };
-    if !goal_choices(item).contains(&goal) || (goal != default && reach != Reach::One) {
+    if requested.is_some_and(|goal| !goal_choices(item).contains(&goal)) {
         return Err(ValidationError::NotAllowed { field: Field::Goal });
     }
-    Ok(goal)
+    Ok(match reach {
+        Reach::AllTheWay if item.kind == Kind::Note && item.stage == Stage::AsWritten => Goal::Defined,
+        Reach::AllTheWay => goal_for(item),
+        Reach::One => requested.unwrap_or_else(|| goal_for(item)),
+    })
 }
 
 /// Whether an agent has `item`: it is open, its heap is active, it has an open turn, and it doesn't wait for the
@@ -660,11 +662,26 @@ mod tests {
     }
 
     #[gtest]
-    fn no_goal_asked_means_the_default() {
+    fn no_goal_asked_means_the_default_for_one_turn() {
         let note = item(Kind::Note, Stage::AsWritten);
 
         expect_that!(pick_goal(&note, Reach::One, None), ok(eq(&Goal::WithContext)));
-        expect_that!(pick_goal(&note, Reach::AllTheWay, None), ok(eq(&Goal::WithContext)));
+    }
+
+    #[gtest]
+    fn all_the_way_opens_a_note_as_written_at_defined() {
+        let note = item(Kind::Note, Stage::AsWritten);
+
+        expect_that!(pick_goal(&note, Reach::AllTheWay, None), ok(eq(&Goal::Defined)));
+    }
+
+    #[gtest]
+    fn all_the_way_opens_any_other_item_at_its_default_goal() {
+        let with_context = item(Kind::Note, Stage::WithContext);
+        let task = item(Kind::Task, Stage::Defined);
+
+        expect_that!(pick_goal(&with_context, Reach::AllTheWay, None), ok(eq(&Goal::Defined)));
+        expect_that!(pick_goal(&task, Reach::AllTheWay, None), ok(eq(&Goal::Done)));
     }
 
     #[gtest]
@@ -682,7 +699,7 @@ mod tests {
     }
 
     #[gtest]
-    fn another_goal_from_the_choices_goes_one_turn_only() {
+    fn a_note_as_written_asked_for_either_goal_opens_at_defined_all_the_way() {
         let note = item(Kind::Note, Stage::AsWritten);
 
         expect_that!(
@@ -691,7 +708,11 @@ mod tests {
         );
         expect_that!(
             pick_goal(&note, Reach::AllTheWay, Some(Goal::Defined)),
-            err(eq(&ValidationError::NotAllowed { field: Field::Goal }))
+            ok(eq(&Goal::Defined))
+        );
+        expect_that!(
+            pick_goal(&note, Reach::AllTheWay, Some(Goal::WithContext)),
+            ok(eq(&Goal::Defined))
         );
     }
 
@@ -846,6 +867,18 @@ mod tests {
             &item(Kind::Task, Stage::Defined),
             Timestamp::EPOCH,
         );
+        expect_that!(next.map(|next| next.goal), some(eq(Goal::Done)));
+    }
+
+    #[gtest]
+    fn the_follow_on_goes_where_the_item_is_when_the_person_went_past_the_goal() {
+        let turn = all_the_way(&item(Kind::Note, Stage::AsWritten));
+        let next = turn.follow_on(
+            TurnId::from_uuid(Uuid::from_u128(41)),
+            &item(Kind::Task, Stage::Defined),
+            Timestamp::EPOCH,
+        );
+        expect_that!(turn.goal, eq(Goal::WithContext));
         expect_that!(next.map(|next| next.goal), some(eq(Goal::Done)));
     }
 

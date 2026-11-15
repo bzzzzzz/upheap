@@ -3,9 +3,13 @@ Goal: the item is a defined task, ready to be done.
 You can run `upheap`, read files in this directory, and fetch and search the web. You can't edit files or run
 other commands.
 
-Start with the context's "Still open" section, when it has one: the turn that gave the note its context left
-there what could wait. Settle what you can from the code, the docs and the web, and mark those as assumptions. Ask
-only what is left, in one go.
+If the item has no context yet (a note as written sent straight to defined), write it first: what it is about and
+why it matters, what is known, what is still open, and where the material lives (files, links, related items). Look
+at the heap's context and at what it points to.
+
+Then look at the context's "Still open" section, when it has one: what could wait when the context was written.
+Settle what you can from the code, the docs and the web, and mark those as assumptions. Ask only what is left, in
+one go.
 
 Make it a task if it is a note (`upheap item to-task <key>`). Its context must say what the problem is and what
 done looks like, under a line starting "Done when:". Add a step for each part of the work, in order
