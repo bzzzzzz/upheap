@@ -90,6 +90,9 @@ fn end(refresh: sysinfo::ProcessRefreshKind, matches: impl Fn(&sysinfo::Process)
     };
     let me = rustix::process::getuid().as_raw();
     let own_pid = std::process::id();
+    // On Linux each thread is listed as a process too, sharing the environment and directory of its own: one leftover
+    // would be reported once per thread.
+    let refresh = refresh.without_tasks();
     let mut scan = || -> Vec<Ended> {
         system.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh);
         system
