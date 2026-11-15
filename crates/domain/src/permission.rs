@@ -138,7 +138,7 @@ pub enum ItemAction {
 
 /// Whether `role` may ask for changes to `item` in `heap`, whose latest turn is `latest`: the heap is active, the role
 /// may edit items, and [`check_redo`] passes.
-pub fn can_redo_turn(item: &Item, heap: &Heap, role: Role, latest: Option<&Turn>) -> bool {
+fn can_redo_turn(item: &Item, heap: &Heap, role: Role, latest: Option<&Turn>) -> bool {
     !heap.is_archived() && Permission::EditItems.is_granted_to(role) && check_redo(item, latest).is_ok()
 }
 
@@ -181,7 +181,7 @@ pub fn allowed_item_actions(
 }
 
 /// The stages `role` may set on `item` in `heap` now: none unless they may edit it.
-pub fn allowed_stage_choices(item: &Item, heap: &Heap, role: Role) -> Vec<Stage> {
+fn allowed_stage_choices(item: &Item, heap: &Heap, role: Role) -> Vec<Stage> {
     if heap.is_archived() || !Permission::EditItems.is_granted_to(role) {
         return Vec::new();
     }
@@ -197,11 +197,46 @@ pub enum StepAction {
 
 /// What `role` can do with the steps of `item` in `heap`: edit them while the item is open and the heap is active.
 /// The same for every step of the item.
-pub fn allowed_step_actions(item: &Item, heap: &Heap, role: Role) -> Vec<StepAction> {
+fn allowed_step_actions(item: &Item, heap: &Heap, role: Role) -> Vec<StepAction> {
     if item.is_closed() || !can_edit_heap_content(heap, role) {
         return Vec::new();
     }
     vec![StepAction::Edit]
+}
+
+/// What a caller may do with one item: its actions, the stages they may set, and what they may do with its steps.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ItemAllowance {
+    /// See [`allowed_item_actions`], with [`ItemAction::RedoTurn`] last when [`can_redo_turn`] passes.
+    pub actions: Vec<ItemAction>,
+    /// See [`allowed_stage_choices`].
+    pub stage_choices: Vec<Stage>,
+    /// See [`allowed_step_actions`].
+    pub step_actions: Vec<StepAction>,
+}
+
+/// What `role` may do with `item` in `heap` at `now`, given whether it has an open turn, whether that turn is
+/// `stuck`, and its `latest` turn. `latest` is read only where asking for changes is offered: a list passes `None`,
+/// since it would need the latest turn of every row, and so offers no [`ItemAction::RedoTurn`].
+pub fn item_allowance(
+    item: &Item,
+    heap: &Heap,
+    role: Role,
+    has_open_turn: bool,
+    stuck: bool,
+    latest: Option<&Turn>,
+    now: Timestamp,
+) -> ItemAllowance {
+    let mut actions = allowed_item_actions(item, heap, role, has_open_turn, stuck, now);
+    // Changes can be asked only of an item with no turn open.
+    if !has_open_turn && can_redo_turn(item, heap, role, latest) {
+        actions.push(ItemAction::RedoTurn);
+    }
+    ItemAllowance {
+        actions,
+        stage_choices: allowed_stage_choices(item, heap, role),
+        step_actions: allowed_step_actions(item, heap, role),
+    }
 }
 
 /// An action a client may offer on a question.

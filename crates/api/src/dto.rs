@@ -40,6 +40,7 @@ fn to_item_parameter_dto(value: ParameterValue) -> ItemParameterDto {
 /// Renders an item with labels computed for `as_of` in `tz`.
 pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -> ItemDto {
     let item = view.item;
+    let allowance = view.allowance;
     let closed_at = item.state.closed_at();
     // What a turn opened now may go to, the default first: for an open note or task (a reminder has none).
     let goal_choices: Vec<GoalDto> = if closed_at.is_none() {
@@ -57,7 +58,7 @@ pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -
         kind: item.kind.into(),
         // The stage is shown while the item is open.
         stage: closed_at.is_none().then(|| item.stage.into()),
-        stage_choices: view.stage_choices.into_iter().map(StageDto::from).collect(),
+        stage_choices: allowance.stage_choices.into_iter().map(StageDto::from).collect(),
         state: item.state.kind().into(),
         blocked_by: view.blocked_by.map(ItemRefDto::from),
         blocked_reason: item.state.blocked_reason().map(|reason| reason.as_str().to_owned()),
@@ -107,7 +108,7 @@ pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -
                 .iter()
                 .map(|step| {
                     let origin = view.step_origins.remove(&step.number).map(to_item_origin_dto);
-                    StepDto::new(step, &view.step_actions, origin)
+                    StepDto::new(step, &allowance.step_actions, origin)
                 })
                 .collect()
         }),
@@ -137,7 +138,7 @@ pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -
         origin: view.origin.map(to_item_origin_dto),
         added_in_run: item.created_run_id.is_some(),
         version: item.version.get(),
-        allowed_actions: view.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+        allowed_actions: allowance.actions.into_iter().map(ItemActionDto::from).collect(),
     }
 }
 
