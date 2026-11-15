@@ -1761,6 +1761,17 @@ export interface components {
          * @enum {string}
          */
         Age: "keep" | "new";
+        /**
+         * @description Where an item stands with the agents, for the list's `agent` filter.
+         *
+         *     - `running`: with an agent, and a run is live now.
+         *     - `queued`: with an agent, and no run is live.
+         *     - `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.
+         *     - `stuck`: an open turn whose runs keep failing.
+         *     - `none`: no open turn.
+         * @enum {string}
+         */
+        AgentState: "running" | "queued" | "waits" | "stuck" | "none";
         ArchiveOptionRequest: {
             /**
              * Format: uuid
@@ -3941,6 +3952,11 @@ export interface components {
             opened_label: string;
             reach: components["schemas"]["Reach"];
             /**
+             * @description Whether the turn has a run that is live now: not ended, and heard from recently. Read when the response is
+             *     made.
+             */
+            running: boolean;
+            /**
              * Format: int32
              * @description How many runs the turn has had.
              */
@@ -4817,6 +4833,13 @@ export interface operations {
                 impact?: components["schemas"]["Size"][];
                 /** @description Keep items with any of these needs, comma-separated. */
                 need?: components["schemas"]["Need"][];
+                /** @description Keep items in any of these agent states, comma-separated. */
+                agent?: components["schemas"]["AgentState"][];
+                /**
+                 * @description Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.
+                 *     Items without an open turn match none.
+                 */
+                going_to?: components["schemas"]["Goal"][];
             };
             header?: {
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
@@ -6097,6 +6120,13 @@ export interface operations {
                  *     any of its options listed. An archived option keeps the items that switched to its replacement.
                  */
                 param?: string[];
+                /** @description Keep items in any of these agent states, comma-separated. */
+                agent?: components["schemas"]["AgentState"][];
+                /**
+                 * @description Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.
+                 *     Items without an open turn match none.
+                 */
+                going_to?: components["schemas"]["Goal"][];
             };
             header?: {
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */

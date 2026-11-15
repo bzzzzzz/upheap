@@ -1,6 +1,6 @@
-import { CalendarClock, ClipboardCheck, FileText, ListChecks } from "lucide-react";
+import { CalendarClock, CircleCheck, ClipboardCheck, FileText, ListChecks } from "lucide-react";
 
-import type { Kind, Stage } from "../api/client";
+import type { Goal, Kind, Stage } from "../api/client";
 
 const ICON_CLASS = "size-3.5 shrink-0 text-muted";
 
@@ -27,5 +27,17 @@ export function StageIcon({ stage }: { stage: Stage | null | undefined }) {
     case null:
     case undefined:
       return null;
+  }
+}
+
+/** The icon of where a turn goes: the stage icons for with context and defined, a check for done. */
+export function TargetIcon({ goal, className }: { goal: Goal; className: string }) {
+  switch (goal) {
+    case "with_context":
+      return <FileText aria-hidden="true" className={className} />;
+    case "defined":
+      return <ClipboardCheck aria-hidden="true" className={className} />;
+    case "done":
+      return <CircleCheck aria-hidden="true" className={className} />;
   }
 }

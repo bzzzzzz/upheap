@@ -238,6 +238,8 @@ impl ListViewInputDto {
                 impact: self.impact.iter().copied().map(Size::from).collect(),
                 need: self.need.iter().copied().map(Need::from).collect(),
                 options: self.param.iter().copied().map(OptionId::from_uuid).collect(),
+                // Saved views don't carry the agent filters; a query sets them after.
+                ..ListFilter::default()
             },
         })
     }

@@ -1,5 +1,5 @@
 // Display names for enum values, and which states are closed. Anything computed about an item comes from the server.
-import type { ClosedGroup, Goal, ItemState, Kind, Need, Size, Stage } from "../api/client";
+import type { AgentState, ClosedGroup, Goal, ItemState, Kind, Need, Size, Stage } from "../api/client";
 
 /** US dollars, as "$0.31". */
 export const usd = (amount: number) => `$${amount.toFixed(2)}`;
@@ -50,6 +50,20 @@ export const GOAL_LABELS: Record<Goal, string> = {
   defined: "defined",
   done: "done",
 };
+
+/** The agent states the list filters by, and how the filter names them. */
+export const AGENT_STATES: readonly AgentState[] = ["running", "queued", "waits", "stuck", "none"];
+export const AGENT_STATE_LABELS: Record<AgentState, string> = {
+  running: "Running",
+  queued: "Queued",
+  waits: "Waits for you",
+  stuck: "Stuck",
+  none: "Not with an agent",
+};
+
+/** Where a turn ends, as the list filters by it: a turn sent all the way goes to done. */
+export const GOING_TO: readonly Goal[] = ["with_context", "defined", "done"];
+export const GOING_TO_LABELS: Record<Goal, string> = { with_context: "With context", defined: "Defined", done: "Done" };
 
 export const STATE_LABELS: Record<ItemState, string> = {
   open: "Open",

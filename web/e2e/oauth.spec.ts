@@ -276,7 +276,7 @@ test("Account makes a personal token, shows its secret once, and revokes it afte
   expect(secret).toMatch(/^uph_/);
   await expect(panel).toContainText("UPHEAP_TOKEN=<token> upheap item list");
   await expect(panel).not.toContainText(secret);
-  await panel.getByRole("button", { name: "Done" }).click();
+  await panel.getByRole("button", { name: "Done" }).last().click();
   await expect(panel).toHaveCount(0);
   await expect(make).toBeFocused();
 

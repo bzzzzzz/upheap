@@ -41,11 +41,13 @@ async function open(page: Page, heapPath: string, key: string, title: string) {
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue(title);
 }
 
-/** The list row of an item an agent has, whose link a screen reader hears with ", with an agent" after the title. */
+/** The list row of an item an agent has, whose link a screen reader hears with ", with an agent, ..." after the title. */
 const heldRow = (page: Page, title: string): Locator =>
-  page
-    .getByRole("listitem")
-    .filter({ has: page.getByRole("link", { name: new RegExp(`^${title}\\s*, with an agent$`) }) });
+  page.getByRole("listitem").filter({
+    has: page.getByRole("link", {
+      name: new RegExp(`^${title}\\s*, with an agent, (queued|running now), going to .+$`),
+    }),
+  });
 
 /** The agent chip in the status line, which opens Who has it. */
 const chip = (page: Page): Locator => itemPane(page).getByRole("button", { name: /^Who has it: / });

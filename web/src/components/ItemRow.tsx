@@ -3,10 +3,10 @@ import { Bot } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
-import type { HeapRef, Item, ItemState, RankedItem, RankedList } from "../api/client";
+import type { Goal, HeapRef, Item, ItemState, RankedItem, RankedList, Turn } from "../api/client";
 import { useSendWithUndo } from "./ItemTurn";
-import { KindIcon, StageIcon } from "./kindIcons";
-import { STAGE_LABELS, STATE_LABELS } from "./labels";
+import { KindIcon, StageIcon, TargetIcon } from "./kindIcons";
+import { GOAL_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
 import { ParameterChips } from "./ParameterPicker";
 import { formatDate } from "./reminders";
@@ -188,7 +188,7 @@ export function ItemRow({
           </span>
           <span className="relative size-6 shrink-0 max-sm:hidden">
             {item.turn ? (
-              <RobotMark waits={item.waits_for_you} />
+              <RobotMark item={item} turn={item.turn} />
             ) : (
               canSend && <RobotButton item={item} disabled={sending} onPress={onSend} />
             )}
@@ -201,7 +201,7 @@ export function ItemRow({
               <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent sm:hidden" />
             )}
             {/* The same slot says an agent has the item, with a mark: the two never show together. */}
-            {item.with_agent && <Bot aria-hidden="true" className="size-3.5 shrink-0 text-agent sm:hidden" />}
+            {item.with_agent && item.turn && <PhoneMark turn={item.turn} />}
             {/* The link covers the whole row, under the buttons and tags. */}
             <Link
               {...link}
@@ -226,7 +226,10 @@ export function ItemRow({
                 {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
                 {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
                 {item.waits_for_you && ", waits for you"}
-                {item.with_agent && ", with an agent"}
+                {item.with_agent &&
+                  item.turn &&
+                  `, with an agent, ${item.turn.running ? "running now" : "queued"}, going to ${GOAL_LABELS[goingTo(item.turn)]}`}
+                {item.turn?.stuck && ", agent stuck"}
               </span>
             </Link>
             {item.step_progress && (
@@ -633,19 +636,54 @@ function RobotButton({ item, disabled, onPress }: { item: Item; disabled: boolea
   );
 }
 
+/** Where a turn ends: its goal, except that a turn sent all the way goes to done. The rule `going_to` filters by. */
+const goingTo = (turn: Turn): Goal => (turn.reach === "all_the_way" ? "done" : turn.goal);
+
 /**
  * Says an agent has the item: a blue robot on a blue tint, so it reads as on in either theme, apart from the quiet robot
- * that sends and from the accent that marks in progress, with an accent dot when the agent waits for the person. Not a
- * button; the row's link says the same in words.
+ * that sends and from the accent that marks in progress. A run that is live turns the tile solid. An accent dot says the
+ * agent waits for the person, and a badge in the corner says where the turn goes. Not a button; the row's link says the
+ * same in words, and the tooltip is for the mouse.
  */
-function RobotMark({ waits }: { waits: boolean }) {
+function RobotMark({ item, turn }: { item: Item; turn: Turn }) {
+  const running = item.with_agent && turn.running;
+  const target = GOAL_LABELS[goingTo(turn)];
+  const title = turn.stuck
+    ? `Agent stuck: ${turn.failed_runs} runs failed`
+    : `${running ? "Running now" : item.with_agent ? "Queued" : "Waits for you"} · going to: ${target}`;
   return (
+    // Above the row's link, so the tooltip shows; the span can't be focused.
     <span
       aria-hidden="true"
-      className="relative -m-0.5 flex size-7 items-center justify-center rounded-lg bg-agent-soft text-agent"
+      title={title}
+      className={`relative z-10 -m-0.5 flex size-7 items-center justify-center rounded-lg ${
+        running ? "bg-agent text-canvas" : "bg-agent-soft text-agent"
+      }`}
     >
-      <Bot className="size-5 fill-agent/20" />
-      {waits && <span className="absolute top-0 right-0 size-2 rounded-full bg-accent" />}
+      <Bot className={running ? "size-5" : "size-5 fill-agent/20"} />
+      {item.waits_for_you && <span className="absolute top-0 right-0 size-2 rounded-full bg-accent" />}
+      <span className="absolute -right-1 -bottom-1 flex size-3.5 items-center justify-center rounded-full bg-canvas">
+        <TargetIcon goal={goingTo(turn)} className="size-[11px] text-agent" />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The phone's mark for an item with an agent, in the dot's slot before the title: a small robot, on a solid tile while
+ * a run is live, then where the turn goes.
+ */
+function PhoneMark({ turn }: { turn: Turn }) {
+  return (
+    <span aria-hidden="true" className="flex shrink-0 items-center gap-1 sm:hidden">
+      {turn.running ? (
+        <span className="flex size-4 items-center justify-center rounded bg-agent text-canvas">
+          <Bot className="size-3" />
+        </span>
+      ) : (
+        <Bot className="size-3.5 text-agent" />
+      )}
+      <TargetIcon goal={goingTo(turn)} className="size-[13px] text-agent" />
     </span>
   );
 }

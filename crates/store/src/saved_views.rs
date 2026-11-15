@@ -219,6 +219,8 @@ impl StoredListView {
                     .map(|code| parse_code(code, Need::from_code))
                     .collect::<Result<_, _>>()?,
                 options: self.options.iter().copied().map(OptionId::from_uuid).collect(),
+                // Saved views don't carry the agent filters.
+                ..ListFilter::default()
             },
         })
     }
@@ -249,6 +251,7 @@ mod tests {
                 impact: BTreeSet::from([Size::M]),
                 need: BTreeSet::from([Need::Idea, Need::Critical]),
                 options: BTreeSet::from([OptionId::from_uuid(Uuid::from_u128(8))]),
+                ..ListFilter::default()
             },
         };
 

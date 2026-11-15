@@ -92,6 +92,40 @@ async fn item_list_filters_by_the_api_flags_and_by_tag_name() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn item_list_filters_by_agent_state_and_turn_target() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let sent = key(&items[0])?;
+    server
+        .send(
+            &ada,
+            "POST",
+            &format!("/teams/ada/heaps/personal/items/{sent}/turn"),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    let queued = cli.run(&["item", "list", "-q", "--agent", "queued"]).await;
+    let not_with_agent = cli.run(&["item", "list", "-q", "--agent", "none"]).await;
+    let to_context = cli.run(&["item", "list", "-q", "--going-to", "with_context"]).await;
+    let to_defined = cli
+        .run(&["item", "list", "-q", "--agent", "queued", "--going-to", "defined"])
+        .await;
+    let all_heaps = cli
+        .run(&["item", "list", "-q", "--all-heaps", "--agent", "queued"])
+        .await;
+
+    expect_that!(queued.stdout, eq(&format!("{sent}\n")));
+    expect_that!(not_with_agent.stdout.lines().count(), eq(2));
+    expect_that!(to_context.stdout, eq(&format!("{sent}\n")));
+    expect_that!(to_defined.stdout, eq(""));
+    expect_that!(all_heaps.stdout, eq(&format!("ada/personal/{sent}\n")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_list_text_narrows_by_title_and_description() -> Result<()> {
     let server = TestServer::start().await?;
     let (ada, items) = ada_with_items(&server).await?;

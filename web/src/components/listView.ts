@@ -1,7 +1,9 @@
 // The list view lives in the URL, so a view can be bookmarked, shared and kept on reload. The search params are
 // the API's query parameters, with lists comma-separated as the API takes them. Anything else in the URL is dropped.
 import type {
+  AgentState,
   BlockedLayout,
+  Goal,
   HeapRef,
   ItemState,
   ListSort,
@@ -13,7 +15,7 @@ import type {
   Size,
   StateMode,
 } from "../api/client";
-import { NEEDS, SIZES } from "./labels";
+import { AGENT_STATES, GOING_TO, NEEDS, SIZES } from "./labels";
 
 export type ListSearch = {
   open?: StateMode;
@@ -34,6 +36,10 @@ export type ListSearch = {
   impact?: string;
   /** Option IDs of custom parameters, comma-separated. */
   param?: string;
+  /** Agent states, comma-separated. */
+  agent?: string;
+  /** Where the agent's turn goes, comma-separated. */
+  going_to?: string;
 };
 
 /** The states whose place in the list the user picks. */
@@ -135,24 +141,38 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
     effort: sizes(raw.effort),
     impact: sizes(raw.impact),
     param: ids(raw.param),
+    agent: known(AGENT_STATES, raw.agent),
+    going_to: known(GOING_TO, raw.going_to),
   };
   // Unset keys stay out of the URL.
   return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined)) as ListSearch;
 }
 
 /**
- * The search of the page listing every heap's items: the view settings that page has and need, effort and impact, and
+ * The search of the page listing every heap's items: the view settings that page has and need, effort, impact and the
+ * agent filters, and
  * the open item as `team/heap/key`, since an item's key is only unique within its heap.
  */
 export type AcrossSearch = Pick<
   ListSearch,
-  "open" | "in_progress" | "blocked" | "blocked_layout" | "need" | "effort" | "impact"
+  "open" | "in_progress" | "blocked" | "blocked_layout" | "need" | "effort" | "impact" | "agent" | "going_to"
 > & { item?: string };
 
 /** Keeps only what the page across heaps has of [`parseListSearch`], and the open item. */
 export function parseAcrossSearch(raw: Record<string, unknown>): AcrossSearch {
-  const { open, in_progress, blocked, blocked_layout, need, effort, impact } = parseListSearch(raw);
-  const search = { open, in_progress, blocked, blocked_layout, need, effort, impact, item: list(raw.item) };
+  const { open, in_progress, blocked, blocked_layout, need, effort, impact, agent, going_to } = parseListSearch(raw);
+  const search = {
+    open,
+    in_progress,
+    blocked,
+    blocked_layout,
+    need,
+    effort,
+    impact,
+    agent,
+    going_to,
+    item: list(raw.item),
+  };
   return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined)) as AcrossSearch;
 }
 
@@ -192,6 +212,8 @@ export function toListQuery(search: ListSearch): ListViewQuery {
     effort: splitList(search.effort) as Size[],
     impact: splitList(search.impact) as Size[],
     param: splitList(search.param),
+    agent: splitList(search.agent) as AgentState[],
+    going_to: splitList(search.going_to) as Goal[],
   };
   // Left-out keys keep the query key, and so the cache, the same for equal views.
   return Object.fromEntries(
@@ -212,7 +234,9 @@ export const filterCount = (search: ListSearch) =>
   splitList(search.need).length +
   splitList(search.effort).length +
   splitList(search.impact).length +
-  splitList(search.param).length;
+  splitList(search.param).length +
+  splitList(search.agent).length +
+  splitList(search.going_to).length;
 
 /** The same view with no filters on. */
 export const withoutFilters = (search: ListSearch): ListSearch => ({
@@ -222,6 +246,8 @@ export const withoutFilters = (search: ListSearch): ListSearch => ({
   effort: undefined,
   impact: undefined,
   param: undefined,
+  agent: undefined,
+  going_to: undefined,
 });
 
 /** Reset all: no filters and the default view settings. The sort stays, as does the search text. */

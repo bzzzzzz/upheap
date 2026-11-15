@@ -1021,6 +1021,34 @@
             "explode": false
           },
           {
+            "name": "agent",
+            "in": "query",
+            "description": "Keep items in any of these agent states, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AgentState"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "going_to",
+            "in": "query",
+            "description": "Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.\nItems without an open turn match none.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Goal"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
             "name": "Time-Zone",
             "in": "header",
             "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
@@ -3053,6 +3081,34 @@
               "items": {
                 "type": "string",
                 "format": "uuid"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "description": "Keep items in any of these agent states, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AgentState"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "going_to",
+            "in": "query",
+            "description": "Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.\nItems without an open turn match none.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Goal"
               }
             },
             "style": "form",
@@ -8392,6 +8448,17 @@
           "new"
         ]
       },
+      "AgentState": {
+        "type": "string",
+        "description": "Where an item stands with the agents, for the list's `agent` filter.\n\n- `running`: with an agent, and a run is live now.\n- `queued`: with an agent, and no run is live.\n- `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.\n- `stuck`: an open turn whose runs keep failing.\n- `none`: no open turn.",
+        "enum": [
+          "running",
+          "queued",
+          "waits",
+          "stuck",
+          "none"
+        ]
+      },
       "ArchiveOptionRequest": {
         "type": "object",
         "properties": {
@@ -13675,6 +13742,7 @@
           "opened_at",
           "opened_label",
           "stuck",
+          "running",
           "failed_runs",
           "stuck_reason",
           "runs"
@@ -13718,6 +13786,10 @@
           },
           "reach": {
             "$ref": "#/components/schemas/Reach"
+          },
+          "running": {
+            "type": "boolean",
+            "description": "Whether the turn has a run that is live now: not ended, and heard from recently. Read when the response is\nmade."
           },
           "runs": {
             "type": "integer",

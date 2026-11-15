@@ -174,6 +174,7 @@ pub(crate) fn to_turn_dto(view: TurnView, as_of: Timestamp, tz: &TimeZone) -> Tu
         describe_since(view.turn.opened_at, as_of, tz),
         view.runs,
         view.stuck_reason,
+        view.running,
     )
 }
 

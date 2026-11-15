@@ -2,7 +2,7 @@
 //! endpoints answer with the whole item (`ItemDto`).
 
 use domain::ValidationError;
-use domain::turn::{Goal, Reach, Turn, TurnLine, TurnSource};
+use domain::turn::{AgentState, Goal, Reach, Turn, TurnLine, TurnSource};
 use domain::validation::Field;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -87,6 +87,36 @@ impl TryFrom<GoalDto> for Goal {
     }
 }
 
+/// Where an item stands with the agents, for the list's `agent` filter.
+///
+/// - `running`: with an agent, and a run is live now.
+/// - `queued`: with an agent, and no run is live.
+/// - `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.
+/// - `stuck`: an open turn whose runs keep failing.
+/// - `none`: no open turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = AgentState)]
+pub enum AgentStateDto {
+    Running,
+    Queued,
+    Waits,
+    Stuck,
+    None,
+}
+
+impl From<AgentStateDto> for AgentState {
+    fn from(state: AgentStateDto) -> Self {
+        match state {
+            AgentStateDto::Running => Self::Running,
+            AgentStateDto::Queued => Self::Queued,
+            AgentStateDto::Waits => Self::Waits,
+            AgentStateDto::Stuck => Self::Stuck,
+            AgentStateDto::None => Self::None,
+        }
+    }
+}
+
 /// How a turn came to be opened.
 ///
 /// - `go_ahead`: a person sent the item.
@@ -137,6 +167,11 @@ pub struct TurnDto {
     #[serde(default)]
     #[schema(required = true)]
     pub stuck: bool,
+    /// Whether the turn has a run that is live now: not ended, and heard from recently. Read when the response is
+    /// made.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub running: bool,
     /// How many of the turn's runs in a row failed.
     #[serde(default)]
     #[schema(required = true)]
@@ -153,13 +188,14 @@ pub struct TurnDto {
 
 impl TurnDto {
     /// The open `turn`, with the user who opened it if the caller knows them, `opened_label` for when it opened, how
-    /// many `runs` it has had and, when it is stuck, why (`stuck_reason`).
+    /// many `runs` it has had, when it is stuck, why (`stuck_reason`), and whether a run is live (`running`).
     pub fn new(
         turn: &Turn,
         opened_by: Option<UserRefDto>,
         opened_label: String,
         runs: u32,
         stuck_reason: Option<String>,
+        running: bool,
     ) -> Self {
         Self {
             reach: turn.reach.into(),
@@ -170,6 +206,7 @@ impl TurnDto {
             opened_label,
             opened_by,
             stuck: turn.is_stuck(),
+            running,
             failed_runs: turn.failed_runs,
             stuck_reason: if turn.is_stuck() { stuck_reason } else { None },
             runs,

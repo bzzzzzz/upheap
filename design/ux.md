@@ -253,7 +253,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    when the item says why in words, and the padlock's tooltip carries the reason too; the row itself shows nothing
    more. Second **Done**, a circle with a check, on every row. Third the **robot**: a button that sends the item to an agent, one step at once, with
    no line, when the server allows it and no agent has the item; a blue robot mark on a blue tint when an agent has
-   it, with a small accent dot when it waits for the person; empty otherwise (a reminder, a blocked item, a reader).
+   it, on a solid blue tile while a run is live (queued otherwise), with a small accent dot when it waits for the person
+   and, in the corner, a badge for where the turn ends (with context, defined, or done, which is also where a turn sent
+   all the way ends); its tooltip says it ("Running now · going to: defined", "Queued · going to: with context", "Waits
+   for you · going to: done", "Agent stuck: 3 runs failed"); empty otherwise (a reminder, a blocked item, a reader).
    With a mouse, Done and the robot are muted until the row is hovered or has focus within; with a finger they are
    always in full colour. A quick send shows the toast "Sent to an agent, going to: with context." with Undo (The item
    point 15), gives focus to the row, and a failed one says why in a toast. A phone shows the state button only (44 px)
@@ -272,7 +275,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 7. One Filters panel holds what the list shows and its filters: Show (Open, In progress, Blocked as Pinned, Shown or
    Hidden, a dot on a changed one; shown blocked items in their own group or mixed in; Reminders to come, Hidden or
    Shown, point 16), then Narrow down (tags, need,
-   effort, impact, parameters), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
+   effort, impact, parameters, agent state, going to), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
    on a phone. The toolbar is search, Sort by and Filters; on a phone it's search and an icon Filters button, and the
    sheet, "Filters & sort", starts with the sort and ends with "Show 6 items". The Filters button counts the filters
    and changed settings, amber while any are on; on a phone, where the sort is out of sight in the sheet, it counts a
@@ -293,7 +296,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     shows it.
 14. An open item an agent has shows the robot mark in its slot (point 3), with a dot while it waits for the person: an
     item that waits for the person is not the agent's, and says so in words (point 13). On a phone a small blue robot mark
-    before the title stands for it. A screen reader hears ", with an agent" after the title. Who has an item never
+    before the title stands for it, on a small solid tile while a run is live, with the icon of where the turn ends after
+    it; a dot alone stands for an item that waits for the person. A screen reader hears ", with an agent, running now,
+    going to defined" or ", queued, going to with context" after the title, and ", agent stuck" after ", waits for you"
+    for a stuck one. Who has an item never
     changes its place. The closed list never shows it.
 15. Moving an item an agent has to a state that takes it back, from the list, asks first, naming the item: "An
     agent has “Rotate the certs”. Marking it done takes it back from the agent." The state button, Done, a
@@ -675,7 +681,7 @@ filter, heap filter, position numbers or reminders to come.
    nothing. The pane's ↑ and ↓ walk the rows on screen, across heaps, and its position is the one in this list. Closing goes back, or to `/all` with the rest of
    the search, and gives the focus to the row.
 4. The toolbar is the search and Filters. The panel has Show (Open, In progress and Blocked, each Pinned, Shown or
-   Hidden, and the shown blocked items grouped or mixed in) and Narrow down: Need, Effort and Impact. Its chips, Reset
+   Hidden, and the shown blocked items grouped or mixed in) and Narrow down: Need, Effort, Impact, Agent and Going to. Its chips, Reset
    all and the hidden note are the list's. The panel can't say how many items the filters leave out of the total, so it
    shows the number the view matches. The view is in the address.
 5. Add opens the Add dialog in the heap the shell keeps (the one opened last), with the need, effort and impact

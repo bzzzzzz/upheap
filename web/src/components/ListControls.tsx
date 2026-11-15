@@ -3,7 +3,17 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import type { BlockedLayout, HeapRef, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/client";
 import { useParameters, useTags } from "../api/queries";
-import { NEED_LABELS, NEEDS, SIZE_LABELS, SIZES, STATE_LABELS } from "./labels";
+import {
+  AGENT_STATE_LABELS,
+  AGENT_STATES,
+  GOING_TO,
+  GOING_TO_LABELS,
+  NEED_LABELS,
+  NEEDS,
+  SIZE_LABELS,
+  SIZES,
+  STATE_LABELS,
+} from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
 import {
@@ -229,6 +239,16 @@ export function FilterChips({
       label: options.find((option) => option.id === id)?.label ?? "An option",
       remove: () => onChange({ ...view, param: toggled(view.param, id) }),
     })),
+    ...splitList(view.agent).map((state) => ({
+      key: `agent:${state}`,
+      label: `Agent: ${AGENT_STATE_LABELS[state as keyof typeof AGENT_STATE_LABELS]}`,
+      remove: () => onChange({ ...view, agent: toggled(view.agent, state) }),
+    })),
+    ...splitList(view.going_to).map((goal) => ({
+      key: `going_to:${goal}`,
+      label: `Going to: ${GOING_TO_LABELS[goal as keyof typeof GOING_TO_LABELS]}`,
+      remove: () => onChange({ ...view, going_to: toggled(view.going_to, goal) }),
+    })),
   ];
   const settings = viewChanges(view).map((setting) => {
     const [name, value] = describeSetting(view, setting);
@@ -362,7 +382,10 @@ function ShowSection({
   );
 }
 
-/** The filters: tags, need, effort, impact, then each custom parameter. The tags and parameters are a heap's. */
+/**
+ * The filters: tags, need, effort, impact, each custom parameter, then the agent state and where its turn goes. The
+ * tags and parameters are a heap's.
+ */
 function NarrowSection({
   heapRef,
   view,
@@ -451,6 +474,28 @@ function NarrowSection({
           )
         );
       })}
+      <PanelRow label="Agent">
+        {AGENT_STATES.map((state) => (
+          <Toggle
+            key={state}
+            pressed={splitList(view.agent).includes(state)}
+            onClick={() => onChange({ ...view, agent: toggled(view.agent, state) })}
+          >
+            {AGENT_STATE_LABELS[state]}
+          </Toggle>
+        ))}
+      </PanelRow>
+      <PanelRow label="Going to">
+        {GOING_TO.map((goal) => (
+          <Toggle
+            key={goal}
+            pressed={splitList(view.going_to).includes(goal)}
+            onClick={() => onChange({ ...view, going_to: toggled(view.going_to, goal) })}
+          >
+            {GOING_TO_LABELS[goal]}
+          </Toggle>
+        ))}
+      </PanelRow>
     </Section>
   );
 }

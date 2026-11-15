@@ -36,6 +36,7 @@ export type NewComment = Schemas["AddCommentRequest"];
 export type Turn = Schemas["Turn"];
 export type Reach = Schemas["Reach"];
 export type Goal = Schemas["Goal"];
+export type AgentState = Schemas["AgentState"];
 export type SendToAgent = Schemas["SendToAgentRequest"];
 export type Decisions = Schemas["Decisions"];
 export type DecisionRow = Schemas["DecisionRow"];

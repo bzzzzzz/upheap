@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use domain::item::{Age, BlockReason, Description, Due, ItemPatch, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
 use domain::list_view::ListView;
 use domain::tag::parse_tag_set;
+use domain::turn::{AgentState, Goal};
 use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
 use jiff::tz::TimeZone;
 use serde::de::IntoDeserializer;
@@ -17,6 +18,7 @@ use crate::common::{
     double_option, never_null, non_null,
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, RemindersModeDto, SortDto, StateModeDto};
+use crate::turns::{AgentStateDto, GoalDto};
 use crate::waiting::ItemHeapDto;
 
 /// The list view. Every parameter is optional; leaving them all out gives the default view: in-progress items
@@ -86,6 +88,25 @@ pub struct RankedQuery {
     )]
     #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
     pub param: Vec<Uuid>,
+    /// Keep items in any of these agent states, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<AgentStateDto>>, style = Form, explode = false)]
+    pub agent: Vec<AgentStateDto>,
+    /// Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.
+    /// Items without an open turn match none.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<GoalDto>>, style = Form, explode = false)]
+    pub going_to: Vec<GoalDto>,
 }
 
 impl RankedQuery {
@@ -107,7 +128,19 @@ impl RankedQuery {
             param: self.param.clone(),
         }
         .to_view()
+        .and_then(|view| with_agent_filters(view, &self.agent, &self.going_to))
     }
+}
+
+/// `view` with the agent filters of a query. Fails on a goal this server doesn't know.
+fn with_agent_filters(
+    mut view: ListView,
+    agent: &[AgentStateDto],
+    going_to: &[GoalDto],
+) -> Result<ListView, ValidationError> {
+    view.filter.agent = agent.iter().copied().map(AgentState::from).collect();
+    view.filter.going_to = going_to.iter().copied().map(Goal::try_from).collect::<Result<_, _>>()?;
+    Ok(view)
 }
 
 /// The view of the list across all heaps (`GET /me/items`). Every parameter is optional; leaving them all out gives
@@ -154,6 +187,25 @@ pub struct AcrossHeapsQuery {
     )]
     #[param(value_type = Option<Vec<NeedDto>>, style = Form, explode = false)]
     pub need: Vec<NeedDto>,
+    /// Keep items in any of these agent states, comma-separated.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<AgentStateDto>>, style = Form, explode = false)]
+    pub agent: Vec<AgentStateDto>,
+    /// Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.
+    /// Items without an open turn match none.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<GoalDto>>, style = Form, explode = false)]
+    pub going_to: Vec<GoalDto>,
 }
 
 impl AcrossHeapsQuery {
@@ -175,6 +227,7 @@ impl AcrossHeapsQuery {
             param: Vec::new(),
         }
         .to_view()
+        .and_then(|view| with_agent_filters(view, &self.agent, &self.going_to))
     }
 }
 
