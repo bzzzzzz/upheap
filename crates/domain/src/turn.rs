@@ -4,62 +4,36 @@
 //! Data model). An item has at most one open turn. Turns are never deleted: a taken-back one keeps its row.
 
 use crate::heap::Heap;
+use crate::ids::coded_enum;
 use crate::item::{Item, ItemError, Kind, Stage, StateKind};
 use crate::run::{Run, STUCK_AFTER};
 use crate::text::parse_optional;
 use crate::validation::Field;
 use crate::{ItemId, Timestamp, TurnId, UserId, ValidationError};
 
-/// How far a turn is meant to go.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Reach {
-    /// To the next stable state, then back to the person.
-    One,
-    /// On through the stable states until the work is done. Each turn still goes one stable state; the next opens
-    /// when it is reached (see [`Turn::follow_on`]).
-    AllTheWay,
-}
-
-impl Reach {
-    pub const ALL: [Self; 2] = [Self::One, Self::AllTheWay];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::One => "one",
-            Self::AllTheWay => "all_the_way",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|reach| reach.code() == code)
+coded_enum! {
+    /// How far a turn is meant to go.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum Reach {
+        /// To the next stable state, then back to the person.
+        One = "one",
+        /// On through the stable states until the work is done. Each turn still goes one stable state; the next opens
+        /// when it is reached (see [`Turn::follow_on`]).
+        AllTheWay = "all_the_way",
     }
 }
 
-/// The stable state a turn goes to, worked out from the item when the turn opens.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Goal {
-    WithContext,
-    Defined,
-    Done,
+coded_enum! {
+    /// The stable state a turn goes to, worked out from the item when the turn opens.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub enum Goal {
+        WithContext = "with_context",
+        Defined = "defined",
+        Done = "done",
+    }
 }
 
 impl Goal {
-    pub const ALL: [Self; 3] = [Self::WithContext, Self::Defined, Self::Done];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::WithContext => "with_context",
-            Self::Defined => "defined",
-            Self::Done => "done",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|goal| goal.code() == code)
-    }
-
     /// The goal in words, as a sentence names it: "with context".
     pub const fn phrase(self) -> &'static str {
         match self {
@@ -80,101 +54,47 @@ impl Goal {
     }
 }
 
-/// How a turn came to be opened.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TurnSource {
-    /// The person sent the item.
-    GoAhead,
-    /// The heap is set so agents prepare every new item.
-    Prepare,
-}
-
-impl TurnSource {
-    pub const ALL: [Self; 2] = [Self::GoAhead, Self::Prepare];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::GoAhead => "go_ahead",
-            Self::Prepare => "prepare",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|source| source.code() == code)
+coded_enum! {
+    /// How a turn came to be opened.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum TurnSource {
+        /// The person sent the item.
+        GoAhead = "go_ahead",
+        /// The heap is set so agents prepare every new item.
+        Prepare = "prepare",
     }
 }
 
-/// How a turn ended.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TurnEnd {
-    TakenBack,
-    /// A run said the turn's goal was reached and the check passed, or the person set the item's stage to the goal
-    /// or past it, or a claim found it there already.
-    Reached,
-    /// A run found nothing to do for the goal and gave the turn back to the person. Not a failure.
-    HandedBack,
-}
-
-impl TurnEnd {
-    pub const ALL: [Self; 3] = [Self::TakenBack, Self::Reached, Self::HandedBack];
-
-    /// Stable code used in storage. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::TakenBack => "taken_back",
-            Self::Reached => "reached",
-            Self::HandedBack => "handed_back",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|end| end.code() == code)
+coded_enum! {
+    /// How a turn ended.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum TurnEnd {
+        TakenBack = "taken_back",
+        /// A run said the turn's goal was reached and the check passed, or the person set the item's stage to the goal
+        /// or past it, or a claim found it there already.
+        Reached = "reached",
+        /// A run found nothing to do for the goal and gave the turn back to the person. Not a failure.
+        HandedBack = "handed_back",
     }
 }
 
-/// Why a turn was taken back, as its audit entry says, or why a question was withdrawn: the last two codes are only
-/// ever a question's `why`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TakeBackWhy {
-    /// The person took it back.
-    TakeBack,
-    /// The person started the item.
-    Started,
-    /// The item was closed.
-    Closed,
-    /// The heap was archived.
-    HeapArchived,
-    /// Only for withdrawn questions: the turn ended because the item reached its goal.
-    GoalMet,
-    /// Only for withdrawn questions: the run handed the turn back.
-    HandedBack,
-}
-
-impl TakeBackWhy {
-    pub const ALL: [Self; 6] = [
-        Self::TakeBack,
-        Self::Started,
-        Self::Closed,
-        Self::HeapArchived,
-        Self::GoalMet,
-        Self::HandedBack,
-    ];
-
-    /// Stable code used in audit diffs. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::TakeBack => "take_back",
-            Self::Started => "started",
-            Self::Closed => "closed",
-            Self::HeapArchived => "heap_archived",
-            Self::GoalMet => "goal_met",
-            Self::HandedBack => "handed_back",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|why| why.code() == code)
+coded_enum! {
+    /// Why a turn was taken back, as its audit entry says, or why a question was withdrawn: the last two codes are only
+    /// ever a question's `why`.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum TakeBackWhy {
+        /// The person took it back.
+        TakeBack = "take_back",
+        /// The person started the item.
+        Started = "started",
+        /// The item was closed.
+        Closed = "closed",
+        /// The heap was archived.
+        HeapArchived = "heap_archived",
+        /// Only for withdrawn questions: the turn ended because the item reached its goal.
+        GoalMet = "goal_met",
+        /// Only for withdrawn questions: the run handed the turn back.
+        HandedBack = "handed_back",
     }
 }
 

@@ -8,6 +8,7 @@ use std::fmt;
 
 use crate::handle::{Handle, ItemKey};
 use crate::heap::Heap;
+use crate::ids::coded_enum;
 use crate::item::{Item, Kind, Need, Stage};
 use crate::text::parse_required;
 use crate::turn::Goal;
@@ -31,76 +32,38 @@ pub const STARTED_BOOST: f64 = 3.0;
 /// Most heaps the queue is asked about at once.
 pub const MAX_QUEUE_HEAPS: usize = 20;
 
-/// How a run ended.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum RunEnd {
-    /// It said the turn's goal was reached, and the check passed.
-    Reached,
-    /// It asked one or more questions, and the person has the item.
-    Asked,
-    /// It ended without either, or went quiet. Counts toward a stuck turn.
-    Failed,
-    /// The person took the turn back while the run was live. Not a failure.
-    TakenBack,
-    /// It found nothing to do for the goal and gave the turn back to the person. Not a failure.
-    HandedBack,
-    /// It stopped because the account hit the agent tool's usage limit. Not a failure: the turn's failed runs are left
-    /// as they are, and the queue gives its item first place.
-    Limited,
-}
-
-impl RunEnd {
-    pub const ALL: [Self; 6] = [
-        Self::Reached,
-        Self::Asked,
-        Self::Failed,
-        Self::TakenBack,
-        Self::HandedBack,
-        Self::Limited,
-    ];
-
-    /// Stable code used in storage and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Reached => "reached",
-            Self::Asked => "asked",
-            Self::Failed => "failed",
-            Self::TakenBack => "taken_back",
-            Self::HandedBack => "handed_back",
-            Self::Limited => "limited",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|end| end.code() == code)
+coded_enum! {
+    /// How a run ended.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum RunEnd {
+        /// It said the turn's goal was reached, and the check passed.
+        Reached = "reached",
+        /// It asked one or more questions, and the person has the item.
+        Asked = "asked",
+        /// It ended without either, or went quiet. Counts toward a stuck turn.
+        Failed = "failed",
+        /// The person took the turn back while the run was live. Not a failure.
+        TakenBack = "taken_back",
+        /// It found nothing to do for the goal and gave the turn back to the person. Not a failure.
+        HandedBack = "handed_back",
+        /// It stopped because the account hit the agent tool's usage limit. Not a failure: the turn's failed runs are
+        /// left as they are, and the queue gives its item first place.
+        Limited = "limited",
     }
 }
 
-/// What a run reached when it ended as [`RunEnd::Reached`]: the stage its item is at after the reach, or that its
-/// note became other items.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RunReached {
-    WithContext,
-    Defined,
-    Became,
+coded_enum! {
+    /// What a run reached when it ended as [`RunEnd::Reached`]: the stage its item is at after the reach, or that its
+    /// note became other items.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum RunReached {
+        WithContext = "with_context",
+        Defined = "defined",
+        Became = "became",
+    }
 }
 
 impl RunReached {
-    pub const ALL: [Self; 3] = [Self::WithContext, Self::Defined, Self::Became];
-
-    /// Stable code used in storage and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::WithContext => "with_context",
-            Self::Defined => "defined",
-            Self::Became => "became",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|reached| reached.code() == code)
-    }
-
     /// What an item at `stage` reached, or `None` for a stage no run reaches: as written.
     pub const fn from_stage(stage: Stage) -> Option<Self> {
         match stage {
@@ -743,15 +706,6 @@ mod tests {
             default_failure(Goal::WithContext),
             eq("The run ended without saying it reached with context or asking a question.")
         );
-    }
-
-    #[gtest]
-    fn every_end_reads_back_from_its_code() {
-        for end in RunEnd::ALL {
-            expect_that!(RunEnd::from_code(end.code()), some(eq(end)));
-        }
-        expect_that!(RunEnd::from_code("handed_back"), some(eq(RunEnd::HandedBack)));
-        expect_that!(RunEnd::from_code("lapsed"), none());
     }
 
     fn made(kind: Kind, description: Option<&str>, key: &str) -> Item {

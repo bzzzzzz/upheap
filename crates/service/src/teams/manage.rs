@@ -333,7 +333,7 @@ impl Services {
         store::audit::insert_audit_entry(&txn, &entry).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(%team_id, member_id = %target.user_id, user_id = %principal.user_id, action = action.as_str(), "membership ended");
+        tracing::info!(%team_id, member_id = %target.user_id, user_id = %principal.user_id, action = action.code(), "membership ended");
         Ok(())
     }
 }

@@ -3,6 +3,7 @@
 //! Steps are their own rows with their own versions, so ticking one never conflicts with editing the item
 //! (architecture.md, Data model). They are never deleted: a dropped step stays, shown as dropped.
 
+use crate::ids::coded_enum;
 use crate::item::{Item, ItemError, Kind, Title};
 use crate::text::{Context, parse_positive};
 use crate::{ItemId, StepId, Timestamp, Version};
@@ -46,28 +47,13 @@ impl std::fmt::Display for StepNumber {
     }
 }
 
-/// Whether a step is still to do, done, or no longer wanted. A step can move from any state to any other.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum StepState {
-    Open,
-    Ticked,
-    Dropped,
-}
-
-impl StepState {
-    pub const ALL: [Self; 3] = [Self::Open, Self::Ticked, Self::Dropped];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Open => "open",
-            Self::Ticked => "ticked",
-            Self::Dropped => "dropped",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|state| state.code() == code)
+coded_enum! {
+    /// Whether a step is still to do, done, or no longer wanted. A step can move from any state to any other.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum StepState {
+        Open = "open",
+        Ticked = "ticked",
+        Dropped = "dropped",
     }
 }
 

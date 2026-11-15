@@ -291,7 +291,7 @@ impl Services {
         let saved = self
             .save_parameter(txn, heap, principal, &edited, action, diff, self.now())
             .await?;
-        tracing::info!(heap_id = %heap.id, parameter_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), action = action.as_str(), "parameter changed");
+        tracing::info!(heap_id = %heap.id, parameter_id = %saved.id, user_id = %principal.user_id, version = saved.version.get(), action = action.code(), "parameter changed");
         Ok(with_actions(saved, heap, role))
     }
 

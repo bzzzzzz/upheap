@@ -1,26 +1,15 @@
 //! Teams and membership. A team always keeps at least one admin, and a personal team keeps exactly its owner.
 
 use crate::handle::Handle;
+use crate::ids::coded_enum;
 use crate::text::Name;
 use crate::{TeamId, Timestamp, UserId, Version};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Role {
-    Admin,
-    Member,
-}
-
-impl Role {
-    /// Stable code used in storage and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Admin => "admin",
-            Self::Member => "member",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        [Self::Admin, Self::Member].into_iter().find(|role| role.code() == code)
+coded_enum! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Role {
+        Admin = "admin",
+        Member = "member",
     }
 }
 
