@@ -273,7 +273,8 @@ async fn hand_back(
 }
 
 /// Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that
-/// asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
+/// asked questions ends as `asked`; one sent with `limited` (the agent tool hit the account's usage limit) ends as
+/// `limited` and is no failure; any other ends as `failed`, with `failure` or a default text, and counts toward a
 /// stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
 /// its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
 /// The tool's start and exit times are each set once too, but sending them again changes nothing and is no error.
@@ -309,6 +310,7 @@ async fn finish_run(
             tool_started_at,
             tool_ended_at,
             failure,
+            body.limited,
         )
         .await?;
     Ok(Json(run_dto(&view)))

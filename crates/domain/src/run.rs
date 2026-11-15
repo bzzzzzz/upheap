@@ -1,6 +1,6 @@
 //! Runs: one go an agent has at the turn of an item (Work with agents, Runs and The agent loop).
 //!
-//! A run is claimed from the queue, holds one item, and ends one of five ways. An agent that goes quiet is not waited
+//! A run is claimed from the queue, holds one item, and ends one of six ways. An agent that goes quiet is not waited
 //! for: a run nobody has heard from in [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and is written
 //! as failed the next time something touches it (architecture.md, Runs).
 
@@ -44,15 +44,19 @@ pub enum RunEnd {
     TakenBack,
     /// It found nothing to do for the goal and gave the turn back to the person. Not a failure.
     HandedBack,
+    /// It stopped because the account hit the agent tool's usage limit. Not a failure: the turn's failed runs are left
+    /// as they are, and the queue gives its item first place.
+    Limited,
 }
 
 impl RunEnd {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Reached,
         Self::Asked,
         Self::Failed,
         Self::TakenBack,
         Self::HandedBack,
+        Self::Limited,
     ];
 
     /// Stable code used in storage and the API. Never renamed.
@@ -63,6 +67,7 @@ impl RunEnd {
             Self::Failed => "failed",
             Self::TakenBack => "taken_back",
             Self::HandedBack => "handed_back",
+            Self::Limited => "limited",
         }
     }
 

@@ -458,6 +458,35 @@ pub async fn latest_failure_for_turns(
     Ok(latest)
 }
 
+/// Which of `turn_ids` have a latest run (by `started_at`, ties by id) that ended `limited`, in one query per
+/// [`IN_LIST_CHUNK`] turns.
+pub async fn turns_last_limited(db: &impl ConnectionTrait, turn_ids: &[TurnId]) -> Result<HashSet<TurnId>, StoreError> {
+    let ids: Vec<String> = turn_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut limited = HashSet::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_runs::Entity::find()
+            .filter(item_runs::Column::TurnId.is_in(chunk.iter().map(String::as_str)))
+            .order_by_asc(item_runs::Column::StartedAt)
+            .order_by_asc(item_runs::Column::Id)
+            .all(db)
+            .await?;
+        // Ascending, so the last run of a turn decides.
+        for row in rows {
+            let read = RowReader {
+                table: TABLE,
+                id: &row.id,
+            };
+            let turn = TurnId::from_uuid(read.uuid(&row.turn_id)?);
+            if row.end_kind.as_deref() == Some(RunEnd::Limited.code()) {
+                limited.insert(turn);
+            } else {
+                limited.remove(&turn);
+            }
+        }
+    }
+    Ok(limited)
+}
+
 fn links_to_db(links: &[RunLink]) -> String {
     let links: Vec<&str> = links.iter().map(RunLink::as_str).collect();
     serde_json::to_string(&links).unwrap_or_else(|_| "[]".to_owned())

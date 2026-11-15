@@ -70,6 +70,8 @@ pub struct WaitingInHeapDto {
 /// - `asked`: it asked one or more questions, so the person has the item.
 /// - `failed`: it ended without either, or nobody heard from it for 30 minutes.
 /// - `taken_back`: the person took the turn back while the run was live. Not a failure.
+/// - `handed_back`: it found nothing to do and handed the turn back. Not a failure.
+/// - `limited`: the run stopped because the account hit the agent tool's usage limit. Not a failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = RunEnd)]
@@ -80,6 +82,8 @@ pub enum RunEndDto {
     TakenBack,
     /// The run found nothing to do and handed the turn back. Not a failure.
     HandedBack,
+    /// The run stopped because the account hit the agent tool's usage limit. Not a failure.
+    Limited,
     /// An end this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -94,6 +98,7 @@ impl From<RunEnd> for RunEndDto {
             RunEnd::Failed => Self::Failed,
             RunEnd::TakenBack => Self::TakenBack,
             RunEnd::HandedBack => Self::HandedBack,
+            RunEnd::Limited => Self::Limited,
         }
     }
 }
@@ -219,6 +224,10 @@ pub struct FinishRequestDto {
     /// characters. Ignored for a run that ended another way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<String>,
+    /// Whether the run stopped because the agent tool hit the account's usage limit. A run that hasn't ended then
+    /// ends as `limited`, not failed, unless it lapsed or asked. Left out, false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub limited: bool,
     /// When the run's agent tool started, in UTC milliseconds. Set once: a later value for a run that has one is
     /// ignored.
     #[serde(default, skip_serializing_if = "Option::is_none")]

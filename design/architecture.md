@@ -162,7 +162,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   the named ones.
 - **A turn is worked in runs,** rows of their own in `item_runs`: one go an agent has at the turn of an item, with who
   claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it
-  ended (`reached`, `asked`, `failed`, `taken_back` or `handed_back`), what it said it reached and made (`result`, `links`), why it
+  ended (`reached`, `asked`, `failed`, `taken_back`, `handed_back` or `limited`), what it said it reached and made (`result`, `links`), why it
   failed, and its cost in micro-dollars. `work run` also sends the agent tool's own start and exit times with `finish`
   (`tool_started_at`, `tool_ended_at`, each set once, null for older runs and for runs whose tool never started).
   Like turns, runs are never deleted and never bump the item's `version`.
@@ -172,8 +172,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   history is the runs that ended as reached in the last 30 days, and Your decision is the items whose latest turn
   ended as reached by such a run and that are still at that stage, not started and not closed.
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
-  blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered by the
-  item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
+  blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered first by
+  whether the open turn's latest run ended `limited` (those come before all others, so the item a usage limit cut off
+  is the one claimed once the limit resets), then by the item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
   `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
   position. The boost lets half-done work go on before new work of about the same importance while something much
   more important still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the
@@ -822,8 +823,13 @@ section is how it maps onto this API.
    for 30 minutes." That timer uses the monotonic clock on purpose: it stands still while the machine sleeps, as
    claude does, so a sleep isn't silence. The loop stops the tool when the server answers
    `run_over`. When the tool ends it sends `finish` with the cost the tool reported and, only if the tool itself
-   failed, why: the server decides whether the run reached its goal, asked, handed back, or failed, and
-   the loop never works that out. With `--workers N` the loop runs N workers on one task, each claiming its own item;
+   failed, why: the server decides whether the run reached its goal, asked, handed back, hit the limit, or failed, and
+   the loop never works that out. The exception is the agent tool's usage limit: a run whose claude stream had a rejected
+   `rate_limit_event` (not overage use) or `api_error` `usage_limit_reached` on its result is sent with `limited`, and
+   ends as `limited`, not failed, so the turn's failed runs are left alone. The loop then holds every worker until the
+   reset plus a minute (30 minutes when no time is known), by the wall clock like heartbeats, with live runs ending as
+   usual; the queue then claims that item first (see the queue's order above).
+   With `--once` the loop says when to run again and exits. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
    item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the

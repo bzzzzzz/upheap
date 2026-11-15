@@ -26,7 +26,8 @@ use clap::{CommandFactory, Parser, Subcommand};
 use reqwest::Url;
 
 pub use crate::agent::{
-    Access, AgentTools, Interrupt, ListenForInterrupts, SystemTools, Tool, ToolError, ToolReport, ToolStart, WorkDeps,
+    Access, AgentTools, Interrupt, ListenForInterrupts, SystemTools, Tool, ToolError, ToolReport, ToolStart,
+    UsageLimit, WorkDeps,
 };
 pub use crate::auth::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
 pub use crate::client::HttpClients;
