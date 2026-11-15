@@ -158,8 +158,9 @@ async fn next_item(
 }
 
 /// The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:
-/// its position in its heap's list, your priority for that heap, and whether it is started work. Read-only: nothing is
-/// claimed. Any member who may edit items in every given heap may ask.
+/// its position in its heap's list, your priority for that heap, whether it is started work, and whether its last run
+/// was cut off by the usage limit. Read-only: nothing is claimed. Any member who may edit items in every given heap
+/// may ask.
 #[utoipa::path(get, path = "/work/queue", tag = "work", security(("session" = [])),
     params(NextQuery),
     responses(
@@ -186,6 +187,7 @@ async fn queue_items(
                 state: queued.work.item.state.kind().into(),
                 heap_position: queued.heap_position,
                 heap_priority: queued.heap_priority.get(),
+                limited: queued.limited,
             })
             .collect(),
         waiting_count: queue.waiting_count,
@@ -310,7 +312,8 @@ async fn hand_back(
 }
 
 /// Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that
-/// asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
+/// asked questions ends as `asked`; one sent with `limited` (the agent tool hit the account's usage limit) ends as
+/// `limited` and is no failure; any other ends as `failed`, with `failure` or a default text, and counts toward a
 /// stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
 /// its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
 /// The tool's start and exit times are each set once too, but sending them again changes nothing and is no error.
@@ -346,6 +349,7 @@ async fn finish_run(
             tool_started_at,
             tool_ended_at,
             failure,
+            body.limited,
         )
         .await?;
     Ok(Json(run_dto(&view)))

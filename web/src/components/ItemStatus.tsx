@@ -6,6 +6,7 @@ import { chipClass } from "./buttons";
 import { AgentChip, ChangesAskedButton, SendToAgentButton } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";
 import { isClosed, KIND_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
+import { useOverListLink } from "./overList";
 import { PopoverSheet } from "./PopoverSheet";
 import { formatDate, isToCome } from "./reminders";
 import { useFocusAfterRender } from "./useFocusAfterRender";
@@ -41,6 +42,9 @@ export function StatusLine({
   const date = item.kind === "reminder" && item.due ? formatDate(item.due.date) : undefined;
   const closed = isClosed(item.state);
   const blocker = item.state === "blocked" ? item.blocked_by : null;
+  // A blocker moved to another heap of the team is opened there.
+  const blockerHeap = { ...heapRef, heap: item.blocker_gone?.moved_to?.slug ?? heapRef.heap };
+  const overList = useOverListLink();
   const reason = item.state === "blocked" ? item.blocked_reason : null;
   const focusAfterRender = useFocusAfterRender();
   // Set by a send, until the item shows the agent's chip, which then takes the focus: the send button goes away with the
@@ -85,9 +89,9 @@ export function StatusLine({
             Blocked by
             <Link
               to="/teams/$team/heaps/$heap/items/$item"
-              // A blocker moved to another heap of the team is opened there.
-              params={{ ...heapRef, heap: item.blocker_gone?.moved_to?.slug ?? heapRef.heap, item: blocker.key }}
+              params={{ ...blockerHeap, item: blocker.key }}
               search={true}
+              {...overList(blockerHeap, blocker.key)}
               // In place of this item, so Back still closes the pane rather than walking back through the blockers.
               replace
               state={(prev) => prev}

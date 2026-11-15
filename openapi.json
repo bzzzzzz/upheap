@@ -7739,7 +7739,7 @@
         "tags": [
           "work"
         ],
-        "summary": "The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:\nits position in its heap's list, your priority for that heap, and whether it is started work. Read-only: nothing is\nclaimed. Any member who may edit items in every given heap may ask.",
+        "summary": "The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:\nits position in its heap's list, your priority for that heap, whether it is started work, and whether its last run\nwas cut off by the usage limit. Read-only: nothing is claimed. Any member who may edit items in every given heap\nmay ask.",
         "operationId": "queue_items",
         "parameters": [
           {
@@ -7929,7 +7929,7 @@
         "tags": [
           "work"
         ],
-        "summary": "Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that\nasked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a\nstuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps\nits end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.\nThe tool's start and exit times are each set once too, but sending them again changes nothing and is no error.",
+        "summary": "Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that\nasked questions ends as `asked`; one sent with `limited` (the agent tool hit the account's usage limit) ends as\n`limited` and is no failure; any other ends as `failed`, with `failure` or a default text, and counts toward a\nstuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps\nits end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.\nThe tool's start and exit times are each set once too, but sending them again changes nothing and is no error.",
         "operationId": "finish_run",
         "parameters": [
           {
@@ -9713,6 +9713,10 @@
               "null"
             ],
             "description": "Why the run failed, for a run that ends without reaching the goal or asking: plain text, cut to 2,000\ncharacters. Ignored for a run that ended another way."
+          },
+          "limited": {
+            "type": "boolean",
+            "description": "Whether the run stopped because the agent tool hit the account's usage limit. A run that hasn't ended then\nends as `limited`, not failed, unless it lapsed or asked. Left out, false."
           },
           "tool_ended_at": {
             "type": [
@@ -12544,7 +12548,8 @@
           "item",
           "state",
           "heap_position",
-          "heap_priority"
+          "heap_priority",
+          "limited"
         ],
         "properties": {
           "heap_position": {
@@ -12561,6 +12566,10 @@
           },
           "item": {
             "$ref": "#/components/schemas/WorkItem"
+          },
+          "limited": {
+            "type": "boolean",
+            "description": "Whether the turn's latest run ended as `limited`, cut off by the agent tool's usage limit. Such items come\nbefore all others, so the work a limit cut off goes on first once it resets."
           },
           "state": {
             "$ref": "#/components/schemas/ItemState",
@@ -13105,13 +13114,14 @@
       },
       "RunEnd": {
         "type": "string",
-        "description": "How a run ended.\n\n- `reached`: it said the turn's goal was reached, and the check passed.\n- `asked`: it asked one or more questions, so the person has the item.\n- `failed`: it ended without either, or nobody heard from it for 30 minutes.\n- `taken_back`: the person took the turn back while the run was live. Not a failure.",
+        "description": "How a run ended.\n\n- `reached`: it said the turn's goal was reached, and the check passed.\n- `asked`: it asked one or more questions, so the person has the item.\n- `failed`: it ended without either, or nobody heard from it for 30 minutes.\n- `taken_back`: the person took the turn back while the run was live. Not a failure.\n- `handed_back`: it found nothing to do and handed the turn back. Not a failure.\n- `limited`: the run stopped because the account hit the agent tool's usage limit. Not a failure.",
         "enum": [
           "reached",
           "asked",
           "failed",
           "taken_back",
-          "handed_back"
+          "handed_back",
+          "limited"
         ]
       },
       "RunLink": {

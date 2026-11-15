@@ -54,6 +54,8 @@ pub struct QueuedItem {
     pub heap_position: u32,
     /// The caller's priority for the item's heap.
     pub heap_priority: HeapPriority,
+    /// Whether the turn's latest run was cut off by the agent tool's usage limit, which puts the item first.
+    pub limited: bool,
 }
 
 /// The whole queue in the order a claim takes it, and how many items wait for the person.
@@ -96,6 +98,10 @@ pub(crate) struct RunScope {
     pub run: Run,
     pub turn: Turn,
 }
+
+/// What orders the queue's candidates, best first: whether the turn's latest run was limited, the score, the heap's
+/// index, and the position.
+type QueueKey = (bool, f64, usize, u32);
 
 /// A heap the queue is asked about, with its team.
 struct QueueHeap {
@@ -433,14 +439,16 @@ impl Services {
     /// Ends the run `run_id` if it hasn't ended, and records what it cost. What a loop calls when the agent tool
     /// exits.
     ///
-    /// - A run that hasn't ended ends as asked when questions were asked in it, otherwise as failed, with `failure`
-    ///   (already cut by [`cut_failure`]) or the default text. A lapsed run ends as failed with the lapse text,
-    ///   whatever was sent.
+    /// - A run that hasn't ended ends as asked when questions were asked in it, then as limited when `limited` says
+    ///   the agent tool hit the account's usage limit (the turn's failed runs are left as they are, and no failure
+    ///   text is kept), otherwise as failed, with `failure` (already cut by [`cut_failure`]) or the default text. A
+    ///   lapsed run ends as failed with the lapse text, whatever was sent.
     /// - A run that has ended keeps its end; only the cost is recorded.
     ///
     /// The cost, in millionths of a US dollar, is set once: a second one fails with [`RunError::CostRecorded`]. The
     /// tool's start and exit times (already checked by [`domain::run::check_tool_times`]) are each set once too, but a
     /// second one is ignored without an error.
+    #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
     pub async fn finish_run(
         &self,
         principal: Principal,
@@ -449,6 +457,7 @@ impl Services {
         tool_started_at: Option<Timestamp>,
         tool_ended_at: Option<Timestamp>,
         failure: Option<String>,
+        limited: bool,
     ) -> Result<RunView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (mut run, _) = self.lock_run(&txn, principal, run_id).await?;
@@ -471,6 +480,7 @@ impl Services {
                     store::turns::set_failed_runs(&txn, turn.id, 0).await?;
                     run.ended_as(RunEnd::Asked, now, None, Vec::new(), None)
                 }
+                Some(_) if limited => run.ended_as(RunEnd::Limited, now, None, Vec::new(), None),
                 Some(turn) => {
                     self.record_failed_run(&txn, &turn).await?;
                     let failure = failure.unwrap_or_else(|| default_failure(turn.goal));
@@ -776,9 +786,10 @@ impl Services {
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
     /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The candidates come best
-    /// first: the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has
-    /// already worked on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split
-    /// from), then by heap, then by position.
+    /// first: those whose turn's latest run ended as limited (the agent tool's usage limit); then the highest score
+    /// times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already worked on its send
+    /// (its turn, or an earlier stage of the same all-the-way send or the note it was split from), then by heap, then
+    /// by position.
     async fn read_queue(
         &self,
         db: &impl ConnectionTrait,
@@ -836,10 +847,16 @@ impl Services {
             .collect();
         let started_sends = store::runs::sends_with_runs(db, &candidate_sends).await?;
 
-        // Each candidate with its sort key: score times the person's heap priority, boosted when started, then heap
-        // index, then position. Its runs are counted below, in one query for all of them.
+        // The turns whose latest run hit the agent tool's usage limit come before every other candidate.
+        let candidate_turns: Vec<TurnId> = by_heap
+            .values()
+            .flat_map(|turns| turns.values().map(|turn| turn.id))
+            .collect();
+        let limited_turns = store::runs::turns_last_limited(db, &candidate_turns).await?;
+
+        // Each candidate with its sort key. Its runs are counted below, in one query for all of them.
         let mut met = Vec::new();
-        let mut candidates: Vec<((f64, usize, u32), QueuedItem)> = Vec::new();
+        let mut candidates: Vec<(QueueKey, QueuedItem)> = Vec::new();
         let list = ListView::default();
         for (heap_index, queue) in heaps.iter().enumerate() {
             let Some(in_heap) = by_heap.remove(&queue.heap.id) else {
@@ -872,13 +889,20 @@ impl Services {
                 }
                 let started = started_sends.contains(&turn.send_id);
                 let boost = if started { STARTED_BOOST } else { 1.0 };
-                let key = (ranked.score * priority.as_factor() * boost, heap_index, ranked.position);
+                let limited = limited_turns.contains(&turn.id);
+                let key = (
+                    limited,
+                    ranked.score * priority.as_factor() * boost,
+                    heap_index,
+                    ranked.position,
+                );
                 candidates.push((
                     key,
                     QueuedItem {
                         // An item that isn't blocked is always in the default list.
                         heap_position: list_position.unwrap_or(ranked.position),
                         heap_priority: priority,
+                        limited,
                         work: WorkItem {
                             item: (*item).clone(),
                             heap: queue.heap.clone(),
@@ -893,10 +917,11 @@ impl Services {
         }
 
         candidates.sort_by(|(a, _), (b, _)| {
-            a.0.total_cmp(&b.0)
+            a.0.cmp(&b.0)
                 .reverse()
-                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.1.total_cmp(&b.1).reverse())
                 .then_with(|| a.2.cmp(&b.2))
+                .then_with(|| a.3.cmp(&b.3))
         });
         let turn_ids: Vec<TurnId> = candidates.iter().map(|(_, queued)| queued.work.turn.id).collect();
         let run_counts = store::runs::count_runs_for_turns(db, &turn_ids).await?;

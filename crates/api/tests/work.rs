@@ -1640,6 +1640,74 @@ async fn a_run_that_ends_without_a_word_fails_with_a_default_or_the_given_reason
 
 #[gtest]
 #[tokio::test]
+async fn a_limited_run_is_no_failure_and_leaves_the_failed_runs_as_they_are() -> Result<()> {
+    // Arrange: a turn with two failed runs, one more would make it stuck.
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    w.fail_once().await?;
+    w.fail_once().await?;
+    let run = w.claimed().await?;
+
+    // Act
+    let limited = w
+        .finish(&run, json!({ "limited": true, "failure": "ignored", "cost_usd": 1.5 }))
+        .await?;
+    let item = w.get(&key).await?;
+    let again = w.finish(&run, json!({ "failure": "later" })).await?;
+
+    // Assert
+    expect_that!(limited.status, eq(StatusCode::OK));
+    expect_that!(limited.body["end"], eq(&json!("limited")));
+    expect_that!(limited.body["failure"], eq(&Value::Null));
+    expect_that!(item["turn"]["failed_runs"], eq(&json!(2)));
+    expect_that!(item["turn"]["stuck"], eq(false));
+    expect_that!(again.body["end"], eq(&json!("limited")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_whose_latest_run_was_limited_comes_first_until_a_later_run_ends_otherwise() -> Result<()> {
+    // Arrange: a modest item has a run that hits the limit, then a better item is sent.
+    let w = world().await?;
+    let limited = w
+        .add(
+            "Polish the footer",
+            json!({ "need": "nice_to_have", "impact": "m", "effort": "m" }),
+        )
+        .await?;
+    w.send_turn(&limited).await?;
+    let run = w.claimed().await?;
+    w.finish(&run, json!({ "limited": true })).await?;
+    let better = w
+        .add(
+            "Servers are down",
+            json!({ "need": "critical", "impact": "m", "effort": "m" }),
+        )
+        .await?;
+    w.send_turn(&better).await?;
+
+    // Act
+    let first = w.next().await?;
+    let claimed = w.claim().await?;
+    let after = w
+        .finish(
+            claimed.body["run"]["id"].as_str().context("run id")?,
+            json!({ "failure": "The tool crashed" }),
+        )
+        .await?;
+    let then = w.next().await?;
+
+    // Assert
+    expect_that!(first.body["item"]["key"], eq(&json!(limited)));
+    expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(limited)));
+    expect_that!(after.body["end"], eq(&json!("failed")));
+    expect_that!(then.body["item"]["key"], eq(&json!(better)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_heartbeat_keeps_a_run_live_past_the_lapse() -> Result<()> {
     // Arrange
     let w = world().await?;
@@ -2978,5 +3046,40 @@ async fn queue_gives_the_position_the_heaps_list_shows() -> Result<()> {
     expect_that!(items[1]["item"]["key"], eq(&json!(sent)));
     expect_that!(items[1]["state"], eq(&json!("open")));
     expect_that!(items[1]["heap_position"], eq(&json!(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn queue_puts_an_item_the_usage_limit_cut_off_first_and_says_so() -> Result<()> {
+    // Arrange: a modest item has a run that hits the limit, then a better item is sent.
+    let w = world().await?;
+    let limited = w
+        .add(
+            "Polish the footer",
+            json!({ "need": "nice_to_have", "impact": "m", "effort": "m" }),
+        )
+        .await?;
+    w.send_turn(&limited).await?;
+    let run = w.claimed().await?;
+    w.finish(&run, json!({ "limited": true })).await?;
+    let better = w
+        .add(
+            "Servers are down",
+            json!({ "need": "critical", "impact": "m", "effort": "m" }),
+        )
+        .await?;
+    w.send_turn(&better).await?;
+
+    // Act
+    let queue = w.queue().await?;
+
+    // Assert
+    let items = queue.body["items"].as_array().context("items")?;
+    expect_that!(items.len(), eq(2));
+    expect_that!(items[0]["item"]["key"], eq(&json!(limited)));
+    expect_that!(items[0]["limited"], eq(&json!(true)));
+    expect_that!(items[1]["item"]["key"], eq(&json!(better)));
+    expect_that!(items[1]["limited"], eq(&json!(false)));
     Ok(())
 }

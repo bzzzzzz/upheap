@@ -1538,8 +1538,9 @@ export interface paths {
         };
         /**
          * The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:
-         *     its position in its heap's list, your priority for that heap, and whether it is started work. Read-only: nothing is
-         *     claimed. Any member who may edit items in every given heap may ask.
+         *     its position in its heap's list, your priority for that heap, whether it is started work, and whether its last run
+         *     was cut off by the usage limit. Read-only: nothing is claimed. Any member who may edit items in every given heap
+         *     may ask.
          */
         get: operations["queue_items"];
         put?: never;
@@ -1583,7 +1584,8 @@ export interface paths {
         put?: never;
         /**
          * Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that
-         *     asked questions ends as `asked`; any other ends as `failed`, with `failure` or a default text, and counts toward a
+         *     asked questions ends as `asked`; one sent with `limited` (the agent tool hit the account's usage limit) ends as
+         *     `limited` and is no failure; any other ends as `failed`, with `failure` or a default text, and counts toward a
          *     stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
          *     its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
          *     The tool's start and exit times are each set once too, but sending them again changes nothing and is no error.
@@ -2264,6 +2266,11 @@ export interface components {
              *     characters. Ignored for a run that ended another way.
              */
             failure?: string | null;
+            /**
+             * @description Whether the run stopped because the agent tool hit the account's usage limit. A run that hasn't ended then
+             *     ends as `limited`, not failed, unless it lapsed or asked. Left out, false.
+             */
+            limited?: boolean;
             /**
              * Format: int64
              * @description When the run's agent tool exited, in UTC milliseconds; not before `tool_started_at` when both are sent. Set
@@ -3420,6 +3427,11 @@ export interface components {
             heap_priority: number;
             item: components["schemas"]["WorkItem"];
             /**
+             * @description Whether the turn's latest run ended as `limited`, cut off by the agent tool's usage limit. Such items come
+             *     before all others, so the work a limit cut off goes on first once it resets.
+             */
+            limited: boolean;
+            /**
              * @description `in_progress` or `open`: the group of the heap's list that `heap_position` counts in, as the list pins items
              *     in progress above the open ones.
              */
@@ -3679,9 +3691,11 @@ export interface components {
          *     - `asked`: it asked one or more questions, so the person has the item.
          *     - `failed`: it ended without either, or nobody heard from it for 30 minutes.
          *     - `taken_back`: the person took the turn back while the run was live. Not a failure.
+         *     - `handed_back`: it found nothing to do and handed the turn back. Not a failure.
+         *     - `limited`: the run stopped because the account hit the agent tool's usage limit. Not a failure.
          * @enum {string}
          */
-        RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back";
+        RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back" | "limited";
         /** @description A link a run left. */
         RunLink: {
             /** @description What to show for it: "pull request" for a pull or merge request, else the address without its `https://` or `http://`. */

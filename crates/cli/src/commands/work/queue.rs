@@ -57,6 +57,11 @@ pub async fn run(args: QueueArgs, app: &App, out: &mut Output) -> Result<(), Cli
                         "in heap"
                     };
                     let started = if item.started { ", started" } else { "" };
+                    let limited = if queued.limited {
+                        ", cut off by the usage limit"
+                    } else {
+                        ""
+                    };
                     vec![
                         Cell::new((index + 1).to_string()),
                         Cell::toned(item.key.clone(), Tone::Strong),
@@ -65,7 +70,7 @@ pub async fn run(args: QueueArgs, app: &App, out: &mut Output) -> Result<(), Cli
                         Cell::new(journey(item)),
                         Cell::toned(
                             format!(
-                                "#{} {group}, priority {}{started}",
+                                "#{} {group}, priority {}{started}{limited}",
                                 queued.heap_position, queued.heap_priority
                             ),
                             Tone::Dim,

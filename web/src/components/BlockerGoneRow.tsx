@@ -6,6 +6,7 @@ import { ApiProblem, type BlockerGone, type HeapRef, type WaitingBlocker } from 
 import { useUnblock } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
+import { useOverListLink } from "./overList";
 
 const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 
@@ -59,6 +60,8 @@ export function BlockerGoneRow({
   onElsewhere: () => void;
 }) {
   const unblock = useUnblock(heapRef);
+  const overList = useOverListLink();
+  const blockerHeap = { ...heapRef, heap: blocker.gone.moved_to?.slug ?? heapRef.heap };
   const canUnblock = blocker.allowed_actions.includes("change_state");
   const unblockNow = () =>
     unblock.mutateAsync(item).then(onUnblocked, (error: Error) => {
@@ -73,7 +76,8 @@ export function BlockerGoneRow({
         Waits for “
         <Link
           to="/teams/$team/heaps/$heap/items/$item"
-          params={{ ...heapRef, heap: blocker.gone.moved_to?.slug ?? heapRef.heap, item: blocker.item.key }}
+          params={{ ...blockerHeap, item: blocker.item.key }}
+          {...overList(blockerHeap, blocker.item.key)}
           className="text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent"
         >
           {blocker.item.title}

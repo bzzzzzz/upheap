@@ -9,6 +9,7 @@ import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { Markdown } from "./Markdown";
 import { MenuEntry, MenuPopover } from "./Menu";
+import { useOverListLink } from "./overList";
 
 /**
  * A task's steps (ux.md, The item §3): a checklist, inline at every width, each step saving as it's changed. Only the
@@ -99,6 +100,7 @@ function StepRow({
   const canEdit = step.allowed_actions.includes("edit");
   const dropped = step.state === "dropped";
   const hasDisclosure = Boolean(step.context) || canEdit;
+  const overList = useOverListLink();
   // Whether the context's textarea is open. An editor sees it at once for a step with no context, so adding takes one
   // step; with a context it shows rendered until Edit. Focusing the textarea sets the flag, so a context arriving from
   // elsewhere never swaps a draft out from under the typing.
@@ -283,6 +285,7 @@ function StepRow({
                 to="/teams/$team/heaps/$heap/items/$item"
                 params={{ team: step.origin.heap.team_slug, heap: step.origin.heap.slug, item: step.origin.key }}
                 search={true}
+                {...overList({ team: step.origin.heap.team_slug, heap: step.origin.heap.slug }, step.origin.key)}
                 className="text-accent-ink underline"
               >
                 “{step.origin.title}”, a {step.origin.kind}

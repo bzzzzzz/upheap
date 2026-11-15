@@ -72,6 +72,17 @@ pub struct ToolReport {
     pub failure: Option<String>,
     /// The tool's last message. Logged at `DEBUG`, never shown.
     pub last_message: Option<String>,
+    /// Set when the run failed because the account hit the tool's usage limit.
+    pub limit: Option<UsageLimit>,
+}
+
+/// An account's usage limit the tool stopped at.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UsageLimit {
+    /// When the limit resets; `None` when the tool didn't say.
+    pub resets_at: Option<jiff::Timestamp>,
+    /// Which window was reached, as the tool names it (`five_hour`, `seven_day`); `None` when not said.
+    pub window: Option<String>,
 }
 
 /// Why a tool could not be started.
