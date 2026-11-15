@@ -514,7 +514,7 @@ stage to the turn's goal or past it. A reached turn can later be marked **redone
 runs.
 
 **Run.** One start of the agent tool on one item, inside a turn. It records when it started and ended, how it
-ended (reached, asked, failed, handed back), the state it started from and reached, a **result** (a line or two and links to
+ended (reached, asked, failed, handed back, or stopped by the usage limit), the state it started from and reached, a **result** (a line or two and links to
 what it produced), and its cost as reported. A turn has one or more runs. Runs are never changed or deleted.
 
 **Claim.** While a run is live it holds its item, and no other run is given it. A claim lapses when its run
@@ -571,12 +571,15 @@ change it makes carries the run it was made in.
    boost in the queue: large enough that only something much more important passes it. Half-done work is
    finished before new work of about the same importance is begun. The boost is ×3, a number in the formula
    like the others, and counts any run on the open turn or an earlier stage of the same send, however it ended. It
-   is the queue's only: the person's lists keep the plain score.
+   is the queue's only: the person's lists keep the plain score. An item whose open turn's latest run stopped at the
+   agent tool's usage limit comes before all others, so it is the first one claimed once the limit resets.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
-5. A run ends in one of four ways: **reached**, with its result; **asked**, having attached at least one
+5. A run ends in one of five ways: **reached**, with its result; **asked**, having attached at least one
    question; **handed back**, with a reason, when there is nothing to do and the goal needn't be reached,
-   such as work done elsewhere (the turn goes back to the person, and it isn't a failure); or **failed**. An item
+   such as work done elsewhere (the turn goes back to the person, and it isn't a failure); **limited**, when the
+   agent tool stopped at the account's usage limit (not a failure: it doesn't count toward a stuck turn); or
+   **failed**. An item
    that already has what the goal needs is reached, not handed back. A claim that lapses counts as failed.
    So does a run whose tool showed no activity for 30 minutes: the loop stops it and fails it with its own reason.
 6. Reached is checked, not believed: the turn ends, and the stage moves, only if the item fits the stage's row
@@ -1047,7 +1050,11 @@ Working in Work (priority 2) and House (priority 1) with claude. Ctrl-C stops af
 The agent tool gets: the instructions for working with Upheap, the heap's context, what `item show`
 prints, the state to reach, and the person's line.
 How a run ended is read off it: it said `work reached` and the check passed; or `work hand-back`; or it left an open
-question; otherwise it failed. Cost is what the tool reported, or blank.
+question; or the tool stopped at the account's usage limit (`hit the limit`); otherwise it failed. Cost is what
+the tool reported, or blank.
+At the usage limit: every worker claims nothing until the limit resets plus a minute (30 minutes when the tool
+gives no time), and one line says so: `12:07  Claude limit reached (five_hour), waiting until 12:21.` Runs that
+are live end as usual. With --once the loop says when to run again and exits 0 at once.
 Ctrl-C: once, the current run (every current run, with --workers) finishes and the loop stops, and each live run is
 listed with how long it has been going; twice, the runs are stopped and count as failed.
 Exits:  0 stopped by the person, or --once done; 2 no heap named and no default; 4 not signed in;

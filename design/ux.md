@@ -719,7 +719,7 @@ nothing happened in the whole period each chart says "Nothing in these 30 days."
 
 What each figure counts: spend is the cost of the runs that started in the bucket (a run with no cost adds nothing);
 added is items created in it; closed is items whose latest close is in it, by how they closed (a reopened item stops
-counting until it closes again); runs are by how they ended, "other" being taken back, handed back and still running.
+counting until it closes again); runs are by how they ended, "other" being taken back, handed back, stopped by the usage limit and still running.
 An item counts in the heap it is in now, for all its past.
 
 Hovering or focusing a bar (arrow keys move between bars) shows its values, zeros included. On a phone a tap on a bar

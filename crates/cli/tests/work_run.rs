@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
-use cli::{Access, Interrupt, TokenStore, Tool, ToolError, ToolReport, ToolStart};
+use cli::{Access, Interrupt, TokenStore, Tool, ToolError, ToolReport, ToolStart, UsageLimit};
 use common::{
     Agent, Buffer, HEAP, Outcome, START, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, key,
     lines_with, wait_until,
@@ -2847,4 +2847,121 @@ mod leftovers {
         expect_that!(outcome.stderr, not(contains_substring("couldn't remove")));
         Ok(())
     }
+}
+
+/// An agent that stops at the usage limit, which resets `resets_in` from now, every time it is started.
+fn limited_agent(resets_in: StdDuration) -> StandIn {
+    StandIn::new(move |_| async move {
+        Ok(ToolReport {
+            cost_usd: Some(1.5),
+            failure: Some("claude reported an error: You've hit your limit".to_owned()),
+            limit: Some(UsageLimit {
+                resets_at: jiff::Timestamp::now().checked_add(resets_in).ok(),
+                window: Some("five_hour".to_owned()),
+            }),
+            ..ToolReport::default()
+        })
+    })
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_at_the_limit_is_limited_and_the_loop_holds_then_claims_the_same_item_again() -> Result<()> {
+    // Arrange: a limit that resets in a minute, so the hold lasts two.
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let tool = limited_agent(StdDuration::from_secs(60));
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+
+    // Act
+    let looping = cli.run_work_watched(LOOP, &tool, interrupts, &stdout, &stderr);
+    let holding = async {
+        wait_until("the hold line", || stdout.contents().contains("waiting until")).await?;
+        // Held: no claim for a good while by the loop's own checks.
+        tokio::time::sleep(StdDuration::from_millis(100)).await;
+        let claims_while_held = tool.starts().len();
+        cli.clock_offset.fetch_add(3 * 60 * 1000, Ordering::SeqCst);
+        wait_until("the second run", || tool.starts().len() == 2).await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(claims_while_held)
+    };
+    let (outcome, claims_while_held) = tokio::join!(looping, holding);
+
+    // Assert
+    expect_that!(claims_while_held?, eq(1));
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(lines_with(&outcome.stdout, "hit the limit"), not(is_empty()));
+    expect_that!(
+        lines_with(&outcome.stdout, "hit the limit")[0],
+        matches_regex(format!(
+            r"^\d\d:\d\d  {note}  Rotate the certs  Personal  note → with context  hit the limit  \d+m\d\ds  \$1\.50$"
+        ))
+    );
+    expect_that!(
+        lines_with(&outcome.stdout, "Claude limit reached")[0],
+        matches_regex(r"^\d\d:\d\d  Claude limit reached \(five_hour\), waiting until (\w{3} \d+ )?\d\d:\d\d\.$")
+    );
+    // The hold line comes after the run's line it explains.
+    let order: Vec<&str> = outcome
+        .stdout
+        .lines()
+        .filter(|line| line.contains("hit the limit") || line.contains("Claude limit reached"))
+        .take(2)
+        .collect();
+    expect_that!(
+        order.first().is_some_and(|line| line.contains("hit the limit")),
+        eq(true)
+    );
+    expect_that!(item_key_of(&tool.starts()[1]), eq(&note));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn with_once_a_run_at_the_limit_says_when_to_run_again_and_exits_at_once() -> Result<()> {
+    // Arrange: two notes, so a second run would be possible.
+    let (server, ada, cli, _note) = with_prepared_note().await?;
+    add_note(&server, &ada, "Tidy the wiki").await?;
+    let tool = limited_agent(StdDuration::from_secs(60));
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(tool.starts().len(), eq(1));
+    expect_that!(lines_with(&outcome.stdout, "hit the limit").len(), eq(1));
+    expect_that!(lines_with(&outcome.stdout, "waiting until"), is_empty());
+    expect_that!(
+        lines_with(&outcome.stderr, "Claude limit reached")[0],
+        matches_regex(
+            r"^Claude limit reached \(five_hour\)\. It resets at (\w{3} \d+ )?\d\d:\d\d; run again after (\w{3} \d+ )?\d\d:\d\d\.$"
+        )
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn ctrl_c_during_the_hold_ends_the_loop_at_once() -> Result<()> {
+    // Arrange: a limit that resets in an hour.
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = limited_agent(StdDuration::from_secs(60 * 60));
+    let (interrupt, interrupts) = unbounded_channel();
+    let (stdout, stderr) = (Buffer::default(), Buffer::default());
+
+    // Act
+    let looping = cli.run_work_watched(LOOP, &tool, interrupts, &stdout, &stderr);
+    let pressing = async {
+        wait_until("the hold line", || stdout.contents().contains("waiting until")).await?;
+        interrupt.send(Interrupt::CtrlC)?;
+        anyhow::Ok(())
+    };
+    let (outcome, pressed) = tokio::join!(looping, pressing);
+
+    // Assert
+    pressed?;
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(tool.starts().len(), eq(1));
+    Ok(())
 }
