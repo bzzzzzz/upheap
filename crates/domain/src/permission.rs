@@ -207,11 +207,12 @@ fn allowed_step_actions(item: &Item, heap: &Heap, role: Role) -> Vec<StepAction>
 /// What a caller may do with one item: its actions, the stages they may set, and what they may do with its steps.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ItemAllowance {
-    /// See [`allowed_item_actions`], with [`ItemAction::RedoTurn`] last when [`can_redo_turn`] passes.
+    /// See [`allowed_item_actions`], then [`ItemAction::RedoTurn`] when no turn is open and the latest one can be
+    /// redone (see [`check_redo`]) by someone who may edit items in an active heap.
     pub actions: Vec<ItemAction>,
-    /// See [`allowed_stage_choices`].
+    /// The stages they may set now, in table order: none unless they may edit items in an active heap.
     pub stage_choices: Vec<Stage>,
-    /// See [`allowed_step_actions`].
+    /// What they may do with each step, the same for all of them: edit while the item is open and the heap active.
     pub step_actions: Vec<StepAction>,
 }
 
@@ -995,6 +996,47 @@ mod tests {
         expect_that!(long_closed, elements_are![eq(&ItemAction::Comment)]);
         expect_that!(actions(&item(Kind::Task, false), &heap(true)), is_empty());
         expect_that!(actions(&item(Kind::Task, true), &heap(true)), is_empty());
+    }
+
+    #[gtest]
+    fn changes_are_offered_last_and_only_on_a_reached_turn_with_none_open() {
+        use crate::turn::{Reach, TurnSource, goal_for};
+
+        let now = Timestamp::EPOCH;
+        let note = item(Kind::Note, false);
+        let user = UserId::from_uuid(Uuid::from_u128(10));
+        let reached = Turn::open(
+            crate::TurnId::from_uuid(Uuid::from_u128(40)),
+            &note,
+            Reach::AllTheWay,
+            goal_for(&note),
+            None,
+            TurnSource::Prepare,
+            user,
+            now,
+        )
+        .reached(user, now);
+        let actions = |item: &Item, heap: &Heap, has_open_turn: bool, latest: Option<&Turn>| {
+            item_allowance(item, heap, Role::Member, has_open_turn, false, latest, now).actions
+        };
+
+        expect_that!(
+            actions(&note, &heap(false), false, Some(&reached)).last(),
+            some(eq(&ItemAction::RedoTurn))
+        );
+        expect_that!(
+            actions(&note, &heap(false), false, None),
+            not(contains(eq(&ItemAction::RedoTurn)))
+        );
+        expect_that!(
+            actions(&note, &heap(false), true, Some(&reached)),
+            not(contains(eq(&ItemAction::RedoTurn)))
+        );
+        expect_that!(actions(&note, &heap(true), false, Some(&reached)), is_empty());
+        expect_that!(
+            actions(&item(Kind::Note, true), &heap(false), false, Some(&reached)),
+            not(contains(eq(&ItemAction::RedoTurn)))
+        );
     }
 
     #[gtest]

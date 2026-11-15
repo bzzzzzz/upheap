@@ -815,7 +815,7 @@ impl Services {
             stuck_reason: None,
             running: false,
         });
-        // A new item has no turn to ask changes of.
+        // A new item has no reached turn to ask changes of.
         let allowance = item_allowance(
             &item,
             &access.heap,
