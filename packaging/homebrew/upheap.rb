@@ -1,5 +1,5 @@
 # Template for the cask in bzzzzzz/homebrew-tap. scripts/release/render-cask.sh fills in the version and the checksum
-# (design/operations.md, "Releasing the CLI"). This first comment is dropped when it is rendered.
+# (design/operations.md, "Releasing the CLI and the server"). This first comment is dropped when it is rendered.
 cask "upheap" do
   version "@VERSION@"
   sha256 "@SHA256@"

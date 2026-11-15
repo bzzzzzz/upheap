@@ -65,6 +65,21 @@ DATABASE_URL="sqlite://data/heap.db?mode=rwc" BASE_URL=http://localhost:8080 LOG
   cargo run --release -p server
 ```
 
+From a release, a static binary with the web app inside (not in Homebrew; `brew install` is for the CLI). Pick the
+target for your platform: `aarch64-apple-darwin` for macOS with Apple silicon, or `x86_64-unknown-linux-musl` or
+`aarch64-unknown-linux-musl` for Linux:
+
+```sh
+target=x86_64-unknown-linux-musl
+base=https://github.com/bzzzzzz/upheap/releases/latest/download
+curl -fsSLO "$base/upheap-server-$target.tar.gz"
+curl -fsSLO "$base/SHA256SUMS"
+grep " upheap-server-$target.tar.gz\$" SHA256SUMS | sha256sum -c   # on macOS: shasum -a 256 -c
+tar -xzf "upheap-server-$target.tar.gz" upheap-server
+DATABASE_URL="sqlite://heap.db?mode=rwc" BASE_URL=http://localhost:8080 ./upheap-server
+# open http://localhost:8080
+```
+
 In production, put a TLS-terminating reverse proxy in front, set `BASE_URL` to its `https://` address, and point
 `DATABASE_URL` at Postgres (`postgres://user:pass@host/db`) or MySQL (`mysql://user:pass@host/db`) if you want more
 than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operations.md).

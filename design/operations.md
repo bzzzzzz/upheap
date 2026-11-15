@@ -121,11 +121,11 @@ gcloud run services update-traffic upheap --region us-west1 --to-revisions=<revi
 Only revisions whose image is still in the repository can start, so a rollback reaches back at most 10 deploys
 (see the image cleanup under [Production setup](#production-setup)).
 
-## Releasing the CLI
+## Releasing the CLI and the server
 
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the `upheap` CLI for Apple silicon macOS and
-x86_64 and aarch64 Linux when a `vX.Y.Z` tag is pushed, publishes the archives and `SHA256SUMS` as a GitHub Release,
-and updates the cask in `bzzzzzz/homebrew-tap`. Why it is built this way is in
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the `upheap` CLI and the `upheap-server` binary (web app embedded) for Apple
+silicon macOS and x86_64 and aarch64 Linux when a `vX.Y.Z` tag is pushed, publishes the six archives and `SHA256SUMS` as
+a GitHub Release, and updates the cask in `bzzzzzz/homebrew-tap`, which installs only the CLI. Why it is built this way is in
 [decisions.md](decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow).
 
 To cut a release:
@@ -135,7 +135,7 @@ To cut a release:
 2. Tag the commit on main: `git fetch origin && git tag vX.Y.Z origin/main && git push origin vX.Y.Z`.
 
 The workflow refuses a tag that doesn't match that version or isn't on main, and never replaces a published release;
-its steps' error messages say what else it checks and what to do. Pull requests that touch the packaging or what the CLI is built from run
+its steps' error messages say what else it checks and what to do. Pull requests that touch the packaging or what the CLI or the server is built from run
 it as a dry run that publishes nothing.
 
 Recovering from a failed run:

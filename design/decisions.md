@@ -350,7 +350,8 @@ download on Linux, and the release has to be repeatable from a tag.
 
 **Decision.** A tag `vX.Y.Z` on main, equal to the workspace version, runs
 [`release.yml`](../.github/workflows/release.yml): three native builds (Apple silicon macOS, and x86_64 and aarch64
-Linux), a GitHub Release, and a cask pushed to `bzzzzzz/homebrew-tap`.
+Linux), a GitHub Release with the CLI and the server as archives, and a cask for the CLI pushed to
+`bzzzzzz/homebrew-tap`.
 
 - **A cask, not a formula.** Homebrew expects formulas to build from source and prebuilt binaries to ship as casks.
   GoReleaser moved to casks for that reason.
@@ -368,10 +369,10 @@ Linux), a GitHub Release, and a cask pushed to `bzzzzzz/homebrew-tap`.
   never change. The version is in the tag and in the URL path the cask uses.
 
 **Instead of.** A formula built from source, which makes every install compile; a release per binary target with
-versioned names; shipping the server binary too, which stays Docker-only.
+versioned names.
 
 **Consequences.** A published release's assets are never replaced: a bad release is fixed by a new patch version.
-The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli)). Release builds
+The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli-and-the-server)). Release builds
 use no cache, so they take a few minutes longer.
 
 ## 33. The CLI shares the API's Rust types instead of generating a client
