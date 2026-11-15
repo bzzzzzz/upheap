@@ -8,87 +8,45 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use crate::ids::coded_enum;
 use crate::item::{Item, Need, Size, StateKind};
 use crate::parameter::Parameter;
 use crate::turn::{AgentState, Goal};
 use crate::{OptionId, ParameterId, TagId};
 
-/// Where items in one state go.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StateMode {
-    /// In the pinned group above the rest.
-    Pinned,
-    /// In the main list (blocked items may have their own group, see [`BlockedLayout`]).
-    Shown,
-    /// Left out. The response counts them, so clients can say that something is hidden.
-    Hidden,
-}
-
-impl StateMode {
-    pub const ALL: [Self; 3] = [Self::Pinned, Self::Shown, Self::Hidden];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Pinned => "pinned",
-            Self::Shown => "shown",
-            Self::Hidden => "hidden",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|mode| mode.code() == code)
+coded_enum! {
+    /// Where items in one state go.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum StateMode {
+        /// In the pinned group above the rest.
+        Pinned = "pinned",
+        /// In the main list (blocked items may have their own group, see [`BlockedLayout`]).
+        Shown = "shown",
+        /// Left out. The response counts them, so clients can say that something is hidden.
+        Hidden = "hidden",
     }
 }
 
-/// Where shown blocked items go.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BlockedLayout {
-    /// Their own group, by priority.
-    Grouped,
-    /// Mixed in with the open items, in the list's sort order.
-    Mixed,
-}
-
-impl BlockedLayout {
-    pub const ALL: [Self; 2] = [Self::Grouped, Self::Mixed];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Grouped => "grouped",
-            Self::Mixed => "mixed",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|layout| layout.code() == code)
+coded_enum! {
+    /// Where shown blocked items go.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum BlockedLayout {
+        /// Their own group, by priority.
+        Grouped = "grouped",
+        /// Mixed in with the open items, in the list's sort order.
+        Mixed = "mixed",
     }
 }
 
-/// Whether the heap's reminders to come are listed, in a group of their own after the others. They have no
-/// position: they are not ranked until their date.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum RemindersMode {
-    /// Left out. A search shows them anyway.
-    #[default]
-    Hidden,
-    Shown,
-}
-
-impl RemindersMode {
-    pub const ALL: [Self; 2] = [Self::Hidden, Self::Shown];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Hidden => "hidden",
-            Self::Shown => "shown",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|mode| mode.code() == code)
+coded_enum! {
+    /// Whether the heap's reminders to come are listed, in a group of their own after the others. They have no
+    /// position: they are not ranked until their date.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub enum RemindersMode {
+        /// Left out. A search shows them anyway.
+        #[default]
+        Hidden = "hidden",
+        Shown = "shown",
     }
 }
 
@@ -396,15 +354,7 @@ mod tests {
     }
 
     #[gtest]
-    fn codes_read_back_as_the_same_value() {
-        expect_that!(
-            StateMode::ALL.map(|m| StateMode::from_code(m.code())),
-            eq(StateMode::ALL.map(Some))
-        );
-        expect_that!(
-            BlockedLayout::ALL.map(|l| BlockedLayout::from_code(l.code())),
-            eq(BlockedLayout::ALL.map(Some))
-        );
+    fn sort_keys_read_back_from_their_codes() {
         expect_that!(
             SortKey::FIXED.map(|k| SortKey::from_parts(k.code(), None)),
             eq(SortKey::FIXED.map(Some))

@@ -5,6 +5,7 @@
 
 use std::fmt;
 
+use crate::ids::coded_enum;
 use crate::{Duration, InviteLinkId, TeamId, Timestamp, UserId, Version};
 
 /// How long a link works after it was made. The end is derived, never stored.
@@ -66,23 +67,14 @@ pub struct Revocation {
     pub by: UserId,
 }
 
-/// Where a link is in its life. `Ended` and `Revoked` are final.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InviteLinkState {
-    Working,
-    /// Its week passed.
-    Ended,
-    Revoked,
-}
-
-impl InviteLinkState {
-    /// The stable code used in audit diffs.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Working => "working",
-            Self::Ended => "ended",
-            Self::Revoked => "revoked",
-        }
+coded_enum! {
+    /// Where a link is in its life. `Ended` and `Revoked` are final.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum InviteLinkState {
+        Working = "working",
+        /// Its week passed.
+        Ended = "ended",
+        Revoked = "revoked",
     }
 }
 

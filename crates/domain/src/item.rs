@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::handle::ItemKey;
+use crate::ids::coded_enum;
 use crate::text::{parse_optional, parse_required};
 use crate::validation::{Field, ValidationError};
 use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
@@ -10,28 +11,18 @@ use crate::{Duration, HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Times
 /// A closed item can be reopened for exactly 7 × 24 hours after it was closed, independent of timezones.
 pub const REOPEN_WINDOW: Duration = Duration::from_days(7);
 
-/// Effort and impact scale. Ordered from smallest to largest.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Size {
-    S,
-    M,
-    L,
-    Xl,
+coded_enum! {
+    /// Effort and impact scale. Ordered from smallest to largest.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum Size {
+        S = "s",
+        M = "m",
+        L = "l",
+        Xl = "xl",
+    }
 }
 
 impl Size {
-    pub const ALL: [Self; 4] = [Self::S, Self::M, Self::L, Self::Xl];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::S => "s",
-            Self::M => "m",
-            Self::L => "l",
-            Self::Xl => "xl",
-        }
-    }
-
     /// The size as people read it: "S", "M", "L", "XL".
     pub const fn label(self) -> &'static str {
         match self {
@@ -41,46 +32,28 @@ impl Size {
             Self::Xl => "XL",
         }
     }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|size| size.code() == code)
-    }
 }
 
-/// How much the item is needed: what happens if it never gets done. Ordered from least to most needed.
-///
-/// It is separate from impact, which says how much doing the item gains. Need says how much skipping it costs, so
-/// a small fix someone is waiting for can outrank a bigger win nobody asked for. Each step is told apart from the
-/// next by who is affected when the item is skipped.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Need {
-    /// Kept so it isn't forgotten. Nobody has decided it's wanted, and nothing is lost if it never happens.
-    Idea,
-    /// Wanted, but nobody is waiting for it. Skipping it only misses a gain.
-    NiceToHave,
-    /// Someone is counting on it. Skipping it lets them down.
-    Expected,
-    /// It has to happen. Skipping it does real damage: an outage, a lost customer, a broken commitment.
-    Critical,
+coded_enum! {
+    /// How much the item is needed: what happens if it never gets done. Ordered from least to most needed.
+    ///
+    /// It is separate from impact, which says how much doing the item gains. Need says how much skipping it costs, so
+    /// a small fix someone is waiting for can outrank a bigger win nobody asked for. Each step is told apart from the
+    /// next by who is affected when the item is skipped.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum Need {
+        /// Kept so it isn't forgotten. Nobody has decided it's wanted, and nothing is lost if it never happens.
+        Idea = "idea",
+        /// Wanted, but nobody is waiting for it. Skipping it only misses a gain.
+        NiceToHave = "nice_to_have",
+        /// Someone is counting on it. Skipping it lets them down.
+        Expected = "expected",
+        /// It has to happen. Skipping it does real damage: an outage, a lost customer, a broken commitment.
+        Critical = "critical",
+    }
 }
 
 impl Need {
-    pub const ALL: [Self; 4] = [Self::Idea, Self::NiceToHave, Self::Expected, Self::Critical];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Idea => "idea",
-            Self::NiceToHave => "nice_to_have",
-            Self::Expected => "expected",
-            Self::Critical => "critical",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|need| need.code() == code)
-    }
-
     /// The step's name as people read it, in contributors and audit entries.
     pub const fn label(self) -> &'static str {
         match self {
@@ -92,32 +65,19 @@ impl Need {
     }
 }
 
-/// What an item is. A note is kept so it isn't forgotten; a task is something to get done; a reminder has a date
-/// and joins the ranked list when it comes. A note or a reminder becomes a task in place, keeping its key, age and
-/// history, and a task never goes back. No other kind changes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Kind {
-    Note,
-    Task,
-    Reminder,
+coded_enum! {
+    /// What an item is. A note is kept so it isn't forgotten; a task is something to get done; a reminder has a date
+    /// and joins the ranked list when it comes. A note or a reminder becomes a task in place, keeping its key, age and
+    /// history, and a task never goes back. No other kind changes.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum Kind {
+        Note = "note",
+        Task = "task",
+        Reminder = "reminder",
+    }
 }
 
 impl Kind {
-    pub const ALL: [Self; 3] = [Self::Note, Self::Task, Self::Reminder];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Note => "note",
-            Self::Task => "task",
-            Self::Reminder => "reminder",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|kind| kind.code() == code)
-    }
-
     /// Whether an item of this kind can be at `stage`. Only a task can be defined.
     pub const fn allows(self, stage: Stage) -> bool {
         match self {
@@ -127,31 +87,16 @@ impl Kind {
     }
 }
 
-/// How far an item has been prepared. Ordered from least to most prepared.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Stage {
-    /// Just as it was first put down.
-    AsWritten,
-    /// Background has been added, but what to do is still open.
-    WithContext,
-    /// Clear enough to start on. Only a task can be here.
-    Defined,
-}
-
-impl Stage {
-    pub const ALL: [Self; 3] = [Self::AsWritten, Self::WithContext, Self::Defined];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::AsWritten => "as_written",
-            Self::WithContext => "with_context",
-            Self::Defined => "defined",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|stage| stage.code() == code)
+coded_enum! {
+    /// How far an item has been prepared. Ordered from least to most prepared.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum Stage {
+        /// Just as it was first put down.
+        AsWritten = "as_written",
+        /// Background has been added, but what to do is still open.
+        WithContext = "with_context",
+        /// Clear enough to start on. Only a task can be here.
+        Defined = "defined",
     }
 }
 
@@ -210,49 +155,26 @@ pub struct Due {
     pub firm: bool,
 }
 
-/// An item's state without its data. This is what clients send and what the database stores.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum StateKind {
-    Open,
-    InProgress,
-    Blocked,
-    Done,
-    WontDo,
-    /// Closed because it was split: the items made from it carry on (Rules, Kinds and moves).
-    Became,
+coded_enum! {
+    /// An item's state without its data. This is what clients send and what the database stores.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum StateKind {
+        Open = "open",
+        InProgress = "in_progress",
+        Blocked = "blocked",
+        Done = "done",
+        WontDo = "wont_do",
+        /// Closed because it was split: the items made from it carry on (Rules, Kinds and moves).
+        Became = "became",
+    }
 }
 
 impl StateKind {
-    pub const ALL: [Self; 6] = [
-        Self::Open,
-        Self::InProgress,
-        Self::Blocked,
-        Self::Done,
-        Self::WontDo,
-        Self::Became,
-    ];
-
     /// The states of an item that isn't closed, which are the ones that rank.
     pub const OPEN: [Self; 3] = [Self::Open, Self::InProgress, Self::Blocked];
 
     pub const fn is_closed(self) -> bool {
         matches!(self, Self::Done | Self::WontDo | Self::Became)
-    }
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Open => "open",
-            Self::InProgress => "in_progress",
-            Self::Blocked => "blocked",
-            Self::Done => "done",
-            Self::WontDo => "wont_do",
-            Self::Became => "became",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|state| state.code() == code)
     }
 }
 
@@ -1099,13 +1021,6 @@ mod tests {
     }
 
     #[gtest]
-    fn need_codes_round_trip() {
-        for need in Need::ALL {
-            expect_that!(Need::from_code(need.code()), some(eq(need)));
-        }
-    }
-
-    #[gtest]
     fn inconsistent_stored_state_is_rejected() {
         let other = ItemId::from_uuid(Uuid::from_u128(1));
         expect_that!(
@@ -1692,16 +1607,6 @@ mod tests {
     }
 
     #[gtest]
-    fn kind_and_stage_codes_round_trip() {
-        for kind in Kind::ALL {
-            expect_that!(Kind::from_code(kind.code()), some(eq(kind)));
-        }
-        for stage in Stage::ALL {
-            expect_that!(Stage::from_code(stage.code()), some(eq(stage)));
-        }
-    }
-
-    #[gtest]
     fn stage_choices_depend_on_the_kind_and_are_empty_when_closed() {
         let closed = sample_task()
             .apply_patch(&closing_patch(), actor(), at(2))
@@ -1880,11 +1785,7 @@ mod tests {
     }
 
     #[gtest]
-    fn state_codes_round_trip_including_became() {
-        for kind in StateKind::ALL {
-            expect_that!(StateKind::from_code(kind.code()), some(eq(kind)));
-        }
-        expect_that!(StateKind::Became.code(), eq("became"));
+    fn a_became_state_kind_is_closed() {
         expect_that!(StateKind::Became.is_closed(), eq(true));
     }
 

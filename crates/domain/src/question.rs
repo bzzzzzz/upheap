@@ -5,6 +5,7 @@
 //! withdrawn when its item was closed stays, withdrawn.
 
 use crate::heap::Heap;
+use crate::ids::coded_enum;
 use crate::item::{Item, ItemError, Kind};
 use crate::run::RunLink;
 use crate::step::{Step, StepNumber, StepState};
@@ -64,38 +65,24 @@ impl std::fmt::Display for QuestionNumber {
     }
 }
 
-/// What is being asked: something to answer, something to do, work to look at, or a proposal to close the task.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum QuestionKind {
-    /// Free text, or a pick among choices.
-    Question,
-    /// Something to do, replied to with Done or Can't be done.
-    Request,
-    /// A link to work for the person to look at, replied to with Approved or Changes asked. Only an agent doing the
-    /// task asks it.
-    Review,
-    /// The agent says nothing is left, replied to with Close as done or Not yet. Only an agent doing the task asks
-    /// it.
-    DoneProposal,
+coded_enum! {
+    /// What is being asked: something to answer, something to do, work to look at, or a proposal to close the task.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum QuestionKind {
+        /// Free text, or a pick among choices.
+        Question = "question",
+        /// Something to do, replied to with Done or Can't be done.
+        Request = "request",
+        /// A link to work for the person to look at, replied to with Approved or Changes asked. Only an agent doing the
+        /// task asks it.
+        Review = "review",
+        /// The agent says nothing is left, replied to with Close as done or Not yet. Only an agent doing the task asks
+        /// it.
+        DoneProposal = "done_proposal",
+    }
 }
 
 impl QuestionKind {
-    pub const ALL: [Self; 4] = [Self::Question, Self::Request, Self::Review, Self::DoneProposal];
-
-    /// Stable code used in storage, audit diffs and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Question => "question",
-            Self::Request => "request",
-            Self::Review => "review",
-            Self::DoneProposal => "done_proposal",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|kind| kind.code() == code)
-    }
-
     /// The kind in a word, as a message names a question of it: "review q4".
     pub const fn word(self) -> &'static str {
         match self {
@@ -107,29 +94,14 @@ impl QuestionKind {
     }
 }
 
-/// Whether a question still waits for a reply.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum QuestionState {
-    Open,
-    Answered,
-    /// Closing its item took it back, unanswered. Reopening the item doesn't bring it back.
-    Withdrawn,
-}
-
-impl QuestionState {
-    pub const ALL: [Self; 3] = [Self::Open, Self::Answered, Self::Withdrawn];
-
-    /// Stable code used in storage and the API. Never renamed.
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Open => "open",
-            Self::Answered => "answered",
-            Self::Withdrawn => "withdrawn",
-        }
-    }
-
-    pub fn from_code(code: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|state| state.code() == code)
+coded_enum! {
+    /// Whether a question still waits for a reply.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum QuestionState {
+        Open = "open",
+        Answered = "answered",
+        /// Closing its item took it back, unanswered. Reopening the item doesn't bring it back.
+        Withdrawn = "withdrawn",
     }
 }
 
@@ -1156,17 +1128,6 @@ mod tests {
                 number: withdrawn.number
             })))
         );
-    }
-
-    #[gtest]
-    fn kinds_and_states_round_trip_through_their_codes() {
-        for kind in QuestionKind::ALL {
-            expect_that!(QuestionKind::from_code(kind.code()), some(eq(kind)));
-        }
-        for state in QuestionState::ALL {
-            expect_that!(QuestionState::from_code(state.code()), some(eq(state)));
-        }
-        expect_that!(QuestionKind::from_code("unknown"), none());
     }
 
     #[gtest]

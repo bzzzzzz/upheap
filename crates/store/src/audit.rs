@@ -46,8 +46,8 @@ fn to_row(entry: &NewAuditEntry) -> audit_log::ActiveModel {
         team_id: Set(id_to_db(entry.team_id.as_uuid())),
         heap_id: Set(entry.heap_id.map(|h| id_to_db(h.as_uuid()))),
         actor_user_id: Set(id_to_db(entry.actor.as_uuid())),
-        action: Set(entry.action.as_str().to_owned()),
-        entity_type: Set(entry.entity_type.as_str().to_owned()),
+        action: Set(entry.action.code().to_owned()),
+        entity_type: Set(entry.entity_type.code().to_owned()),
         entity_id: Set(id_to_db(&entry.entity_id)),
         diff: Set(entry.diff.to_string()),
         run_id: Set(entry.run_id.map(|run| id_to_db(run.as_uuid()))),
@@ -128,7 +128,7 @@ pub async fn list_audit_entries(
         return Ok(Vec::new());
     }
     let mut select = audit_log::Entity::find()
-        .filter(audit_log::Column::Action.is_in(query.actions.iter().map(|action| action.as_str())));
+        .filter(audit_log::Column::Action.is_in(query.actions.iter().map(|action| action.code())));
     select = match query.scope {
         AuditScope::Heap(heap_id) => select.filter(audit_log::Column::HeapId.eq(id_to_db(heap_id.as_uuid()))),
         AuditScope::Team(team_id) => select
@@ -136,7 +136,7 @@ pub async fn list_audit_entries(
             .filter(
                 Condition::any()
                     .add(audit_log::Column::HeapId.is_null())
-                    .add(audit_log::Column::EntityType.eq(EntityType::Heap.as_str())),
+                    .add(audit_log::Column::EntityType.eq(EntityType::Heap.code())),
             ),
         AuditScope::Entity { team_id, entity_id } => select
             .filter(audit_log::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
@@ -182,8 +182,8 @@ pub async fn count_joins_by_invite_link(
         .select_only()
         .column(audit_log::Column::EntityId)
         .column_as(Expr::col(audit_log::Column::Id).count(), "joins")
-        .filter(audit_log::Column::EntityType.eq(EntityType::InviteLink.as_str()))
-        .filter(audit_log::Column::Action.eq(AuditAction::MemberJoined.as_str()))
+        .filter(audit_log::Column::EntityType.eq(EntityType::InviteLink.code()))
+        .filter(audit_log::Column::Action.eq(AuditAction::MemberJoined.code()))
         .filter(audit_log::Column::EntityId.is_in(link_ids.iter().map(|id| id_to_db(id.as_uuid()))))
         .group_by(audit_log::Column::EntityId)
         .into_tuple()
