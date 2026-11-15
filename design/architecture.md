@@ -156,7 +156,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   (one entry for each). Who has an item is derived, not stored: `with_agent` is the item being open, its heap active,
   an open turn, and no open question; list rows get their open turns from one grouped query, like question counts.
   `heaps.agents_prepare` makes `create_item` open a turn of one state on every new item, whoever added it. Neither
-  changes ranking. The agent queue (`work next`, `work claim`, `work run`) reads the heaps it is given and every
+  changes ranking. The agent queue (`work next`, `work queue`, `work claim`, `work run`) reads the heaps it is given and every
   active heap made from an item in one of them, and from an item in those in turn (`resolve_queue_heaps`), so a made
   heap's items are given with the heap that held their note; the limit on how many heaps a request names counts only
   the named ones.
@@ -178,8 +178,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
   position. The boost lets half-done work go on before new work of about the same importance while something much
   more important still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the
-  plain score. A claim takes the locks of every given heap in ID order, as the item writes do, so two claims at once
-  get different items.
+  plain score. `GET /work/queue` returns the whole list in that order, read-only like `/work/next`, with each item's
+  position in its group of the heap's default list and the heap's priority. It is unpaged: the queue is at most the
+  open items of the given heaps, which are few; past a few hundred items it would need a cap. A claim takes the locks
+  of every given heap in ID order, as the item writes do, so two claims at once get different items.
   **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
   wherever it is read, and is written as failed lazily, the next time a claim over its heap, its own `finish` or a

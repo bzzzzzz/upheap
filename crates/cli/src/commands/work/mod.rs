@@ -1,8 +1,8 @@
 //! The work commands, for the agent's queue and its runs: their args and flows, and what they share.
 //!
-//! `next` and `claim` look for work in some heaps, and `log` lists what the agents reached; `reached`, `hand-back` and
-//! `finish` belong to a run, named by `UPHEAP_RUN`, which `claim` prints for a script to export, and `run` is the loop
-//! that does all of it for an agent tool.
+//! `next`, `queue` and `claim` look for work in some heaps, and `log` lists what the agents reached; `reached`,
+//! `hand-back` and `finish` belong to a run, named by `UPHEAP_RUN`, which `claim` prints for a script to export, and
+//! `run` is the loop that does all of it for an agent tool.
 
 mod brief;
 pub mod claim;
@@ -12,6 +12,7 @@ mod kept;
 pub mod log;
 mod logs;
 pub mod next;
+pub mod queue;
 pub mod reached;
 pub mod run;
 

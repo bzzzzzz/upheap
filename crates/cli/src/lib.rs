@@ -297,6 +297,8 @@ enum ParameterOptionCommand {
 enum WorkCommand {
     /// The item an agent would work on next, without taking it
     Next(commands::work::next::NextArgs),
+    /// The agents' whole queue, in order, with why each item is there
+    Queue(commands::work::queue::QueueArgs),
     /// What the agents reached in the last 30 days, newest first
     Log(commands::work::log::LogArgs),
     /// Take the next item and start a run on it
@@ -385,6 +387,7 @@ impl Command {
             Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Archive(args))) => &args.shared,
             Self::Heap(HeapCommand::Add(args)) => &args.shared,
             Self::Work(WorkCommand::Next(args)) => &args.shared,
+            Self::Work(WorkCommand::Queue(args)) => &args.shared,
             Self::Work(WorkCommand::Log(args)) => &args.shared,
             Self::Work(WorkCommand::Claim(args)) => &args.shared,
             Self::Work(WorkCommand::Run(args)) => &args.shared,
@@ -554,6 +557,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         }
         Command::Heap(HeapCommand::Add(args)) => commands::heap::add::run(args, app, out).await,
         Command::Work(WorkCommand::Next(args)) => commands::work::next::run(args, app, out).await,
+        Command::Work(WorkCommand::Queue(args)) => commands::work::queue::run(args, app, out).await,
         Command::Work(WorkCommand::Log(args)) => commands::work::log::run(args, app, out).await,
         Command::Work(WorkCommand::Claim(args)) => commands::work::claim::run(args, app, out).await,
         Command::Work(WorkCommand::Run(args)) => commands::work::run::run(args, app, work, out).await,

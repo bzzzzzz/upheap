@@ -830,6 +830,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::GET,
+            "/work/queue",
+            edit,
+            Target::Queue,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
             Method::POST,
             "/work/runs",
             edit,

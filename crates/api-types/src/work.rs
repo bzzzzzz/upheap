@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::common::{KindDto, StageDto};
+use crate::common::{KindDto, StageDto, StateDto};
 use crate::turns::{GoalDto, ReachDto};
 use crate::waiting::ItemHeapDto;
 
@@ -53,6 +53,38 @@ pub struct WorkNextDto {
     /// `waiting_count`.
     #[serde(default)]
     pub waiting: Vec<WaitingInHeapDto>,
+}
+
+/// The whole queue, in the order `GET /work/next` and a claim take it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = WorkQueue)]
+pub struct WorkQueueDto {
+    /// Every item in the given heaps that waits for an agent, the one a claim takes first.
+    pub items: Vec<QueuedItemDto>,
+    /// How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item
+    /// counts once.
+    pub waiting_count: u32,
+    /// How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to
+    /// `waiting_count`.
+    #[serde(default)]
+    pub waiting: Vec<WaitingInHeapDto>,
+}
+
+/// An item of the queue, with why it stands where it does.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = QueuedItem)]
+pub struct QueuedItemDto {
+    pub item: WorkItemDto,
+    /// `in_progress` or `open`: the group of the heap's list that `heap_position` counts in, as the list pins items
+    /// in progress above the open ones.
+    pub state: StateDto,
+    /// The item's 1-based position in its heap's list as the person sees it by default, within its group.
+    pub heap_position: u32,
+    /// The caller's priority for the item's heap, 1 to 10.
+    pub heap_priority: u8,
+    /// Whether the turn's latest run ended as `limited`, cut off by the agent tool's usage limit. Such items come
+    /// before all others, so the work a limit cut off goes on first once it resets.
+    pub limited: bool,
 }
 
 /// The items waiting for the person in one heap.
