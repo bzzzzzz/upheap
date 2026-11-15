@@ -15,11 +15,12 @@ use super::{Access, ToolError, ToolReport, ToolStart};
 const USD_PER_NANO_AIU: f64 = 1e-11;
 
 /// The arguments `copilot` starts with: one JSON event a line, never asking the person (no one is there to ask), the
-/// session kept off the account's sync, and every `upheap` command allowed but `upheap auth`.
+/// session kept off the account's sync, and every `upheap` command allowed but `upheap auth` and `upheap heap use`.
 ///
 /// A Copilot allow rule can't scope a program by subcommand (`shell(upheap item:*)` allows nothing), only the whole
 /// program, while a deny rule can. With `UPHEAP_RUN` set the server already refuses anything outside the run's own
-/// item, so only `upheap auth`, which is local, is denied, last: Copilot's deny wins over every allow.
+/// item, so only the two commands that write on this machine, which the server has no say in, are denied, last:
+/// Copilot's deny wins over every allow.
 ///
 /// `Prepare` may use the web; reads under the directory it runs in need no rule. `Do` has file edits accepted, and
 /// every other command follows the person's own saved Copilot approvals. In a directory made for the run
@@ -43,9 +44,16 @@ pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String]) -
         arguments.extend(["--allow-all-tools", "--allow-all-urls"].map(str::to_owned));
     }
     arguments.extend(allow.iter().map(|rule| format!("--allow-tool={rule}")));
-    arguments.push("--deny-tool=shell(upheap auth:*)".to_owned());
+    arguments.extend(LOCAL_WRITES_DENIED.map(str::to_owned));
     arguments
 }
+
+/// The `upheap` commands that change the person's own sign-in or config, as deny rules: text an agent reads could
+/// talk it into signing the person out or pointing their default heap elsewhere.
+const LOCAL_WRITES_DENIED: [&str; 2] = [
+    "--deny-tool=shell(upheap auth:*)",
+    "--deny-tool=shell(upheap heap use:*)",
+];
 
 /// What the tool's exit and output say: its cost and whether it failed. `nano_aiu` is the total usage of the last
 /// `session.usage_checkpoint` line, if there was one.
@@ -134,8 +142,6 @@ mod tests {
 
     use super::*;
 
-    const AUTH_DENY: &str = "--deny-tool=shell(upheap auth:*)";
-
     fn strings(arguments: &[&str]) -> Vec<String> {
         arguments.iter().map(|argument| (*argument).to_owned()).collect()
     }
@@ -151,7 +157,8 @@ mod tests {
                 "--sync-session=off",
                 "--allow-tool=shell(upheap:*)",
                 "--allow-all-urls",
-                AUTH_DENY,
+                "--deny-tool=shell(upheap auth:*)",
+                "--deny-tool=shell(upheap heap use:*)",
             ]))
         );
     }
@@ -167,7 +174,8 @@ mod tests {
                 "--sync-session=off",
                 "--allow-tool=shell(upheap:*)",
                 "--allow-tool=write",
-                AUTH_DENY,
+                "--deny-tool=shell(upheap auth:*)",
+                "--deny-tool=shell(upheap heap use:*)",
             ]))
         );
     }
@@ -176,9 +184,9 @@ mod tests {
     fn in_its_own_directory_either_access_may_use_any_tool_and_the_deny_is_still_last() {
         for access in [Access::Prepare, Access::Do] {
             let mut expected = arguments(access, false, &[]);
-            let deny = expected.pop().unwrap_or_default();
+            let denies = expected.split_off(expected.len() - LOCAL_WRITES_DENIED.len());
             expected.extend(strings(&["--allow-all-tools", "--allow-all-urls"]));
-            expected.push(deny);
+            expected.extend(denies);
 
             expect_that!(arguments(access, true, &[]), eq(&expected));
         }
@@ -189,9 +197,9 @@ mod tests {
         let allow = ["shell(gh pr)".to_owned(), "-x".to_owned()];
         for access in [Access::Prepare, Access::Do] {
             let mut expected = arguments(access, true, &[]);
-            let deny = expected.pop().unwrap_or_default();
+            let denies = expected.split_off(expected.len() - LOCAL_WRITES_DENIED.len());
             expected.extend(strings(&["--allow-tool=shell(gh pr)", "--allow-tool=-x"]));
-            expected.push(deny);
+            expected.extend(denies);
 
             expect_that!(arguments(access, true, &allow), eq(&expected));
         }

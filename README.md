@@ -287,7 +287,7 @@ comma or a space, or one starting with `-`, is refused. Every run is still denie
 wide as `Bash` lets a run get around that through a shell.
 
 With `--tool copilot`, the loop starts GitHub Copilot CLI (`copilot`) the same way, and these differ. A run may
-run any `upheap` command but `auth`, since Copilot's rules can't allow single subcommands. To do a task, edits are
+run any `upheap` command but `auth` and `heap use`, since Copilot's rules can't allow single subcommands. To do a task, edits are
 accepted and other commands follow your saved Copilot approvals. Under `--root` the directory gets `AGENTS.md`, and any
 tool is allowed. `--allow` rules are in Copilot's syntax (`shell(npm:*)`) and may hold spaces. The cost is counted from
 Copilot's AI credits, at 100 credits to the dollar. A usage limit is not recognised yet, so a run that stops at one

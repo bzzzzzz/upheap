@@ -851,7 +851,8 @@ section is how it maps onto this API.
    person's own Claude settings, since Upheap keeps no tool list of its own. Copilot's rules can't allow one
    subcommand of a program, only the whole program (`shell(upheap item:*)` allows nothing, `shell(upheap:*)` does),
    while a deny rule can scope one; and with `UPHEAP_RUN` set the server already refuses whatever is outside the run's
-   own item. So a Copilot run is allowed all of `upheap` and denied `upheap auth`, which is local, last, since a
+   own item. So a Copilot run is allowed all of `upheap` and denied `upheap auth` and `upheap heap use`, which write on the
+   person's own machine, last, since a
    deny wins over every allow, `--allow-all-tools` included; to do a task it has file edits accepted too, and
    the person's saved Copilot approvals decide the rest. With `--root` the loop names one
    directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run; the loop makes it if it is
