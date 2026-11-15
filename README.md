@@ -247,6 +247,7 @@ cargo run -p cli -- work run --tool claude --root ~/agent-runs   # each item in 
 cargo run -p cli -- work run --tool claude --root ~/agent-runs --workers 3  # up to 3 runs at once, each on its own item
 cargo run -p cli -- work run --tool claude --instructions ~/how-i-work.md  # tell every run how you want work done on this machine
 cargo run -p cli -- work run --tool claude --allow mcp__claude_ai_Claude_Docs --allow-do 'Bash(npm:*)'  # let runs use a tool your settings don't allow; --allow-prepare / --allow-do for one kind of run only
+cargo run -p cli -- work run --tool copilot --root ~/agent-runs  # the same loop with GitHub Copilot CLI
 UPHEAP_RUN=<id> cargo run -p cli -- item edit k3x9a --context-file context.md  # with a run, writes are the run's
 UPHEAP_RUN=<id> cargo run -p cli -- work reached --result "Wrote the context"  # the turn's goal is reached
 UPHEAP_RUN=<id> cargo run -p cli -- work finish --cost-usd 0.12  # the run is over; what it cost
@@ -283,7 +284,16 @@ comes before the heap's context on how the work is done. The file is read once, 
 `mcp__claude_ai_Claude_Docs`), without allowing it in your own sessions; `--allow-prepare` and `--allow-do` add a
 rule to runs that prepare an item or do a task only. Each flag takes one rule and can be repeated; a rule with a
 comma or a space, or one starting with `-`, is refused. Every run is still denied `upheap auth`, though a rule as
-wide as `Bash` lets a run get around that through a shell. Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
+wide as `Bash` lets a run get around that through a shell.
+
+With `--tool copilot`, the loop starts GitHub Copilot CLI (`copilot`) the same way, and these differ. A run may
+run any `upheap` command but `auth`, since Copilot's rules can't allow single subcommands. To do a task, edits are
+accepted and other commands follow your saved Copilot approvals. Under `--root` the directory gets `AGENTS.md`, and any
+tool is allowed. `--allow` rules are in Copilot's syntax (`shell(npm:*)`) and may hold spaces. The cost is counted from
+Copilot's AI credits, at 100 credits to the dollar. A usage limit is not recognised yet, so a run that stops at one
+fails. Copilot saves each run as a session in `~/.copilot`; account sync is turned off for the run.
+
+Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
 signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, no agent tool, or a
 `UPHEAP_TOKEN` the server refuses), 1 anything else.
 
@@ -305,14 +315,14 @@ has expired or isn't one the server knows.
 
 To have an agent work your items:
 
-1. Install `upheap` (above) and Claude Code (`claude`), signed in.
+1. Install `upheap` (above) and Claude Code (`claude`) or GitHub Copilot CLI (`copilot`), signed in.
 2. Sign in to your server: `upheap auth login --server https://<your server>`.
 3. Make or pick a heap: `upheap heap add "Website"`, then `upheap heap use website`.
 4. Write its context: where the repository is, and how work is done and reviewed there. `upheap heap edit
    --context-file context.md`.
 5. In the web app, open the heap's settings and turn on "Agents prepare new notes", so each note you add goes to an
    agent. The CLI has no flag for it.
-6. Run `upheap work run --tool claude --root ~/agent-runs` and leave it running. Ctrl-C stops it. The flags are
+6. Run `upheap work run --tool claude --root ~/agent-runs` (or `--tool copilot`) and leave it running. Ctrl-C stops it. The flags are
    above, with the other commands.
 7. Add a note (`upheap item add "..." --need expected`), answer what the agent asks (in the web app, or with
    `upheap question reply`), and send items on with `upheap item send` or from the web app with "Send to an agent".

@@ -820,30 +820,43 @@ section is how it maps onto this API.
    says whether the token was revoked, has expired or isn't known.
 7. **`work run` is the agent loop** over the `/work` routes. It claims the next item (`POST /work/runs`), reads the
    heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
-   standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. While the tool runs it
+   standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. The code that starts the
+   process, feeds it, watches it for silence and stops it is `process.rs` there, shared by the tools; each tool has
+   a module of its own, `claude.rs` and `copilot.rs`, for its command line and what its stream says. While the tool runs it
    sends a heartbeat every 5 minutes by the wall clock, checked every 30 seconds, so one goes out soon after the
    machine wakes from sleep (the monotonic clock stands still in sleep). A failed heartbeat is tried again at each
    check until one is heard, logged each time, and said on stderr from the second in a row, so the one that goes out
    before the network is back after a wake isn't a false alarm. The heartbeat says the loop is up. Claude's streamed
    output says claude is working: it is read by the loop only, saved to the run's log
-   (`<config dir>/runs/<run id>.jsonl`, pruned after 7 days) and never sent to the server. When the tool shows no
+   (`<config dir>/runs/<run id>.jsonl`, pruned after 7 days) and never sent to the server. Copilot's stream
+   (`--output-format json`) is read for one event only, `session.usage_checkpoint`, whose `totalNanoAiu` is the
+   session's running usage: the last one is the run's cost, `totalNanoAiu / 1e11` dollars, since a billion nano AI
+   units make an AI credit and 100 credits are taken as a dollar (the owner's working figure, not GitHub's published
+   price). The other lines are only logged. When the tool shows no
    output for 30 minutes the loop stops it and fails the run with its own message, "The agent showed no activity
    for 30 minutes." That timer uses the monotonic clock on purpose: it stands still while the machine sleeps, as
    claude does, so a sleep isn't silence. The loop stops the tool when the server answers
    `run_over`. When the tool ends it sends `finish` with the cost the tool reported and, only if the tool itself
    failed, why: the server decides whether the run reached its goal, asked, handed back, hit the limit, or failed, and
-   the loop never works that out. The exception is the agent tool's usage limit: a run whose claude stream had a rejected
+   the loop never works that out. The exception is the agent tool's usage limit, recognised for Claude only: a run whose claude stream had a rejected
    `rate_limit_event` (not overage use) or `api_error` `usage_limit_reached` on its result is sent with `limited`, and
    ends as `limited`, not failed, so the turn's failed runs are left alone. The loop then holds every worker until the
    reset plus a minute (30 minutes when no time is known), by the wall clock like heartbeats, with live runs ending as
-   usual; the queue then claims that item first (see the queue's order above).
+   usual; the queue then claims that item first (see the queue's order above). A Copilot run that stops at its limit
+   is a failed run like any other.
    With `--once` the loop says when to run again and exits. With `--workers N` the loop runs N workers on one task, each claiming its own item;
    the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
    runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
    item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
-   person's own Claude settings, since Upheap keeps no tool list of its own. With `--root` the loop names one
+   person's own Claude settings, since Upheap keeps no tool list of its own. Copilot's rules can't allow one
+   subcommand of a program, only the whole program (`shell(upheap item:*)` allows nothing, `shell(upheap:*)` does),
+   while a deny rule can scope one; and with `UPHEAP_RUN` set the server already refuses whatever is outside the run's
+   own item. So a Copilot run is allowed all of `upheap` and denied `upheap auth`, which is local, last, since a
+   deny wins over every allow, `--allow-all-tools` included; to do a task it has file edits accepted too, and
+   the person's saved Copilot approvals decide the rest. With `--root` the loop names one
    directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run; the loop makes it if it is
-   missing and the tool writes its own instructions into it (for Claude, `CLAUDE.md`), and starts there. The path is the whole
+   missing and the tool writes its own instructions into it (`CLAUDE.md` for Claude, `AGENTS.md` for Copilot, with the same text),
+   and starts there. The path is the whole
    record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
    left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
    `.upheap-run` in it, naming the server, and that file's modification time is when a run last started or ended there. The

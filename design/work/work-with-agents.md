@@ -766,7 +766,7 @@ joining the queue; and need being settled for everything made from a note.
 ### Unproven mechanisms
 
 1. **Driving an agent tool without a person at it, and getting its cost back.** Proven for Claude's
-   command-line tool (2.1.322) in stage 1's first piece; not checked for other tools. `claude -p --output-format
+   command-line tool (2.1.322) in stage 1's first piece and for GitHub Copilot's (1.0.112). `claude -p --output-format
    json` reads the prompt on stdin, runs to the end with no one at it and exits. It prints one JSON object with
    `result` (the agent's last message), `subtype` and `is_error` (how it ended) and `total_cost_usd`.
    `--permission-mode dontAsk` with `--allowedTools "Bash(upheap:*)"` lets the agent run only `upheap`: any
