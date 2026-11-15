@@ -825,6 +825,8 @@ impl Shared<'_> {
                 // What an interrupted sweep renamed and did not finish deleting.
                 for left in kept::leftovers(&root) {
                     let removed = if left.is_dir() {
+                        // Its delete most likely failed because something still wrote into it.
+                        leftovers::end_inside(&left);
                         kept::delete(&left)
                     } else {
                         std::fs::remove_file(&left)

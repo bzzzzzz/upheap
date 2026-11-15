@@ -81,8 +81,12 @@ fn end(refresh: sysinfo::ProcessRefreshKind, matches: impl Fn(&sysinfo::Process)
     use sysinfo::{ProcessesToUpdate, System};
 
     // Nothing can be read, so nothing is ended: a scan never fails the run.
-    let Ok(mut system) = System::new() else {
-        return Vec::new();
+    let mut system = match System::new() {
+        Ok(system) => system,
+        Err(err) => {
+            tracing::warn!(error = %err, "couldn't read the process table, so nothing left running was ended");
+            return Vec::new();
+        }
     };
     let me = rustix::process::getuid().as_raw();
     let own_pid = std::process::id();
