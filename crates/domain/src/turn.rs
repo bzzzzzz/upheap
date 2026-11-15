@@ -23,6 +23,16 @@ coded_enum! {
     }
 }
 
+impl Reach {
+    /// The reach as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::One => "One state",
+            Self::AllTheWay => "All the way",
+        }
+    }
+}
+
 coded_enum! {
     /// The stable state a turn goes to, worked out from the item when the turn opens.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -34,6 +44,15 @@ coded_enum! {
 }
 
 impl Goal {
+    /// The goal as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::WithContext => "With context",
+            Self::Defined => "Defined",
+            Self::Done => "Done",
+        }
+    }
+
     /// The goal in words, as a sentence names it: "with context".
     pub const fn phrase(self) -> &'static str {
         match self {
@@ -62,6 +81,16 @@ coded_enum! {
         GoAhead = "go_ahead",
         /// The heap is set so agents prepare every new item.
         Prepare = "prepare",
+    }
+}
+
+impl TurnSource {
+    /// How the turn was opened, as people read it in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::GoAhead => "Sent by a person",
+            Self::Prepare => "Prepared on add",
+        }
     }
 }
 
@@ -95,6 +124,20 @@ coded_enum! {
         GoalMet = "goal_met",
         /// Only for withdrawn questions: the run handed the turn back.
         HandedBack = "handed_back",
+    }
+}
+
+impl TakeBackWhy {
+    /// Why the turn was taken back, or the question withdrawn, as people read it in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::TakeBack => "Taken back",
+            Self::Started => "Started",
+            Self::Closed => "Closed",
+            Self::HeapArchived => "Heap archived",
+            Self::GoalMet => "Goal met",
+            Self::HandedBack => "Handed back",
+        }
     }
 }
 

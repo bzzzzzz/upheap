@@ -13,6 +13,16 @@ coded_enum! {
     }
 }
 
+impl Role {
+    /// The role as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Admin => "Admin",
+            Self::Member => "Member",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Team {
     pub id: TeamId,

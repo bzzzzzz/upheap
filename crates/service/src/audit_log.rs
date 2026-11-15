@@ -753,26 +753,26 @@ fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> O
         return None;
     }
     let text = match field {
-        "kind" => describe_kind(Kind::from_code(value.as_str()?)?).to_owned(),
-        "stage" => describe_stage(Stage::from_code(value.as_str()?)?).to_owned(),
-        "state" => describe_state(StateKind::from_code(value.as_str()?)?).to_owned(),
+        "kind" => Kind::from_code(value.as_str()?)?.label().to_owned(),
+        "stage" => Stage::from_code(value.as_str()?)?.label().to_owned(),
+        "state" => StateKind::from_code(value.as_str()?)?.label().to_owned(),
         // A step is named by its title; its number is in the diff for API clients.
         "step" => value.get("title")?.as_str()?.to_owned(),
-        "step_state" => describe_step_state(StepState::from_code(value.as_str()?)?).to_owned(),
+        "step_state" => StepState::from_code(value.as_str()?)?.label().to_owned(),
         // A question is named by its number, as `q2`, after its item's key.
         "question" => format!("q{}", value.as_u64()?),
         // A comment is named the same way, as `c3`.
         "comment" => format!("c{}", value.as_u64()?),
-        "reach" => describe_reach(Reach::from_code(value.as_str()?)?).to_owned(),
-        "goal" => describe_goal(Goal::from_code(value.as_str()?)?).to_owned(),
-        "source" => describe_turn_source(TurnSource::from_code(value.as_str()?)?).to_owned(),
-        "why" => describe_why(TakeBackWhy::from_code(value.as_str()?)?).to_owned(),
+        "reach" => Reach::from_code(value.as_str()?)?.label().to_owned(),
+        "goal" => Goal::from_code(value.as_str()?)?.label().to_owned(),
+        "source" => TurnSource::from_code(value.as_str()?)?.label().to_owned(),
+        "why" => TakeBackWhy::from_code(value.as_str()?)?.label().to_owned(),
         "how" => describe_how(value.as_str()?)?.to_owned(),
-        "question_kind" => describe_question_kind(QuestionKind::from_code(value.as_str()?)?).to_owned(),
+        "question_kind" => QuestionKind::from_code(value.as_str()?)?.label().to_owned(),
         "question_choices" => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
         "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
-        "effort" | "impact" => describe_size(Size::from_code(value.as_str()?)?).to_owned(),
-        "role" => describe_role(Role::from_code(value.as_str()?)?).to_owned(),
+        "effort" | "impact" => Size::from_code(value.as_str()?)?.label().to_owned(),
+        "role" => Role::from_code(value.as_str()?)?.label().to_owned(),
         "due" => describe_recorded_due(value, tz)?,
         "blocked_by" | "origin" | "blocker_done" => names.of_value(value, "Unknown item"),
         "heap" => names.of_value(value, "Unknown heap"),
@@ -812,60 +812,6 @@ fn describe_recorded_due(value: &Value, tz: &TimeZone) -> Option<String> {
     Some(describe_due_date(Due { at, firm }, tz))
 }
 
-const fn describe_state(state: StateKind) -> &'static str {
-    match state {
-        StateKind::Open => "Open",
-        StateKind::InProgress => "In progress",
-        StateKind::Blocked => "Blocked",
-        StateKind::Done => "Done",
-        StateKind::WontDo => "Won't do",
-        StateKind::Became => "Became",
-    }
-}
-
-const fn describe_question_kind(kind: QuestionKind) -> &'static str {
-    match kind {
-        QuestionKind::Question => "Question",
-        QuestionKind::Request => "Request",
-        QuestionKind::Review => "Review",
-        QuestionKind::DoneProposal => "Done proposal",
-    }
-}
-
-const fn describe_reach(reach: Reach) -> &'static str {
-    match reach {
-        Reach::One => "One state",
-        Reach::AllTheWay => "All the way",
-    }
-}
-
-const fn describe_goal(goal: Goal) -> &'static str {
-    match goal {
-        Goal::WithContext => "With context",
-        Goal::Defined => "Defined",
-        Goal::Done => "Done",
-    }
-}
-
-const fn describe_turn_source(source: TurnSource) -> &'static str {
-    match source {
-        TurnSource::GoAhead => "Sent by a person",
-        TurnSource::Prepare => "Prepared on add",
-    }
-}
-
-/// Why a turn was taken back, or a question withdrawn, as the entry's `why` records it.
-const fn describe_why(why: TakeBackWhy) -> &'static str {
-    match why {
-        TakeBackWhy::TakeBack => "Taken back",
-        TakeBackWhy::Started => "Started",
-        TakeBackWhy::Closed => "Closed",
-        TakeBackWhy::HeapArchived => "Heap archived",
-        TakeBackWhy::GoalMet => "Goal met",
-        TakeBackWhy::HandedBack => "Handed back",
-    }
-}
-
 /// How a turn came to be reached without a run saying so, as the entry's `how` records it.
 fn describe_how(code: &str) -> Option<&'static str> {
     match code {
@@ -873,46 +819,6 @@ fn describe_how(code: &str) -> Option<&'static str> {
         "already_met" => Some("Already at the goal"),
         "became" => Some("Defined when its note became"),
         _ => None,
-    }
-}
-
-const fn describe_step_state(state: StepState) -> &'static str {
-    match state {
-        StepState::Open => "Open",
-        StepState::Ticked => "Ticked",
-        StepState::Dropped => "Dropped",
-    }
-}
-
-const fn describe_kind(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Note => "Note",
-        Kind::Task => "Task",
-        Kind::Reminder => "Reminder",
-    }
-}
-
-const fn describe_stage(stage: Stage) -> &'static str {
-    match stage {
-        Stage::AsWritten => "As written",
-        Stage::WithContext => "With context",
-        Stage::Defined => "Defined",
-    }
-}
-
-const fn describe_size(size: Size) -> &'static str {
-    match size {
-        Size::S => "S",
-        Size::M => "M",
-        Size::L => "L",
-        Size::Xl => "XL",
-    }
-}
-
-const fn describe_role(role: Role) -> &'static str {
-    match role {
-        Role::Admin => "Admin",
-        Role::Member => "Member",
     }
 }
 
