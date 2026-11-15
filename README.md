@@ -223,6 +223,7 @@ cargo run -p cli -- comment list k3x9a                          # an item's comm
 cargo run -p cli -- question reply k3x9a.q1 --pick Internal  # reply: --pick a choice by label or number, --comment or --comment-file
 cargo run -p cli -- question reply k3x9a.q1 --pick "Let's Encrypt" --change  # change the reply of an answered question, on an open item
 cargo run -p cli -- work next                                    # what an agent would work on next, without taking it
+cargo run -p cli -- work log                                     # what the agents reached in the last 30 days, newest first; --cursor for older runs
 cargo run -p cli -- work claim --quiet                           # take it: starts a run and prints the run's ID
 cargo run -p cli -- work run --tool claude                       # the agent loop: claim, start claude on the item, record the run, repeat; Ctrl-C stops it
 cargo run -p cli -- work run --tool claude --heap work --once    # one run in a heap, or nothing when there is nothing to do

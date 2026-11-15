@@ -1,9 +1,8 @@
 //! `upheap work log [--cursor <cursor>]`: what the agents reached in the last 30 days, newest first.
 
-use api_types::agents::ResultsDto;
+use api_types::agents::{ResultsDto, ResultsQuery};
 use clap::Args;
 
-use crate::client::NO_QUERY;
 use crate::commands::SharedArgs;
 use crate::commands::heap_api::indented_context;
 use crate::output::{Cell, Mode, Output, Tone, shorten};
@@ -23,23 +22,18 @@ pub struct LogArgs {
 /// Prints one page of the runs that reached their goal, under a heading for each day:
 /// `14:02  k3x9a  Rotate the certs  Work  defined (skipped with context)`, then the run's result and its links, one
 /// to a line. A page that isn't the last ends with the command for the older runs. No runs print a sentence saying
-/// so. `--quiet` prints each run's item key; `--json` the server's answer. Exit 0 either way.
+/// so. `--quiet` prints each run's item as `team/heap/key`; `--json` the server's answer. Exit 0 either way.
 pub async fn run(args: LogArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
-    let results = match &args.cursor {
-        Some(cursor) => {
-            client
-                .get::<ResultsDto>(&["me", "results"], &[("cursor", cursor.as_str())], &token)
-                .await?
-        }
-        None => client.get::<ResultsDto>(&["me", "results"], NO_QUERY, &token).await?,
-    };
+    let query = ResultsQuery { cursor: args.cursor };
+    let results = client.get::<ResultsDto>(&["me", "results"], &query, &token).await?;
     match out.mode() {
         Mode::Json => out.json(&results.body)?,
         Mode::Quiet => {
             for row in &results.value.rows {
-                out.line(&row.item.key)?;
+                // The log spans heaps, so a key alone may name an item in another heap than the default.
+                out.line(&format!("{}/{}/{}", row.heap.team_slug, row.heap.slug, row.item.key))?;
             }
         }
         Mode::Human => render(&results.value, out)?,
@@ -109,24 +103,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-
-    /// A writer that keeps what it is given, to read it back as text.
-    #[derive(Clone, Default)]
-    struct TextBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
-
-    impl std::io::Write for TextBuffer {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
+    use crate::output::human_text;
 
     fn row(day: &str, label: &str, time: &str, key: &str, title: &str, heap: &str) -> serde_json::Value {
         json!({
@@ -167,14 +144,10 @@ mod tests {
         second["result"] = json!("Found the cause.");
         let results: ResultsDto =
             serde_json::from_value(json!({ "rows": [first, second], "next_cursor": "c1" })).expect("a results page");
-        let buffer = TextBuffer::default();
-        let mut out = Output::new(Box::new(buffer.clone()), Box::new(std::io::sink()), Mode::Human, false);
+        let text = human_text(|out| render(&results, out));
 
-        render(&results, &mut out).expect("the buffer takes every write");
-
-        let bytes = buffer.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         expect_that!(
-            String::from_utf8_lossy(&bytes).into_owned(),
+            text,
             eq(concat!(
                 "Today\n",
                 "  14:02  k3x9a  Rotate the certs   Work   defined (skipped with context)\n",

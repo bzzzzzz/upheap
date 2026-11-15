@@ -89,7 +89,7 @@ async fn a_reached_run_shows_its_result_and_links() -> Result<()> {
     );
     expect_that!(log.stdout, contains_substring("\n    https://wiki.example/page\n"));
     expect_that!(log.stdout, not(contains_substring("Older runs")));
-    expect_that!(quiet.stdout, eq(&format!("{note}\n")));
+    expect_that!(quiet.stdout, eq(&format!("ada/personal/{note}\n")));
     expect_that!(serde_json::from_str::<Value>(&json.stdout).is_ok(), eq(true));
     Ok(())
 }
@@ -106,7 +106,7 @@ async fn a_cursor_the_server_did_not_issue_is_refused() -> Result<()> {
     let log = cli.run(&["work", "log", "--cursor", "nonsense"]).await;
 
     // Assert
-    expect_that!(log.exited(0), eq(false));
+    expect_that!(log.exited(3), eq(true));
     expect_that!(log.stderr, contains_substring("cursor is not one this server issued"));
     Ok(())
 }
