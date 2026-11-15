@@ -3,6 +3,7 @@
 //! and a second tool is an addition here, not a change to the loop.
 
 mod claude;
+pub(crate) mod leftovers;
 
 use std::ffi::OsString;
 use std::future::Future;

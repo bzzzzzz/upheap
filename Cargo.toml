@@ -74,6 +74,9 @@ similar = { version = "2", default-features = false, features = ["text"] }
 sha2 = "0.10"
 # Signalling a process group, which std and tokio can't: stopping an agent tool with everything it started.
 rustix = { version = "1", features = ["process"] }
+# Reading other processes' environment and working directory, which std can't and `unsafe` is forbidden: ending what an
+# agent run left running.
+sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 tempfile = "3"
 thiserror = "2"
 # Only what every user needs: each binary and test suite adds the runtime flavour, signals, networking and timers it

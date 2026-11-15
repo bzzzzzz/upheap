@@ -30,6 +30,7 @@ use super::{
     HeapsArgs, NamedHeap, end_word, ended_journey, journey, missing_agents, resolve_named_heaps, waiting_by_heap_text,
     waiting_text,
 };
+use crate::agent::leftovers;
 use crate::agent::{
     Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, UsageLimit, WorkDeps, make_root,
 };
@@ -729,6 +730,14 @@ impl Shared<'_> {
         }
         // The tool is gone: its own exit time, which a tool that never started doesn't have.
         let tool_ended = self.app.now();
+        // What the tool started and left running would keep its CPU and ports and go on writing into the directory, so
+        // it is ended before the marker lock is dropped and the run is recorded. The blocking scan runs off the loop.
+        if tool_started.is_some() {
+            let id = run.id.to_string();
+            if let Err(err) = tokio::task::spawn_blocking(move || leftovers::end_run(&id)).await {
+                tracing::warn!(run_id = %run.id, error = %err, "ending what the run left running failed");
+            }
+        }
         let tool_times = |request: FinishRequestDto| FinishRequestDto {
             tool_started_at: tool_started.map(|at| at.as_millisecond()),
             tool_ended_at: tool_started.map(|_| tool_ended.as_millisecond()),
@@ -852,6 +861,8 @@ impl Shared<'_> {
                 // What an interrupted sweep renamed and did not finish deleting.
                 for left in kept::leftovers(&root) {
                     let removed = if left.is_dir() {
+                        // Its delete most likely failed because something still wrote into it.
+                        leftovers::end_inside(&left);
                         kept::delete(&left)
                     } else {
                         std::fs::remove_file(&left)
@@ -960,7 +971,13 @@ impl Shared<'_> {
         };
         let deleted = {
             let away = away.clone();
-            tokio::task::spawn_blocking(move || kept::delete(&away)).await
+            // What still works in the directory is ended first, or it keeps writing into it and the delete fails with
+            // "Directory not empty". Done after the rename, which is what the lock covers.
+            tokio::task::spawn_blocking(move || {
+                leftovers::end_inside(&away);
+                kept::delete(&away)
+            })
+            .await
         };
         // A directory left half-deleted under its new name is cleared by the next sweep.
         if let Err(err) = deleted.unwrap_or_else(|panicked| Err(std::io::Error::other(panicked))) {
