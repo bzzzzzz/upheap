@@ -1983,6 +1983,39 @@ async fn a_bad_allow_rule_is_refused_before_any_request() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn copilot_rules_may_hold_spaces_and_dashes_but_claudes_may_not() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let copilot = idle_agent(None);
+    let claude = idle_agent(None);
+
+    // Act
+    let accepted = cli
+        .run_work(
+            &["work", "run", "--tool", "copilot", "--once", "--allow", "shell(gh pr)"],
+            &copilot,
+        )
+        .await;
+    let refused = cli
+        .run_work(&[ONCE, &["--allow", "shell(gh pr)"]].concat(), &claude)
+        .await;
+    let next = cli.run(&["work", "next", "--quiet"]).await;
+
+    // Assert
+    expect_that!(accepted.exited(0), eq(true));
+    let starts = copilot.starts();
+    assert_that!(starts.len(), eq(1));
+    expect_that!(starts[0].tool, eq(Tool::Copilot));
+    expect_that!(starts[0].allow, eq(&vec!["shell(gh pr)".to_owned()]));
+    expect_that!(refused.exited(2), eq(true));
+    expect_that!(refused.stderr, contains_substring("--allow \"shell(gh pr)\""));
+    expect_that!(claude.starts().len(), eq(0));
+    expect_that!(next.stdout.trim().is_empty(), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_allow_flags_are_in_the_help() -> Result<()> {
     // Arrange
     let (_server, _ada, cli, _note) = with_prepared_note().await?;
@@ -2093,7 +2126,7 @@ async fn without_a_heap_and_a_default_it_is_a_usage_error() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn the_tool_flag_is_required_and_knows_claude_only() -> Result<()> {
+async fn the_tool_flag_is_required_and_knows_claude_and_copilot() -> Result<()> {
     // Arrange
     let (_server, _ada, cli, _note) = with_prepared_note().await?;
 
@@ -2105,7 +2138,7 @@ async fn the_tool_flag_is_required_and_knows_claude_only() -> Result<()> {
     expect_that!(missing.exited(2), eq(true));
     expect_that!(missing.stderr, contains_substring("--tool <TOOL>"));
     expect_that!(other.exited(2), eq(true));
-    expect_that!(other.stderr, contains_substring("[possible values: claude]"));
+    expect_that!(other.stderr, contains_substring("[possible values: claude, copilot]"));
     Ok(())
 }
 

@@ -93,6 +93,12 @@ pub enum UsageError {
     WorkersWithoutRoot { workers: u8 },
     #[error("work {verb} runs inside a run: set UPHEAP_RUN")]
     NeedsRun { verb: &'static str },
+    #[error("{flag} {rule:?}: {reason}")]
+    BadAllowRule {
+        flag: &'static str,
+        rule: String,
+        reason: &'static str,
+    },
 }
 
 /// Reads a flag's value the way the API spells it, such as `in_progress` or `nice_to_have`, into the API's type.

@@ -3,7 +3,9 @@
 //! and a second tool is an addition here, not a change to the loop.
 
 mod claude;
+mod copilot;
 pub(crate) mod leftovers;
+mod process;
 
 use std::ffi::OsString;
 use std::future::Future;
@@ -18,6 +20,8 @@ use tokio::sync::mpsc::UnboundedReceiver;
 pub enum Tool {
     /// Claude's command-line tool, `claude`.
     Claude,
+    /// GitHub Copilot's command-line tool, `copilot`.
+    Copilot,
 }
 
 impl Tool {
@@ -25,6 +29,7 @@ impl Tool {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Claude => "claude",
+            Self::Copilot => "copilot",
         }
     }
 }
@@ -231,8 +236,10 @@ const SILENCE_LIMIT: Duration = Duration::from_secs(30 * 60);
 pub struct SystemTools {
     /// The program to start for [`Tool::Claude`] in place of the one on `PATH`. For tests.
     claude: Option<PathBuf>,
+    /// The program to start for [`Tool::Copilot`] in place of the one on `PATH`. For tests.
+    copilot: Option<PathBuf>,
     /// The tools stopped and not yet ended.
-    stops: claude::StopTracker,
+    stops: process::StopTracker,
     /// How long a tool may print nothing before it is stopped and its run failed. 30 minutes in the binary.
     silence_limit: Duration,
 }
@@ -241,7 +248,8 @@ impl SystemTools {
     pub fn new() -> Self {
         Self {
             claude: None,
-            stops: claude::StopTracker::new(),
+            copilot: None,
+            stops: process::StopTracker::new(),
             silence_limit: SILENCE_LIMIT,
         }
     }
@@ -250,7 +258,18 @@ impl SystemTools {
     pub fn with_claude(path: PathBuf) -> Self {
         Self {
             claude: Some(path),
-            stops: claude::StopTracker::new(),
+            copilot: None,
+            stops: process::StopTracker::new(),
+            silence_limit: SILENCE_LIMIT,
+        }
+    }
+
+    /// Tools whose `copilot` is the program at `path`, wherever `PATH` points.
+    pub fn with_copilot(path: PathBuf) -> Self {
+        Self {
+            claude: None,
+            copilot: Some(path),
+            stops: process::StopTracker::new(),
             silence_limit: SILENCE_LIMIT,
         }
     }
@@ -264,8 +283,11 @@ impl SystemTools {
     }
 
     fn program(&self, tool: Tool) -> Result<PathBuf, ToolError> {
-        let Tool::Claude = tool;
-        match &self.claude {
+        let overridden = match tool {
+            Tool::Claude => &self.claude,
+            Tool::Copilot => &self.copilot,
+        };
+        match overridden {
             Some(path) if is_runnable(path) => Ok(path.clone()),
             Some(_) => Err(ToolError::NotInstalled { tool }),
             None => find_on_path(tool.name(), std::env::var_os("PATH")).ok_or(ToolError::NotInstalled { tool }),
@@ -291,6 +313,7 @@ impl AgentTools for SystemTools {
         Box::pin(async move {
             match start.tool {
                 Tool::Claude => claude::run(program?, start, stops, silence_limit).await,
+                Tool::Copilot => copilot::run(program?, start, stops, silence_limit).await,
             }
         })
     }

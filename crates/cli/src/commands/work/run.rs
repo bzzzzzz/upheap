@@ -78,32 +78,41 @@ pub struct RunArgs {
     #[arg(long, value_name = "FILE")]
     pub instructions: Option<PathBuf>,
     /// An extra allow rule for the agent tool in every run, in the tool's own syntax, such as
-    /// mcp__claude_ai_Claude_Docs or Bash(npm:*). Repeat it for several
-    #[arg(long, value_name = "RULE", value_parser = parse_allow_rule)]
+    /// mcp__claude_ai_Claude_Docs or Bash(npm:*) for claude, shell(npm:*) for copilot. Repeat it for several
+    #[arg(long, value_name = "RULE")]
     pub allow: Vec<String>,
     /// An extra allow rule only in runs that prepare an item (to with context or defined). Repeat it for several
-    #[arg(long, value_name = "RULE", value_parser = parse_allow_rule)]
+    #[arg(long, value_name = "RULE")]
     pub allow_prepare: Vec<String>,
     /// An extra allow rule only in runs that do a task (to done). Repeat it for several
-    #[arg(long, value_name = "RULE", value_parser = parse_allow_rule)]
+    #[arg(long, value_name = "RULE")]
     pub allow_do: Vec<String>,
     #[command(flatten)]
     pub shared: SharedArgs,
 }
 
-/// Checks one allow rule as clap reads it. Claude's `--allowedTools` splits a value on commas and spaces, so a rule
-/// holding either would become several rules, or none. Each rule gets its own flag instead. The rule is not trimmed.
-/// A rule starting with `-` would reach `claude` as a flag of its own, not as a rule, so it is refused too.
-fn parse_allow_rule(raw: &str) -> Result<String, String> {
-    if raw.is_empty() {
-        Err("an allow rule can't be empty".to_owned())
-    } else if raw.starts_with('-') {
-        Err("an allow rule can't start with -".to_owned())
-    } else if raw.contains(',') || raw.contains(char::is_whitespace) {
-        Err("an allow rule can't hold a comma or whitespace: give each rule its own flag".to_owned())
+/// Checks one allow rule of `flag` for `tool`, before any request. Claude's `--allowedTools` splits a value on commas
+/// and spaces, so a rule holding either would become several rules, or none: each rule gets its own flag instead. The
+/// rule is not trimmed. A rule starting with `-` would reach `claude` as a flag of its own, not as a rule, so it is
+/// refused too. Copilot gets each rule as one `--allow-tool=<rule>` argument, so a leading `-` or a space can't split
+/// it, and its rules hold spaces (`shell(gh pr)`): only an empty one is refused.
+fn check_allow_rule(tool: Tool, flag: &'static str, rule: &str) -> Result<(), UsageError> {
+    let reason = if rule.is_empty() {
+        "an allow rule can't be empty"
+    } else if tool == Tool::Copilot {
+        return Ok(());
+    } else if rule.starts_with('-') {
+        "an allow rule can't start with -"
+    } else if rule.contains(',') || rule.contains(char::is_whitespace) {
+        "an allow rule can't hold a comma or whitespace: give each rule its own flag"
     } else {
-        Ok(raw.to_owned())
-    }
+        return Ok(());
+    };
+    Err(UsageError::BadAllowRule {
+        flag,
+        rule: rule.to_owned(),
+        reason,
+    })
 }
 
 /// The runner's extra allow rules, from `--allow`, `--allow-prepare` and `--allow-do`.
@@ -153,6 +162,15 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
     }
     if args.workers > 1 && args.root.is_none() {
         return Err(UsageError::WorkersWithoutRoot { workers: args.workers }.into());
+    }
+    for (flag, rules) in [
+        ("--allow", &args.allow),
+        ("--allow-prepare", &args.allow_prepare),
+        ("--allow-do", &args.allow_do),
+    ] {
+        for rule in rules {
+            check_allow_rule(args.tool, flag, rule)?;
+        }
     }
     let server = app.server(&args.shared)?;
     let client = app.client(server.clone())?;
@@ -1478,6 +1496,33 @@ mod tests {
             }),
             body: String::new(),
         })
+    }
+
+    #[gtest]
+    fn claudes_allow_rules_are_one_word_without_a_leading_dash() {
+        expect_that!(check_allow_rule(Tool::Claude, "--allow", "Bash(npm:*)"), ok(anything()));
+        for rule in ["", "-x", "Read,Edit", "Bash(npm run:*)", "Read\tEdit"] {
+            expect_that!(
+                check_allow_rule(Tool::Claude, "--allow", rule),
+                err(matches_pattern!(UsageError::BadAllowRule { .. })),
+                "{rule:?}"
+            );
+        }
+    }
+
+    #[gtest]
+    fn copilots_allow_rules_may_hold_spaces_and_a_dash_but_not_be_empty() {
+        for rule in ["shell(gh pr)", "-x"] {
+            expect_that!(
+                check_allow_rule(Tool::Copilot, "--allow", rule),
+                ok(anything()),
+                "{rule:?}"
+            );
+        }
+        expect_that!(
+            check_allow_rule(Tool::Copilot, "--allow-do", ""),
+            err(matches_pattern!(UsageError::BadAllowRule { .. }))
+        );
     }
 
     #[gtest]
