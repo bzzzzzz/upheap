@@ -177,7 +177,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
   position. The boost lets half-done work go on before new work of about the same importance while something much
   more important still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the
-  plain score. A claim takes the locks of every given heap in ID order, as the item writes do, so two claims at once
+  plain score. `GET /work/queue` returns the whole list in that order, read-only like `/work/next`. A claim takes the locks of every given heap in ID order, as the item writes do, so two claims at once
   get different items.
   **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,

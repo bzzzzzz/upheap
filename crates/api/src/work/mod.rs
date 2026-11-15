@@ -4,8 +4,8 @@
 //! extractor reads (`extract.rs`).
 
 use api_types::work::{
-    ClaimDto, ClaimRequestDto, FinishRequestDto, HandBackRequestDto, ReachedRequestDto, RunDto, WaitingInHeapDto,
-    WorkItemDto, WorkNextDto,
+    ClaimDto, ClaimRequestDto, FinishRequestDto, HandBackRequestDto, QueuedItemDto, ReachedRequestDto, RunDto,
+    WaitingInHeapDto, WorkItemDto, WorkNextDto, WorkQueueDto,
 };
 use axum::Json;
 use axum::extract::{FromRequestParts, State};
@@ -30,6 +30,7 @@ use crate::{ApiError, AppState};
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(next_item))
+        .routes(routes!(queue_items))
         .routes(routes!(claim_run))
         .routes(routes!(heartbeat))
         .routes(routes!(reached))
@@ -148,11 +149,46 @@ async fn next_item(
     ApiQuery(query): ApiQuery<NextQuery>,
 ) -> Result<Json<WorkNextDto>, ApiError> {
     let heaps = split_heaps(&query.heaps);
-    let next = state.services.next_for_agent(principal, &heaps).await?;
+    let queue = state.services.queue_for_agent(principal, &heaps).await?;
     Ok(Json(WorkNextDto {
-        item: next.item.as_ref().map(work_item_dto),
-        waiting_count: next.waiting_count,
-        waiting: waiting_dtos(&next.waiting),
+        item: queue.items.first().map(|queued| work_item_dto(&queued.work)),
+        waiting_count: queue.waiting_count,
+        waiting: waiting_dtos(&queue.waiting),
+    }))
+}
+
+/// The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:
+/// its position in its own heap, your priority for that heap, and whether it is started work. Read-only: nothing is
+/// claimed. Any member who may edit items in every given heap may ask.
+#[utoipa::path(get, path = "/work/queue", tag = "work", security(("session" = [])),
+    params(NextQuery),
+    responses(
+        (status = 200, body = WorkQueueDto),
+        (status = 400, description = "`invalid_query` or `invalid_header`", body = Problem),
+        (status = 403, description = "`forbidden`: the caller can't edit items in a given heap", body = Problem),
+        (status = 404, description = "A heap outside the caller's teams", body = Problem),
+        (status = 409, description = "`heap_archived`", body = Problem),
+        (status = 422, description = "`invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap`", body = Problem),
+    ))]
+async fn queue_items(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ApiQuery(query): ApiQuery<NextQuery>,
+) -> Result<Json<WorkQueueDto>, ApiError> {
+    let heaps = split_heaps(&query.heaps);
+    let queue = state.services.queue_for_agent(principal, &heaps).await?;
+    Ok(Json(WorkQueueDto {
+        items: queue
+            .items
+            .iter()
+            .map(|queued| QueuedItemDto {
+                item: work_item_dto(&queued.work),
+                heap_position: queued.heap_position,
+                heap_priority: queued.heap_priority.get(),
+            })
+            .collect(),
+        waiting_count: queue.waiting_count,
+        waiting: waiting_dtos(&queue.waiting),
     }))
 }
 

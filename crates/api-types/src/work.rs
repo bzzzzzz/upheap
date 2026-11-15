@@ -55,6 +55,32 @@ pub struct WorkNextDto {
     pub waiting: Vec<WaitingInHeapDto>,
 }
 
+/// The whole queue, in the order `GET /work/next` and a claim take it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = WorkQueue)]
+pub struct WorkQueueDto {
+    /// Every item in the given heaps that waits for an agent, the one a claim takes first.
+    pub items: Vec<QueuedItemDto>,
+    /// How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item
+    /// counts once.
+    pub waiting_count: u32,
+    /// How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to
+    /// `waiting_count`.
+    #[serde(default)]
+    pub waiting: Vec<WaitingInHeapDto>,
+}
+
+/// An item of the queue, with why it stands where it does.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = QueuedItem)]
+pub struct QueuedItemDto {
+    pub item: WorkItemDto,
+    /// The item's 1-based position in its own heap's ranking.
+    pub heap_position: u32,
+    /// The caller's priority for the item's heap, 1 to 10.
+    pub heap_priority: u8,
+}
+
 /// The items waiting for the person in one heap.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = WaitingInHeap)]

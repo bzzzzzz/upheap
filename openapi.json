@@ -7734,6 +7734,97 @@
         ]
       }
     },
+    "/api/v1/work/queue": {
+      "get": {
+        "tags": [
+          "work"
+        ],
+        "summary": "The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:\nits position in its own heap, your priority for that heap, and whether it is started work. Read-only: nothing is\nclaimed. Any member who may edit items in every given heap may ask.",
+        "operationId": "queue_items",
+        "parameters": [
+          {
+            "name": "heaps",
+            "in": "query",
+            "description": "One to 20 heaps, each `team/heap` by slug, separated by commas. A heap named twice counts once.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "ops/backlog,ops/infra"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkQueue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query` or `invalid_header`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the caller can't edit items in a given heap",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A heap outside the caller's teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/work/runs": {
       "post": {
         "tags": [
@@ -12446,6 +12537,32 @@
           "withdrawn"
         ]
       },
+      "QueuedItem": {
+        "type": "object",
+        "description": "An item of the queue, with why it stands where it does.",
+        "required": [
+          "item",
+          "heap_position",
+          "heap_priority"
+        ],
+        "properties": {
+          "heap_position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The item's 1-based position in its own heap's ranking.",
+            "minimum": 0
+          },
+          "heap_priority": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The caller's priority for the item's heap, 1 to 10.",
+            "minimum": 0
+          },
+          "item": {
+            "$ref": "#/components/schemas/WorkItem"
+          }
+        }
+      },
       "RankedItem": {
         "type": "object",
         "required": [
@@ -14168,6 +14285,36 @@
                 "description": "`null` when nothing in the given heaps waits for an agent."
               }
             ]
+          },
+          "waiting": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingInHeap"
+            },
+            "description": "How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to\n`waiting_count`."
+          },
+          "waiting_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item\ncounts once.",
+            "minimum": 0
+          }
+        }
+      },
+      "WorkQueue": {
+        "type": "object",
+        "description": "The whole queue, in the order `GET /work/next` and a claim take it.",
+        "required": [
+          "items",
+          "waiting_count"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueuedItem"
+            },
+            "description": "Every item in the given heaps that waits for an agent, the one a claim takes first."
           },
           "waiting": {
             "type": "array",

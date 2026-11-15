@@ -112,6 +112,17 @@ impl World {
             .await
     }
 
+    async fn queue(&self) -> Result<TestResponse> {
+        self.app
+            .send(
+                Method::GET,
+                &format!("/api/v1/work/queue?heaps={}", self.heap_ref),
+                Some(&self.session),
+                None,
+            )
+            .await
+    }
+
     async fn claim(&self) -> Result<TestResponse> {
         self.claim_as(&self.session).await
     }
@@ -2810,5 +2821,130 @@ async fn a_critical_item_passes_started_nice_to_have_work() -> Result<()> {
     expect_that!(next.body["item"]["key"], eq(&json!(critical)));
     expect_that!(next.body["item"]["started"], eq(&json!(false)));
     expect_that!(claimed.body["run"]["item"]["key"], eq(&json!(critical)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn queue_lists_every_candidate_in_the_order_next_takes_them() -> Result<()> {
+    // Arrange: two sent items of different scores, and one with an open question, which waits for the person.
+    let w = world().await?;
+    let lower = w.add("Tidy the logs", json!({ "impact": "m", "effort": "m" })).await?;
+    w.send_turn(&lower).await?;
+    let higher = w
+        .add("Rotate the certs", json!({ "impact": "l", "effort": "m" }))
+        .await?;
+    w.send_turn(&higher).await?;
+    let asked = w.add_sent("Has a question").await?;
+    let question = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/questions", w.item_path(&asked).await?),
+            Some(&w.session),
+            Some(json!({ "kind": "question", "text": "Which CA?" })),
+        )
+        .await?;
+    expect_that!(question.status, eq(StatusCode::CREATED));
+
+    // Act
+    let queue = w.queue().await?;
+    let next = w.next().await?;
+
+    // Assert
+    expect_that!(queue.status, eq(StatusCode::OK));
+    let items = queue.body["items"].as_array().context("items")?;
+    expect_that!(items.len(), eq(2));
+    expect_that!(items[0]["item"]["key"], eq(&json!(higher)));
+    expect_that!(items[0]["heap_position"], eq(&json!(1)));
+    expect_that!(items[0]["heap_priority"], eq(&json!(1)));
+    expect_that!(items[1]["item"]["key"], eq(&json!(lower)));
+    expect_that!(items[1]["heap_position"], eq(&json!(2)));
+    expect_that!(items[1]["heap_priority"], eq(&json!(1)));
+    expect_that!(items[0]["item"]["key"], eq(&next.body["item"]["key"]));
+    expect_that!(queue.body["waiting_count"], eq(&json!(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn queue_puts_started_work_first_and_says_so() -> Result<()> {
+    // Arrange: an agent has had a go at the first item; the second scores a little above it.
+    let w = world().await?;
+    let started = w
+        .add("Rotate the certs", json!({ "impact": "m", "effort": "m" }))
+        .await?;
+    w.send_turn(&started).await?;
+    w.fail_once().await?;
+    let fresh = w.add("Tidy the logs", json!({ "impact": "l", "effort": "m" })).await?;
+    w.send_turn(&fresh).await?;
+
+    // Act
+    let queue = w.queue().await?;
+
+    // Assert
+    let items = queue.body["items"].as_array().context("items")?;
+    expect_that!(items.len(), eq(2));
+    expect_that!(items[0]["item"]["key"], eq(&json!(started)));
+    expect_that!(items[0]["item"]["started"], eq(&json!(true)));
+    expect_that!(items[0]["heap_position"], eq(&json!(2)));
+    expect_that!(items[1]["item"]["key"], eq(&json!(fresh)));
+    expect_that!(items[1]["item"]["started"], eq(&json!(false)));
+    expect_that!(items[1]["heap_position"], eq(&json!(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn queue_orders_heaps_by_the_persons_priority() -> Result<()> {
+    // Arrange: the personal heap's note outscores the garage's.
+    let w = world().await?;
+    let url = w.app.heap_url(&w.heap).await?;
+    let team = url.split("/heaps/").next().context("heap url")?;
+    let created = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{team}/heaps"),
+            Some(&w.session),
+            Some(json!({ "name": "Garage" })),
+        )
+        .await?;
+    let garage = created.body["id"].as_str().context("heap id")?.to_owned();
+    let garage_ref = heap_ref(&w.app, &garage).await?;
+    let in_personal = w.add("In personal", json!({ "need": "critical" })).await?;
+    w.send_turn(&in_personal).await?;
+    let note = w
+        .app
+        .new_item(&w.session, &garage, json!({ "title": "In garage", "need": "expected" }))
+        .await?;
+    let garage_path = format!(
+        "{}/items/{}/turn",
+        w.app.heap_url(&garage).await?,
+        note["key"].as_str().context("key")?
+    );
+    let sent = w
+        .app
+        .send(
+            Method::POST,
+            &garage_path,
+            Some(&w.session),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
+    let both = format!("/api/v1/work/queue?heaps={},{garage_ref}", w.heap_ref);
+    w.app.set_priority(&w.session, &garage, 10).await?;
+
+    // Act
+    let queue = w.app.send(Method::GET, &both, Some(&w.session), None).await?;
+
+    // Assert
+    let items = queue.body["items"].as_array().context("items")?;
+    expect_that!(items.len(), eq(2));
+    expect_that!(items[0]["item"]["title"], eq(&json!("In garage")));
+    expect_that!(items[0]["heap_priority"], eq(&json!(10)));
+    expect_that!(items[1]["item"]["title"], eq(&json!("In personal")));
+    expect_that!(items[1]["heap_priority"], eq(&json!(1)));
     Ok(())
 }

@@ -44,10 +44,20 @@ pub struct WorkItem {
     pub started: bool,
 }
 
-/// The first item of the queue, if there is one, and how many items wait for the person.
+/// An item of the queue, with why it stands where it does.
 #[derive(Debug)]
-pub struct NextView {
-    pub item: Option<WorkItem>,
+pub struct QueuedItem {
+    pub work: WorkItem,
+    /// The item's 1-based position in its own heap's ranking.
+    pub heap_position: u32,
+    /// The caller's priority for the item's heap.
+    pub heap_priority: HeapPriority,
+}
+
+/// The whole queue in the order a claim takes it, and how many items wait for the person.
+#[derive(Debug)]
+pub struct QueueView {
+    pub items: Vec<QueuedItem>,
     pub waiting_count: u32,
     /// Where those items are: each heap of the queue that has any, in the queue's heap order.
     pub waiting: Vec<WaitingInHeap>,
@@ -74,7 +84,7 @@ pub struct RunView {
 pub struct ClaimView {
     pub run: Option<RunView>,
     pub waiting_count: u32,
-    /// As in [`NextView`].
+    /// As in [`QueueView`].
     pub waiting: Vec<WaitingInHeap>,
 }
 
@@ -95,8 +105,8 @@ struct QueueHeap {
 
 /// What the queue holds right now.
 struct Queue {
-    first: Option<WorkItem>,
-    /// Candidates whose item is already at the turn's goal, by heap index. They are never `first`: a claim ends them.
+    items: Vec<QueuedItem>,
+    /// Candidates whose item is already at the turn's goal, by heap index. They are never in `items`: a claim ends them.
     met: Vec<(usize, Item, Turn)>,
     waiting_count: u32,
     waiting: Vec<WaitingInHeap>,
@@ -124,14 +134,15 @@ fn parse_heap_refs(refs: &[String]) -> Result<Vec<(Handle, Handle)>, ValidationE
 }
 
 impl Services {
-    /// The first item of the queue over `heaps` (each `team/heap` by slug) and how many items wait for the person.
+    /// The queue over `heaps` (each `team/heap` by slug), in the order a claim takes it, and how many items wait for
+    /// the person.
     /// A turn whose item is already at its goal is skipped, not ended. Writes nothing: a lapsed run counts as ended,
     /// failed, but isn't written (decision: lapses are written lazily).
     ///
     /// Fails with a validation error unless `heaps` names 1 to 20 well-formed heaps, [`ServiceError::NotFound`] for a
     /// heap outside the caller's teams, [`ServiceError::HeapArchived`] for an archived one, and
     /// [`ServiceError::Forbidden`] where the caller can't edit items.
-    pub async fn next_for_agent(&self, principal: Principal, heaps: &[String]) -> Result<NextView, ServiceError> {
+    pub async fn queue_for_agent(&self, principal: Principal, heaps: &[String]) -> Result<QueueView, ServiceError> {
         let heaps = self.resolve_queue_heaps(principal, heaps).await?;
         let now = self.now();
         let heap_ids: Vec<HeapId> = heaps.iter().map(|queue| queue.heap.id).collect();
@@ -145,18 +156,18 @@ impl Services {
             }
         }
         let queue = self.read_queue(&self.db, &heaps, &live, &lapsed, now, false).await?;
-        Ok(NextView {
-            item: queue.first,
+        Ok(QueueView {
+            items: queue.items,
             waiting_count: queue.waiting_count,
             waiting: queue.waiting,
         })
     }
 
-    /// Does what [`next_for_agent`](Self::next_for_agent) does under the locks of every given heap, taken in heap ID
+    /// Does what [`queue_for_agent`](Self::queue_for_agent) does under the locks of every given heap, taken in heap ID
     /// order, and starts a run on the first item. Before choosing, it writes every lapsed run on those heaps' items as
     /// failed, and ends every candidate turn whose item is already at its goal as reached, credited to the caller,
     /// so no run is spent on it (a turn sent all the way may open a next one, which is then a candidate). The run
-    /// belongs to the caller. Fails as `next_for_agent` does.
+    /// belongs to the caller. Fails as `queue_for_agent` does.
     pub async fn claim_run(&self, principal: Principal, heaps: &[String]) -> Result<ClaimView, ServiceError> {
         let mut heaps = self.resolve_queue_heaps(principal, heaps).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -207,7 +218,7 @@ impl Services {
             }
             queue = self.read_queue(&txn, &heaps, &live, &HashSet::new(), now, true).await?;
         }
-        let Some(mut work) = queue.first else {
+        let Some(QueuedItem { mut work, .. }) = queue.items.into_iter().next() else {
             // Lapsed runs written above stay written.
             txn.commit().await.map_err(StoreError::from)?;
             return Ok(ClaimView {
@@ -761,9 +772,8 @@ impl Services {
 
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
-    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The best candidate is the one
-    /// with the highest score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already
-    /// worked on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split from),
+    /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The candidates come best first: the highest
+    /// score times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already worked on its send (its turn, or an earlier stage of the same all-the-way send or the note it was split from),
     /// then by heap, then by position.
     async fn read_queue(
         &self,
@@ -822,10 +832,10 @@ impl Services {
             .collect();
         let started_sends = store::runs::sends_with_runs(db, &candidate_sends).await?;
 
-        // (score times the person's heap priority, boosted when started, heap index, position) of the best candidate
-        // so far, and the candidate.
+        // Each candidate with its sort key: score times the person's heap priority, boosted when started, then heap
+        // index, then position.
         let mut met = Vec::new();
-        let mut best: Option<((f64, usize, u32), Item, Turn)> = None;
+        let mut candidates_in_order: Vec<((f64, usize, u32), Item, Turn)> = Vec::new();
         for (heap_index, queue) in heaps.iter().enumerate() {
             let Some(candidates) = by_heap.remove(&queue.heap.id) else {
                 continue;
@@ -850,41 +860,38 @@ impl Services {
                     1.0
                 };
                 let key = (ranked.score * priority.as_factor() * boost, heap_index, ranked.position);
-                let better = best.as_ref().is_none_or(|(held, _, _)| {
-                    key.0
-                        .total_cmp(&held.0)
-                        .reverse()
-                        .then_with(|| key.1.cmp(&held.1))
-                        .then_with(|| key.2.cmp(&held.2))
-                        .is_lt()
-                });
-                if better {
-                    best = Some((key, (*item).clone(), turn.clone()));
-                }
+                candidates_in_order.push((key, (*item).clone(), turn.clone()));
             }
         }
 
-        let first = match best {
-            Some(((_, heap_index, _), item, turn)) => {
+        candidates_in_order.sort_by(|(a, ..), (b, ..)| {
+            a.0.total_cmp(&b.0)
+                .reverse()
+                .then_with(|| a.1.cmp(&b.1))
+                .then_with(|| a.2.cmp(&b.2))
+        });
+        let turn_ids: Vec<TurnId> = candidates_in_order.iter().map(|(_, _, turn)| turn.id).collect();
+        let run_counts = store::runs::count_runs_for_turns(db, &turn_ids).await?;
+        let items = candidates_in_order
+            .into_iter()
+            .map(|((_, heap_index, heap_position), item, turn)| {
                 let queue = &heaps[heap_index];
-                let runs = store::runs::count_runs_for_turns(db, &[turn.id])
-                    .await?
-                    .get(&turn.id)
-                    .copied()
-                    .unwrap_or(0);
-                Some(WorkItem {
-                    item,
-                    heap: queue.heap.clone(),
-                    team: queue.team.clone(),
-                    started: started_sends.contains(&turn.send_id),
-                    turn,
-                    runs,
-                })
-            }
-            None => None,
-        };
+                QueuedItem {
+                    heap_position,
+                    heap_priority: queue.priority,
+                    work: WorkItem {
+                        item,
+                        heap: queue.heap.clone(),
+                        team: queue.team.clone(),
+                        started: started_sends.contains(&turn.send_id),
+                        runs: run_counts.get(&turn.id).copied().unwrap_or(0),
+                        turn,
+                    },
+                }
+            })
+            .collect();
         Ok(Queue {
-            first,
+            items,
             met,
             waiting_count,
             waiting,
