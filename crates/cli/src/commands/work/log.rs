@@ -26,6 +26,7 @@ pub struct LogArgs {
 pub async fn run(args: LogArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
+    let older = args.cursor.is_some();
     let query = ResultsQuery { cursor: args.cursor };
     let results = client.get::<ResultsDto>(&["me", "results"], &query, &token).await?;
     match out.mode() {
@@ -36,14 +37,19 @@ pub async fn run(args: LogArgs, app: &App, out: &mut Output) -> Result<(), CliEr
                 out.line(&format!("{}/{}/{}", row.heap.team_slug, row.heap.slug, row.item.key))?;
             }
         }
-        Mode::Human => render(&results.value, out)?,
+        Mode::Human => render(&results.value, older, out)?,
     }
     Ok(())
 }
 
-fn render(results: &ResultsDto, out: &mut Output) -> std::io::Result<()> {
+/// `older` is a page after the first: when it is empty, the runs before it have aged out of the 30 days.
+fn render(results: &ResultsDto, older: bool, out: &mut Output) -> std::io::Result<()> {
     if results.rows.is_empty() {
-        return out.line("No agent run reached anything in the last 30 days.");
+        return out.line(if older {
+            "No older runs in the last 30 days."
+        } else {
+            "No agent run reached anything in the last 30 days."
+        });
     }
     let rows: Vec<Vec<Cell>> = results
         .rows
@@ -73,7 +79,7 @@ fn render(results: &ResultsDto, out: &mut Output) -> std::io::Result<()> {
             if link.pull_request {
                 out.line_parts(&[
                     ("    ", Tone::Plain),
-                    ("pull request", Tone::Dim),
+                    (&link.label, Tone::Dim),
                     (" ", Tone::Plain),
                     (&link.url, Tone::Plain),
                 ])?;
@@ -144,7 +150,7 @@ mod tests {
         second["result"] = json!("Found the cause.");
         let results: ResultsDto =
             serde_json::from_value(json!({ "rows": [first, second], "next_cursor": "c1" })).expect("a results page");
-        let text = human_text(|out| render(&results, out));
+        let text = human_text(|out| render(&results, false, out));
 
         expect_that!(
             text,
