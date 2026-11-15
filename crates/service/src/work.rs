@@ -108,7 +108,8 @@ struct QueueHeap {
 /// What the queue holds right now.
 struct Queue {
     items: Vec<QueuedItem>,
-    /// Candidates whose item is already at the turn's goal, by heap index. They are never in `items`: a claim ends them.
+    /// Candidates whose item is already at the turn's goal, by heap index. They are never in `items`: a claim ends
+    /// them.
     met: Vec<(usize, Item, Turn)>,
     waiting_count: u32,
     waiting: Vec<WaitingInHeap>,

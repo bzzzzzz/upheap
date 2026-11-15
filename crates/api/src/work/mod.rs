@@ -158,7 +158,7 @@ async fn next_item(
 }
 
 /// The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:
-/// its position in its own heap, your priority for that heap, and whether it is started work. Read-only: nothing is
+/// its position in its heap's list, your priority for that heap, and whether it is started work. Read-only: nothing is
 /// claimed. Any member who may edit items in every given heap may ask.
 #[utoipa::path(get, path = "/work/queue", tag = "work", security(("session" = [])),
     params(NextQuery),
@@ -183,6 +183,7 @@ async fn queue_items(
             .iter()
             .map(|queued| QueuedItemDto {
                 item: work_item_dto(&queued.work),
+                state: queued.work.item.state.kind().into(),
                 heap_position: queued.heap_position,
                 heap_priority: queued.heap_priority.get(),
             })

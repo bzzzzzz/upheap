@@ -511,3 +511,22 @@ async fn a_queued_item_that_was_started_says_so() -> Result<()> {
     expect_that!(queue.stdout, contains_substring("#1 in heap, priority 1, started"));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_queued_item_in_progress_counts_among_the_items_in_progress() -> Result<()> {
+    // Arrange: the person started the note, which takes it back from the agents, and sent it again; the heap's list
+    // pins it with the items in progress.
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let started = cli.run(&["item", "start", &note]).await;
+    let sent = cli.run(&["item", "send", &note]).await;
+
+    // Act
+    let queue = cli.run(&["work", "queue"]).await;
+
+    // Assert
+    expect_that!(started.exited(0), eq(true));
+    expect_that!(sent.exited(0), eq(true));
+    expect_that!(queue.stdout, contains_substring("#1 in progress, priority 1"));
+    Ok(())
+}

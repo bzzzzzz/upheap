@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::common::{KindDto, StageDto};
+use crate::common::{KindDto, StageDto, StateDto};
 use crate::turns::{GoalDto, ReachDto};
 use crate::waiting::ItemHeapDto;
 
@@ -75,8 +75,10 @@ pub struct WorkQueueDto {
 #[schema(as = QueuedItem)]
 pub struct QueuedItemDto {
     pub item: WorkItemDto,
-    /// The item's 1-based position in its heap's list as the person sees it by default, within its group: in
-    /// progress, or open.
+    /// `in_progress` or `open`: the group of the heap's list that `heap_position` counts in, as the list pins items
+    /// in progress above the open ones.
+    pub state: StateDto,
+    /// The item's 1-based position in its heap's list as the person sees it by default, within its group.
     pub heap_position: u32,
     /// The caller's priority for the item's heap, 1 to 10.
     pub heap_priority: u8,

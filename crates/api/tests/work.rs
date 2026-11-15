@@ -2952,11 +2952,15 @@ async fn queue_orders_heaps_by_the_persons_priority() -> Result<()> {
 #[gtest]
 #[tokio::test]
 async fn queue_gives_the_position_the_heaps_list_shows() -> Result<()> {
-    // Arrange: an item in progress and a blocked one rank above the sent item, but the list pins the first in a group
-    // of its own and hides the second, so the sent item is first among the open items.
+    // Arrange: two items in progress and a blocked one rank above the sent open item, but the list pins the first two
+    // in a group of their own and hides the third, so the sent item is first among the open items. The second item
+    // in progress is sent too, and is second in its group.
     let w = world().await?;
     let running = w.add("Migrate the database", json!({ "need": "critical" })).await?;
     w.edit(&running, json!({ "state": "in_progress" })).await?;
+    let started = w.add("Rotate the certs", json!({ "need": "expected" })).await?;
+    w.edit(&started, json!({ "state": "in_progress" })).await?;
+    w.send_turn(&started).await?;
     let blocked = w.add("Renew the domain", json!({ "need": "critical" })).await?;
     w.edit(&blocked, json!({ "state": "blocked" })).await?;
     let sent = w.add("Tidy the logs", json!({ "need": "nice_to_have" })).await?;
@@ -2967,8 +2971,12 @@ async fn queue_gives_the_position_the_heaps_list_shows() -> Result<()> {
 
     // Assert
     let items = queue.body["items"].as_array().context("items")?;
-    expect_that!(items.len(), eq(1));
-    expect_that!(items[0]["item"]["key"], eq(&json!(sent)));
-    expect_that!(items[0]["heap_position"], eq(&json!(1)));
+    expect_that!(items.len(), eq(2));
+    expect_that!(items[0]["item"]["key"], eq(&json!(started)));
+    expect_that!(items[0]["state"], eq(&json!("in_progress")));
+    expect_that!(items[0]["heap_position"], eq(&json!(2)));
+    expect_that!(items[1]["item"]["key"], eq(&json!(sent)));
+    expect_that!(items[1]["state"], eq(&json!("open")));
+    expect_that!(items[1]["heap_position"], eq(&json!(1)));
     Ok(())
 }

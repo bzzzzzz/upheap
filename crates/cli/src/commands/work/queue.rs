@@ -2,6 +2,7 @@
 //!
 //! Read-only, like `next`: it shows what agents will work on after the first item, and why each item is where it is.
 
+use api_types::common::StateDto;
 use api_types::work::WorkQueueDto;
 use clap::Args;
 
@@ -19,8 +20,9 @@ pub struct QueueArgs {
 }
 
 /// Prints one row per item of the queue: its place, `k3x9a  Rotate the certs  Work  note → with context`, and why it
-/// is there: `#2 in heap, priority 3, started`. Nothing to do prints how many items wait for you. `--quiet` prints
-/// the keys in order; `--json` the server's answer. Exit 0 either way.
+/// is there: `#2 in heap, priority 3, started`, or `#1 in progress, …` for an item the heap's list pins. Nothing to
+/// do prints how many items wait for you. `--quiet` prints the keys in order; `--json` the server's answer. Exit 0
+/// either way.
 pub async fn run(args: QueueArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
@@ -49,6 +51,11 @@ pub async fn run(args: QueueArgs, app: &App, out: &mut Output) -> Result<(), Cli
                 .enumerate()
                 .map(|(index, queued)| {
                     let item = &queued.item;
+                    let group = if queued.state == StateDto::InProgress {
+                        "in progress"
+                    } else {
+                        "in heap"
+                    };
                     let started = if item.started { ", started" } else { "" };
                     vec![
                         Cell::new((index + 1).to_string()),
@@ -58,7 +65,7 @@ pub async fn run(args: QueueArgs, app: &App, out: &mut Output) -> Result<(), Cli
                         Cell::new(journey(item)),
                         Cell::toned(
                             format!(
-                                "#{} in heap, priority {}{started}",
+                                "#{} {group}, priority {}{started}",
                                 queued.heap_position, queued.heap_priority
                             ),
                             Tone::Dim,

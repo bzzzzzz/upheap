@@ -1538,7 +1538,7 @@ export interface paths {
         };
         /**
          * The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:
-         *     its position in its own heap, your priority for that heap, and whether it is started work. Read-only: nothing is
+         *     its position in its heap's list, your priority for that heap, and whether it is started work. Read-only: nothing is
          *     claimed. Any member who may edit items in every given heap may ask.
          */
         get: operations["queue_items"];
@@ -3410,8 +3410,7 @@ export interface components {
         QueuedItem: {
             /**
              * Format: int32
-             * @description The item's 1-based position in its heap's list as the person sees it by default, within its group: in
-             *     progress, or open.
+             * @description The item's 1-based position in its heap's list as the person sees it by default, within its group.
              */
             heap_position: number;
             /**
@@ -3420,6 +3419,11 @@ export interface components {
              */
             heap_priority: number;
             item: components["schemas"]["WorkItem"];
+            /**
+             * @description `in_progress` or `open`: the group of the heap's list that `heap_position` counts in, as the list pins items
+             *     in progress above the open ones.
+             */
+            state: components["schemas"]["ItemState"];
         };
         RankedItem: {
             /** @description The biggest reasons for the position, largest first. */

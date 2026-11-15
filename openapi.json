@@ -7739,7 +7739,7 @@
         "tags": [
           "work"
         ],
-        "summary": "The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:\nits position in its own heap, your priority for that heap, and whether it is started work. Read-only: nothing is\nclaimed. Any member who may edit items in every given heap may ask.",
+        "summary": "The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:\nits position in its heap's list, your priority for that heap, and whether it is started work. Read-only: nothing is\nclaimed. Any member who may edit items in every given heap may ask.",
         "operationId": "queue_items",
         "parameters": [
           {
@@ -12542,6 +12542,7 @@
         "description": "An item of the queue, with why it stands where it does.",
         "required": [
           "item",
+          "state",
           "heap_position",
           "heap_priority"
         ],
@@ -12549,7 +12550,7 @@
           "heap_position": {
             "type": "integer",
             "format": "int32",
-            "description": "The item's 1-based position in its heap's list as the person sees it by default, within its group: in\nprogress, or open.",
+            "description": "The item's 1-based position in its heap's list as the person sees it by default, within its group.",
             "minimum": 0
           },
           "heap_priority": {
@@ -12560,6 +12561,10 @@
           },
           "item": {
             "$ref": "#/components/schemas/WorkItem"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ItemState",
+            "description": "`in_progress` or `open`: the group of the heap's list that `heap_position` counts in, as the list pins items\nin progress above the open ones."
           }
         }
       },
