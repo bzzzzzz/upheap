@@ -1,4 +1,4 @@
-//! `upheap work next | claim | reached | hand-back | finish`, the writes an agent makes in a run, and what a run is refused.
+//! `upheap work next | queue | claim | reached | hand-back | finish`, the writes an agent makes in a run, and what a run is refused.
 
 mod common;
 
@@ -439,5 +439,94 @@ async fn the_run_header_is_only_sent_when_upheap_run_is_set() -> Result<()> {
     // A run nobody has made is not the caller's: the server says it isn't there.
     expect_that!(in_run.exited(4), eq(true));
     expect_that!(read.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn queue_lists_the_items_in_order_with_their_reasons() -> Result<()> {
+    // Arrange: the heap prepares every new note, so both are in the queue.
+    let (server, ada, cli, first) = with_prepared_note().await?;
+    let second = server.add_item(&ada, HEAP, json!({ "title": "Tidy the logs" })).await?;
+    let second = key(&second)?.to_owned();
+
+    // Act
+    let queue = cli.run(&["work", "queue"]).await;
+    let quiet = cli.run(&["work", "queue", "-q"]).await;
+    let json = cli.run(&["work", "queue", "--json"]).await;
+
+    // Assert
+    expect_that!(queue.exited(0), eq(true));
+    let lines: Vec<&str> = queue.stdout.lines().collect();
+    expect_that!(lines.len(), eq(2));
+    expect_that!(lines[0], starts_with("1 "));
+    expect_that!(lines[1], starts_with("2 "));
+    expect_that!(lines[0], contains_substring("#1 in heap, priority 1"));
+    expect_that!(lines[1], contains_substring("#2 in heap, priority 1"));
+    let keys: Vec<&str> = quiet.stdout.lines().collect();
+    expect_that!(keys.len(), eq(2));
+    expect_that!(lines[0], contains_substring(keys[0]));
+    expect_that!(lines[1], contains_substring(keys[1]));
+    let mut sorted = keys.clone();
+    sorted.sort_unstable();
+    let mut both = vec![first.as_str(), second.as_str()];
+    both.sort_unstable();
+    expect_that!(sorted, eq(&both));
+    let body: Value = serde_json::from_str(&json.stdout)?;
+    expect_that!(body["items"].as_array().map(Vec::len), some(eq(2)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn queue_with_nothing_to_do_says_so() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let queue = cli.run(&["work", "queue"]).await;
+
+    // Assert
+    expect_that!(queue.exited(0), eq(true));
+    expect_that!(queue.stdout, eq("Nothing to do.\n"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_queued_item_that_was_started_says_so() -> Result<()> {
+    // Arrange: one failed run, so the turn has had a run.
+    let (_server, _ada, mut cli, _note) = with_prepared_note().await?;
+    let claimed = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claimed.stdout.trim().to_owned());
+    cli.run(&["work", "finish"]).await;
+    cli.env.run = None;
+
+    // Act
+    let queue = cli.run(&["work", "queue"]).await;
+
+    // Assert
+    expect_that!(queue.stdout, contains_substring("#1 in heap, priority 1, started"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_queued_item_in_progress_counts_among_the_items_in_progress() -> Result<()> {
+    // Arrange: the person started the note, which takes it back from the agents, and sent it again; the heap's list
+    // pins it with the items in progress.
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let started = cli.run(&["item", "start", &note]).await;
+    let sent = cli.run(&["item", "send", &note]).await;
+
+    // Act
+    let queue = cli.run(&["work", "queue"]).await;
+
+    // Assert
+    expect_that!(started.exited(0), eq(true));
+    expect_that!(sent.exited(0), eq(true));
+    expect_that!(queue.stdout, contains_substring("#1 in progress, priority 1"));
     Ok(())
 }

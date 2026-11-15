@@ -1529,6 +1529,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/work/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The whole queue `GET /work/next` takes the first of, in the same order, with why each item stands where it does:
+         *     its position in its heap's list, your priority for that heap, whether it is started work, and whether its last run
+         *     was cut off by the usage limit. Read-only: nothing is claimed. Any member who may edit items in every given heap
+         *     may ask.
+         */
+        get: operations["queue_items"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/work/runs": {
         parameters: {
             query?: never;
@@ -3407,6 +3429,30 @@ export interface components {
          * @enum {string}
          */
         QuestionState: "open" | "answered" | "withdrawn";
+        /** @description An item of the queue, with why it stands where it does. */
+        QueuedItem: {
+            /**
+             * Format: int32
+             * @description The item's 1-based position in its heap's list as the person sees it by default, within its group.
+             */
+            heap_position: number;
+            /**
+             * Format: int32
+             * @description The caller's priority for the item's heap, 1 to 10.
+             */
+            heap_priority: number;
+            item: components["schemas"]["WorkItem"];
+            /**
+             * @description Whether the turn's latest run ended as `limited`, cut off by the agent tool's usage limit. Such items come
+             *     before all others, so the work a limit cut off goes on first once it resets.
+             */
+            limited: boolean;
+            /**
+             * @description `in_progress` or `open`: the group of the heap's list that `heap_position` counts in, as the list pins items
+             *     in progress above the open ones.
+             */
+            state: components["schemas"]["ItemState"];
+        };
         RankedItem: {
             /** @description The biggest reasons for the position, largest first. */
             contributors: components["schemas"]["Contributor"][];
@@ -4145,6 +4191,22 @@ export interface components {
         /** @description The first item of the queue, if there is one. */
         WorkNext: {
             item?: null | components["schemas"]["WorkItem"];
+            /**
+             * @description How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to
+             *     `waiting_count`.
+             */
+            waiting?: components["schemas"]["WaitingInHeap"][];
+            /**
+             * Format: int32
+             * @description How many items in the given heaps wait for the person: with an open question, or with a stuck turn. An item
+             *     counts once.
+             */
+            waiting_count: number;
+        };
+        /** @description The whole queue, in the order `GET /work/next` and a claim take it. */
+        WorkQueue: {
+            /** @description Every item in the given heaps that waits for an agent, the one a claim takes first. */
+            items: components["schemas"]["QueuedItem"][];
             /**
              * @description How many items wait for the person in each given heap that has any, in the queue's heap order; they add up to
              *     `waiting_count`.
@@ -9068,6 +9130,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkNext"];
+                };
+            };
+            /** @description `invalid_query` or `invalid_header` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `forbidden`: the caller can't edit items in a given heap */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A heap outside the caller's teams */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    queue_items: {
+        parameters: {
+            query?: {
+                /**
+                 * @description One to 20 heaps, each `team/heap` by slug, separated by commas. A heap named twice counts once.
+                 * @example ops/backlog,ops/infra
+                 */
+                heaps?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkQueue"];
                 };
             };
             /** @description `invalid_query` or `invalid_header` */

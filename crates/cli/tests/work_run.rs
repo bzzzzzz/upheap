@@ -2654,6 +2654,201 @@ async fn a_tool_that_cannot_start_sends_no_tool_times() -> Result<()> {
     Ok(())
 }
 
+/// What an agent run leaves behind is ended with the run. The leftovers are this test binary, started again to run
+/// [`stays_for_a_leftover`]: on macOS the environment of Apple's own programs, `sleep` among them, can't be read, so a
+/// run's mark would never be seen on them as it is on a dev server.
+#[cfg(unix)]
+mod leftovers {
+    use std::os::unix::process::CommandExt;
+    use std::path::Path;
+    use std::process::Command;
+    use std::sync::Mutex;
+    use std::time::Instant;
+
+    use super::*;
+
+    const STAYS: &str = "UPHEAP_TEST_STAYS";
+
+    /// Not a test: the body of a leftover. Does nothing unless a test started this binary to stay.
+    #[gtest]
+    fn stays_for_a_leftover() {
+        if std::env::var_os(STAYS).is_some() {
+            std::thread::sleep(StdDuration::from_secs(60));
+        }
+    }
+
+    /// Kills the process on drop, so a test that fails early leaves nothing behind.
+    struct Leftover(u32);
+
+    impl Drop for Leftover {
+        fn drop(&mut self) {
+            let _ = Command::new("kill")
+                .args(["-KILL", &self.0.to_string()])
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+    }
+
+    /// Starts a leftover with `env` and, when given, `cwd`, detached as a real one is: in a process group of its own,
+    /// its shell gone and the process reparented to init. Returns once the shell has become the leftover.
+    fn start_leftover(env: &[(String, String)], cwd: Option<&Path>) -> Result<Leftover> {
+        let mut shell = Command::new("sh");
+        shell
+            .arg("-c")
+            .arg(r#"(exec "$0" --exact leftovers::stays_for_a_leftover) >/dev/null 2>&1 & echo $!"#)
+            .arg(std::env::current_exe()?)
+            .env_remove("UPHEAP_RUN")
+            .env(STAYS, "1")
+            .envs(env.iter().map(|(name, value)| (name, value)))
+            .process_group(0);
+        if let Some(cwd) = cwd {
+            shell.current_dir(cwd);
+        }
+        let leftover = Leftover(String::from_utf8(shell.output()?.stdout)?.trim().parse()?);
+        // Until it has exec'd, its environment and directory can't be read.
+        let deadline = Instant::now() + StdDuration::from_secs(5);
+        loop {
+            let command = Command::new("ps")
+                .args(["-o", "command=", "-p", &leftover.0.to_string()])
+                .output()?;
+            if String::from_utf8_lossy(&command.stdout).contains("stays_for_a_leftover") {
+                return Ok(leftover);
+            }
+            anyhow::ensure!(Instant::now() < deadline, "the leftover didn't start");
+            std::thread::sleep(StdDuration::from_millis(10));
+        }
+    }
+
+    /// Whether `pid` is gone, waiting a couple of seconds for init to reap it.
+    fn is_gone_soon(pid: u32) -> bool {
+        let deadline = Instant::now() + StdDuration::from_secs(2);
+        loop {
+            let alive = Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success());
+            if !alive {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(StdDuration::from_millis(20));
+        }
+    }
+
+    /// An agent that starts a leftover with the environment its run gave it, then does `then`.
+    fn leaving_agent<F, Fut>(left: &Arc<Mutex<Vec<Leftover>>>, then: F) -> StandIn
+    where
+        F: Fn() -> Fut + Send + Sync + Clone + 'static,
+        Fut: std::future::Future<Output = Result<ToolReport, ToolError>> + Send + 'static,
+    {
+        let left = left.clone();
+        StandIn::new(move |start: ToolStart| {
+            let (left, then) = (left.clone(), then.clone());
+            async move {
+                let leftover = start_leftover(&start.env, None).map_err(|err| ToolError::WouldNotStart {
+                    tool: Tool::Claude,
+                    source: std::io::Error::other(err),
+                })?;
+                left.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(leftover);
+                then().await
+            }
+        })
+    }
+
+    fn pids(left: &Mutex<Vec<Leftover>>) -> Vec<u32> {
+        left.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .map(|leftover| leftover.0)
+            .collect()
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_leftover_of_a_run_that_ends_normally_is_ended_and_the_run_recorded() -> Result<()> {
+        // Arrange
+        let (_server, _ada, cli, note) = with_prepared_note().await?;
+        let left = Arc::new(Mutex::new(Vec::new()));
+        let tool = leaving_agent(&left, || async { Ok(ToolReport::default()) });
+
+        // Act
+        let outcome = cli.run_work(ONCE, &tool).await;
+
+        // Assert
+        expect_that!(outcome.exited(0), eq(true));
+        expect_that!(lines_with(&outcome.stdout, &note), not(is_empty()));
+        let pids = pids(&left);
+        expect_that!(pids, len(eq(1)));
+        expect_that!(is_gone_soon(pids[0]), eq(true));
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_leftover_of_a_run_that_is_stopped_is_ended() -> Result<()> {
+        // Arrange: an agent that starts a leftover and never ends on its own.
+        let (server, ada, mut cli, note) = with_prepared_note().await?;
+        cli.heartbeat_every = StdDuration::from_millis(25);
+        let left = Arc::new(Mutex::new(Vec::new()));
+        let tool = leaving_agent(&left, std::future::pending::<Result<ToolReport, ToolError>>);
+
+        // Act: the person takes the turn back once the leftover is there.
+        let running = cli.run_work(ONCE, &tool);
+        let taking_back = async {
+            wait_until("the leftover", || !pids(&left).is_empty()).await?;
+            server
+                .send(
+                    &ada,
+                    "DELETE",
+                    &format!("/teams/ada/heaps/personal/items/{note}/turn"),
+                    None,
+                )
+                .await?;
+            anyhow::Ok(())
+        };
+        let (outcome, taken) = tokio::join!(running, taking_back);
+
+        // Assert
+        taken?;
+        expect_that!(outcome.exited(0), eq(true));
+        expect_that!(tool.stopped(), eq(1));
+        let pids = pids(&left);
+        expect_that!(pids, len(eq(1)));
+        expect_that!(is_gone_soon(pids[0]), eq(true));
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn the_sweep_ends_a_process_working_in_the_directory_it_removes() -> Result<()> {
+        // Arrange: a directory of an item that can't be found, with a process in it that no run started.
+        let (server, _ada, cli, _note) = with_a_note_nobody_claims().await?;
+        let parent = tempfile::tempdir()?;
+        let dir = kept_directory(&server.url, parent.path(), "ada", "personal", "zzzzz", 1)?;
+        let inside = dir.join("deeper");
+        std::fs::create_dir(&inside)?;
+        let leftover = start_leftover(&[], Some(&inside))?;
+        let root_arg = parent.path().to_string_lossy().into_owned();
+
+        // Act
+        let outcome = cli
+            .run_work(&[ONCE, &["--root", &root_arg]].concat(), &idle_agent(None))
+            .await;
+
+        // Assert
+        expect_that!(outcome.exited(0), eq(true));
+        expect_that!(is_gone_soon(leftover.0), eq(true));
+        expect_that!(dir.exists(), eq(false));
+        expect_that!(outcome.stderr, not(contains_substring("couldn't remove")));
+        Ok(())
+    }
+}
+
 /// An agent that stops at the usage limit, which resets `resets_in` from now, every time it is started.
 fn limited_agent(resets_in: StdDuration) -> StandIn {
     StandIn::new(move |_| async move {

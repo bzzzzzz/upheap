@@ -162,7 +162,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   filters by both, so it reads turns and open questions for every non-closed item, not only the listed ones, before
   it filters (still none in an archived heap). Saved views don't store these filters.
   `heaps.agents_prepare` makes `create_item` open a turn of one state on every new item, whoever added it. Neither
-  changes ranking. The agent queue (`work next`, `work claim`, `work run`) reads the heaps it is given and every
+  changes ranking. The agent queue (`work next`, `work queue`, `work claim`, `work run`) reads the heaps it is given and every
   active heap made from an item in one of them, and from an item in those in turn (`resolve_queue_heaps`), so a made
   heap's items are given with the heap that held their note; the limit on how many heaps a request names counts only
   the named ones.
@@ -184,8 +184,10 @@ The tables and columns are in the migrations. These are the conventions they fol
   `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
   position. The boost lets half-done work go on before new work of about the same importance while something much
   more important still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the
-  plain score. A claim takes the locks of every given heap in ID order, as the item writes do, so two claims at once
-  get different items.
+  plain score. `GET /work/queue` returns the whole list in that order, read-only like `/work/next`, with each item's
+  position in its group of the heap's default list and the heap's priority. It is unpaged: the queue is at most the
+  open items of the given heaps, which are few; past a few hundred items it would need a cap. A claim takes the locks
+  of every given heap in ID order, as the item writes do, so two claims at once get different items.
   **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
   `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
   wherever it is read, and is written as failed lazily, the next time a claim over its heap, its own `finish` or a
@@ -869,7 +871,15 @@ section is how it maps onto this API.
    the loop, the second stops the tool, and the run counts as failed unless it had asked a question. Stopping asks the tool
    to end and kills its group after a few seconds if it hasn't: Claude runs each command in a group of its own and
    ends them only when asked, not when killed. `SIGTERM` does what the second Ctrl-C does; `SIGHUP` is left
-   alone, so `nohup` keeps a loop going. The loop reads
+   alone, so `nohup` keeps a loop going.
+   Once the tool is gone, whatever it started and left running (a dev server, a watcher, a command Claude didn't end
+   because it was killed) is ended too, since it would keep its CPU and ports and go on writing into the item's
+   directory. Those processes are found by the `UPHEAP_RUN` entry in their environment, which they inherit and which
+   survives `setsid` and reparenting, where a process group or a process tree doesn't, and there are no cgroups on
+   macOS. Those of the run's id and the user's own get `SIGTERM`, then `SIGKILL` after 3 seconds. The sweep does the same
+   to the processes whose working directory is in a directory it is about to delete, once it is renamed away, since
+   a process still writing there makes the delete fail; that also covers what runs from before this existed. Reading
+   other processes' environment and directory is done through `sysinfo`, as `unsafe` is forbidden. The loop reads
    the wall clock for every request, not the time it started, so a loop that lives for hours, through the machine's
    sleep, refreshes its access token like any command.
 8. **A newer server's values.** A new enum value is additive
