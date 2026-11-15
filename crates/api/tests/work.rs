@@ -845,7 +845,7 @@ async fn a_turn_of_one_state_leaves_the_item_to_the_person_when_reached() -> Res
 
 #[gtest]
 #[tokio::test]
-async fn the_next_turn_goes_where_the_item_is_after_the_person_went_past_the_goal() -> Result<()> {
+async fn the_next_turn_goes_to_done_after_the_person_defined_the_task_while_the_agent_worked() -> Result<()> {
     // Arrange: a note sent all the way, which the person makes a defined task while the agent works.
     let w = world().await?;
     let key = w.add("Rotate the certs", json!({})).await?;

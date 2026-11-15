@@ -26,8 +26,9 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 /// Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
 /// item. Any member may. The turn goes to the item's `next_goal`, worked out from the item, unless the request picks
 /// a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`. A note as written sent
-/// `all_the_way` opens at `defined` whichever goal it names, in one run. It needs no `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
-/// and the item waits as before. A blocked item can't be sent until it is unblocked.
+/// `all_the_way` opens at `defined` whichever goal it names, in one run. It needs no `If-Match`, and the item's
+/// `version` doesn't change. An item with an open question may be sent: the turn opens, and the item waits as before.
+/// A blocked item can't be sent until it is unblocked.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/turn", tag = "items", security(("session" = [])),
     params(ItemParams, TimeZoneHeader), request_body = SendToAgentDto,
     responses(

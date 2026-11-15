@@ -1044,8 +1044,9 @@ export interface paths {
          * Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
          *     item. Any member may. The turn goes to the item's `next_goal`, worked out from the item, unless the request picks
          *     a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`. A note as written sent
-         *     `all_the_way` opens at `defined` whichever goal it names, in one run. It needs no `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
-         *     and the item waits as before. A blocked item can't be sent until it is unblocked.
+         *     `all_the_way` opens at `defined` whichever goal it names, in one run. It needs no `If-Match`, and the item's
+         *     `version` doesn't change. An item with an open question may be sent: the turn opens, and the item waits as before.
+         *     A blocked item can't be sent until it is unblocked.
          */
         post: operations["send_to_agent"];
         /**
@@ -2633,8 +2634,9 @@ export interface components {
             due?: null | components["schemas"]["Due"];
             effort?: null | components["schemas"]["Size"];
             /**
-             * @description The goals a turn opened now may go to, `next_goal` first: also `defined` on a note as written. Empty when
-             *     `next_goal` is null. Whether the item may be sent at all is `allowed_actions` (`send_to_agent`).
+             * @description The goals a turn of reach `one` opened now may go to, `next_goal` first: also `defined` on a note as written
+             *     (which `all_the_way` opens at, whichever is asked). Empty when `next_goal` is null. Whether the item may be
+             *     sent at all is `allowed_actions` (`send_to_agent`).
              */
             goal_choices: components["schemas"]["Goal"][];
             /** Format: uuid */

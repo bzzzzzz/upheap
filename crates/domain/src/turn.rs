@@ -871,6 +871,18 @@ mod tests {
     }
 
     #[gtest]
+    fn the_follow_on_goes_where_the_item_is_when_the_person_went_past_the_goal() {
+        let turn = all_the_way(&item(Kind::Note, Stage::AsWritten));
+        let next = turn.follow_on(
+            TurnId::from_uuid(Uuid::from_u128(41)),
+            &item(Kind::Task, Stage::Defined),
+            Timestamp::EPOCH,
+        );
+        expect_that!(turn.goal, eq(Goal::WithContext));
+        expect_that!(next.map(|next| next.goal), some(eq(Goal::Done)));
+    }
+
+    #[gtest]
     fn a_turn_of_one_state_a_turn_to_done_and_a_reminder_have_no_follow_on() {
         let id = TurnId::from_uuid(Uuid::from_u128(41));
         let note = item(Kind::Note, Stage::WithContext);
