@@ -857,7 +857,15 @@ section is how it maps onto this API.
    the loop, the second stops the tool, and the run counts as failed unless it had asked a question. Stopping asks the tool
    to end and kills its group after a few seconds if it hasn't: Claude runs each command in a group of its own and
    ends them only when asked, not when killed. `SIGTERM` does what the second Ctrl-C does; `SIGHUP` is left
-   alone, so `nohup` keeps a loop going. The loop reads
+   alone, so `nohup` keeps a loop going.
+   Once the tool is gone, whatever it started and left running (a dev server, a watcher, a command Claude didn't end
+   because it was killed) is ended too, since it would keep its CPU and ports and go on writing into the item's
+   directory. Those processes are found by the `UPHEAP_RUN` entry in their environment, which they inherit and which
+   survives `setsid` and reparenting, where a process group or a process tree doesn't, and there are no cgroups on
+   macOS. Those of the run's id and the user's own get `SIGTERM`, then `SIGKILL` after 3 seconds. The sweep does the same
+   to the processes whose working directory is in a directory it is about to delete, once it is renamed away, since
+   a process still writing there makes the delete fail; that also covers what runs from before this existed. Reading
+   other processes' environment and directory is done through `sysinfo`, as `unsafe` is forbidden. The loop reads
    the wall clock for every request, not the time it started, so a loop that lives for hours, through the machine's
    sleep, refreshes its access token like any command.
 8. **A newer server's values.** A new enum value is additive
