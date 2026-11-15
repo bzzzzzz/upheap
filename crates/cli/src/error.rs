@@ -12,7 +12,7 @@
 
 use std::error::Error as _;
 
-use crate::agent::ToolError;
+use crate::agent::{Tool, ToolError};
 use crate::auth::login::LoginError;
 use crate::auth::loopback::LoopbackError;
 use crate::auth::{AuthError, TokenStoreError};
@@ -262,7 +262,11 @@ impl CliError {
                 "sign in again with `upheap auth login`, or forget it with `upheap auth logout --local`".to_owned(),
             ),
             (Self::Tool(ToolError::NotInstalled { tool }), _) => Some(format!(
-                "install Claude Code, or check that `{tool} --version` works in this shell"
+                "install {}, or check that `{tool} --version` works in this shell",
+                match tool {
+                    Tool::Claude => "Claude Code",
+                    Tool::Copilot => "GitHub Copilot CLI",
+                }
             )),
             (Self::Tool(ToolError::NoDirectory { .. }), _) => {
                 Some("check that `--root` names a directory you can write to".to_owned())

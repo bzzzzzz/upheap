@@ -31,6 +31,18 @@ fn a_tool_that_is_not_there_is_not_installed() {
     );
 }
 
+#[gtest]
+fn copilot_that_is_not_there_is_not_installed() {
+    let tools = SystemTools::with_copilot(PathBuf::from("/definitely/not/here/copilot"));
+
+    expect_that!(
+        tools.check(Tool::Copilot),
+        err(matches_pattern!(ToolError::NotInstalled {
+            tool: eq(&Tool::Copilot)
+        }))
+    );
+}
+
 #[cfg(unix)]
 mod processes {
     use std::os::unix::fs::PermissionsExt;
@@ -656,5 +668,38 @@ mod processes {
         let settled = tokio::time::timeout(Duration::from_millis(500), tools.settled()).await;
 
         verify_that!(settled.is_ok(), eq(true))
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn copilot_in_a_directory_gets_agents_md_and_its_cost_is_read() -> googletest::Result<()> {
+        // Arrange: a script called copilot that prints a usage checkpoint.
+        let dir = tempfile::tempdir()?;
+        let program = dir.path().join("copilot");
+        std::fs::write(
+            &program,
+            "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"session.usage_checkpoint\",\"data\":{\"totalNanoAiu\":273068000}}'\n",
+        )?;
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755))?;
+        let tools = SystemTools::with_copilot(program);
+        let run_dir = dir.path().join("root").join("k3x9a");
+
+        // Act
+        let report = tools
+            .run(ToolStart {
+                tool: Tool::Copilot,
+                dir: Some(run_dir.clone()),
+                ..start(Access::Do)
+            })
+            .await?;
+
+        // Assert
+        verify_that!(report.failure, none())?;
+        verify_that!(report.cost_usd, some(approx_eq(0.002_730_68)))?;
+        verify_that!(
+            std::fs::read_to_string(run_dir.join("AGENTS.md"))?,
+            eq(process::WORKSPACE_INSTRUCTIONS)
+        )?;
+        verify_that!(run_dir.join("CLAUDE.md").exists(), eq(false))
     }
 }
