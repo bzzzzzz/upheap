@@ -36,7 +36,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
 | Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz` |
 | Testing | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end |
-| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the CLI as static binaries on GitHub Releases, with a Homebrew cask in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli)) |
+| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the CLI and the server as static binaries on GitHub Releases, with a Homebrew cask for the CLI in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli-and-the-server)) |
 
 ## Workspace
 

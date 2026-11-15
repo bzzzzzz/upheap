@@ -371,8 +371,10 @@ Linux), a GitHub Release, and a cask pushed to `bzzzzzz/homebrew-tap`.
 versioned names; shipping the server binary too, which stays Docker-only.
 
 **Consequences.** A published release's assets are never replaced: a bad release is fixed by a new patch version.
-The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli)). Release builds
-use no cache, so they take a few minutes longer.
+The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli-and-the-server)).
+Release builds use no cache, so they take a few minutes longer.
+
+**Superseded in part** by §40: the server ships as a download too.
 
 ## 33. The CLI shares the API's Rust types instead of generating a client
 
@@ -493,3 +495,19 @@ second process using the same sign-in revokes the first.
 **Consequences.** The machine holds a long-lived secret that the person manages: it works until revoked or expired,
 and a password change or reset revokes it. A token has all of its person's permissions, as a command-line sign-in has;
 a narrower one would need scopes first. Making a token is done in the web app only, so a token can't make another.
+
+## 40. The server ships as a prebuilt download on the release too, not in Homebrew
+
+**Context.** §30 kept the server Docker-only. Running one without Docker meant a source build: npm for the web app,
+then cargo. Self-hosting on a plain machine needs a file to download and run.
+
+**Decision.** The release workflow of §30 also builds `upheap-server`, with the web app embedded, for the same three
+targets, and publishes `upheap-server-<target>.tar.gz` next to the CLI's archives, in the same `SHA256SUMS`. Static
+musl on Linux, as for the CLI. The Homebrew cask installs only the CLI.
+
+**Instead of.** Docker-only (§30), which leaves a source build as the only other way. A cask or formula for the server
+too, which puts a service on the machines of people who only want the client.
+
+**Consequences.** The server's archive names are public download URLs for good, like the CLI's. Every release builds
+the web app and runs the server once per target in its smoke test, so a server that doesn't start on a platform fails
+the release before anything is published.

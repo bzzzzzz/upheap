@@ -1,9 +1,10 @@
-# Releases the `upheap` CLI (design/operations.md, "Releasing the CLI"). Pushing a tag `vX.Y.Z` that matches the
-# workspace version, on a commit of main, builds static binaries for Apple silicon macOS and x86_64 and aarch64 Linux
-# on native runners, publishes them as a GitHub Release, and updates the Homebrew cask in bzzzzzz/homebrew-tap. A
-# pull request that changes this workflow, the packaging, or the CLI and its dependencies, and a manual run, do
-# everything up to the release (build, smoke test, package, render and style-check the cask) and publish nothing, so a
-# broken release, such as a new dependency that stops the musl build being static, is found before a tag.
+# Releases the `upheap` CLI and the `upheap-server` binary (design/operations.md, "Releasing the CLI and the server").
+# Pushing a tag `vX.Y.Z` that matches the workspace version, on a commit of main, builds static binaries of both for
+# Apple silicon macOS and x86_64 and aarch64 Linux on native runners, the server with the web app embedded, publishes
+# them as a GitHub Release, and updates the Homebrew cask in bzzzzzz/homebrew-tap, which installs only the CLI. A pull
+# request that changes this workflow, the packaging, or the CLI and its dependencies, and a manual run, do everything
+# up to the release (build, smoke test, package, render and style-check the cask) and publish nothing, so a broken
+# release, such as a new dependency that stops the musl build being static, is found before a tag.
 #
 # It ships binaries, so every action is pinned to a commit, and release builds use no cache another ref could have
 # written. The tap is pushed to with a deploy key, secret HOMEBREW_TAP_DEPLOY_KEY.
@@ -22,6 +23,8 @@ on:
       - Cargo.toml
       - Cargo.lock
       - crates/cli/**
+      # A crate's features, such as SQLite's, can make the server's musl build dynamic without touching Cargo.lock.
+      - crates/*/Cargo.toml
       - crates/api-types/**
       - crates/domain/**
       - .cargo/**
@@ -76,9 +79,39 @@ jobs:
             exit 1
           fi
 
+  # The web app is the same on every target, so it is built once and each build embeds it in the server.
+  web:
+    name: Web app
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Install the web app's packages
+        working-directory: web
+        run: |
+          for i in 1 2 3; do
+            npm ci --no-audit --no-fund && break
+            [ "$i" = 3 ] && exit 1
+            sleep $((i * 15))
+          done
+
+      - name: Build the web app
+        working-directory: web
+        run: npm run build
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-dist
+          path: web/dist
+          if-no-files-found: error
+
   build:
     name: Build ${{ matrix.target }}
-    needs: version
+    needs: [version, web]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -121,8 +154,13 @@ jobs:
             sleep $((i * 15))
           done
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: web-dist
+          path: web/dist
+
       - name: Build
-        run: cargo build --release --locked -p cli --target "$TARGET"
+        run: cargo build --release --locked -p cli -p server --target "$TARGET"
 
       - name: Smoke test
         run: |
@@ -133,18 +171,62 @@ jobs:
             exit 1
           fi
 
-      - name: Check the binary is static
-        if: runner.os == 'Linux'
+      - name: Smoke test the server
         run: |
-          out=$(file "target/$TARGET/release/upheap")
+          bin="target/$TARGET/release/upheap-server"
+          out=$("$bin" openapi | jq -r .info.version)
           echo "$out"
-          if ! grep -Eq 'statically linked|static-pie linked' <<< "$out"; then
-            echo "::error::The Linux binary isn't static. A dependency probably pulled in glibc; the musl build must stay free of system libraries."
+          if [ "$out" != "$VERSION" ]; then
+            echo "::error::The server's API is at version '$out', expected '$VERSION'."
+            exit 1
+          fi
+          log="$RUNNER_TEMP/server.log"
+          DATABASE_URL="sqlite://$RUNNER_TEMP/smoke.db?mode=rwc" BASE_URL=http://127.0.0.1:18080 \
+            BIND_ADDR=127.0.0.1:18080 LOG_FORMAT=pretty "$bin" > "$log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2> /dev/null || true' EXIT
+          ready=false
+          for _ in $(seq 30); do
+            if ! kill -0 "$pid" 2> /dev/null; then
+              echo "::error::The server exited while starting. Its log:"
+              cat "$log"
+              exit 1
+            fi
+            if curl -fsS http://127.0.0.1:18080/readyz > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "::error::The server didn't answer /readyz within 30 seconds. Its log:"
+            cat "$log"
+            exit 1
+          fi
+          page=$(curl -fsS http://127.0.0.1:18080/ || true)
+          if ! grep -q '<div id="root">' <<< "$page"; then
+            echo "::error::The server's / isn't the web app: it was built without web/dist embedded. Its log:"
+            cat "$log"
             exit 1
           fi
 
+      - name: Check the binaries are static
+        if: runner.os == 'Linux'
+        run: |
+          for bin in upheap upheap-server; do
+            out=$(file "target/$TARGET/release/$bin")
+            echo "$out"
+            if ! grep -Eq 'statically linked|static-pie linked' <<< "$out"; then
+              echo "::error::The Linux $bin binary isn't static. A dependency probably pulled in glibc; the musl build must stay free of system libraries."
+              exit 1
+            fi
+          done
+
       - name: Package
-        run: scripts/release/package.sh "$TARGET" "target/$TARGET/release/upheap" dist
+        run: |
+          for bin in upheap upheap-server; do
+            scripts/release/package.sh "$TARGET" "target/$TARGET/release/$bin" dist
+          done
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -238,6 +320,9 @@ jobs:
           dist/upheap-aarch64-apple-darwin.tar.gz
           dist/upheap-x86_64-unknown-linux-musl.tar.gz
           dist/upheap-aarch64-unknown-linux-musl.tar.gz
+          dist/upheap-server-aarch64-apple-darwin.tar.gz
+          dist/upheap-server-x86_64-unknown-linux-musl.tar.gz
+          dist/upheap-server-aarch64-unknown-linux-musl.tar.gz
           dist/SHA256SUMS
 
   # Its own job, so re-running the failed jobs after a tap failure doesn't try to create the release again.
@@ -264,7 +349,7 @@ jobs:
           DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then
-            echo "::error::Secret HOMEBREW_TAP_DEPLOY_KEY is empty. Create it as described in design/operations.md, section \"Releasing the CLI\", then re-run the failed jobs."
+            echo "::error::Secret HOMEBREW_TAP_DEPLOY_KEY is empty. Create it as described in design/operations.md, section \"Releasing the CLI and the server\", then re-run the failed jobs."
             exit 1
           fi
           key="$RUNNER_TEMP/tap_key"
