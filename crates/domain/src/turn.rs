@@ -37,7 +37,7 @@ impl Reach {
 }
 
 /// The stable state a turn goes to, worked out from the item when the turn opens.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Goal {
     WithContext,
     Defined,
@@ -323,6 +323,14 @@ impl Turn {
         self.ended.is_none()
     }
 
+    /// Where the turn ends, as a list filter reads it: its goal, except that a turn sent all the way goes to done.
+    pub const fn going_to(&self) -> Goal {
+        match self.reach {
+            Reach::AllTheWay => Goal::Done,
+            Reach::One => self.goal,
+        }
+    }
+
     /// Whether the turn's runs keep failing: it is open, and has failed [`STUCK_AFTER`] runs in a row. A stuck turn is
     /// not in the queue, and its item waits for the person.
     pub const fn is_stuck(&self) -> bool {
@@ -527,6 +535,38 @@ pub const fn with_agent(
     has_open_turn && !stuck && !blocker_gone && !item.is_closed() && !heap.is_archived() && open_questions == 0
 }
 
+/// Where an item stands with the agents, for a list row and the list's agent filter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AgentState {
+    /// With an agent, and a run is live.
+    Running,
+    /// With an agent, and no run is live.
+    Queued,
+    /// An open turn that waits for the person: an open question or a blocker that is gone.
+    Waits,
+    /// An open turn whose runs keep failing.
+    Stuck,
+    /// No open turn.
+    None,
+}
+
+/// The [`AgentState`] of a listed item. `with_agent` is [`with_agent`]'s answer and `running` whether the open turn
+/// has a live run. Stuck wins over waits, and waits over running and queued, so an item that waits for the person
+/// is never the agent's.
+pub const fn agent_state(has_open_turn: bool, stuck: bool, with_agent: bool, running: bool) -> AgentState {
+    if !has_open_turn {
+        AgentState::None
+    } else if stuck {
+        AgentState::Stuck
+    } else if !with_agent {
+        AgentState::Waits
+    } else if running {
+        AgentState::Running
+    } else {
+        AgentState::Queued
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
@@ -722,6 +762,34 @@ mod tests {
             closed_by: None,
         };
         expect_that!(with_agent(&closed, &heap(false), 0, true, false, false), eq(false));
+    }
+
+    #[gtest]
+    fn the_agent_state_splits_with_agent_by_a_live_run() {
+        expect_that!(agent_state(false, false, false, false), eq(AgentState::None));
+        expect_that!(agent_state(true, true, false, false), eq(AgentState::Stuck));
+        expect_that!(agent_state(true, false, true, true), eq(AgentState::Running));
+        expect_that!(agent_state(true, false, true, false), eq(AgentState::Queued));
+        expect_that!(agent_state(true, false, false, false), eq(AgentState::Waits));
+        // An item that waits for the person isn't the agent's even with a live run.
+        expect_that!(agent_state(true, false, false, true), eq(AgentState::Waits));
+    }
+
+    #[gtest]
+    fn a_turn_goes_to_its_goal_or_all_the_way_to_done() {
+        let note = item(Kind::Note, Stage::AsWritten);
+        let one = Turn::open(
+            TurnId::from_uuid(Uuid::from_u128(42)),
+            &note,
+            Reach::One,
+            Goal::WithContext,
+            None,
+            TurnSource::GoAhead,
+            UserId::from_uuid(Uuid::from_u128(10)),
+            Timestamp::EPOCH,
+        );
+        expect_that!(one.going_to(), eq(Goal::WithContext));
+        expect_that!(all_the_way(&note).going_to(), eq(Goal::Done));
     }
 
     fn all_the_way(note: &Item) -> Turn {

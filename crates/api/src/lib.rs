@@ -35,6 +35,7 @@ use std::time::Duration;
 
 use api_types::data::DataDaysDto;
 use api_types::list_view::{BlockedLayoutDto, SortDto, StateModeDto};
+use api_types::turns::AgentStateDto;
 use axum::Router;
 use axum::extract::{MatchedPath, Request};
 use axum::middleware;
@@ -72,7 +73,7 @@ pub struct CookieSettings {
     info(title = "Upheap API", description = "A todo list that ranks itself."),
     modifiers(&SessionCookieScheme),
     // Only used in query parameters, which don't register their schemas.
-    components(schemas(StateModeDto, BlockedLayoutDto, SortDto, DataDaysDto)),
+    components(schemas(StateModeDto, BlockedLayoutDto, SortDto, DataDaysDto, AgentStateDto)),
     tags(
         (name = "auth", description = "Registration and sign-in"),
         (name = "oauth", description = "Signing in non-web clients, such as the CLI: OAuth 2.0 with PKCE"),

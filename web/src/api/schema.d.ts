@@ -1783,6 +1783,17 @@ export interface components {
          * @enum {string}
          */
         Age: "keep" | "new";
+        /**
+         * @description Where an item stands with the agents, for the list's `agent` filter.
+         *
+         *     - `running`: with an agent, and a run is live now.
+         *     - `queued`: with an agent, and no run is live.
+         *     - `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.
+         *     - `stuck`: an open turn whose runs keep failing.
+         *     - `none`: no open turn.
+         * @enum {string}
+         */
+        AgentState: "running" | "queued" | "waits" | "stuck" | "none";
         ArchiveOptionRequest: {
             /**
              * Format: uuid
@@ -2558,6 +2569,11 @@ export interface components {
         Item: {
             /** @description Whether an agent run added the item. Unlike `origin`, it is set for a caller who can't see the origin. */
             added_in_run: boolean;
+            /**
+             * @description Where the item stands with the agents: `running`, `queued`, `waits` (an open turn that waits for the person),
+             *     `stuck` or `none` (no open turn). On every response, lists included.
+             */
+            agent_state: components["schemas"]["AgentState"];
             allowed_actions: components["schemas"]["ItemAction"][];
             /**
              * Format: int64
@@ -3972,6 +3988,8 @@ export interface components {
              */
             failed_runs: number;
             goal: components["schemas"]["Goal"];
+            /** @description Where the turn ends: `goal`, or `done` for a turn sent all the way. */
+            going_to: components["schemas"]["Goal"];
             /** @description What the person told the agent: plain text, at most 2,000 characters; `null` when they said nothing. */
             line?: string | null;
             /**
@@ -4879,6 +4897,13 @@ export interface operations {
                 impact?: components["schemas"]["Size"][];
                 /** @description Keep items with any of these needs, comma-separated. */
                 need?: components["schemas"]["Need"][];
+                /** @description Keep items in any of these agent states, comma-separated. */
+                agent?: components["schemas"]["AgentState"][];
+                /**
+                 * @description Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.
+                 *     Items without an open turn match none.
+                 */
+                going_to?: components["schemas"]["Goal"][];
             };
             header?: {
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
@@ -6159,6 +6184,13 @@ export interface operations {
                  *     any of its options listed. An archived option keeps the items that switched to its replacement.
                  */
                 param?: string[];
+                /** @description Keep items in any of these agent states, comma-separated. */
+                agent?: components["schemas"]["AgentState"][];
+                /**
+                 * @description Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.
+                 *     Items without an open turn match none.
+                 */
+                going_to?: components["schemas"]["Goal"][];
             };
             header?: {
                 /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */

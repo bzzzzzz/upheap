@@ -554,3 +554,141 @@ async fn a_non_member_filtering_by_a_tag_of_the_heap_gets_not_found() -> Result<
     expect_that!(response.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }
+
+/// Sends the item to an agent with `reach`.
+async fn send_to_agent(app: &TestApp, session: &str, item: &str, reach: &str) -> Result<()> {
+    let sent = app
+        .send(
+            Method::POST,
+            &format!("{}/turn", app.item_url(item).await?),
+            Some(session),
+            Some(json!({ "reach": reach })),
+        )
+        .await?;
+    anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
+    Ok(())
+}
+
+/// A note with a context, so an agent may take it.
+async fn note(app: &TestApp, session: &str, heap: &str, title: &str) -> Result<String> {
+    add(
+        app,
+        session,
+        heap,
+        json!({ "title": title, "description": "Everything is a mess." }),
+    )
+    .await
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_agent_filter_keeps_items_with_an_agent_that_is_queued_or_running() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let sent = note(&app, &session, &heap, "Sent").await?;
+    note(&app, &session, &heap, "Unsent").await?;
+    send_to_agent(&app, &session, &sent, "one").await?;
+
+    // Act
+    let queued = list(&app, &session, &heap, "agent=queued").await?;
+    let none = list(&app, &session, &heap, "agent=none").await?;
+    let unknown = list(&app, &session, &heap, "agent=asleep").await?;
+
+    // Assert
+    expect_that!(titles(&queued.body["ranked"]), elements_are![eq("Sent")]);
+    expect_that!(queued.body["ranked"][0]["item"]["agent_state"], eq(&json!("queued")));
+    expect_that!(titles(&none.body["ranked"]), elements_are![eq("Unsent")]);
+    expect_that!(unknown.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_claimed_item_is_running_and_no_longer_queued() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let sent = note(&app, &session, &heap, "Sent").await?;
+    send_to_agent(&app, &session, &sent, "one").await?;
+    let heap_url = app.heap_url(&heap).await?;
+    let claimed = app
+        .send(
+            Method::POST,
+            "/api/v1/work/runs",
+            Some(&session),
+            Some(json!({ "heaps": [heap_url.replace("/api/v1/teams/", "").replace("/heaps/", "/")] })),
+        )
+        .await?;
+    anyhow::ensure!(claimed.status == StatusCode::CREATED, "claim failed: {}", claimed.body);
+
+    // Act
+    let running = list(&app, &session, &heap, "agent=running").await?;
+    let queued = list(&app, &session, &heap, "agent=queued").await?;
+
+    // Assert
+    expect_that!(titles(&running.body["ranked"]), elements_are![eq("Sent")]);
+    expect_that!(running.body["ranked"][0]["item"]["agent_state"], eq(&json!("running")));
+    expect_that!(titles(&queued.body["ranked"]), is_empty());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn going_to_done_matches_a_note_sent_all_the_way() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let sent = note(&app, &session, &heap, "Sent").await?;
+    send_to_agent(&app, &session, &sent, "all_the_way").await?;
+
+    // Act
+    let done = list(&app, &session, &heap, "going_to=done").await?;
+    let with_context = list(&app, &session, &heap, "going_to=with_context").await?;
+
+    // Assert
+    expect_that!(titles(&done.body["ranked"]), elements_are![eq("Sent")]);
+    expect_that!(titles(&with_context.body["ranked"]), is_empty());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_open_question_makes_the_item_wait_and_a_blocked_item_with_a_turn_is_queued() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let asked = note(&app, &session, &heap, "Asked").await?;
+    let blocked = note(&app, &session, &heap, "Blocked").await?;
+    send_to_agent(&app, &session, &asked, "one").await?;
+    send_to_agent(&app, &session, &blocked, "one").await?;
+    move_to(&app, &session, &blocked, "blocked").await?;
+    let question = app
+        .send(
+            Method::POST,
+            &format!("{}/questions", app.item_url(&asked).await?),
+            Some(&session),
+            Some(json!({ "kind": "question", "text": "Which CA?" })),
+        )
+        .await?;
+    anyhow::ensure!(question.status == StatusCode::CREATED, "ask failed: {}", question.body);
+
+    // Act
+    let waits = list(&app, &session, &heap, "agent=waits").await?;
+    let queued = list(&app, &session, &heap, "agent=queued").await?;
+    let queued_with_blocked = list(&app, &session, &heap, "agent=queued&blocked=shown").await?;
+
+    // Assert
+    expect_that!(titles(&waits.body["ranked"]), elements_are![eq("Asked")]);
+    expect_that!(waits.body["ranked"][0]["item"]["agent_state"], eq(&json!("waits")));
+    expect_that!(titles(&queued.body["ranked"]), is_empty());
+    expect_that!(
+        titles(&queued_with_blocked.body["blocked"]),
+        elements_are![eq("Blocked")]
+    );
+    expect_that!(
+        queued_with_blocked.body["blocked"][0]["item"]["agent_state"],
+        eq(&json!("queued"))
+    );
+    Ok(())
+}

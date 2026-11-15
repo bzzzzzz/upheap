@@ -20,7 +20,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::comments::CommentDto;
-use crate::turns::{GoalDto, TurnDto};
+use crate::turns::{AgentStateDto, GoalDto, TurnDto};
 use crate::work::ItemRunDto;
 
 /// Effort or impact.
@@ -932,6 +932,11 @@ pub struct ItemDto {
     #[serde(default)]
     #[schema(required = true)]
     pub with_agent: bool,
+    /// Where the item stands with the agents: `running`, `queued`, `waits` (an open turn that waits for the person),
+    /// `stuck` or `none` (no open turn). On every response, lists included.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub agent_state: AgentStateDto,
     /// The item this one was made from: the note it was split from, or the item of the run that added it. `null` when
     /// it has no origin, when the
     /// caller can't view the origin's heap, and in the ranked list and the closed list, which don't look it up.
@@ -1224,7 +1229,7 @@ mod tests {
                 "impact": null, "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
                 "created_by": null, "closed_at": 0, "closed_label": "today", "closed_by": null,
                 "closed_group": "last_month",
-                "turn": { "reach": "until_done", "goal": "reviewed", "line": null, "source": "schedule", "opened_at": 0, "opened_by": null },
+                "turn": { "reach": "until_done", "goal": "reviewed", "going_to": "reviewed", "line": null, "source": "schedule", "opened_at": 0, "opened_by": null },
                 "version": 1, "allowed_actions": ["edit", "archive", "reopen"],
                 "steps": [{
                     "id": Uuid::nil(), "number": 1, "title": "Run in staging", "context": null, "state": "parked",
@@ -1255,6 +1260,7 @@ mod tests {
         let turn = ranked.item.turn.or_fail()?;
         expect_that!(turn.reach, eq(ReachDto::Unknown));
         expect_that!(turn.goal, eq(GoalDto::Unknown));
+        expect_that!(turn.going_to, eq(GoalDto::Unknown));
         expect_that!(turn.source, eq(TurnSourceDto::Unknown));
         let steps = ranked.item.steps.or_fail()?;
         expect_that!(steps[0].state, eq(StepStateDto::Unknown));

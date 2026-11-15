@@ -22,7 +22,7 @@ test("one panel sets what the list shows and filters it, with a chip for each ch
     await panel.getByRole("button", { name: "Show 1 of 2 items" }).click();
   } else {
     await expect(panel).toContainText("1 of 2 items");
-    await panel.getByRole("button", { name: "Done" }).click();
+    await panel.getByRole("button", { name: "Done", exact: true }).click();
   }
   await expect(panel).toHaveCount(0);
   await expect(row(page, "Try a dark theme")).toHaveCount(0);

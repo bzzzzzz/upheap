@@ -218,6 +218,33 @@ async fn a_filter_applies_to_every_heap() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn the_agent_filter_applies_to_every_heap() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, personal) = app.register("ada@example.test").await?;
+    let sent = item(&app, &session, &personal, "Sent", "expected").await?;
+    item(&app, &session, &personal, "Unsent", "expected").await?;
+    let turn = app
+        .send(
+            Method::POST,
+            &format!("{}/turn", app.item_url(sent["id"].as_str().context("id")?).await?),
+            Some(&session),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    anyhow::ensure!(turn.status == StatusCode::CREATED, "send failed: {}", turn.body);
+
+    // Act
+    let list = across(&app, &session, "?agent=queued").await?;
+
+    // Assert
+    expect_that!(titles(&list, "ranked"), elements_are![eq("Sent")]);
+    expect_that!(list["count"], eq(&json!(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn archived_heaps_and_other_peoples_heaps_are_left_out() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

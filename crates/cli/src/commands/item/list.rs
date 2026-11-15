@@ -8,6 +8,7 @@ use api_types::items::{
 use api_types::list_view::{BlockedLayoutDto, ListViewDto, RemindersModeDto, SortDto, StateModeDto};
 use api_types::parameters::ParameterListDto;
 use api_types::tags::TagListDto;
+use api_types::turns::{AgentStateDto, GoalDto};
 use api_types::views::SavedViewListDto;
 use api_types::waiting::ItemHeapDto;
 use clap::Args;
@@ -36,7 +37,7 @@ pub struct ListArgs {
     pub all_heaps: bool,
     /// Closed items, most recently closed first, in place of the ranked list
     #[arg(long, conflicts_with_all = [
-        "view", "tag", "need", "effort", "impact", "sort", "sort_parameter", "open", "in_progress", "blocked",
+        "view", "tag", "need", "effort", "impact", "agent", "going_to", "sort", "sort_parameter", "open", "in_progress", "blocked",
         "blocked_layout", "reminders",
     ])]
     pub closed: bool,
@@ -55,6 +56,12 @@ pub struct ListArgs {
     /// Keep items with any of these impacts: s, m, l, xl. Repeat or separate with commas
     #[arg(long, value_name = "SIZE", value_delimiter = ',', value_parser = parse_api_value::<SizeDto>)]
     pub impact: Vec<SizeDto>,
+    /// Keep items in any of these agent states: running, queued, waits, stuck, none. Repeat or separate with commas
+    #[arg(long, value_name = "STATE", value_delimiter = ',', value_parser = parse_api_value::<AgentStateDto>)]
+    pub agent: Vec<AgentStateDto>,
+    /// Keep items whose agent's turn goes to any of these: with_context, defined, done. Repeat or separate with commas
+    #[arg(long, value_name = "GOAL", value_delimiter = ',', value_parser = parse_api_value::<GoalDto>)]
+    pub going_to: Vec<GoalDto>,
     /// What each group is sorted by: priority, due, need, effort, impact, or parameter with --sort-parameter
     #[arg(long, value_name = "SORT", value_parser = parse_api_value::<SortDto>)]
     pub sort: Option<SortDto>,
@@ -153,6 +160,8 @@ async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Resu
         effort: args.effort.clone(),
         impact: args.impact.clone(),
         need: args.need.clone(),
+        agent: args.agent.clone(),
+        going_to: args.going_to.clone(),
     };
     let list = client
         .get::<AcrossHeapsListDto>(&["me", "items"], &query, &token)
@@ -216,6 +225,12 @@ async fn build_query(args: &ListArgs, api: &HeapApi<'_>) -> Result<RankedQuery, 
     if !args.impact.is_empty() {
         query.impact.clone_from(&args.impact);
     }
+    if !args.agent.is_empty() {
+        query.agent.clone_from(&args.agent);
+    }
+    if !args.going_to.is_empty() {
+        query.going_to.clone_from(&args.going_to);
+    }
     Ok(query)
 }
 
@@ -235,6 +250,9 @@ fn to_query(view: &ListViewDto) -> RankedQuery {
         impact: view.impact.clone(),
         need: view.need.clone(),
         param: view.param.clone(),
+        // Saved views don't carry the agent filters.
+        agent: Vec::new(),
+        going_to: Vec::new(),
     }
 }
 

@@ -1021,6 +1021,34 @@
             "explode": false
           },
           {
+            "name": "agent",
+            "in": "query",
+            "description": "Keep items in any of these agent states, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AgentState"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "going_to",
+            "in": "query",
+            "description": "Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.\nItems without an open turn match none.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Goal"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
             "name": "Time-Zone",
             "in": "header",
             "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
@@ -3053,6 +3081,34 @@
               "items": {
                 "type": "string",
                 "format": "uuid"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "description": "Keep items in any of these agent states, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AgentState"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "going_to",
+            "in": "query",
+            "description": "Keep items whose open turn goes to any of these, comma-separated. A turn sent all the way goes to `done`.\nItems without an open turn match none.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Goal"
               }
             },
             "style": "form",
@@ -8483,6 +8539,17 @@
           "new"
         ]
       },
+      "AgentState": {
+        "type": "string",
+        "description": "Where an item stands with the agents, for the list's `agent` filter.\n\n- `running`: with an agent, and a run is live now.\n- `queued`: with an agent, and no run is live.\n- `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.\n- `stuck`: an open turn whose runs keep failing.\n- `none`: no open turn.",
+        "enum": [
+          "running",
+          "queued",
+          "waits",
+          "stuck",
+          "none"
+        ]
+      },
       "ArchiveOptionRequest": {
         "type": "object",
         "properties": {
@@ -10349,6 +10416,7 @@
           "next_goal",
           "goal_choices",
           "with_agent",
+          "agent_state",
           "origin",
           "added_in_run",
           "version",
@@ -10358,6 +10426,10 @@
           "added_in_run": {
             "type": "boolean",
             "description": "Whether an agent run added the item. Unlike `origin`, it is set for a caller who can't see the origin."
+          },
+          "agent_state": {
+            "$ref": "#/components/schemas/AgentState",
+            "description": "Where the item stands with the agents: `running`, `queued`, `waits` (an open turn that waits for the person),\n`stuck` or `none` (no open turn). On every response, lists included."
           },
           "allowed_actions": {
             "type": "array",
@@ -13798,6 +13870,7 @@
         "required": [
           "reach",
           "goal",
+          "going_to",
           "source",
           "opened_at",
           "opened_label",
@@ -13815,6 +13888,10 @@
           },
           "goal": {
             "$ref": "#/components/schemas/Goal"
+          },
+          "going_to": {
+            "$ref": "#/components/schemas/Goal",
+            "description": "Where the turn ends: `goal`, or `done` for a turn sent all the way."
           },
           "line": {
             "type": [

@@ -19,7 +19,7 @@ use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
 use domain::step::{Step, StepNumber, StepProgress, StepState, progress};
 use domain::tag::Tag;
 use domain::team::{Membership, Role, Team};
-use domain::turn::{Goal, Reach, TakeBackWhy, Turn, TurnSource, goal_for, with_agent};
+use domain::turn::{AgentState, Goal, Reach, TakeBackWhy, Turn, TurnSource, agent_state, goal_for, with_agent};
 use domain::user::User;
 use domain::validation::Field;
 use domain::{
@@ -98,6 +98,8 @@ pub struct ItemView {
     pub turn: Option<TurnView>,
     /// Whether an agent has the item (see [`domain::turn::with_agent`]).
     pub with_agent: bool,
+    /// Where the item stands with the agents (see [`domain::turn::agent_state`]).
+    pub agent_state: AgentState,
     /// The item this one was made from, when the caller may see the heap it is in. `None` otherwise, and in lists,
     /// which don't look it up: the item's own view does.
     pub origin: Option<ItemOrigin>,
@@ -158,6 +160,8 @@ pub struct TurnView {
     pub runs: u32,
     /// Why the latest failed run failed, when the turn is stuck (see [`Turn::is_stuck`]).
     pub stuck_reason: Option<String>,
+    /// Whether the turn has a run that is live now ([`Run::is_live`]).
+    pub running: bool,
 }
 
 impl TurnView {
@@ -368,18 +372,51 @@ impl Services {
         // Reminders to come are listed only when the view shows them, by date, and the filters apply to them.
         let mut to_come: Vec<Item> = if view.reminders == RemindersMode::Shown {
             to_come
-                .into_iter()
-                .filter(|item| view.filter.matches(item, &parameters))
-                .collect()
         } else {
             Vec::new()
         };
-        to_come.sort_by(|a, b| {
-            (a.arrives_at, a.created_at, a.key.as_str()).cmp(&(b.arrives_at, b.created_at, b.key.as_str()))
-        });
         let mut blockers = blocker_summaries(&self.db, &items).await?;
         blockers.extend(blocker_summaries(&self.db, &to_come).await?);
         let gone = gone_blockers(&self.db, items.iter().chain(&to_come), &blockers).await?;
+
+        // The agent filters need every item's open turn and questions, listed or not. Nothing waits, and no agent has
+        // anything, in an archived heap, so its items need no read.
+        let (open_questions, mut open_turns) = if heap.is_archived() {
+            (HashMap::new(), HashMap::new())
+        } else {
+            let ids: Vec<ItemId> = items.iter().chain(&to_come).map(|item| item.id).collect();
+            let turns = store::turns::list_open_turns(&self.db, &ids).await?;
+            (
+                store::questions::count_open_questions(&self.db, &ids).await?,
+                turn_views(&self.db, turns.into_values(), now, false).await?,
+            )
+        };
+        let agent_facts = |item: &Item| -> (AgentState, Option<Goal>) {
+            let turn = open_turns.get(&item.id);
+            let questions = open_questions.get(&item.id).copied().unwrap_or(0) as usize;
+            let stuck = turn.is_some_and(TurnView::is_stuck);
+            let agent = with_agent(
+                item,
+                &heap,
+                questions,
+                turn.is_some(),
+                stuck,
+                gone.contains_key(&item.id),
+            );
+            let running = turn.is_some_and(|turn| turn.running);
+            (
+                agent_state(turn.is_some(), stuck, agent, running),
+                turn.map(|turn| turn.turn.going_to()),
+            )
+        };
+        let to_come_kept = |item: &Item| {
+            let (state, going_to) = agent_facts(item);
+            view.filter.matches(item, &parameters) && view.filter.matches_agent(state, going_to)
+        };
+        to_come.retain(to_come_kept);
+        to_come.sort_by(|a, b| {
+            (a.arrives_at, a.created_at, a.key.as_str()).cmp(&(b.arrives_at, b.created_at, b.key.as_str()))
+        });
         let mut users = load_item_users(&self.db, &items).await?;
         users.extend(load_item_users(&self.db, &to_come).await?);
 
@@ -405,7 +442,7 @@ impl Services {
                 created_by,
                 // Listed items aren't closed, so they have no closer.
                 closed_by: None,
-                // Set below, once the open turns of the entries that are listed are known.
+                // Set below, from the open turns read for the filters.
                 allowed_actions: Vec::new(),
                 stage_choices,
                 // Lists carry the progress only, counted below for the entries that are listed.
@@ -419,6 +456,7 @@ impl Services {
                 waits_for_you: false,
                 turn: None,
                 with_agent: false,
+                agent_state: AgentState::None,
                 origin: None,
                 step_origins: HashMap::new(),
             }
@@ -431,7 +469,8 @@ impl Services {
                 continue;
             };
             let item = items.swap_remove(index);
-            if !view.filter.matches(&item, &parameters) {
+            let (state, going_to) = agent_facts(&item);
+            if !view.filter.matches(&item, &parameters) || !view.filter.matches_agent(state, going_to) {
                 continue;
             }
             let group = match view.group_of(item.state.kind()) {
@@ -481,16 +520,6 @@ impl Services {
             .chain(reminders.iter().map(|view| view.item.id))
             .collect();
         let mut step_progress = store::steps::count_step_progress(&self.db, &listed).await?;
-        // Nothing waits, and no agent has anything, in an archived heap, so its items need no count.
-        let (open_questions, mut open_turns) = if heap.is_archived() {
-            (HashMap::new(), HashMap::new())
-        } else {
-            let turns = store::turns::list_open_turns(&self.db, &listed).await?;
-            (
-                store::questions::count_open_questions(&self.db, &listed).await?,
-                turn_views(&self.db, turns.into_values(), now, false).await?,
-            )
-        };
         let views = pinned
             .iter_mut()
             .chain(&mut ranked)
@@ -506,6 +535,12 @@ impl Services {
             let blocker_gone = view.blocker_gone.is_some();
             view.waits_for_you = waits_for_you(&view.item, &heap, open_questions, stuck, blocker_gone);
             view.with_agent = with_agent(&view.item, &heap, open_questions, turn.is_some(), stuck, blocker_gone);
+            view.agent_state = agent_state(
+                turn.is_some(),
+                stuck,
+                view.with_agent,
+                turn.as_ref().is_some_and(|turn| turn.running),
+            );
             view.allowed_actions = allowed_item_actions(&view.item, &heap, role, turn.is_some(), stuck, now);
             view.turn = turn;
         }
@@ -649,6 +684,7 @@ impl Services {
                     waits_for_you: false,
                     turn: None,
                     with_agent: false,
+                    agent_state: AgentState::None,
                     origin: None,
                     step_origins: HashMap::new(),
                 }
@@ -791,6 +827,7 @@ impl Services {
             opened_by: created_by.clone(),
             runs: 0,
             stuck_reason: None,
+            running: false,
         });
         let allowed_actions =
             allowed_item_actions(&item, &access.heap, access.membership.role, turn.is_some(), false, now);
@@ -820,6 +857,11 @@ impl Services {
             waits_for_you: false,
             // A new item has no questions, so an open turn is an agent having it.
             with_agent: turn.is_some(),
+            agent_state: if turn.is_some() {
+                AgentState::Queued
+            } else {
+                AgentState::None
+            },
             turn,
             origin,
             step_origins: HashMap::new(),
@@ -1357,6 +1399,12 @@ pub(crate) async fn build_item_view(
         comments: Some(comments),
         runs: Some(runs),
         waits_for_you,
+        agent_state: agent_state(
+            turn.is_some(),
+            stuck,
+            with_agent,
+            turn.as_ref().is_some_and(|turn| turn.running),
+        ),
         turn,
         with_agent,
     })
@@ -1387,10 +1435,15 @@ pub(crate) async fn turn_views(
         .map(|user| (user.id, user))
         .collect();
     let turn_ids: Vec<TurnId> = turns.iter().map(|turn| turn.id).collect();
-    let lapsed: HashSet<TurnId> = store::runs::list_unended_runs_for_turns(db, &turn_ids, lock)
-        .await?
-        .into_iter()
+    let unended = store::runs::list_unended_runs_for_turns(db, &turn_ids, lock).await?;
+    let lapsed: HashSet<TurnId> = unended
+        .iter()
         .filter(|run| run.is_lapsed(now))
+        .map(|run| run.turn_id)
+        .collect();
+    let live: HashSet<TurnId> = unended
+        .iter()
+        .filter(|run| run.is_live(now))
         .map(|run| run.turn_id)
         .collect();
     let turns: Vec<Turn> = turns
@@ -1418,6 +1471,7 @@ pub(crate) async fn turn_views(
                 opened_by,
                 runs: runs.get(&turn.id).copied().unwrap_or(0),
                 stuck_reason,
+                running: live.contains(&turn.id),
                 turn,
             };
             (view.turn.item_id, view)

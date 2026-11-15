@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 
 use crate::item::{Item, Need, Size, StateKind};
 use crate::parameter::Parameter;
+use crate::turn::{AgentState, Goal};
 use crate::{OptionId, ParameterId, TagId};
 
 /// Where items in one state go.
@@ -166,6 +167,10 @@ pub struct ListFilter {
     /// An archived option matches the items that switched to its replacement. Options of archived parameters
     /// don't filter, as those parameters no longer count anywhere else.
     pub options: BTreeSet<OptionId>,
+    /// Keep items in one of these agent states.
+    pub agent: BTreeSet<AgentState>,
+    /// Keep items whose open turn goes to one of these. An item without an open turn matches none.
+    pub going_to: BTreeSet<Goal>,
 }
 
 impl ListFilter {
@@ -177,6 +182,12 @@ impl ListFilter {
             && within(&self.effort, item.effort)
             && within(&self.impact, item.impact)
             && self.matches_options(item, parameters)
+    }
+
+    /// Whether an item in `state`, whose open turn goes to `going_to` (`None` without one), passes the agent filters.
+    pub fn matches_agent(&self, state: AgentState, going_to: Option<Goal>) -> bool {
+        (self.agent.is_empty() || self.agent.contains(&state))
+            && (self.going_to.is_empty() || going_to.is_some_and(|goal| self.going_to.contains(&goal)))
     }
 
     fn matches_options(&self, item: &Item, parameters: &[Parameter]) -> bool {
@@ -490,6 +501,28 @@ mod tests {
         expect_that!(filter.matches(&critical, &[]), eq(true));
         expect_that!(filter.matches(&idea, &[]), eq(true));
         expect_that!(filter.matches(&item(3), &[]), eq(false));
+    }
+
+    #[gtest]
+    fn the_agent_filters_keep_by_any_state_and_any_target() {
+        let filter = ListFilter {
+            agent: BTreeSet::from([AgentState::Running, AgentState::Queued]),
+            going_to: BTreeSet::from([Goal::Done]),
+            ..ListFilter::default()
+        };
+
+        expect_that!(filter.matches_agent(AgentState::Queued, Some(Goal::Done)), eq(true));
+        expect_that!(filter.matches_agent(AgentState::Running, Some(Goal::Done)), eq(true));
+        expect_that!(filter.matches_agent(AgentState::Waits, Some(Goal::Done)), eq(false));
+        expect_that!(filter.matches_agent(AgentState::Queued, Some(Goal::Defined)), eq(false));
+        // An item without a turn has no target.
+        expect_that!(filter.matches_agent(AgentState::Queued, None), eq(false));
+        let only_state = ListFilter {
+            agent: BTreeSet::from([AgentState::None]),
+            ..ListFilter::default()
+        };
+        expect_that!(only_state.matches_agent(AgentState::None, None), eq(true));
+        expect_that!(ListFilter::default().matches_agent(AgentState::None, None), eq(true));
     }
 
     #[gtest]

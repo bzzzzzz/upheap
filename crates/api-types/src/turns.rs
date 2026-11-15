@@ -2,7 +2,7 @@
 //! endpoints answer with the whole item (`ItemDto`).
 
 use domain::ValidationError;
-use domain::turn::{Goal, Reach, Turn, TurnLine, TurnSource};
+use domain::turn::{AgentState, Goal, Reach, Turn, TurnLine, TurnSource};
 use domain::validation::Field;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -87,6 +87,61 @@ impl TryFrom<GoalDto> for Goal {
     }
 }
 
+/// Where an item stands with the agents, for the list's `agent` filter.
+///
+/// - `running`: with an agent, and a run is live now.
+/// - `queued`: with an agent, and no run is live.
+/// - `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.
+/// - `stuck`: an open turn whose runs keep failing.
+/// - `none`: no open turn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = AgentState)]
+pub enum AgentStateDto {
+    Running,
+    Queued,
+    Waits,
+    Stuck,
+    #[default]
+    None,
+    /// A state this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<AgentState> for AgentStateDto {
+    fn from(state: AgentState) -> Self {
+        match state {
+            AgentState::Running => Self::Running,
+            AgentState::Queued => Self::Queued,
+            AgentState::Waits => Self::Waits,
+            AgentState::Stuck => Self::Stuck,
+            AgentState::None => Self::None,
+        }
+    }
+}
+
+impl TryFrom<AgentStateDto> for AgentState {
+    type Error = ValidationError;
+
+    /// Fails on a state this server doesn't know, which a request can carry.
+    fn try_from(state: AgentStateDto) -> Result<Self, Self::Error> {
+        match state {
+            AgentStateDto::Running => Ok(Self::Running),
+            AgentStateDto::Queued => Ok(Self::Queued),
+            AgentStateDto::Waits => Ok(Self::Waits),
+            AgentStateDto::Stuck => Ok(Self::Stuck),
+            AgentStateDto::None => Ok(Self::None),
+            AgentStateDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Agent }),
+        }
+    }
+}
+
+const fn unknown_goal() -> GoalDto {
+    GoalDto::Unknown
+}
+
 /// How a turn came to be opened.
 ///
 /// - `go_ahead`: a person sent the item.
@@ -118,6 +173,12 @@ impl From<TurnSource> for TurnSourceDto {
 pub struct TurnDto {
     pub reach: ReachDto,
     pub goal: GoalDto,
+    /// Where the turn ends: `goal`, or `done` for a turn sent all the way.
+    // Decoding tolerates an older server that doesn't send it (as unknown); every response of this server does, so
+    // the schema says required.
+    #[serde(default = "unknown_goal")]
+    #[schema(required = true)]
+    pub going_to: GoalDto,
     /// What the person told the agent: plain text, at most 2,000 characters; `null` when they said nothing.
     pub line: Option<String>,
     pub source: TurnSourceDto,
@@ -164,6 +225,7 @@ impl TurnDto {
         Self {
             reach: turn.reach.into(),
             goal: turn.goal.into(),
+            going_to: turn.going_to().into(),
             line: turn.line.as_ref().map(|line| line.as_str().to_owned()),
             source: turn.source.into(),
             opened_at: turn.opened_at.as_millis(),
