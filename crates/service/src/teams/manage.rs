@@ -4,7 +4,7 @@
 //! caller's permission on them, so two changes in one team run one after the other and the last-admin rule
 //! ([`domain::team::ensure_admin_remains`]) sees both (see `lock_team_for`).
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::handle::Handle;
 use domain::permission::Permission;
 use domain::team::{Membership, Role, Team, ensure_admin_remains};
@@ -100,7 +100,7 @@ impl Services {
                 AuditAction::TeamCreated,
                 EntityType::Team,
                 *team.id.as_uuid(),
-                json!({ "slug": team.slug.as_str(), "name": team.name.as_str() }),
+                json!({ AuditField::Slug.code(): team.slug.as_str(), AuditField::Name.code(): team.name.as_str() }),
                 now,
             ),
             self.team_audit_entry(
@@ -109,7 +109,7 @@ impl Services {
                 AuditAction::MemberAdded,
                 EntityType::User,
                 *principal.user_id.as_uuid(),
-                json!({ "role": Role::Admin.code() }),
+                json!({ AuditField::Role.code(): Role::Admin.code() }),
                 now,
             ),
         ];
@@ -154,13 +154,13 @@ impl Services {
         let mut diff = serde_json::Map::new();
         if let Some(name) = &name {
             diff.insert(
-                "name".into(),
+                AuditField::Name.code().into(),
                 json!({ "before": current.name.as_str(), "after": name.as_str() }),
             );
         }
         if let Some(slug) = &slug {
             diff.insert(
-                "slug".into(),
+                AuditField::Slug.code().into(),
                 json!({ "before": current.slug.as_str(), "after": slug.as_str() }),
             );
         }
@@ -228,7 +228,7 @@ impl Services {
             AuditAction::MemberAdded,
             EntityType::User,
             *user_id.as_uuid(),
-            json!({ "role": Role::Member.code() }),
+            json!({ AuditField::Role.code(): Role::Member.code() }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
@@ -265,7 +265,7 @@ impl Services {
             AuditAction::MemberRoleChanged,
             EntityType::User,
             *user_id.as_uuid(),
-            json!({ "role": { "before": target.role.code(), "after": role.code() } }),
+            json!({ AuditField::Role.code(): { "before": target.role.code(), "after": role.code() } }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
@@ -327,7 +327,7 @@ impl Services {
             action,
             EntityType::User,
             *target.user_id.as_uuid(),
-            json!({ "role": target.role.code() }),
+            json!({ AuditField::Role.code(): target.role.code() }),
             self.now(),
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;

@@ -1,6 +1,6 @@
 //! A new user with a team of their own and a first heap in it: what registering makes.
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::team::{Membership, Role, Team};
@@ -101,28 +101,28 @@ impl Services {
                 EntityType::User,
                 *user.id.as_uuid(),
                 None,
-                json!({ "username": user.username.as_str(), "display_name": user.display_name.as_str() }),
+                json!({ AuditField::Username.code(): user.username.as_str(), AuditField::DisplayName.code(): user.display_name.as_str() }),
             ),
             entry(
                 AuditAction::TeamCreated,
                 EntityType::Team,
                 *team.id.as_uuid(),
                 None,
-                json!({ "slug": team.slug.as_str(), "name": team.name.as_str() }),
+                json!({ AuditField::Slug.code(): team.slug.as_str(), AuditField::Name.code(): team.name.as_str() }),
             ),
             entry(
                 AuditAction::MemberAdded,
                 EntityType::User,
                 *user.id.as_uuid(),
                 None,
-                json!({ "role": Role::Admin.code() }),
+                json!({ AuditField::Role.code(): Role::Admin.code() }),
             ),
             entry(
                 AuditAction::HeapCreated,
                 EntityType::Heap,
                 *heap.id.as_uuid(),
                 Some(heap.id),
-                json!({ "slug": heap.slug.as_str(), "name": heap.name.as_str() }),
+                json!({ AuditField::Slug.code(): heap.slug.as_str(), AuditField::Name.code(): heap.name.as_str() }),
             ),
         ];
         for entry in &entries {

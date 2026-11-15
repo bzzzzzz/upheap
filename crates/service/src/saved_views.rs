@@ -3,7 +3,7 @@
 //! Every write locks the heap first, like item and tag writes, so a view can't be saved into a heap archived while
 //! the write waited. Views are archived, never deleted.
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::heap::Heap;
 use domain::list_view::ListView;
 use domain::permission::{
@@ -148,7 +148,7 @@ impl Services {
             archived_at: Some(now),
             ..current.clone()
         };
-        let diff = json!({ "archived_at": { "before": null, "after": now.as_millis() } });
+        let diff = json!({ AuditField::ArchivedAt.code(): { "before": null, "after": now.as_millis() } });
         let saved = self
             .save_saved_view(
                 txn,

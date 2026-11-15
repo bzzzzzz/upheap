@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::due::{describe_due_date, describe_time};
 use domain::item::{Due, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
@@ -348,9 +348,9 @@ fn collect_referenced_items(entries: &[AuditEntry]) -> BTreeSet<Uuid> {
         .filter(|entry| entry.entity_type == EntityType::Item)
         .flat_map(|entry| {
             [
-                entry.diff.get("blocked_by"),
-                entry.diff.get("origin"),
-                entry.diff.get("blocker_done"),
+                entry.diff.get(AuditField::BlockedBy.code()),
+                entry.diff.get(AuditField::Origin.code()),
+                entry.diff.get(AuditField::BlockerDone.code()),
             ]
         })
         .flatten()
@@ -510,66 +510,17 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
     }
 }
 
-/// Fields in the order forms show them. Fields not listed come after these, by name.
-const FIELD_ORDER: [&str; 54] = [
-    "step",
-    "step_title",
-    "step_context",
-    "step_state",
-    "question",
-    "question_kind",
-    "question_text",
-    "question_details",
-    "question_choices",
-    "question_many",
-    "question_step",
-    "comment",
-    "comment_text",
-    "reply",
-    "reply_comment",
-    "reach",
-    "goal",
-    "line",
-    "source",
-    "why",
-    "how",
-    "reason",
-    "blocker_done",
-    "title",
-    "heap",
-    "key",
-    "kind",
-    "stage",
-    "name",
-    "display_name",
-    "description",
-    "context",
-    "state",
-    "blocked_by",
-    "origin",
-    "blocked_reason",
-    "need",
-    "effort",
-    "impact",
-    "due",
-    "tags",
-    "parameters",
-    "role",
-    "weight",
-    "need_weight",
-    "age_weight",
-    "deadline_weight",
-    "value_weight",
-    "options",
-    "archived_options",
-    "items_switched",
-    "ended_sign_ins",
-    "list_view",
-    "agents_prepare",
-];
-
-/// Fields left out: the action already says it, as with `archived_at` for an archiving.
-const UNSHOWN_FIELDS: [&str; 1] = ["archived_at"];
+/// A diff value as the values before and after it, by the shape of the action's diff.
+fn changed_values<'a>(shape: &DiffShape, value: &'a Value) -> (&'a Value, &'a Value) {
+    match shape {
+        DiffShape::Created => (&Value::Null, value),
+        DiffShape::Ended => (value, &Value::Null),
+        DiffShape::Changed => match (value.get("before"), value.get("after")) {
+            (Some(before), Some(after)) => (before, after),
+            _ => (&Value::Null, value),
+        },
+    }
+}
 
 fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<AuditChange> {
     // The phrase says it all ("made an invite link"), and the diff holds a raw end time and link states, which
@@ -580,44 +531,47 @@ fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<Aud
     let Value::Object(fields) = &entry.diff else {
         return Vec::new();
     };
-    let mut fields: Vec<(&String, &Value)> = fields
+    // Declared fields in the order forms show them, then the ones no version declared, by name.
+    let mut fields: Vec<(Option<AuditField>, &String, &Value)> = fields
         .iter()
-        .filter(|(field, _)| !UNSHOWN_FIELDS.contains(&field.as_str()))
+        .map(|(key, value)| (AuditField::from_code(key), key, value))
         .collect();
-    fields.sort_by_key(|(field, _)| {
-        let position = FIELD_ORDER.iter().position(|known| known == field);
-        (position.unwrap_or(FIELD_ORDER.len()), field.as_str())
-    });
+    fields.sort_by_key(|(field, key, _)| (field.is_none(), field.map(|field| field as usize), key.as_str()));
 
     let shape = classify_diff(entry.action);
     let mut changes = Vec::new();
-    for (field, value) in fields {
-        let (before, after) = match shape {
-            DiffShape::Created => (&Value::Null, value),
-            DiffShape::Ended => (value, &Value::Null),
-            DiffShape::Changed => match (value.get("before"), value.get("after")) {
-                (Some(before), Some(after)) => (before, after),
-                _ => (&Value::Null, value),
+    for (field, key, value) in fields {
+        let reading = field.map_or(
+            Reading::Shown {
+                form: Form::Plain,
+                diffed: false,
             },
+            |field| reading(field, entry.entity_type),
+        );
+        let (form, diffed) = match reading {
+            Reading::Unshown => continue,
+            Reading::PerParameter => {
+                let (before, after) = changed_values(&shape, value);
+                changes.extend(describe_parameter_values(before, after, names));
+                continue;
+            }
+            Reading::Shown { form, diffed } => (form, diffed),
         };
-        if field == "parameters" {
-            changes.extend(describe_parameter_values(before, after, names));
-            continue;
-        }
+        let (before, after) = changed_values(&shape, value);
         if has_no_value(before) && has_no_value(after) {
             continue;
         }
-        let before = describe_value(field, before, names, tz);
-        let after = describe_value(field, after, names, tz);
+        let before = describe_value(form, before, names, tz);
+        let after = describe_value(form, after, names, tz);
         let text_diff = match (&shape, &before, &after) {
-            (DiffShape::Changed, Some(before), Some(after)) if is_diffed_text(field, entry.entity_type) => {
-                diff_words(before, after)
-            }
+            (DiffShape::Changed, Some(before), Some(after)) if diffed => diff_words(before, after),
             _ => None,
         };
         let change = AuditChange {
-            field: field.clone(),
-            label: describe_field(field, entry.entity_type).to_owned(),
+            field: key.clone(),
+            label: field
+                .map_or(key.as_str(), |field| describe_field(field, entry.entity_type))
+                .to_owned(),
             before,
             after,
             text_diff,
@@ -629,21 +583,6 @@ fn describe_changes(entry: &AuditEntry, names: &Names, tz: &TimeZone) -> Vec<Aud
         changes.push(change);
     }
     changes
-}
-
-/// Whether an edit of `field` shows as a word diff: the texts people edit, an item's title and context, a step's,
-/// and a heap's context. Other text, such as a tag's name, shows in full.
-fn is_diffed_text(field: &str, entity_type: EntityType) -> bool {
-    match entity_type {
-        EntityType::Item => matches!(field, "title" | "description" | "step_title" | "step_context"),
-        EntityType::Heap => field == "context",
-        EntityType::User
-        | EntityType::Team
-        | EntityType::Tag
-        | EntityType::SavedView
-        | EntityType::Parameter
-        | EntityType::InviteLink => false,
-    }
 }
 
 /// One change per parameter whose value differs, from maps of parameter ID to option ID.
@@ -684,119 +623,217 @@ fn has_no_value(value: &Value) -> bool {
 }
 
 /// A field's label. An item's description is its context to people; a tag's stays a description.
-fn describe_field(field: &str, entity_type: EntityType) -> &str {
+const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static str {
     match field {
-        "step" => "Step",
-        "step_title" => "Step title",
-        "step_context" => "Step context",
-        "step_state" => "Step state",
-        "question" => "Question",
-        "question_kind" => "Kind",
-        "question_text" => "Question text",
-        "question_details" => "Details",
-        "question_choices" => "Choices",
-        "question_many" => "Pick any",
-        "question_step" => "Step",
-        "question_link" => "Link",
-        "question_piece" => "Piece",
-        "question_round" => "Round",
-        "comment" => "Comment",
-        "comment_text" => "Comment text",
-        "reply" => "Reply",
-        "reply_comment" => "Comment",
-        "reach" => "Reach",
-        "goal" => "Goal",
-        "line" => "Line",
-        "source" => "Source",
-        "why" => "Why",
-        "how" => "How",
-        "reason" => "Reason",
-        "blocker_done" => "Blocker done",
-        "agents_prepare" => "Agents prepare new notes",
-        "title" => "Title",
-        "heap" => "Heap",
-        "key" => "Key",
-        "kind" => "Kind",
-        "stage" => "Stage",
-        "name" => "Name",
-        "display_name" => "Display name",
-        "description" if entity_type == EntityType::Item => "Context",
-        "description" => "Description",
-        "context" => "Context",
-        "state" => "State",
-        "blocked_by" => "Blocked by",
-        "origin" => "Made from",
-        "blocked_reason" => "Blocked because",
-        "need" => "Need",
-        "effort" => "Effort",
-        "impact" => "Impact",
-        "due" => "Due",
-        "tags" => "Tags",
-        "role" => "Role",
-        "weight" => "Weight",
-        "need_weight" => "Need weight",
-        "age_weight" => "Age weight",
-        "deadline_weight" => "Deadline weight",
-        "value_weight" => "Value per effort weight",
-        "options" => "Options",
-        "archived_options" => "Archived options",
-        "items_switched" => "Items switched",
-        "ended_sign_ins" => "Other sign-ins ended",
-        "list_view" => "What it shows",
-        other => other,
+        AuditField::Step | AuditField::QuestionStep => "Step",
+        AuditField::StepTitle => "Step title",
+        AuditField::StepContext => "Step context",
+        AuditField::StepState => "Step state",
+        AuditField::Question => "Question",
+        AuditField::QuestionKind | AuditField::Kind => "Kind",
+        AuditField::QuestionText => "Question text",
+        AuditField::QuestionDetails => "Details",
+        AuditField::QuestionChoices => "Choices",
+        AuditField::QuestionMany => "Pick any",
+        AuditField::QuestionLink => "Link",
+        AuditField::QuestionPiece => "Piece",
+        AuditField::QuestionRound => "Round",
+        AuditField::Comment | AuditField::ReplyComment => "Comment",
+        AuditField::CommentText => "Comment text",
+        AuditField::Reply => "Reply",
+        AuditField::Reach => "Reach",
+        AuditField::Goal => "Goal",
+        AuditField::Line => "Line",
+        AuditField::Source => "Source",
+        AuditField::Why => "Why",
+        AuditField::How => "How",
+        AuditField::Reason => "Reason",
+        AuditField::BlockerDone => "Blocker done",
+        AuditField::AgentsPrepare => "Agents prepare new notes",
+        AuditField::Title => "Title",
+        AuditField::Heap => "Heap",
+        AuditField::Key => "Key",
+        AuditField::Stage => "Stage",
+        AuditField::Name => "Name",
+        AuditField::DisplayName => "Display name",
+        AuditField::Description if matches!(entity_type, EntityType::Item) => "Context",
+        AuditField::Description => "Description",
+        AuditField::Context => "Context",
+        AuditField::State => "State",
+        AuditField::BlockedBy => "Blocked by",
+        AuditField::Origin => "Made from",
+        AuditField::BlockedReason => "Blocked because",
+        AuditField::Need => "Need",
+        AuditField::Effort => "Effort",
+        AuditField::Impact => "Impact",
+        AuditField::Due => "Due",
+        AuditField::Tags => "Tags",
+        AuditField::Role => "Role",
+        AuditField::Weight => "Weight",
+        AuditField::NeedWeight => "Need weight",
+        AuditField::AgeWeight => "Age weight",
+        AuditField::DeadlineWeight => "Deadline weight",
+        AuditField::ValueWeight => "Value per effort weight",
+        AuditField::Options => "Options",
+        AuditField::ArchivedOptions => "Archived options",
+        AuditField::ItemsSwitched => "Items switched",
+        AuditField::EndedSignIns => "Other sign-ins ended",
+        AuditField::ListView => "What it shows",
+        // These have no label of their own yet.
+        AuditField::EndsAt
+        | AuditField::HeapId
+        | AuditField::MadeBy
+        | AuditField::Priority
+        | AuditField::Slug
+        | AuditField::Username
+        | AuditField::ArchivedAt
+        | AuditField::Parameters => field.code(),
+    }
+}
+
+/// How a field's value reads in the log.
+enum Reading {
+    /// Left out: the action already says it, as with `archived_at` for an archiving.
+    Unshown,
+    /// One change per parameter whose value differs, from maps of parameter ID to option ID.
+    PerParameter,
+    /// One change, its values read as `form`; with a word diff when `diffed` and it was edited.
+    Shown { form: Form, diffed: bool },
+}
+
+/// How a value reads as text.
+#[derive(Clone, Copy)]
+enum Form {
+    /// A string as it is, a number, yes or no, or other JSON as JSON.
+    Plain,
+    /// The label of a coded value, or none for a code no version wrote.
+    Coded(fn(&str) -> Option<&'static str>),
+    /// A step, named by its title (its number is in the diff for API clients).
+    Step,
+    /// A question or comment, by its number after a prefix: `q2`, `c3`.
+    Numbered(char),
+    /// A list of strings, joined.
+    Joined,
+    /// A recorded due date.
+    Due,
+    /// The name of the thing an ID refers to now, or the fallback.
+    Named(&'static str),
+    /// Tag IDs, as tag names.
+    Tags,
+    /// Options, by their labels.
+    OptionLabels,
+    /// A count of items: "1 item", "2 items".
+    ItemCount,
+    /// No short form, as a whole list view: the label says it changed.
+    NoShort,
+}
+
+/// How `field`'s value reads in the log. The texts people edit, an item's title and context, a step's, and a heap's
+/// context, show an edit as a word diff; other text, such as a tag's name, shows in full.
+fn reading(field: AuditField, entity_type: EntityType) -> Reading {
+    let shown = |form| Reading::Shown { form, diffed: false };
+    let coded = |label| shown(Form::Coded(label));
+    match field {
+        AuditField::ArchivedAt => Reading::Unshown,
+        AuditField::Parameters => Reading::PerParameter,
+        AuditField::Kind => coded(|code| Kind::from_code(code).map(Kind::label)),
+        AuditField::Stage => coded(|code| Stage::from_code(code).map(Stage::label)),
+        AuditField::State => coded(|code| StateKind::from_code(code).map(StateKind::label)),
+        AuditField::StepState => coded(|code| StepState::from_code(code).map(StepState::label)),
+        AuditField::Reach => coded(|code| Reach::from_code(code).map(Reach::label)),
+        AuditField::Goal => coded(|code| Goal::from_code(code).map(Goal::label)),
+        AuditField::Source => coded(|code| TurnSource::from_code(code).map(TurnSource::label)),
+        AuditField::Why => coded(|code| TakeBackWhy::from_code(code).map(TakeBackWhy::label)),
+        AuditField::How => coded(describe_how),
+        AuditField::QuestionKind => coded(|code| QuestionKind::from_code(code).map(QuestionKind::label)),
+        AuditField::Need => coded(|code| Need::from_code(code).map(Need::label)),
+        AuditField::Effort | AuditField::Impact => coded(|code| Size::from_code(code).map(Size::label)),
+        AuditField::Role => coded(|code| Role::from_code(code).map(Role::label)),
+        AuditField::Step => shown(Form::Step),
+        AuditField::Question => shown(Form::Numbered('q')),
+        AuditField::Comment => shown(Form::Numbered('c')),
+        AuditField::QuestionChoices => shown(Form::Joined),
+        AuditField::Due => shown(Form::Due),
+        AuditField::BlockedBy | AuditField::Origin | AuditField::BlockerDone => shown(Form::Named("Unknown item")),
+        AuditField::Heap => shown(Form::Named("Unknown heap")),
+        AuditField::Tags => shown(Form::Tags),
+        AuditField::Options | AuditField::ArchivedOptions => shown(Form::OptionLabels),
+        AuditField::ItemsSwitched => shown(Form::ItemCount),
+        AuditField::ListView => shown(Form::NoShort),
+        AuditField::Title | AuditField::Description | AuditField::StepTitle | AuditField::StepContext => {
+            Reading::Shown {
+                form: Form::Plain,
+                diffed: entity_type == EntityType::Item,
+            }
+        }
+        AuditField::Context => Reading::Shown {
+            form: Form::Plain,
+            diffed: entity_type == EntityType::Heap,
+        },
+        AuditField::QuestionText
+        | AuditField::QuestionDetails
+        | AuditField::QuestionMany
+        | AuditField::QuestionStep
+        | AuditField::QuestionLink
+        | AuditField::QuestionPiece
+        | AuditField::QuestionRound
+        | AuditField::CommentText
+        | AuditField::Reply
+        | AuditField::ReplyComment
+        | AuditField::Line
+        | AuditField::Reason
+        | AuditField::Key
+        | AuditField::Name
+        | AuditField::DisplayName
+        | AuditField::BlockedReason
+        | AuditField::Weight
+        | AuditField::NeedWeight
+        | AuditField::AgeWeight
+        | AuditField::DeadlineWeight
+        | AuditField::ValueWeight
+        | AuditField::EndedSignIns
+        | AuditField::AgentsPrepare
+        | AuditField::EndsAt
+        | AuditField::HeapId
+        | AuditField::MadeBy
+        | AuditField::Priority
+        | AuditField::Slug
+        | AuditField::Username => shown(Form::Plain),
     }
 }
 
 /// A diff value as text, or `None` when there was no value or it has no short form.
-fn describe_value(field: &str, value: &Value, names: &Names, tz: &TimeZone) -> Option<String> {
+fn describe_value(form: Form, value: &Value, names: &Names, tz: &TimeZone) -> Option<String> {
     if value.is_null() {
         return None;
     }
-    let text = match field {
-        "kind" => Kind::from_code(value.as_str()?)?.label().to_owned(),
-        "stage" => Stage::from_code(value.as_str()?)?.label().to_owned(),
-        "state" => StateKind::from_code(value.as_str()?)?.label().to_owned(),
-        // A step is named by its title; its number is in the diff for API clients.
-        "step" => value.get("title")?.as_str()?.to_owned(),
-        "step_state" => StepState::from_code(value.as_str()?)?.label().to_owned(),
-        // A question is named by its number, as `q2`, after its item's key.
-        "question" => format!("q{}", value.as_u64()?),
-        // A comment is named the same way, as `c3`.
-        "comment" => format!("c{}", value.as_u64()?),
-        "reach" => Reach::from_code(value.as_str()?)?.label().to_owned(),
-        "goal" => Goal::from_code(value.as_str()?)?.label().to_owned(),
-        "source" => TurnSource::from_code(value.as_str()?)?.label().to_owned(),
-        "why" => TakeBackWhy::from_code(value.as_str()?)?.label().to_owned(),
-        "how" => describe_how(value.as_str()?)?.to_owned(),
-        "question_kind" => QuestionKind::from_code(value.as_str()?)?.label().to_owned(),
-        "question_choices" => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
-        "need" => Need::from_code(value.as_str()?)?.label().to_owned(),
-        "effort" | "impact" => Size::from_code(value.as_str()?)?.label().to_owned(),
-        "role" => Role::from_code(value.as_str()?)?.label().to_owned(),
-        "due" => describe_recorded_due(value, tz)?,
-        "blocked_by" | "origin" | "blocker_done" => names.of_value(value, "Unknown item"),
-        "heap" => names.of_value(value, "Unknown heap"),
-        "tags" => join(value.as_array()?.iter().map(|tag| names.of_value(tag, "Unknown tag")))?,
-        "options" | "archived_options" => join(
-            value
-                .as_array()?
-                .iter()
-                .filter_map(|option| option.get("label").and_then(Value::as_str))
-                .map(str::to_owned),
-        )?,
-        "items_switched" => match value.as_array()?.len() {
-            1 => "1 item".to_owned(),
-            n => format!("{n} items"),
-        },
-        // A whole list view has no short form; the label says it changed.
-        "list_view" => return None,
-        _ => match value {
+    let text = match form {
+        Form::Plain => match value {
             Value::String(text) => text.clone(),
             Value::Number(number) => number.to_string(),
             Value::Bool(true) => "yes".to_owned(),
             Value::Bool(false) => "no".to_owned(),
             other => other.to_string(),
         },
+        Form::Coded(label) => label(value.as_str()?)?.to_owned(),
+        Form::Step => value.get("title")?.as_str()?.to_owned(),
+        Form::Numbered(prefix) => format!("{prefix}{}", value.as_u64()?),
+        Form::Joined => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
+        Form::Due => describe_recorded_due(value, tz)?,
+        Form::Named(fallback) => names.of_value(value, fallback),
+        Form::Tags => join(value.as_array()?.iter().map(|tag| names.of_value(tag, "Unknown tag")))?,
+        Form::OptionLabels => join(
+            value
+                .as_array()?
+                .iter()
+                .filter_map(|option| option.get("label").and_then(Value::as_str))
+                .map(str::to_owned),
+        )?,
+        Form::ItemCount => match value.as_array()?.len() {
+            1 => "1 item".to_owned(),
+            n => format!("{n} items"),
+        },
+        Form::NoShort => return None,
     };
     Some(text)
 }

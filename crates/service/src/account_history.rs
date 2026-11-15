@@ -5,7 +5,7 @@
 //! theirs alone, so there is no way to name another user or team.
 
 use domain::Timestamp;
-use domain::audit::AuditAction;
+use domain::audit::{AuditAction, AuditField};
 use domain::due::describe_time;
 use jiff::tz::TimeZone;
 use serde_json::Value;
@@ -115,7 +115,7 @@ impl Services {
 /// The sentence for an account entry. The count of ended sign-ins comes from the diff; without a readable one the
 /// sentence leaves it out.
 fn describe_account_event(kind: AccountEventKind, diff: &Value) -> String {
-    let ended = diff.get("ended_sign_ins").and_then(Value::as_u64);
+    let ended = diff.get(AuditField::EndedSignIns.code()).and_then(Value::as_u64);
     match (kind, ended) {
         (AccountEventKind::PasswordChanged, Some(0)) => "Password changed. No other sign-ins were open.".to_owned(),
         (AccountEventKind::PasswordChanged, Some(1)) => "Password changed. 1 other sign-in ended.".to_owned(),
@@ -127,10 +127,12 @@ fn describe_account_event(kind: AccountEventKind, diff: &Value) -> String {
         (AccountEventKind::PasswordReset, Some(1)) => "Password set with a reset link. 1 sign-in ended.".to_owned(),
         (AccountEventKind::PasswordReset, Some(n)) => format!("Password set with a reset link. {n} sign-ins ended."),
         (AccountEventKind::PasswordReset, None) => "Password set with a reset link.".to_owned(),
-        (AccountEventKind::PasswordResetLinkMade, _) => match diff.get("made_by").and_then(Value::as_str) {
-            Some("mail") => "Reset link sent by mail, as asked on the sign-in page.".to_owned(),
-            _ => "Reset link made by whoever runs the server.".to_owned(),
-        },
+        (AccountEventKind::PasswordResetLinkMade, _) => {
+            match diff.get(AuditField::MadeBy.code()).and_then(Value::as_str) {
+                Some("mail") => "Reset link sent by mail, as asked on the sign-in page.".to_owned(),
+                _ => "Reset link made by whoever runs the server.".to_owned(),
+            }
+        }
     }
 }
 
