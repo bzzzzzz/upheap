@@ -6,13 +6,10 @@ use domain::audit::{AuditAction, EntityType};
 use domain::comment::Comment;
 use domain::handle::ItemKey;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch};
-use domain::item::{BlockerGone, Item, ItemPatch, ItemSummary, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
+use domain::item::{BlockerGone, Item, ItemPatch, ItemSummary, Kind, NewItem, NewOrigin, StateKind, Title};
 use domain::list_view::{Group, ListView, RemindersMode};
 use domain::parameter::{OptionLabel, Parameter, ParameterError, ParameterName, Weight, check_values, current_values};
-use domain::permission::{
-    ItemAction, Permission, QuestionAction, StepAction, allowed_item_actions, allowed_question_actions,
-    allowed_stage_choices, allowed_step_actions, can_redo_turn,
-};
+use domain::permission::{ItemAllowance, Permission, QuestionAction, allowed_question_actions, item_allowance};
 use domain::question::{Question, QuestionState, changed_since, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
 use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
@@ -73,18 +70,15 @@ pub struct ItemView {
     pub created_by: Option<User>,
     /// Who closed it. `None` when it's open or was closed before this was recorded (see [`domain::item::ItemState::closed_by`]).
     pub closed_by: Option<User>,
-    pub allowed_actions: Vec<ItemAction>,
-    /// The stages the caller may set on it now, in table order (see [`domain::permission::allowed_stage_choices`]).
-    pub stage_choices: Vec<Stage>,
+    /// What the caller may do with it and its steps, and the stages they may set (see
+    /// [`domain::permission::item_allowance`]).
+    pub allowance: ItemAllowance,
     /// A task's steps in order (empty for a note), or `None` in a list, which carries only `step_progress`: a
     /// context can be long, and a list row doesn't show it.
     pub steps: Option<Vec<Step>>,
     /// Ticked of open and ticked steps; `None` when there are none. Set from `steps` where they are loaded, and
     /// counted in storage where they aren't.
     pub step_progress: Option<StepProgress>,
-    /// What the caller may do with each of the steps, the same for all of them (see
-    /// [`domain::permission::allowed_step_actions`]).
-    pub step_actions: Vec<StepAction>,
     /// The item's questions in number order, or `None` in a list, which doesn't carry them.
     pub questions: Option<Vec<QuestionView>>,
     /// The item's comments in number order, or `None` in a list, which doesn't carry them.
@@ -422,8 +416,6 @@ impl Services {
 
         // A list item's view, before the counts below are set on it.
         let make_view = |item: Item| {
-            let stage_choices = allowed_stage_choices(&item, &heap, role);
-            let step_actions = allowed_step_actions(&item, &heap, role);
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
             let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
@@ -443,12 +435,10 @@ impl Services {
                 // Listed items aren't closed, so they have no closer.
                 closed_by: None,
                 // Set below, from the open turns read for the filters.
-                allowed_actions: Vec::new(),
-                stage_choices,
+                allowance: ItemAllowance::default(),
                 // Lists carry the progress only, counted below for the entries that are listed.
                 steps: None,
                 step_progress: None,
-                step_actions,
                 questions: None,
                 comments: None,
                 runs: None,
@@ -541,7 +531,7 @@ impl Services {
                 view.with_agent,
                 turn.as_ref().is_some_and(|turn| turn.running),
             );
-            view.allowed_actions = allowed_item_actions(&view.item, &heap, role, turn.is_some(), stuck, now);
+            view.allowance = item_allowance(&view.item, &heap, role, turn.is_some(), stuck, None, now);
             view.turn = turn;
         }
 
@@ -649,9 +639,7 @@ impl Services {
             .into_iter()
             .map(|item| {
                 // Closed items have no open turn: closing ends it.
-                let allowed_actions = allowed_item_actions(&item, &access.heap, role, false, false, now);
-                let stage_choices = allowed_stage_choices(&item, &access.heap, role);
-                let step_actions = allowed_step_actions(&item, &access.heap, role);
+                let allowance = item_allowance(&item, &access.heap, role, false, false, None, now);
                 let step_progress = step_progress.remove(&item.id);
                 let tags = select_tags(&heap_tags, &item.tags);
                 let values = describe_values(&item, &parameters);
@@ -672,11 +660,9 @@ impl Services {
                     became_heaps: Some(became_heaps),
                     created_by,
                     closed_by,
-                    allowed_actions,
-                    stage_choices,
+                    allowance,
                     steps: None,
                     step_progress,
-                    step_actions,
                     questions: None,
                     comments: None,
                     runs: None,
@@ -829,10 +815,16 @@ impl Services {
             stuck_reason: None,
             running: false,
         });
-        let allowed_actions =
-            allowed_item_actions(&item, &access.heap, access.membership.role, turn.is_some(), false, now);
-        let stage_choices = allowed_stage_choices(&item, &access.heap, access.membership.role);
-        let step_actions = allowed_step_actions(&item, &access.heap, access.membership.role);
+        // A new item has no reached turn to ask changes of.
+        let allowance = item_allowance(
+            &item,
+            &access.heap,
+            access.membership.role,
+            turn.is_some(),
+            false,
+            None,
+            now,
+        );
         let values = describe_values(&item, &parameters);
         // New items have no closer, no steps and nothing made from them, and their blocker is not gone.
         Ok(ItemView {
@@ -846,11 +838,9 @@ impl Services {
             blocker_gone: None,
             created_by,
             closed_by: None,
-            allowed_actions,
-            stage_choices,
+            allowance,
             steps: Some(Vec::new()),
             step_progress: None,
-            step_actions,
             questions: Some(Vec::new()),
             comments: Some(Vec::new()),
             runs: Some(Vec::new()),
@@ -1300,17 +1290,14 @@ pub(crate) async fn build_item_view(
         None => None,
     };
     let stuck = turn.as_ref().is_some_and(TurnView::is_stuck);
-    let mut allowed_actions = allowed_item_actions(&item, heap, role, turn.is_some(), stuck, now);
-    // Changes can be asked only of an item with no turn open, which is the only one worth the extra read. Lists don't
-    // offer it: they would need the latest turn of every row.
-    if turn.is_none() && !item.is_closed() && item.kind != Kind::Reminder {
-        let latest = store::turns::find_latest_turn(db, item.id, locking).await?;
-        if can_redo_turn(&item, heap, role, latest.as_ref()) {
-            allowed_actions.push(ItemAction::RedoTurn);
-        }
-    }
-    let stage_choices = allowed_stage_choices(&item, heap, role);
-    let step_actions = allowed_step_actions(&item, heap, role);
+    // Changes can be asked only of an open item with no turn open that isn't a reminder, so only that one is worth the
+    // extra read.
+    let latest = if turn.is_none() && !item.is_closed() && item.kind != Kind::Reminder {
+        store::turns::find_latest_turn(db, item.id, locking).await?
+    } else {
+        None
+    };
+    let allowance = item_allowance(&item, heap, role, turn.is_some(), stuck, latest.as_ref(), now);
     let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;
     let parameters = store::parameters::list_parameters(db, item.heap_id).await?;
     let blocked_by = find_blocker(db, &item).await?;
@@ -1390,11 +1377,9 @@ pub(crate) async fn build_item_view(
         step_origins,
         created_by,
         closed_by,
-        allowed_actions,
-        stage_choices,
+        allowance,
         step_progress: progress(&steps),
         steps: Some(steps),
-        step_actions,
         questions: Some(questions),
         comments: Some(comments),
         runs: Some(runs),
