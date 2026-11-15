@@ -132,13 +132,17 @@ impl RankedQuery {
     }
 }
 
-/// `view` with the agent filters of a query. Fails on a goal this server doesn't know.
+/// `view` with the agent filters of a query. Fails on a state or goal this server doesn't know.
 fn with_agent_filters(
     mut view: ListView,
     agent: &[AgentStateDto],
     going_to: &[GoalDto],
 ) -> Result<ListView, ValidationError> {
-    view.filter.agent = agent.iter().copied().map(AgentState::from).collect();
+    view.filter.agent = agent
+        .iter()
+        .copied()
+        .map(AgentState::try_from)
+        .collect::<Result<_, _>>()?;
     view.filter.going_to = going_to.iter().copied().map(Goal::try_from).collect::<Result<_, _>>()?;
     Ok(view)
 }

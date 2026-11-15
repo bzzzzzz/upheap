@@ -104,6 +104,10 @@ pub enum AgentStateDto {
     Stuck,
     #[default]
     None,
+    /// A state this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 impl From<AgentState> for AgentStateDto {
@@ -118,16 +122,24 @@ impl From<AgentState> for AgentStateDto {
     }
 }
 
-impl From<AgentStateDto> for AgentState {
-    fn from(state: AgentStateDto) -> Self {
+impl TryFrom<AgentStateDto> for AgentState {
+    type Error = ValidationError;
+
+    /// Fails on a state this server doesn't know, which a request can carry.
+    fn try_from(state: AgentStateDto) -> Result<Self, Self::Error> {
         match state {
-            AgentStateDto::Running => Self::Running,
-            AgentStateDto::Queued => Self::Queued,
-            AgentStateDto::Waits => Self::Waits,
-            AgentStateDto::Stuck => Self::Stuck,
-            AgentStateDto::None => Self::None,
+            AgentStateDto::Running => Ok(Self::Running),
+            AgentStateDto::Queued => Ok(Self::Queued),
+            AgentStateDto::Waits => Ok(Self::Waits),
+            AgentStateDto::Stuck => Ok(Self::Stuck),
+            AgentStateDto::None => Ok(Self::None),
+            AgentStateDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Agent }),
         }
     }
+}
+
+const fn unknown_goal() -> GoalDto {
+    GoalDto::Unknown
 }
 
 /// How a turn came to be opened.
@@ -162,6 +174,10 @@ pub struct TurnDto {
     pub reach: ReachDto,
     pub goal: GoalDto,
     /// Where the turn ends: `goal`, or `done` for a turn sent all the way.
+    // Decoding tolerates an older server that doesn't send it (as unknown); every response of this server does, so
+    // the schema says required.
+    #[serde(default = "unknown_goal")]
+    #[schema(required = true)]
     pub going_to: GoalDto,
     /// What the person told the agent: plain text, at most 2,000 characters; `null` when they said nothing.
     pub line: Option<String>,

@@ -599,7 +599,7 @@ async fn the_agent_filter_keeps_items_with_an_agent_that_is_queued_or_running() 
     expect_that!(titles(&queued.body["ranked"]), elements_are![eq("Sent")]);
     expect_that!(queued.body["ranked"][0]["item"]["agent_state"], eq(&json!("queued")));
     expect_that!(titles(&none.body["ranked"]), elements_are![eq("Unsent")]);
-    expect_that!(unknown.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(unknown.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
     Ok(())
 }
 
@@ -685,6 +685,10 @@ async fn an_open_question_makes_the_item_wait_and_a_blocked_item_with_a_turn_is_
     expect_that!(
         titles(&queued_with_blocked.body["blocked"]),
         elements_are![eq("Blocked")]
+    );
+    expect_that!(
+        queued_with_blocked.body["blocked"][0]["item"]["agent_state"],
+        eq(&json!("queued"))
     );
     Ok(())
 }

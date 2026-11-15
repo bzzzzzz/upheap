@@ -660,6 +660,8 @@ function RobotMark({ item, turn, link, itemOpen }: { item: Item; turn: Turn; lin
       resetScroll={false}
       tabIndex={-1}
       aria-hidden="true"
+      // A click opens the item without focusing a link a screen reader can't see; the row's link keeps the keys.
+      onMouseDown={(event) => event.preventDefault()}
       title={title}
       draggable={false}
       className={`relative z-10 -m-0.5 flex size-7 items-center justify-center rounded-lg ${
