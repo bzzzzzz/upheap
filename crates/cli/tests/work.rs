@@ -155,21 +155,25 @@ async fn reached_says_so_when_a_turn_sent_all_the_way_goes_on() -> Result<()> {
             "edit",
             &note,
             "--description",
-            "The certs expire on Friday.",
+            "The certs expire on Friday. Done when: they are rotated.",
             "-q",
         ])
         .await;
+    let task = cli.run(&["item", "to-task", &note, "-q"]).await;
+    let step = cli.run(&["step", "add", &note, "Order the certs", "-q"]).await;
 
     // Act
-    let reached = cli.run(&["work", "reached", "--result", "Wrote the context"]).await;
+    let reached = cli.run(&["work", "reached", "--result", "Defined the task"]).await;
 
     // Assert
     expect_that!(sent.is_ok(), eq(true));
     expect_that!(edited.exited(0), eq(true));
+    expect_that!(task.exited(0), eq(true));
+    expect_that!(step.exited(0), eq(true));
     expect_that!(reached.exited(0), eq(true));
     expect_that!(
         reached.stdout,
-        eq(&format!("Reached: with context. {note} goes on, all the way.\n"))
+        eq(&format!("Reached: defined. {note} goes on, all the way.\n"))
     );
     Ok(())
 }

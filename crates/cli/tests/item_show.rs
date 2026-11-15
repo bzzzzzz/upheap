@@ -89,7 +89,7 @@ async fn item_show_says_an_agent_has_the_item_and_where_it_is_going() -> Result<
     expect_that!(value_of(&shown.stdout, "State"), some(eq("open · with an agent")));
     expect_that!(
         shown.stdout,
-        contains_substring("\nTurn: to with context, all the way. \"Use the new CA.\".\n")
+        contains_substring("\nTurn: to defined, all the way. \"Use the new CA.\".\n")
     );
     let (_, history) = shown.stdout.split_once("\nHistory\n").context("a History section")?;
     expect_that!(history.lines().next(), some(contains_substring("Ada opened a turn on")));

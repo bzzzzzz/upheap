@@ -54,7 +54,7 @@ async fn send_all_the_way_with_a_line_from_stdin_tells_the_agent() -> Result<()>
     expect_that!(
         sent.stdout,
         eq(&format!(
-            "Sent {key}: Rotate the staging certs. Turn: to with context, all the way. \"Use the new CA.\".\n"
+            "Sent {key}: Rotate the staging certs. Turn: to defined, all the way. \"Use the new CA.\".\n"
         ))
     );
     let turn = server.read_item(&ada, HEAP, key).await?["turn"].clone();

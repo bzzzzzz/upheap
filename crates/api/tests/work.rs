@@ -188,6 +188,33 @@ impl World {
             .await
     }
 
+    /// In `run`, gives the item its context, makes it a task and adds a step, so the run can reach defined.
+    async fn make_defined(&self, run: &str, key: &str, text: &str) -> Result<()> {
+        let path = self.item_path(key).await?;
+        let version = self.get(key).await?["version"].clone();
+        let task = self
+            .in_run(
+                run,
+                Method::PATCH,
+                &path,
+                Some(&version),
+                Some(json!({ "description": text, "kind": "task" })),
+            )
+            .await?;
+        anyhow::ensure!(task.status == StatusCode::OK, "to task failed: {}", task.body);
+        let step = self
+            .in_run(
+                run,
+                Method::POST,
+                &format!("{path}/steps"),
+                None,
+                Some(json!({ "title": "Order the certs" })),
+            )
+            .await?;
+        anyhow::ensure!(step.status == StatusCode::CREATED, "step failed: {}", step.body);
+        Ok(())
+    }
+
     async fn reached(&self, run: &str) -> Result<TestResponse> {
         self.run_call(run, "reached", Some(json!({ "result": "Added the context" })))
             .await
@@ -643,13 +670,14 @@ async fn a_golden_turn_takes_a_note_to_with_context() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_turn_sent_all_the_way_opens_the_next_turn_when_reached() -> Result<()> {
+async fn a_note_as_written_sent_all_the_way_reaches_defined_in_one_run_and_opens_the_turn_to_done() -> Result<()> {
     // Arrange
     let w = world().await?;
     let key = w.add("Rotate the certs", json!({})).await?;
     w.send_all_the_way(&key).await?;
     let run = w.claimed().await?;
-    let written = w.write_context(&run, &key, "The certs expire on Friday").await?;
+    w.make_defined(&run, &key, "The certs expire on Friday. Done when: they are rotated.")
+        .await?;
 
     // Act
     let reached = w.reached(&run).await?;
@@ -660,14 +688,13 @@ async fn a_turn_sent_all_the_way_opens_the_next_turn_when_reached() -> Result<()
     let finished = w.finish(&run, json!({ "cost_usd": 0.31 })).await?;
 
     // Assert
-    expect_that!(written.status, eq(StatusCode::OK));
     expect_that!(reached.status, eq(StatusCode::OK));
     expect_that!(reached.body["end"], eq(&json!("reached")));
     // The run still describes the turn it belonged to.
-    expect_that!(reached.body["item"]["goal"], eq(&json!("with_context")));
-    expect_that!(item["stage"], eq(&json!("with_context")));
+    expect_that!(reached.body["item"]["goal"], eq(&json!("defined")));
+    expect_that!(item["stage"], eq(&json!("defined")));
     expect_that!(item["with_agent"], eq(true));
-    expect_that!(item["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(item["turn"]["goal"], eq(&json!("done")));
     expect_that!(item["turn"]["reach"], eq(&json!("all_the_way")));
     expect_that!(item["turn"]["line"], eq(&json!("Use the new CA.")));
     expect_that!(item["turn"]["ended"], eq(&Value::Null));
@@ -681,17 +708,18 @@ async fn a_turn_sent_all_the_way_opens_the_next_turn_when_reached() -> Result<()
             eq(&"item_created"),
             eq(&"turn_opened"),
             eq(&"item_updated"),
+            eq(&"step_added"),
             eq(&"turn_reached"),
             eq(&"turn_opened"),
         ]
     );
-    expect_that!(runs[3].1.as_deref(), some(eq(run.as_str())));
     expect_that!(runs[4].1.as_deref(), some(eq(run.as_str())));
-    let opened = &entries[4].1;
-    expect_that!(opened["reach"], eq(&json!("all_the_way")));
+    expect_that!(runs[5].1.as_deref(), some(eq(run.as_str())));
+    let opened = &entries[1].1;
     expect_that!(opened["goal"], eq(&json!("defined")));
-    expect_that!(opened["line"], eq(&json!("Use the new CA.")));
-    expect_that!(opened["source"], eq(&json!("go_ahead")));
+    let next_opened = &entries[5].1;
+    expect_that!(next_opened["goal"], eq(&json!("done")));
+    expect_that!(next_opened["source"], eq(&json!("go_ahead")));
     Ok(())
 }
 
@@ -837,9 +865,9 @@ async fn the_next_turn_goes_where_the_item_is_after_the_person_went_past_the_goa
     let item = w.get(&key).await?;
     let entries = w.app.audit_entries(item["id"].as_str().context("id")?).await?;
 
-    // Assert: the edit ended the turn that went to with context, and the one to done opened from the item as it is.
+    // Assert: the edit ended the turn that went to defined, and the one to done opened from the item as it is.
     expect_that!(described.status, eq(StatusCode::OK));
-    expect_that!(still_open["turn"]["goal"], eq(&json!("with_context")));
+    expect_that!(still_open["turn"]["goal"], eq(&json!("defined")));
     expect_that!(defined.status, eq(StatusCode::OK));
     expect_that!(reached.status, eq(StatusCode::CONFLICT));
     expect_that!(code(&reached), some(eq("run_over")));
@@ -2841,7 +2869,7 @@ async fn started_work_keeps_the_boost_at_the_next_stage_of_an_all_the_way_send()
         .await?;
     w.send_all_the_way(&started).await?;
     let run = w.claimed().await?;
-    w.write_context(&run, &started, "The certs expire on Friday").await?;
+    w.make_defined(&run, &started, "The certs expire on Friday").await?;
     w.reached(&run).await?;
     w.finish(&run, json!({})).await?;
     let fresh = w.add("Tidy the logs", json!({ "impact": "l", "effort": "m" })).await?;

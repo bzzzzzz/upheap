@@ -133,7 +133,7 @@ async fn sending_opens_a_turn_and_leaves_the_items_version_alone() -> Result<()>
     expect_that!(sent.status, eq(StatusCode::CREATED));
     let turn = &sent.body["turn"];
     expect_that!(turn["reach"], eq(&json!("all_the_way")));
-    expect_that!(turn["goal"], eq(&json!("with_context")));
+    expect_that!(turn["goal"], eq(&json!("defined")));
     expect_that!(turn["line"], eq(&json!("Use the new CA.")));
     expect_that!(turn["source"], eq(&json!("go_ahead")));
     expect_that!(turn["opened_by"]["display_name"], eq(&json!("Tester")));
@@ -158,7 +158,7 @@ async fn sending_opens_a_turn_and_leaves_the_items_version_alone() -> Result<()>
         last.1,
         eq(&json!({
             "reach": "all_the_way",
-            "goal": "with_context",
+            "goal": "defined",
             "line": "Use the new CA.",
             "source": "go_ahead",
         }))
@@ -521,7 +521,7 @@ async fn archiving_a_heap_takes_back_every_open_turn() -> Result<()> {
         .collect();
     expect_that!(
         taken_back,
-        elements_are![eq(&&json!({ "goal": "with_context", "why": "heap_archived" }))]
+        elements_are![eq(&&json!({ "goal": "defined", "why": "heap_archived" }))]
     );
     Ok(())
 }
@@ -772,12 +772,12 @@ async fn a_note_as_written_may_be_sent_straight_to_defined_in_one_turn() -> Resu
 
 #[gtest]
 #[tokio::test]
-async fn going_past_the_next_state_with_all_the_way_is_refused_and_opens_no_turn() -> Result<()> {
+async fn all_the_way_on_a_note_as_written_opens_one_turn_at_defined() -> Result<()> {
     // Arrange
     let (app, session, heap, key) = note().await?;
 
     // Act
-    let refused = send(
+    let defined = send(
         &app,
         &session,
         &heap,
@@ -785,13 +785,26 @@ async fn going_past_the_next_state_with_all_the_way_is_refused_and_opens_no_turn
         json!({ "reach": "all_the_way", "goal": "defined" }),
     )
     .await?;
-    let after = get(&app, &session, &heap, &key).await?;
 
     // Assert
-    expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
-    expect_that!(refused.body["code"], eq(&json!("field_not_allowed")));
-    expect_that!(refused.body["field"], eq(&json!("goal")));
-    expect_that!(after["turn"], eq(&Value::Null));
+    expect_that!(defined.status, eq(StatusCode::CREATED));
+    expect_that!(defined.body["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(defined.body["turn"]["reach"], eq(&json!("all_the_way")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn one_turn_on_a_note_as_written_with_no_goal_opens_at_with_context() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = note().await?;
+
+    // Act
+    let sent = send(&app, &session, &heap, &key, json!({ "reach": "one" })).await?;
+
+    // Assert
+    expect_that!(sent.status, eq(StatusCode::CREATED));
+    expect_that!(sent.body["turn"]["goal"], eq(&json!("with_context")));
     Ok(())
 }
 

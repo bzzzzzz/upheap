@@ -1043,8 +1043,8 @@ export interface paths {
         /**
          * Sends an open item to an agent: opens a turn with a `reach` and an optional `line`, and answers with the whole
          *     item. Any member may. The turn goes to the item's `next_goal`, worked out from the item, unless the request picks
-         *     a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`, with reach `one`. It needs no
-         *     `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
+         *     a `goal` from the item's `goal_choices`: a note as written may go straight to `defined`. A note as written sent
+         *     `all_the_way` opens at `defined` whichever goal it names, in one run. It needs no `If-Match`, and the item's `version` doesn't change. An item with an open question may be sent: the turn opens,
          *     and the item waits as before. A blocked item can't be sent until it is unblocked.
          */
         post: operations["send_to_agent"];
@@ -7290,7 +7290,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields: a `line` over 2,000 characters, a `reach` or `goal` this server doesn't know, or a `goal` the item can't be sent to, or one past the next stable state with `all_the_way` */
+            /** @description Invalid fields: a `line` over 2,000 characters, a `reach` or `goal` this server doesn't know, or a `goal` the item can't be sent to */
             422: {
                 headers: {
                     [name: string]: unknown;

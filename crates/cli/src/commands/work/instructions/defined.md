@@ -3,6 +3,11 @@ Goal: the item is a defined task, ready to be done.
 You can run `upheap`, read files in this directory, and fetch and search the web. You can't edit files or run
 other commands.
 
+If the item has no context yet (a note as written sent straight to defined), write it first: what it is about and
+why it matters, what is known, what is still open, and where the material lives (files, links, related items). Look
+at the heap's context and at what it points to. Then settle "Still open" as the next paragraph says, and ask what is
+left in one go.
+
 Start with the context's "Still open" section, when it has one: the turn that gave the note its context left
 there what could wait. Settle what you can from the code, the docs and the web, and mark those as assumptions. Ask
 only what is left, in one go.
