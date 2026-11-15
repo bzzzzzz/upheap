@@ -1,5 +1,5 @@
 // Display names for enum values, and which states are closed. Anything computed about an item comes from the server.
-import type { AgentState, ClosedGroup, Goal, ItemState, Kind, Need, Size, Stage } from "../api/client";
+import type { AgentState, ClosedGroup, Goal, ItemState, Kind, Need, Size, Stage } from "../api/schema";
 
 /** US dollars, as "$0.31". */
 export const usd = (amount: number) => `$${amount.toFixed(2)}`;

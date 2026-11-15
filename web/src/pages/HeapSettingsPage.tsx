@@ -2,7 +2,8 @@ import { Link, Outlet } from "@tanstack/react-router";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Switch, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
-import { ApiProblem, type Heap, type HeapRef } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { Heap } from "../api/schema";
 import { useHeap, useSetHeapPriority, useUpdateHeap } from "../api/queries";
 import { BASE } from "../basePath";
 import { useArchiveHeap } from "../components/archiveHeap";

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 
-import { ApiProblem, type Item } from "../api/client";
+import { ApiProblem } from "../api/client";
+import type { Item } from "../api/schema";
 import { compactButtonClass } from "./buttons";
 import { useRegisterDraft, type FlushDraft } from "./contextDraft";
 import { itemProblem } from "./itemProblems";

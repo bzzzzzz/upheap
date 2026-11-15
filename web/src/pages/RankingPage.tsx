@@ -2,7 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
-import type { Heap, HeapRef, Parameter, RankingPreview, WeightsPatch } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Heap, HeapWeightsPatchRequest, Parameter, RankingPreview } from "../api/schema";
 import {
   PREVIEW_ITEMS,
   useHeap,
@@ -460,8 +461,8 @@ function Move({ position, current }: { position: number; current: number }) {
 }
 
 /** The request for the factors whose weight changed: the heap's by name, parameters with the version they were seen at. */
-function toPatch(changed: Factor[], weights: Draft): WeightsPatch {
-  const patch: WeightsPatch = { parameters: [] };
+function toPatch(changed: Factor[], weights: Draft): HeapWeightsPatchRequest {
+  const patch: HeapWeightsPatchRequest = { parameters: [] };
   for (const factor of changed) {
     const weight = weights[factor.key];
     if (weight === undefined) continue;

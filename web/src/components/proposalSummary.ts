@@ -1,4 +1,4 @@
-import type { Item } from "../api/client";
+import type { Item } from "../api/schema";
 
 /** What the owner needs to decide a done proposal: how far the steps are, and how the reviews went. */
 export function proposalSummary(item: Item): string | null {

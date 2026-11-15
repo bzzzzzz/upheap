@@ -1,4 +1,4 @@
-import type { Heap } from "../api/client";
+import type { Heap } from "../api/schema";
 import { useSetHeapArchived } from "../api/queries";
 import { problemMessage } from "./ProblemText";
 import { useToast } from "./UndoToast";

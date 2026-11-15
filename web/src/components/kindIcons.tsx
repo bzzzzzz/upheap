@@ -1,6 +1,6 @@
 import { CalendarClock, CircleCheck, ClipboardCheck, FileText, ListChecks } from "lucide-react";
 
-import type { Goal, Kind, Stage } from "../api/client";
+import type { Goal, Kind, Stage } from "../api/schema";
 
 const ICON_CLASS = "size-3.5 shrink-0 text-muted";
 

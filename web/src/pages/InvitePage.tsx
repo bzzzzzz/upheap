@@ -1,7 +1,8 @@
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 
-import { ApiProblem, type Invitation, type Team } from "../api/client";
+import { ApiProblem } from "../api/client";
+import type { Invitation, Team } from "../api/schema";
 import {
   isInvitationChange,
   useInvitation,

@@ -2,15 +2,8 @@ import { ChevronRight } from "lucide-react";
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button, Checkbox, CheckboxGroup, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
-import {
-  ApiProblem,
-  type HeapRef,
-  type Item,
-  type Question,
-  type QuestionReply,
-  type WaitingBlocker,
-  type WaitingStuck,
-} from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { Item, Question, QuestionReplyRequest, WaitingBlocker, WaitingStuck } from "../api/schema";
 import { useReplyToQuestion } from "../api/queries";
 import { BlockerGoneRow, blockerGoneWord } from "./BlockerGoneRow";
 import { compactButtonClass } from "./buttons";
@@ -434,7 +427,7 @@ export function QuestionRow({
   const canReply = question.allowed_actions.includes("reply");
   const setToast = useToast();
 
-  const send = (body: QuestionReply) =>
+  const send = (body: QuestionReplyRequest) =>
     reply.mutateAsync({ question, reply: body }).then(
       (saved) => {
         onReplied(question);
@@ -482,7 +475,7 @@ function ReplyControls({
   pending: boolean;
   /** The reply being changed, which fills the controls; none for an open question. */
   initial?: Question["reply"];
-  onSend: (reply: QuestionReply) => void;
+  onSend: (reply: QuestionReplyRequest) => void;
 }) {
   const [comment, setComment] = useState(initial?.comment ?? "");
   const [picked, setPicked] = useState<string[]>((initial?.picked ?? []).map(String));
@@ -676,7 +669,7 @@ function AnsweredRow({
     // A change that closed the item (Not yet to Close as done) takes Change reply away: focus stays on the row.
     focusAfterRender(() => row.current?.querySelector<HTMLElement>("[data-change-reply]") ?? row.current);
   };
-  const send = (body: QuestionReply) =>
+  const send = (body: QuestionReplyRequest) =>
     reply.mutateAsync({ question, reply: body, version: changing ?? question.version }).then(
       () => {
         onChanged();

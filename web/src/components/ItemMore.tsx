@@ -14,7 +14,8 @@ import {
   type Selection,
 } from "react-aria-components";
 
-import type { HeapRef, Item, ItemPatch, ItemState, Stage } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Item, ItemPatchRequest, ItemState, Stage } from "../api/schema";
 import { useBlockerCandidates, useUpdateItem } from "../api/queries";
 import { BlockerSelect } from "./BlockerSelect";
 import { BlockReasonEditor } from "./BlockReasonEditor";
@@ -97,7 +98,7 @@ export function ItemActions({
   heapRef: HeapRef;
   item: Item;
   variant: "inline" | "bar";
-  save: (patch: ItemPatch) => void;
+  save: (patch: ItemPatchRequest) => void;
   onState: (state: ItemState) => void;
 }) {
   const moreRef = useRef<HTMLButtonElement>(null);

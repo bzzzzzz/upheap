@@ -1,7 +1,8 @@
 import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
-import type { BlockedLayout, HeapRef, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { BlockedLayout, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/schema";
 import { useParameters, useTags } from "../api/queries";
 import {
   AGENT_STATE_LABELS,

@@ -3,7 +3,8 @@ import { ChevronRight, Ellipsis, History, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type Ref } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
-import { ApiProblem, type Heap, type Team, type TeamMember, type UserMatch } from "../api/client";
+import { ApiProblem } from "../api/client";
+import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
 import {
   isUserQuery,
   useAddMember,

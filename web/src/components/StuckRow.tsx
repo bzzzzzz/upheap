@@ -2,7 +2,8 @@ import { ChevronRight } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "react-aria-components";
 
-import { ApiProblem, type HeapRef, type WaitingStuck } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { WaitingStuck } from "../api/schema";
 import { useRetryTurn, useTakeBack } from "../api/queries";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { compactButtonClass } from "./buttons";

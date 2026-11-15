@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 
-import type { ClosedGroup, HeapRef, Item } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { ClosedGroup, Item } from "../api/schema";
 import { useClosedItems, useReopenItem } from "../api/queries";
 import { becameWords, CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
 import { useUserName } from "../components/userName";

@@ -1,7 +1,7 @@
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import type { Item, ItemRun, RunEnd } from "../api/client";
+import type { Item, ItemRun, RunEnd } from "../api/schema";
 import { Disclosure } from "./AuditHistory";
 import { GOAL_LABELS, STAGE_LABELS, usd } from "./labels";
 

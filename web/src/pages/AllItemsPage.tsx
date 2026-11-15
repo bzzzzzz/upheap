@@ -2,7 +2,8 @@ import { type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { AcrossHeapsItem, AcrossHeapsList, HeapRef, RankedList } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { AcrossHeapsItem, AcrossHeapsList, RankedList } from "../api/schema";
 import { useAcrossHeapsList, useMe } from "../api/queries";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";

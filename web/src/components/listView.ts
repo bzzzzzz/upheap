@@ -1,20 +1,19 @@
 // The list view lives in the URL, so a view can be bookmarked, shared and kept on reload. The search params are
 // the API's query parameters, with lists comma-separated as the API takes them. Anything else in the URL is dropped.
+import type { HeapRef, ListViewQuery } from "../api/client";
 import type {
   AgentState,
   BlockedLayout,
   Goal,
-  HeapRef,
   ItemState,
   ListSort,
-  ListViewQuery,
   Need,
   RankedItem,
   RankedList,
   RemindersMode,
   Size,
   StateMode,
-} from "../api/client";
+} from "../api/schema";
 import { AGENT_STATES, GOING_TO, NEEDS, SIZES } from "./labels";
 
 export type ListSearch = {

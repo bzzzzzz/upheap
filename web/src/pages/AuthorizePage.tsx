@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { AuthorizationRequest } from "../api/client";
+import type { OAuthAuthorizationRequest } from "../api/schema";
 import { useApproveAuthorization, useAuthorizationCheck, useMe } from "../api/queries";
 import { borderedClass } from "../components/buttons";
 import { problemMessage } from "../components/ProblemText";
@@ -20,7 +20,7 @@ export function AuthorizePage({
   request,
   onUseAnotherAccount,
 }: {
-  request: AuthorizationRequest;
+  request: OAuthAuthorizationRequest;
   /** Signs out and goes to sign-in, which comes back here. */
   onUseAnotherAccount: () => void;
 }) {

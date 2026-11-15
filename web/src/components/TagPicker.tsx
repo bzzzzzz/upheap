@@ -1,7 +1,8 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Popover } from "react-aria-components";
 
-import { ApiProblem, type ItemTag, type HeapRef } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { ItemTag } from "../api/schema";
 import { useCreateTag, useTags } from "../api/queries";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 

@@ -3,7 +3,7 @@
 import { KeyRound } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import type { PersonalToken, PersonalTokenExpiry } from "../api/client";
+import type { PersonalToken, PersonalTokenExpiry } from "../api/schema";
 import { useMakePersonalToken, usePersonalTokens, useRevokePersonalToken } from "../api/queries";
 import { BASE } from "../basePath";
 import { compactButtonClass } from "./buttons";

@@ -5,7 +5,7 @@ import { Link, useParams } from "@tanstack/react-router";
 import { Bot, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import type { AuditChange, AuditEntry } from "../api/client";
+import type { AuditChange, AuditEntry } from "../api/schema";
 import { useAuditLog, useMe, type AuditScope } from "../api/queries";
 import { useOverListLink } from "./overList";
 import { TextDiff } from "./TextDiff";

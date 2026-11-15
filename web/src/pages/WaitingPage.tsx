@@ -1,7 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ComponentProps } from "react";
 
-import type { HeapRef, Question, WaitingRow } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Question, WaitingRow } from "../api/schema";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
 import { BlockerGoneRow, blockerGoneWord } from "../components/BlockerGoneRow";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";

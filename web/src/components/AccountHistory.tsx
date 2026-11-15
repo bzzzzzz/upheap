@@ -1,6 +1,6 @@
 // The account's history on the Password card: password changes, reset links made for the user and passwords set with
 // one. The server words each line; this only lays them out (design/ux.md, Password).
-import type { AccountEvent } from "../api/client";
+import type { AccountEvent } from "../api/schema";
 import { useAccountHistory } from "../api/queries";
 import { Disclosure, PagedHistory } from "./AuditHistory";
 

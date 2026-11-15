@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { HeapRef, Item, RankedItem } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Item, RankedItem } from "../api/schema";
 import { chipClass } from "./buttons";
 import { AgentChip, ChangesAskedButton, SendToAgentButton } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";

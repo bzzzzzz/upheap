@@ -1,7 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from "recharts";
 
-import type { DataBucket } from "../api/client";
+import type { DataBucket } from "../api/schema";
 import { PHONE, useMedia } from "./media";
 
 /** One stack of a chart: what it counts, its colour (a design token), and its value in a bucket. */

@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components";
 
-import type { Need } from "../api/client";
+import type { Need } from "../api/schema";
 import { choiceButtonClass, FieldFrame, FieldLabel, type FieldLayout } from "./ChoiceButtons";
 import { NEED_HINTS, NEED_LABELS, NEEDS } from "./labels";
 

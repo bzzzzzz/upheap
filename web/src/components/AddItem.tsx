@@ -3,7 +3,8 @@ import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { Dialog, Modal, ModalOverlay, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
-import type { DueInput, HeapRef, Item, ItemTag, Me, Need, Parameter, Size } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { DueInput, Item, ItemTag, Me, Need, Parameter, Size } from "../api/schema";
 import { useCreateItem, useRefetchRankedList, useMe, useParameters, useTags } from "../api/queries";
 import { useAddAnother } from "./addAnother";
 import { ChoiceButtons, choiceButtonClass } from "./ChoiceButtons";

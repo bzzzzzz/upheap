@@ -30,7 +30,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { HeapRef, Me } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { Me } from "../api/schema";
 import { useHeap, useMe, useDecisions, useSetHeapArchived, useWaiting } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";

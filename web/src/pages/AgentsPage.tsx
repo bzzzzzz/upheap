@@ -2,7 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 
-import type { DecisionRow, HeapRef, Me, ResultRow } from "../api/client";
+import type { HeapRef } from "../api/client";
+import type { DecisionRow, Me, ResultRow } from "../api/schema";
 import { useDecisions, useMe, useResults } from "../api/queries";
 import { readDecisionsFolded, writeDecisionsFolded } from "../components/agentsStorage";
 import { KIND_LABELS, STAGE_LABELS } from "../components/labels";

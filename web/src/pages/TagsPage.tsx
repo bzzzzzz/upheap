@@ -1,7 +1,8 @@
 import { Pencil } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-import { ApiProblem, type Tag, type HeapRef } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
+import type { Tag } from "../api/schema";
 import { useCreateTag, useTags, useUpdateTag } from "../api/queries";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";

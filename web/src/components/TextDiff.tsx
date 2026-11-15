@@ -2,7 +2,7 @@
 // long unchanged stretches folded around the edits (ux.md, The item, point 22).
 import { Fragment, useRef, useState } from "react";
 
-import type { AuditTextDiff } from "../api/client";
+import type { AuditTextDiff } from "../api/schema";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /** An unchanged stretch longer than this many words folds. */

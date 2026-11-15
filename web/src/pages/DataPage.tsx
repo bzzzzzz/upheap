@@ -2,7 +2,7 @@ import { ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
 import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components";
 
-import type { DataDays, Me, TeamData } from "../api/client";
+import type { DataDays, Me, TeamData } from "../api/schema";
 import { useMe, useTeamData } from "../api/queries";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { DataChart, type DataSeries } from "../components/DataChart";
