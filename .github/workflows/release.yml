@@ -23,6 +23,8 @@ on:
       - Cargo.toml
       - Cargo.lock
       - crates/cli/**
+      # A crate's features, such as SQLite's, can make the server's musl build dynamic without touching Cargo.lock.
+      - crates/*/Cargo.toml
       - crates/api-types/**
       - crates/domain/**
       - .cargo/**
@@ -97,7 +99,6 @@ jobs:
             sleep $((i * 15))
           done
 
-      # Reads openapi.json at the repository root, which the checkout has.
       - name: Build the web app
         working-directory: web
         run: npm run build
@@ -170,16 +171,6 @@ jobs:
             exit 1
           fi
 
-      - name: Check the binary is static
-        if: runner.os == 'Linux'
-        run: |
-          out=$(file "target/$TARGET/release/upheap")
-          echo "$out"
-          if ! grep -Eq 'statically linked|static-pie linked' <<< "$out"; then
-            echo "::error::The Linux binary isn't static. A dependency probably pulled in glibc; the musl build must stay free of system libraries."
-            exit 1
-          fi
-
       - name: Smoke test the server
         run: |
           bin="target/$TARGET/release/upheap-server"
@@ -219,20 +210,23 @@ jobs:
             exit 1
           fi
 
-      - name: Check the server is static
+      - name: Check the binaries are static
         if: runner.os == 'Linux'
         run: |
-          out=$(file "target/$TARGET/release/upheap-server")
-          echo "$out"
-          if ! grep -Eq 'statically linked|static-pie linked' <<< "$out"; then
-            echo "::error::The Linux server binary isn't static. A dependency probably pulled in glibc; the musl build must stay free of system libraries."
-            exit 1
-          fi
+          for bin in upheap upheap-server; do
+            out=$(file "target/$TARGET/release/$bin")
+            echo "$out"
+            if ! grep -Eq 'statically linked|static-pie linked' <<< "$out"; then
+              echo "::error::The Linux $bin binary isn't static. A dependency probably pulled in glibc; the musl build must stay free of system libraries."
+              exit 1
+            fi
+          done
 
       - name: Package
         run: |
-          scripts/release/package.sh "$TARGET" "target/$TARGET/release/upheap" dist
-          scripts/release/package.sh "$TARGET" "target/$TARGET/release/upheap-server" dist
+          for bin in upheap upheap-server; do
+            scripts/release/package.sh "$TARGET" "target/$TARGET/release/$bin" dist
+          done
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
