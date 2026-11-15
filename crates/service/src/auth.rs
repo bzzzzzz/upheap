@@ -10,7 +10,7 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use domain::Timestamp;
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::handle::Handle;
 use domain::heap::Heap;
 use domain::team::Team;
@@ -378,7 +378,7 @@ impl Services {
             AuditAction::PasswordChanged,
             EntityType::User,
             *user.id.as_uuid(),
-            json!({ "ended_sign_ins": ended_sign_ins }),
+            json!({ AuditField::EndedSignIns.code(): ended_sign_ins }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;

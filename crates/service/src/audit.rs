@@ -1,5 +1,6 @@
 //! Building audit entries and diffs.
 
+use domain::audit::AuditField;
 use domain::comment::Comment;
 use domain::heap::HeapPolicy;
 use domain::item::{Due, Item, Kind, Stage};
@@ -18,13 +19,13 @@ use serde_json::{Map, Value, json};
 pub(crate) fn describe_new_item(item: &Item) -> Value {
     let mut fields = item_fields(item);
     if item.kind == Kind::Note {
-        fields.remove("kind");
+        fields.remove(AuditField::Kind.code());
     }
     if item.stage == Stage::AsWritten {
-        fields.remove("stage");
+        fields.remove(AuditField::Stage.code());
     }
     if let Some(origin) = item.origin_id {
-        fields.insert("origin".into(), json!(origin.to_string()));
+        fields.insert(AuditField::Origin.code().into(), json!(origin.to_string()));
     }
     Value::Object(fields)
 }
@@ -41,12 +42,12 @@ pub(crate) fn diff_moved(before: &Item, after: &Item) -> Value {
         return Value::Null;
     };
     changes.insert(
-        "heap".into(),
+        AuditField::Heap.code().into(),
         json!({ "before": before.heap_id.to_string(), "after": after.heap_id.to_string() }),
     );
     if before.key != after.key {
         changes.insert(
-            "key".into(),
+            AuditField::Key.code().into(),
             json!({ "before": before.key.as_str(), "after": after.key.as_str() }),
         );
     }
@@ -59,7 +60,7 @@ pub(crate) fn diff_freed(before: &Item, after: &Item, blocker: &Item) -> Value {
     let Value::Object(mut changes) = diff_items(before, after) else {
         return Value::Null;
     };
-    changes.insert("blocker_done".into(), json!(blocker.id.to_string()));
+    changes.insert(AuditField::BlockerDone.code().into(), json!(blocker.id.to_string()));
     Value::Object(changes)
 }
 
@@ -67,9 +68,9 @@ pub(crate) fn diff_freed(before: &Item, after: &Item, blocker: &Item) -> Value {
 /// context is left out when there is none.
 pub(crate) fn describe_new_step(step: &Step) -> Value {
     let mut fields = Map::new();
-    fields.insert("step".into(), step_name(step));
+    fields.insert(AuditField::Step.code().into(), step_name(step));
     if let Some(context) = &step.context {
-        fields.insert("step_context".into(), json!(context.as_str()));
+        fields.insert(AuditField::StepContext.code().into(), json!(context.as_str()));
     }
     Value::Object(fields)
 }
@@ -79,15 +80,18 @@ pub(crate) fn describe_new_step(step: &Step) -> Value {
 pub(crate) fn diff_steps(before: &Step, after: &Step) -> Value {
     let fields = |step: &Step| {
         let mut fields = Map::new();
-        fields.insert("step_title".into(), json!(step.title.as_str()));
-        fields.insert("step_context".into(), json!(step.context.as_ref().map(|c| c.as_str())));
-        fields.insert("step_state".into(), json!(step.state.code()));
+        fields.insert(AuditField::StepTitle.code().into(), json!(step.title.as_str()));
+        fields.insert(
+            AuditField::StepContext.code().into(),
+            json!(step.context.as_ref().map(|c| c.as_str())),
+        );
+        fields.insert(AuditField::StepState.code().into(), json!(step.state.code()));
         fields
     };
     let Value::Object(mut changes) = diff_fields(fields(before), fields(after)) else {
         return Value::Null;
     };
-    changes.insert("step".into(), step_name(after));
+    changes.insert(AuditField::Step.code().into(), step_name(after));
     Value::Object(changes)
 }
 
@@ -95,25 +99,28 @@ pub(crate) fn diff_steps(before: &Step, after: &Step) -> Value {
 /// left out when there are none.
 pub(crate) fn describe_new_question(question: &Question) -> Value {
     let mut fields = Map::new();
-    fields.insert("question".into(), json!(question.number.get()));
-    fields.insert("question_kind".into(), json!(question.kind.code()));
-    fields.insert("question_text".into(), json!(question.text.as_str()));
+    fields.insert(AuditField::Question.code().into(), json!(question.number.get()));
+    fields.insert(AuditField::QuestionKind.code().into(), json!(question.kind.code()));
+    fields.insert(AuditField::QuestionText.code().into(), json!(question.text.as_str()));
     if let Some(details) = &question.details {
-        fields.insert("question_details".into(), json!(details.as_str()));
+        fields.insert(AuditField::QuestionDetails.code().into(), json!(details.as_str()));
     }
     if !question.choices.is_empty() {
-        fields.insert("question_choices".into(), json!(question.choices.labels()));
+        fields.insert(
+            AuditField::QuestionChoices.code().into(),
+            json!(question.choices.labels()),
+        );
     }
     if question.many {
-        fields.insert("question_many".into(), json!(true));
+        fields.insert(AuditField::QuestionMany.code().into(), json!(true));
     }
     if let Some(step) = question.step {
-        fields.insert("question_step".into(), json!(step.get()));
+        fields.insert(AuditField::QuestionStep.code().into(), json!(step.get()));
     }
     if let Some(review) = &question.review {
-        fields.insert("question_link".into(), json!(review.link.as_str()));
-        fields.insert("question_piece".into(), json!(review.piece.as_str()));
-        fields.insert("question_round".into(), json!(review.round));
+        fields.insert(AuditField::QuestionLink.code().into(), json!(review.link.as_str()));
+        fields.insert(AuditField::QuestionPiece.code().into(), json!(review.piece.as_str()));
+        fields.insert(AuditField::QuestionRound.code().into(), json!(review.round));
     }
     Value::Object(fields)
 }
@@ -121,8 +128,8 @@ pub(crate) fn describe_new_question(question: &Question) -> Value {
 /// A newly added comment, for its `comment_added` entry: its number and its whole text.
 pub(crate) fn describe_new_comment(comment: &Comment) -> Value {
     json!({
-        "comment": comment.number.get(),
-        "comment_text": comment.body.as_str(),
+        AuditField::Comment.code(): comment.number.get(),
+        AuditField::CommentText.code(): comment.body.as_str(),
     })
 }
 
@@ -152,10 +159,10 @@ fn reply_parts(question: &Question) -> (Option<String>, Option<&str>) {
 pub(crate) fn describe_reply(question: &Question) -> Value {
     let (reply, reply_comment) = reply_parts(question);
     json!({
-        "question": question.number.get(),
-        "question_text": question.text.as_str(),
-        "reply": reply,
-        "reply_comment": reply_comment,
+        AuditField::Question.code(): question.number.get(),
+        AuditField::QuestionText.code(): question.text.as_str(),
+        AuditField::Reply.code(): reply,
+        AuditField::ReplyComment.code(): reply_comment,
     })
 }
 
@@ -165,14 +172,17 @@ pub(crate) fn describe_reply_change(before: &Question, after: &Question) -> Valu
     let (picked_before, comment_before) = reply_parts(before);
     let (picked_after, comment_after) = reply_parts(after);
     let mut fields = Map::new();
-    fields.insert("question".into(), json!(after.number.get()));
-    fields.insert("question_text".into(), json!(after.text.as_str()));
+    fields.insert(AuditField::Question.code().into(), json!(after.number.get()));
+    fields.insert(AuditField::QuestionText.code().into(), json!(after.text.as_str()));
     if picked_before != picked_after {
-        fields.insert("reply".into(), json!({"before": picked_before, "after": picked_after}));
+        fields.insert(
+            AuditField::Reply.code().into(),
+            json!({"before": picked_before, "after": picked_after}),
+        );
     }
     if comment_before != comment_after {
         fields.insert(
-            "reply_comment".into(),
+            AuditField::ReplyComment.code().into(),
             json!({"before": comment_before, "after": comment_after}),
         );
     }
@@ -183,32 +193,32 @@ pub(crate) fn describe_reply_change(before: &Question, after: &Question) -> Valu
 /// `question_withdrawn` entry.
 pub(crate) fn describe_withdrawal(question: &Question, why: TakeBackWhy) -> Value {
     json!({
-        "question": question.number.get(),
-        "question_text": question.text.as_str(),
-        "why": why.code(),
+        AuditField::Question.code(): question.number.get(),
+        AuditField::QuestionText.code(): question.text.as_str(),
+        AuditField::Why.code(): why.code(),
     })
 }
 
 /// A turn just opened, for its `turn_opened` entry. The line is `null` when there is none.
 pub(crate) fn describe_new_turn(turn: &Turn) -> Value {
     json!({
-        "reach": turn.reach.code(),
-        "goal": turn.goal.code(),
-        "line": turn.line.as_ref().map(domain::turn::TurnLine::as_str),
-        "source": turn.source.code(),
+        AuditField::Reach.code(): turn.reach.code(),
+        AuditField::Goal.code(): turn.goal.code(),
+        AuditField::Line.code(): turn.line.as_ref().map(domain::turn::TurnLine::as_str),
+        AuditField::Source.code(): turn.source.code(),
     })
 }
 
 /// A turn just taken back, for its `turn_taken_back` entry.
 pub(crate) fn describe_take_back(turn: &Turn, why: TakeBackWhy) -> Value {
-    json!({ "goal": turn.goal.code(), "why": why.code() })
+    json!({ AuditField::Goal.code(): turn.goal.code(), AuditField::Why.code(): why.code() })
 }
 
 /// A turn whose goal a run reached, for its `turn_reached` entry: the goal, and the stage the item moved from and to.
 pub(crate) fn describe_reached(goal: Goal, before: Stage, after: Stage) -> Value {
     json!({
-        "goal": goal.code(),
-        "stage": { "before": before.code(), "after": after.code() },
+        AuditField::Goal.code(): goal.code(),
+        AuditField::Stage.code(): { "before": before.code(), "after": after.code() },
     })
 }
 
@@ -238,33 +248,33 @@ impl GoalMetHow {
 /// The stage is left out when it didn't change, as for a claim that found the item already there.
 pub(crate) fn describe_goal_met(goal: Goal, before: Stage, after: Stage, how: GoalMetHow) -> Value {
     if before == after {
-        return json!({ "goal": goal.code(), "how": how.code() });
+        return json!({ AuditField::Goal.code(): goal.code(), AuditField::How.code(): how.code() });
     }
     json!({
-        "goal": goal.code(),
-        "stage": { "before": before.code(), "after": after.code() },
-        "how": how.code(),
+        AuditField::Goal.code(): goal.code(),
+        AuditField::Stage.code(): { "before": before.code(), "after": after.code() },
+        AuditField::How.code(): how.code(),
     })
 }
 
 /// A turn a run handed back, for its `turn_handed_back` entry.
 pub(crate) fn describe_hand_back(turn: &Turn, reason: &str) -> Value {
-    json!({ "goal": turn.goal.code(), "reason": reason })
+    json!({ AuditField::Goal.code(): turn.goal.code(), AuditField::Reason.code(): reason })
 }
 
 /// A turn the person sent back for changes, for its `turn_redone` entry: the redone turn's goal, the stage the item
 /// moved from and to, and the person's line.
 pub(crate) fn describe_redone(turn: &Turn, before: Stage, after: Stage, line: &str) -> Value {
     json!({
-        "goal": turn.goal.code(),
-        "stage": { "before": before.code(), "after": after.code() },
-        "line": line,
+        AuditField::Goal.code(): turn.goal.code(),
+        AuditField::Stage.code(): { "before": before.code(), "after": after.code() },
+        AuditField::Line.code(): line,
     })
 }
 
 /// A stuck turn let go again, for its `turn_retried` entry.
 pub(crate) fn describe_retry(turn: &Turn) -> Value {
-    json!({ "goal": turn.goal.code() })
+    json!({ AuditField::Goal.code(): turn.goal.code() })
 }
 
 fn step_name(step: &Step) -> Value {
@@ -275,7 +285,7 @@ fn step_name(step: &Step) -> Value {
 /// that parameter's value: the item's other values didn't change.
 pub(crate) fn diff_switched_value(parameter: ParameterId, from: OptionId, to: OptionId) -> Value {
     let value = |option: OptionId| json!({ parameter.to_string(): option.to_string() });
-    json!({ "parameters": { "before": value(from), "after": value(to) } })
+    json!({ AuditField::Parameters.code(): { "before": value(from), "after": value(to) } })
 }
 
 /// The fields of a newly created tag, for its `tag_created` entry.
@@ -327,32 +337,35 @@ fn diff_fields(before: Map<String, Value>, after: Map<String, Value>) -> Value {
 fn item_fields(item: &Item) -> Map<String, Value> {
     let due = |due: Option<Due>| due.map(|d| json!({ "at": d.at.as_millis(), "firm": d.firm }));
     let mut fields = Map::new();
-    fields.insert("title".into(), json!(item.title.as_str()));
+    fields.insert(AuditField::Title.code().into(), json!(item.title.as_str()));
     fields.insert(
-        "description".into(),
+        AuditField::Description.code().into(),
         json!(item.description.as_ref().map(|d| d.as_str())),
     );
-    fields.insert("kind".into(), json!(item.kind.code()));
-    fields.insert("stage".into(), json!(item.stage.code()));
-    fields.insert("state".into(), json!(item.state.kind().code()));
-    fields.insert("blocked_by".into(), json!(item.blocked_by().map(|id| id.to_string())));
+    fields.insert(AuditField::Kind.code().into(), json!(item.kind.code()));
+    fields.insert(AuditField::Stage.code().into(), json!(item.stage.code()));
+    fields.insert(AuditField::State.code().into(), json!(item.state.kind().code()));
     fields.insert(
-        "blocked_reason".into(),
+        AuditField::BlockedBy.code().into(),
+        json!(item.blocked_by().map(|id| id.to_string())),
+    );
+    fields.insert(
+        AuditField::BlockedReason.code().into(),
         json!(item.blocked_reason().map(|reason| reason.as_str())),
     );
-    fields.insert("need".into(), json!(item.need.code()));
-    fields.insert("effort".into(), json!(item.effort.map(|s| s.code())));
-    fields.insert("impact".into(), json!(item.impact.map(|s| s.code())));
-    fields.insert("due".into(), json!(due(item.due)));
+    fields.insert(AuditField::Need.code().into(), json!(item.need.code()));
+    fields.insert(AuditField::Effort.code().into(), json!(item.effort.map(|s| s.code())));
+    fields.insert(AuditField::Impact.code().into(), json!(item.impact.map(|s| s.code())));
+    fields.insert(AuditField::Due.code().into(), json!(due(item.due)));
     // Tag IDs rather than names: names change, and the audit entry must still say which tag it was.
     let tags: Vec<String> = item.tags.iter().map(ToString::to_string).collect();
-    fields.insert("tags".into(), json!(tags));
+    fields.insert(AuditField::Tags.code().into(), json!(tags));
     let values: Map<String, Value> = item
         .parameters
         .iter()
         .map(|(parameter, option)| (parameter.to_string(), json!(option.to_string())))
         .collect();
-    fields.insert("parameters".into(), Value::Object(values));
+    fields.insert(AuditField::Parameters.code().into(), Value::Object(values));
     fields
 }
 
@@ -369,13 +382,13 @@ fn parameter_fields(parameter: &Parameter) -> Map<String, Value> {
         .collect();
     let tags: Vec<String> = parameter.tags.iter().map(ToString::to_string).collect();
     let mut fields = Map::new();
-    fields.insert("name".into(), json!(parameter.name.as_str()));
-    fields.insert("weight".into(), json!(parameter.weight.get()));
-    fields.insert("options".into(), json!(options));
-    fields.insert("archived_options".into(), json!(archived));
-    fields.insert("tags".into(), json!(tags));
+    fields.insert(AuditField::Name.code().into(), json!(parameter.name.as_str()));
+    fields.insert(AuditField::Weight.code().into(), json!(parameter.weight.get()));
+    fields.insert(AuditField::Options.code().into(), json!(options));
+    fields.insert(AuditField::ArchivedOptions.code().into(), json!(archived));
+    fields.insert(AuditField::Tags.code().into(), json!(tags));
     fields.insert(
-        "archived_at".into(),
+        AuditField::ArchivedAt.code().into(),
         json!(parameter.archived_at.map(domain::Timestamp::as_millis)),
     );
     fields
@@ -383,18 +396,21 @@ fn parameter_fields(parameter: &Parameter) -> Map<String, Value> {
 
 fn policy_fields(policy: &HeapPolicy) -> Map<String, Value> {
     let mut fields = Map::new();
-    fields.insert("need_weight".into(), json!(policy.need_weight.get()));
-    fields.insert("age_weight".into(), json!(policy.age_weight.get()));
-    fields.insert("deadline_weight".into(), json!(policy.deadline_weight.get()));
-    fields.insert("value_weight".into(), json!(policy.value_weight.get()));
+    fields.insert(AuditField::NeedWeight.code().into(), json!(policy.need_weight.get()));
+    fields.insert(AuditField::AgeWeight.code().into(), json!(policy.age_weight.get()));
+    fields.insert(
+        AuditField::DeadlineWeight.code().into(),
+        json!(policy.deadline_weight.get()),
+    );
+    fields.insert(AuditField::ValueWeight.code().into(), json!(policy.value_weight.get()));
     fields
 }
 
 fn tag_fields(tag: &Tag) -> Map<String, Value> {
     let mut fields = Map::new();
-    fields.insert("name".into(), json!(tag.name.as_str()));
+    fields.insert(AuditField::Name.code().into(), json!(tag.name.as_str()));
     fields.insert(
-        "description".into(),
+        AuditField::Description.code().into(),
         json!(tag.description.as_ref().map(|d| d.as_str())),
     );
     fields
@@ -402,8 +418,8 @@ fn tag_fields(tag: &Tag) -> Map<String, Value> {
 
 fn saved_view_fields(view: &SavedView) -> Map<String, Value> {
     let mut fields = Map::new();
-    fields.insert("name".into(), json!(view.name.as_str()));
-    fields.insert("list_view".into(), list_view_fields(&view.list_view));
+    fields.insert(AuditField::Name.code().into(), json!(view.name.as_str()));
+    fields.insert(AuditField::ListView.code().into(), list_view_fields(&view.list_view));
     fields
 }
 

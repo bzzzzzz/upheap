@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::invite_link::{InviteLink, InviteLinkState, InviteToken, Revocation};
 use domain::permission::{
     InvitationAction, InviteLinkAction, Permission, allowed_invitation_actions, allowed_invite_link_actions,
@@ -234,7 +234,7 @@ impl Services {
             AuditAction::InviteLinkCreated,
             EntityType::InviteLink,
             *link.id.as_uuid(),
-            json!({ "ends_at": link.ends_at().as_millis() }),
+            json!({ AuditField::EndsAt.code(): link.ends_at().as_millis() }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
@@ -288,7 +288,12 @@ impl Services {
             AuditAction::InviteLinkRevoked,
             EntityType::InviteLink,
             *link.id.as_uuid(),
-            json!({ "state": { "before": InviteLinkState::Working.code(), "after": InviteLinkState::Revoked.code() } }),
+            json!({
+                AuditField::State.code(): {
+                    "before": InviteLinkState::Working.code(),
+                    "after": InviteLinkState::Revoked.code(),
+                },
+            }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
@@ -351,7 +356,7 @@ impl Services {
             AuditAction::MemberJoined,
             EntityType::InviteLink,
             *link.id.as_uuid(),
-            json!({ "role": Role::Member.code() }),
+            json!({ AuditField::Role.code(): Role::Member.code() }),
             now,
         );
         store::audit::insert_audit_entry(txn, &entry).await?;

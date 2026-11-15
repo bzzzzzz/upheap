@@ -3,7 +3,7 @@
 //! Every write locks the heap row, like item and tag writes do, so archiving waits for writes in flight and writes
 //! that come after it see the heap archived ([`crate::access::authorize_heap_write`]).
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy, HeapPolicyPatch, HeapPriority};
 use domain::item::{Item, Kind};
@@ -129,7 +129,7 @@ impl Services {
             principal,
             &heap,
             AuditAction::HeapCreated,
-            json!({ "slug": heap.slug.as_str(), "name": heap.name.as_str() }),
+            json!({ AuditField::Slug.code(): heap.slug.as_str(), AuditField::Name.code(): heap.name.as_str() }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
@@ -219,24 +219,24 @@ impl Services {
         let mut diff = serde_json::Map::new();
         if let Some(name) = &name {
             diff.insert(
-                "name".into(),
+                AuditField::Name.code().into(),
                 json!({ "before": current.name.as_str(), "after": name.as_str() }),
             );
         }
         if let Some(slug) = &slug {
             diff.insert(
-                "slug".into(),
+                AuditField::Slug.code().into(),
                 json!({ "before": current.slug.as_str(), "after": slug.as_str() }),
             );
         }
         if let Some(after) = agents_prepare {
             diff.insert(
-                "agents_prepare".into(),
+                AuditField::AgentsPrepare.code().into(),
                 json!({ "before": current.agents_prepare, "after": after }),
             );
         }
         let context_diff = context.as_ref().map(|after| {
-            json!({ "context": {
+            json!({ AuditField::Context.code(): {
                 "before": current.context.as_ref().map(Context::as_str),
                 "after": after.as_ref().map(Context::as_str),
             } })
@@ -416,8 +416,8 @@ impl Services {
             EntityType::User,
             *principal.user_id.as_uuid(),
             json!({
-                "heap_id": heap_id.to_string(),
-                "priority": { "before": before.get(), "after": priority.get() },
+                AuditField::HeapId.code(): heap_id.to_string(),
+                AuditField::Priority.code(): { "before": before.get(), "after": priority.get() },
             }),
             now,
         );
@@ -478,7 +478,7 @@ impl Services {
         } else {
             AuditAction::HeapUnarchived
         };
-        let diff = json!({ "archived_at": {
+        let diff = json!({ AuditField::ArchivedAt.code(): {
             "before": current.archived_at.map(Timestamp::as_millis),
             "after": changed.archived_at.map(Timestamp::as_millis),
         } });

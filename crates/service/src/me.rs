@@ -1,6 +1,6 @@
 //! The signed-in user and what they can reach.
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::heap::Heap;
 use domain::team::{Role, Team};
 use domain::user::{DisplayName, User};
@@ -121,7 +121,7 @@ impl Services {
 
         let now = self.now();
         let diff = json!({
-            "display_name": { "before": current.display_name.as_str(), "after": display_name.as_str() }
+            AuditField::DisplayName.code(): { "before": current.display_name.as_str(), "after": display_name.as_str() }
         });
         for team_id in team_ids {
             let entry = self.team_audit_entry(

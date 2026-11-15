@@ -1,4 +1,5 @@
-//! Audit actions. Stored as stable strings; the application only ever inserts audit entries.
+//! Audit actions, the kinds of entity they are about, and the fields of their diffs, each stored as a stable code.
+//! The application only ever inserts audit entries.
 
 use crate::ids::coded_enum;
 
@@ -67,5 +68,77 @@ coded_enum! {
         Parameter = "parameter",
         /// A team's invite link.
         InviteLink = "invite_link",
+    }
+}
+
+coded_enum! {
+    /// A field of an audit entry's diff, with its stored code. The declaration order is the order the audit log
+    /// shows fields in.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum AuditField {
+        Step = "step",
+        StepTitle = "step_title",
+        StepContext = "step_context",
+        StepState = "step_state",
+        Question = "question",
+        QuestionKind = "question_kind",
+        QuestionText = "question_text",
+        QuestionDetails = "question_details",
+        QuestionChoices = "question_choices",
+        QuestionMany = "question_many",
+        QuestionStep = "question_step",
+        Comment = "comment",
+        CommentText = "comment_text",
+        Reply = "reply",
+        ReplyComment = "reply_comment",
+        Reach = "reach",
+        Goal = "goal",
+        Line = "line",
+        Source = "source",
+        Why = "why",
+        How = "how",
+        Reason = "reason",
+        BlockerDone = "blocker_done",
+        Title = "title",
+        Heap = "heap",
+        Key = "key",
+        Kind = "kind",
+        Stage = "stage",
+        Name = "name",
+        DisplayName = "display_name",
+        Description = "description",
+        Context = "context",
+        State = "state",
+        BlockedBy = "blocked_by",
+        Origin = "origin",
+        BlockedReason = "blocked_reason",
+        Need = "need",
+        Effort = "effort",
+        Impact = "impact",
+        Due = "due",
+        Tags = "tags",
+        Parameters = "parameters",
+        Role = "role",
+        Weight = "weight",
+        NeedWeight = "need_weight",
+        AgeWeight = "age_weight",
+        DeadlineWeight = "deadline_weight",
+        ValueWeight = "value_weight",
+        Options = "options",
+        ArchivedOptions = "archived_options",
+        ItemsSwitched = "items_switched",
+        EndedSignIns = "ended_sign_ins",
+        ListView = "list_view",
+        AgentsPrepare = "agents_prepare",
+        EndsAt = "ends_at",
+        HeapId = "heap_id",
+        MadeBy = "made_by",
+        Priority = "priority",
+        QuestionLink = "question_link",
+        QuestionPiece = "question_piece",
+        QuestionRound = "question_round",
+        Slug = "slug",
+        Username = "username",
+        ArchivedAt = "archived_at",
     }
 }

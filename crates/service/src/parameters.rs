@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::heap::Heap;
 use domain::parameter::{
     NewParameter, OptionLabel, Parameter, ParameterError, ParameterName, ParameterOption, ParameterPatch, Weight,
@@ -259,7 +259,7 @@ impl Services {
         let mut diff = diff_parameters(&current, &edited);
         if let Value::Object(fields) = &mut diff {
             let ids: Vec<String> = switched.iter().map(ToString::to_string).collect();
-            fields.insert("items_switched".into(), serde_json::json!(ids));
+            fields.insert(AuditField::ItemsSwitched.code().into(), serde_json::json!(ids));
         }
         let saved = self
             .save_parameter(txn, &heap, principal, &edited, AuditAction::OptionArchived, diff, now)

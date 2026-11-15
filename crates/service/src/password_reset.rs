@@ -4,7 +4,7 @@
 //! A link's token is a 256-bit random value. The database holds only its SHA-256, so the link is shown once, to the
 //! operator who made it.
 
-use domain::audit::{AuditAction, EntityType};
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::password_reset::{ResetLink, ResetLinkError, ResetLinkState, ResetToken};
 use domain::user::{Email, User, validate_new_password};
 use domain::validation::{Field, ValidationError};
@@ -119,7 +119,7 @@ impl Services {
             AuditAction::PasswordResetLinkMade,
             EntityType::User,
             *user.id.as_uuid(),
-            json!({ "made_by": made_by }),
+            json!({ AuditField::MadeBy.code(): made_by }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
@@ -203,7 +203,7 @@ impl Services {
             AuditAction::PasswordReset,
             EntityType::User,
             *user.id.as_uuid(),
-            json!({ "ended_sign_ins": ended_sign_ins }),
+            json!({ AuditField::EndedSignIns.code(): ended_sign_ins }),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;

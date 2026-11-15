@@ -94,7 +94,7 @@ id_type!(
 mod tests {
     use googletest::prelude::*;
 
-    use crate::audit::{AuditAction, EntityType};
+    use crate::audit::{AuditAction, AuditField, EntityType};
     use crate::invite_link::InviteLinkState;
     use crate::item::{Kind, Need, Size, Stage, StateKind};
     use crate::list_view::{BlockedLayout, RemindersMode, StateMode};
@@ -165,6 +165,75 @@ mod tests {
                 "password_changed",
                 "password_reset_link_made",
                 "password_reset"
+            ]
+        );
+        pinned!(
+            AuditField,
+            [
+                "step",
+                "step_title",
+                "step_context",
+                "step_state",
+                "question",
+                "question_kind",
+                "question_text",
+                "question_details",
+                "question_choices",
+                "question_many",
+                "question_step",
+                "comment",
+                "comment_text",
+                "reply",
+                "reply_comment",
+                "reach",
+                "goal",
+                "line",
+                "source",
+                "why",
+                "how",
+                "reason",
+                "blocker_done",
+                "title",
+                "heap",
+                "key",
+                "kind",
+                "stage",
+                "name",
+                "display_name",
+                "description",
+                "context",
+                "state",
+                "blocked_by",
+                "origin",
+                "blocked_reason",
+                "need",
+                "effort",
+                "impact",
+                "due",
+                "tags",
+                "parameters",
+                "role",
+                "weight",
+                "need_weight",
+                "age_weight",
+                "deadline_weight",
+                "value_weight",
+                "options",
+                "archived_options",
+                "items_switched",
+                "ended_sign_ins",
+                "list_view",
+                "agents_prepare",
+                "ends_at",
+                "heap_id",
+                "made_by",
+                "priority",
+                "question_link",
+                "question_piece",
+                "question_round",
+                "slug",
+                "username",
+                "archived_at"
             ]
         );
         pinned!(
