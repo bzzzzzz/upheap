@@ -57,6 +57,17 @@ coded_enum! {
     }
 }
 
+impl StepState {
+    /// The step's state as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Open => "Open",
+            Self::Ticked => "Ticked",
+            Self::Dropped => "Dropped",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Step {
     pub id: StepId,

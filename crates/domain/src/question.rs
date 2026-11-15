@@ -92,6 +92,16 @@ impl QuestionKind {
             Self::DoneProposal => "proposal",
         }
     }
+
+    /// The kind as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Question => "Question",
+            Self::Request => "Request",
+            Self::Review => "Review",
+            Self::DoneProposal => "Done proposal",
+        }
+    }
 }
 
 coded_enum! {
