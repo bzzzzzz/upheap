@@ -233,6 +233,34 @@ fn defuse(text: &str) -> String {
         .collect()
 }
 
+/// What `render` prints in human mode, without colour, as text.
+pub(crate) fn human_text(render: impl FnOnce(&mut Output) -> std::io::Result<()>) -> String {
+    /// A writer that keeps what it is given, to read it back as text.
+    #[derive(Clone, Default)]
+    struct TextBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl Write for TextBuffer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let buffer = TextBuffer::default();
+    let mut out = Output::new(Box::new(buffer.clone()), Box::new(std::io::sink()), Mode::Human, false);
+    // The buffer takes every write, so rendering cannot fail.
+    let _ = render(&mut out);
+    let bytes = buffer.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
 /// `text` cut to `width` characters, the last one an ellipsis, when it's longer.
 pub fn shorten(text: &str, width: usize) -> String {
     if text.chars().count() <= width {
