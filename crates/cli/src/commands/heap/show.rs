@@ -147,7 +147,7 @@ pub(super) fn render_weights(
         out.table_line("  ", &line)?;
     }
     if !tag_order.is_empty() {
-        out.line(&format!("Tag order: {}", tag_order.join(", ")))?;
+        out.line(&format!("  Tag order: {}", tag_order.join(", ")))?;
     }
     Ok(())
 }

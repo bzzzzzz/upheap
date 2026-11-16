@@ -17,9 +17,8 @@
 //! middle, 0.5, so tags lift an item above the untagged and a tag low in the order pushes it below. Its other tags
 //! never add. With the weight at 0 the component is nothing and the score is the one formula V2 gave.
 //!
-//! **Held back by** lists the fields the person could change to lift an item: a low need, no due date, unset sizes, a tag low in the
-//! order.
-//! It follows the formula's weights and its defaults for unset sizes (product.md, Priority §9). A blocker ranked by
+//! **Held back by** lists the fields the person could change to lift an item: a low need, no due date, unset sizes,
+//! a tag low in the order. It follows the formula's weights and its defaults for unset sizes (product.md, Priority §9). A blocker ranked by
 //! what it blocks has none, since its own fields don't move it.
 //!
 //! **Blockers** take on the priority of the most important item they block, times a small boost, through whole

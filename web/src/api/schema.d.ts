@@ -2266,7 +2266,7 @@ export interface components {
             firm: boolean;
         };
         /** @enum {string} */
-        Factor: "need" | "age" | "deadline" | "value" | "parameter" | "blocks";
+        Factor: "need" | "age" | "deadline" | "value" | "parameter" | "tags" | "blocks";
         /** @description Ends a run that has not ended, and records what it cost. */
         FinishRequest: {
             /**
@@ -2344,6 +2344,11 @@ export interface components {
             priority: number;
             /** @description Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`. */
             slug: string;
+            /**
+             * @description The heap's tag order for ranking, the highest first: the tags that count in ranking, each once. Read-only
+             *     here; admins set it with `PATCH …/weights`.
+             */
+            tag_order: string[];
             /** Format: uuid */
             team_id: string;
             /**
@@ -2425,6 +2430,11 @@ export interface components {
             need: number;
             /**
              * Format: int32
+             * @description 0 to 100. The weight of the heap's tag order.
+             */
+            tags?: number;
+            /**
+             * Format: int32
              * @description 0 to 100. The weight of value per effort: effort and impact count together as one factor.
              */
             value: number;
@@ -2448,6 +2458,13 @@ export interface components {
             need?: number | null;
             /** @description Parameters of the heap in use whose weight changes, each listed once. */
             parameters?: components["schemas"]["ParameterWeightChange"][];
+            /** @description The heap's tags that count in ranking, the highest first, each once. Replaces the whole order; `[]` clears it. */
+            tag_order?: string[] | null;
+            /**
+             * Format: int64
+             * @description 0 to 100. The weight of the heap's tag order.
+             */
+            tags?: number | null;
             /**
              * Format: int64
              * @description 0 to 100. Value per effort.
@@ -2470,7 +2487,7 @@ export interface components {
             label: string;
         };
         /** @enum {string} */
-        HeldBackGap: "need" | "due" | "size";
+        HeldBackGap: "need" | "due" | "size" | "tags";
         /**
          * @description What someone holding an invite link sees of it. Nothing else of the team or the maker is given: no IDs, no
          *     members, no maker username or email.
@@ -8870,7 +8887,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `weight_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap` */
+            /** @description Invalid fields, `weight_out_of_range`, `duplicate_parameter`, `duplicate_tag`, `parameter_not_in_heap` or `tag_not_in_heap` */
             422: {
                 headers: {
                     [name: string]: unknown;

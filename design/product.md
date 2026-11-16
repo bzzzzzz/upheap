@@ -234,9 +234,9 @@ What it is not:
 
 ## Priority
 
-1. Each item has a combined priority score based on need, age, deadline proximity, effort and impact, and custom
-   parameters. Each factor has a weight, set per heap by its admins, and the weights apply to everyone in the team.
-   The weights are the heap's whole ranking policy; there is no separate policy setting.
+1. Each item has a combined priority score based on need, age, deadline proximity, effort and impact, custom
+   parameters, and the heap's tag order. Each factor has a weight, set per heap by its admins, and the weights apply
+   to everyone in the team. The weights are the heap's whole ranking policy; there is no separate policy setting.
 2. **Age** counts from the item's creation, including any time spent in progress or blocked. Items are not expected
    to stay in those states long. A reopened item keeps its original creation time. How fast an item ages depends on
    its need: an idea ages slowly, so old ideas don't climb past fresh work someone is waiting for, and a critical
@@ -257,6 +257,9 @@ What it is not:
 8. Only the item's position is shown, never the score itself.
 9. In the list view, each item shows the biggest contributors to its position. This is how the app answers "why is
    this here?" and "why isn't this higher?"; there is no separate item-by-item comparison.
+10. **Tag order:** a heap's admins can put its tags in an order. An item's highest-ranked tag lifts it when that tag
+    is high in the order and pushes it down when it is low; an item with no ranked tag sits in the middle. The tag
+    order has a weight like any other factor, and starts at 0, so ordering tags moves nothing until it is turned up.
 
 The factors above are the commitment; the numbers aren't. The formula and its numbers live in the code, versioned
 ([decisions.md](decisions.md), decision 4).
@@ -344,7 +347,7 @@ A supporting view, for team admins only.
 | Make, see and revoke the team's invite links | | ✓ |
 | Make a member an admin, demote an admin | | ✓ |
 | Create, rename, archive and unarchive heaps | | ✓ |
-| Configure a heap's ranking: its weights, parameters and options | | ✓ |
+| Configure a heap's ranking: its weights, tag order, parameters and options | | ✓ |
 | Archive parameters and options | | ✓ |
 
 ## Audit log

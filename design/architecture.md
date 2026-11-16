@@ -255,8 +255,12 @@ The tables and columns are in the migrations. These are the conventions they fol
   heap lock.
 - **Insert-only tables:** the application can only insert into `audit_log`. There is no update or delete code path
   for it.
-- **The heap's ranking policy** is its row: the need, age, deadline and value weights on `heaps`, plus each
-  parameter's weight. The weights change together through one endpoint, in one transaction under the heap lock.
+- **The heap's ranking policy** is its row: the need, age, deadline, value and tags weights on `heaps`, plus each
+  parameter's weight, and the heap's tag order. The weights and the order change together through one endpoint, in
+  one transaction under the heap lock. The tag order is a JSON list of tag IDs on `heaps.tag_order`, the highest
+  first (`NULL` when empty), rather than a rank column on `tags` or a table of its own: it belongs to the heap, it is
+  saved under the heap's version with the weights, and a tag shared by several heaps (a team tag) can then sit at its
+  own place in each heap's order without a schema change. A tag the list doesn't name is unranked.
   Effort, impact and need are columns on `items` rather than custom parameters, because they are
   fixed and apply to every heap ([decisions.md](decisions.md#6-effort-impact-and-need-are-item-columns-not-custom-parameters)).
 - **A user's username is the slug of their personal team**, so usernames and team slugs share one namespace under
@@ -336,10 +340,10 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
 1. The service loads everything the heap needs and ranks in memory on each request. Heaps are expected to hold at
    most a few thousand open items, so this is cheap. A per-heap cache invalidated on write can be added if
    measurements call for it.
-2. Each factor (need, age, deadline proximity, value per effort, each custom parameter) produces a weighted
+2. Each factor (need, age, deadline proximity, value per effort, each custom parameter, the tag order) produces a weighted
    component. Age counts from when the item joined the list: its creation, or for an item that was a reminder, its
    `arrives_at` (`ItemForRanking::from`), so a reminder arrives ranked as due that day rather than as an old item.
-   The score combines them. The formula is a named version (`FormulaVersion::V2`) behind one
+   The score combines them. The formula is a named version (`FormulaVersion::V3`) behind one
    function, set in code rather than stored per heap: tests pin orderings per version, so a formula change is an
    explicit test update, and since scores are never stored, switching versions needs no migration. The module doc of
    `domain::ranking` explains the current formula.
@@ -349,7 +353,8 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
 4. **Contributors** are the largest weighted components, each with a label and a relative share ("Deadline in a few
    days", "Blocks *Migrate auth*"). Scores themselves are never returned.
-   **Held back by** names what the person could change to lift an item: a low need, no due date, unset sizes. A
+   **Held back by** names what the person could change to lift an item: a low need, no due date, unset sizes, a tag
+   low in the heap's tag order. A
    factor counts while its weight is above 0 (the need while its weight or the age weight is), and unset sizes are
    labelled with the formula's defaults. It is empty for a blocker ranked by what it blocks; the service also
    empties it for the item listed first in its group, which is the one the item pane calls "Why it's #1", and for
