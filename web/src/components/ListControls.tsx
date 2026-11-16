@@ -2,7 +2,7 @@ import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import type { HeapRef } from "../api/client";
-import type { BlockedLayout, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/schema";
+import type { BlockedLayout, Me, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/schema";
 import { useParameters, useTags } from "../api/queries";
 import {
   AGENT_STATE_LABELS,
@@ -17,6 +17,7 @@ import {
 } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
+import { teamName } from "./teamName";
 import {
   DEFAULT_MODES,
   DEFAULT_REMINDERS,
@@ -53,6 +54,12 @@ const NO_HEAP: HeapRef = { team: "", heap: "" };
 export type ListCounts = { listed: number; total: number | undefined };
 
 /**
+ * The team choice of the list across heaps: `chosen` is the slug in the address, if any. The Filters panel offers the
+ * choice only to a person in several teams; the chip shows whenever a team of theirs is chosen.
+ */
+export type TeamScope = { me: Me; chosen: string | undefined; onChange: (slug: string | undefined) => void };
+
+/**
  * Search, sort, and one Filters panel for the filters and what the list shows (ux.md, The list §7). Everything
  * but the search text is a URL param that the server applies; `onChange` gets the whole new view. On a phone the
  * sort moves into the panel. `/` focuses the search box.
@@ -66,6 +73,7 @@ export function ListControls({
   panel,
   onPanel,
   counts,
+  team,
 }: {
   heapRef?: HeapRef;
   view: ListSearch;
@@ -76,6 +84,7 @@ export function ListControls({
   onPanel: (panel: Panel) => void;
   /** `undefined` while the view loads. */
   counts: ListCounts | undefined;
+  team?: TeamScope;
 }) {
   const phone = useMedia(PHONE);
   const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
@@ -184,7 +193,7 @@ export function ListControls({
         {phone && heapRef && <SortSection view={view} parameters={parameters.data} onChange={onChange} />}
         <ShowSection view={view} reminders={heapRef !== undefined} onChange={onChange} />
         <hr className="border-line" />
-        <NarrowSection heapRef={heapRef} view={view} onChange={onChange} />
+        <NarrowSection heapRef={heapRef} view={view} onChange={onChange} team={team} />
         <PanelFooter phone={phone} filtered={filterCount(view) > 0} counts={counts} onDone={close} />
       </PopoverSheet>
     </div>
@@ -202,12 +211,14 @@ export function FilterChips({
   onChange,
   shown,
   total,
+  team,
 }: {
   heapRef?: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
   shown: number;
   total: number | undefined;
+  team?: TeamScope;
 }) {
   const tags = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
   const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
@@ -217,6 +228,7 @@ export function FilterChips({
       label: `${parameter.name}: ${option.label}`,
     })),
   );
+  const chosenTeam = team?.me.teams.find((t) => t.slug === team.chosen);
   const filters = [
     ...splitList(view.tag).map((id) => ({
       key: `tag:${id}`,
@@ -258,6 +270,11 @@ export function FilterChips({
 
   return (
     <div role="group" aria-label="Filters on" className="mt-3 flex flex-wrap items-center gap-1.5">
+      {team && chosenTeam && (
+        <Chip label={`Remove team ${teamName(chosenTeam, team.me)}`} onClick={() => team.onChange(undefined)}>
+          Team: {teamName(chosenTeam, team.me)}
+        </Chip>
+      )}
       {filters.map((chip) => (
         <Chip key={chip.key} label={`Remove filter ${chip.label}`} onClick={chip.remove}>
           {chip.label}
@@ -273,13 +290,16 @@ export function FilterChips({
           {shown} of {total}
         </span>
       )}
-      <button
-        type="button"
-        onClick={() => onChange(withoutFiltersOrViewChanges(view))}
-        className="ml-1 rounded-md px-1 text-xs font-medium text-accent-ink hover:underline pointer-coarse:h-9"
-      >
-        Reset all
-      </button>
+      {/* The team is the list's scope, not a filter: with only a team chosen there is nothing to reset. */}
+      {(filters.length > 0 || settings.length > 0) && (
+        <button
+          type="button"
+          onClick={() => onChange(withoutFiltersOrViewChanges(view))}
+          className="ml-1 rounded-md px-1 text-xs font-medium text-accent-ink hover:underline pointer-coarse:h-9"
+        >
+          Reset all
+        </button>
+      )}
     </div>
   );
 }
@@ -391,10 +411,12 @@ function NarrowSection({
   heapRef,
   view,
   onChange,
+  team,
 }: {
   heapRef?: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
+  team?: TeamScope;
 }) {
   const tags = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
   const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
@@ -403,6 +425,20 @@ function NarrowSection({
   const chosenOptions = splitList(view.param);
   return (
     <Section title="Narrow down">
+      {team && team.me.teams.length > 1 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-ink-soft">Team</span>
+          <ChipChoice
+            label="Team"
+            options={[
+              { value: "", label: "All teams" },
+              ...team.me.teams.map((t) => ({ value: t.slug, label: teamName(t, team.me) })),
+            ]}
+            value={team.chosen ?? ""}
+            onChange={(slug) => team.onChange(slug === "" ? undefined : slug)}
+          />
+        </div>
+      )}
       {heapRef && (
         <PanelRow label="Tags (any)">
           {tags.data?.tags.length === 0 && <span className="text-sm text-muted">This heap has no tags yet.</span>}

@@ -58,7 +58,8 @@ export function AppLayout() {
   const onAgents = useMatch({ from: "/app/agents", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
   const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
-  const shellHeap = heapRef ?? ((onWaiting || onAgents || onAll || onData) && me ? keptHeap(me) : undefined);
+  const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
+  const shellHeap = heapRef ?? ((onWaiting || onAgents || onAll || onData) && me ? keptHeap(me, allTeam) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
   useEffect(() => {
     if (heapId !== undefined) recordRecentHeap(heapId);
@@ -93,16 +94,19 @@ export function AppLayout() {
 
 /**
  * The heap the shell keeps on a page without one in its address: the one opened last that is still there and active,
- * else the first active heap, else the first heap.
+ * else the first active heap, else the first heap. With `team`, the heap is that team's, and there is none when the
+ * team has no active heap.
  */
-export function keptHeap(me: Me): HeapRef | undefined {
-  const entries = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
+export function keptHeap(me: Me, team?: string): HeapRef | undefined {
+  const entries = me.teams
+    .filter((t) => team === undefined || t.slug === team)
+    .flatMap((t) => t.heaps.map((heap) => ({ team: t, heap })));
   const kept =
     readRecentHeaps()
       .map((id) => entries.find((entry) => entry.heap.id === id && !entry.heap.archived))
       .find((entry) => entry !== undefined) ??
     entries.find((entry) => !entry.heap.archived) ??
-    entries[0];
+    (team === undefined ? entries[0] : undefined);
   return kept && { team: kept.team.slug, heap: kept.heap.slug };
 }
 
@@ -249,6 +253,7 @@ function heapViews(heapRef: HeapRef, itemOpen: boolean) {
 function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
   const links = useShellLinks(me, heapRef);
   const { item: itemKey } = useParams({ strict: false });
+  const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
   const views = heapRef && heapViews(heapRef, itemKey !== undefined);
   const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
   const railTeam = titleTeam(me, heapRef);
@@ -275,7 +280,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
               <span className="max-lg:hidden">All items</span>
             </>
           }
-          count={openItemCount(me)}
+          count={openItemCount(me, allTeam)}
         />
       </div>
 

@@ -929,9 +929,18 @@
         "tags": [
           "me"
         ],
-        "summary": "The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.\nEvery heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row\ncarries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score\nin its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap\nname, then the item's position in its heap. The view takes no tag, parameter or sort. At most 500 rows come back,\npinned first; `count` is the true total. Read-only, for any member.",
+        "summary": "The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.\nEvery heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row\ncarries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score\nin its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap\nname, then the item's position in its heap. The view takes no tag, parameter or sort; `team`, a team's slug,\nlimits the list to that team's heaps, and a team you aren't in is `not_found`. At most 500 rows come back,\npinned first; `count` is the true total. Read-only, for any member.",
         "operationId": "get_items",
         "parameters": [
+          {
+            "name": "team",
+            "in": "query",
+            "description": "Only the heaps of this team, by its slug. A team you aren't in is `not_found`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "as_of",
             "in": "query",
@@ -1084,6 +1093,16 @@
           },
           "401": {
             "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`",
             "content": {
               "application/json": {
                 "schema": {

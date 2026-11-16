@@ -323,7 +323,8 @@ export interface paths {
          *     Every heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row
          *     carries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score
          *     in its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap
-         *     name, then the item's position in its heap. The view takes no tag, parameter or sort. At most 500 rows come back,
+         *     name, then the item's position in its heap. The view takes no tag, parameter or sort; `team`, a team's slug,
+         *     limits the list to that team's heaps, and a team you aren't in is `not_found`. At most 500 rows come back,
          *     pinned first; `count` is the true total. Read-only, for any member.
          */
         get: operations["get_items"];
@@ -5090,6 +5091,8 @@ export interface operations {
     get_items: {
         parameters: {
             query?: {
+                /** @description Only the heaps of this team, by its slug. A team you aren't in is `not_found`. */
+                team?: string;
                 /** @description The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time. */
                 as_of?: number;
                 /** @description Where open items go. Defaults to `shown`. */
@@ -5142,6 +5145,15 @@ export interface operations {
             };
             /** @description `unauthenticated` */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found` */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

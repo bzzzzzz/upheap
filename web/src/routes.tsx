@@ -517,12 +517,16 @@ const allRoute = createRoute({
   component: function AllRoute() {
     const view = allRoute.useSearch();
     const navigate = allRoute.useNavigate();
-    // View changes replace the history entry, as the heap list's do, and the open item stays open.
+    // View changes replace the history entry, as the heap list's do, and the open item stays open. Choosing another
+    // team is a step of its own, so Back returns to the list as it was.
     return (
       <AllItemsPage
         view={view}
         onViewChange={(next) =>
-          void navigate({ search: parseAcrossSearch({ ...next, item: view.item }), replace: true })
+          void navigate({
+            search: parseAcrossSearch({ ...next, item: view.item }),
+            replace: next.team === view.team,
+          })
         }
       />
     );

@@ -9,7 +9,7 @@ import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
 import { focusFirstRow, ItemRow, useRefocusStartedRow } from "../components/ItemRow";
 import { ItemPane } from "../components/ItemPane";
-import { FilterChips, ListControls, type Panel } from "../components/ListControls";
+import { FilterChips, ListControls, type Panel, type TeamScope } from "../components/ListControls";
 import { useListSearch } from "../components/listSearch";
 import {
   filterCount,
@@ -21,7 +21,7 @@ import {
   viewChanges,
   type AcrossSearch,
 } from "../components/listView";
-import { titleTeam } from "../components/teamName";
+import { teamName, titleTeam } from "../components/teamName";
 import { useCloseItem } from "../components/useCloseItem";
 import { keptHeap } from "./AppLayout";
 import { HiddenNote, Section, useChangeState } from "./HeapPage";
@@ -49,7 +49,7 @@ export function AllItemsPage({
 }) {
   const { data: me } = useMe();
   const { search, setSearch } = useListSearch();
-  const list = useAcrossHeapsList(toListQuery(view));
+  const list = useAcrossHeapsList({ ...toListQuery(view), team: view.team });
   const [panel, setPanel] = useState<Panel>(null);
   const open = parseItemAddress(view.item);
   const closeItem = useCloseItem(ALL_ITEMS, open?.key);
@@ -84,13 +84,21 @@ export function AllItemsPage({
 
   if (!me) return null;
   const filters = filterCount(view);
-  const changed = filters > 0 || viewChanges(view).length > 0;
-  const kept = keptHeap(me);
+  const chosen = me.teams.find((t) => t.slug === view.team);
+  // A link to a team the person isn't in (or has left): the server answers not found, and the page says why.
+  const unknownTeam = view.team !== undefined && chosen === undefined;
+  const changed = filters > 0 || viewChanges(view).length > 0 || chosen !== undefined;
+  const kept = keptHeap(me, view.team);
   const keptArchived = me.teams.find((t) => t.slug === kept?.team)?.heaps.find((h) => h.slug === kept?.heap)?.archived;
   // A person belongs to one team or several; the team's name helps only when there are several.
   const manyTeams = me.teams.length > 1;
+  const team: TeamScope = {
+    me,
+    chosen: view.team,
+    onChange: (slug) => onViewChange({ ...view, team: slug }),
+  };
   const heapLabel = (row: AcrossHeapsItem) => {
-    const team = manyTeams ? titleTeam(me, heapOf(row)) : undefined;
+    const team = manyTeams && !chosen ? titleTeam(me, heapOf(row)) : undefined;
     return team ? `${row.heap.name} · ${team}` : row.heap.name;
   };
 
@@ -145,7 +153,13 @@ export function AllItemsPage({
               <h1 className="text-[22px] font-semibold tracking-[-0.015em]">
                 All items{data && data.count > 0 && ` · ${data.count}`}
               </h1>
-              <p className="text-[13px] text-ink-soft max-sm:text-sm">All your heaps, most important first.</p>
+              {!unknownTeam && (
+                <p className="text-[13px] text-ink-soft max-sm:text-sm">
+                  {chosen
+                    ? `${chosen.personal ? "Your personal team" : teamName(chosen, me)}'s heaps, most important first.`
+                    : "All your heaps, most important first."}
+                </p>
+              )}
             </div>
             <AddItem
               heapRef={kept ?? NO_HEAP}
@@ -160,7 +174,7 @@ export function AllItemsPage({
             <p className="py-16 text-center text-muted">Loading…</p>
           ) : !data || !sections ? (
             <p role="alert" className="py-16 text-center text-red-700 dark:text-red-400">
-              {list.error?.message}
+              {unknownTeam ? "You're not in this team." : list.error?.message}
             </p>
           ) : (
             <>
@@ -173,9 +187,12 @@ export function AllItemsPage({
                 onPanel={setPanel}
                 // None while the previous view stands in for this one, so the panel never shows its counts as this view's.
                 counts={list.isPlaceholderData ? undefined : { listed: data.count, total: undefined }}
+                team={team}
               />
 
-              {changed && <FilterChips view={view} onChange={onViewChange} shown={data.count} total={undefined} />}
+              {changed && (
+                <FilterChips view={view} onChange={onViewChange} shown={data.count} total={undefined} team={team} />
+              )}
 
               {search.trim() !== "" && (
                 <p role="status" className="sr-only">

@@ -35,6 +35,9 @@ pub struct ListArgs {
     /// Every open item of every heap you can use, in one ranked list, each with its heap. In place of one heap's list
     #[arg(long, conflicts_with_all = ["name", "view", "tag", "closed", "sort", "sort_parameter", "reminders"])]
     pub all_heaps: bool,
+    /// With --all-heaps, only this team's heaps, by its slug
+    #[arg(long, value_name = "TEAM", requires = "all_heaps")]
+    pub team: Option<String>,
     /// Closed items, most recently closed first, in place of the ranked list
     #[arg(long, conflicts_with_all = [
         "view", "tag", "need", "effort", "impact", "agent", "going_to", "sort", "sort_parameter", "open", "in_progress", "blocked",
@@ -152,6 +155,7 @@ async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Resu
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
     let query = AcrossHeapsQuery {
+        team: args.team.clone(),
         as_of: None,
         open: args.open,
         in_progress: args.in_progress,

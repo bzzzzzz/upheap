@@ -120,6 +120,66 @@ test("a need filter narrows the list, shows its chip and goes in the address", a
   await expect(row(page, "Plan the launch")).toBeVisible();
 });
 
+test("a team choice limits the list to that team, in the address, and Back returns to it", async ({
+  page,
+  heapPath,
+}) => {
+  const launch = await makeLaunchHeap(page);
+  await seed(page, heapPath, "Rotate the certs", "critical");
+  await seed(page, launch, "Plan the launch", "idea");
+  await page.goto("/all");
+  await expect(row(page, "Plan the launch")).toBeVisible();
+  await expect(row(page, "Rotate the certs")).toBeVisible();
+
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  const panel = page.getByRole("dialog", { name: "Filters" });
+  await panel.getByRole("radiogroup", { name: "Team" }).getByText("Acme", { exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+
+  await expect(page).toHaveURL(/[?&]team=/);
+  await expect(row(page, "Rotate the certs")).toHaveCount(0);
+  await expect(row(page, "Plan the launch")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All items · 1", level: 1 })).toBeVisible();
+  await expect(page.getByText("Acme's heaps, most important first.")).toBeVisible();
+  // The heap's name alone: the team is the page's.
+  await expect(row(page, "Plan the launch")).not.toContainText("Acme");
+  const on = page.getByRole("group", { name: "Filters on" });
+  await expect(on.getByRole("button", { name: "Remove team Acme" })).toBeVisible();
+
+  await on.getByRole("button", { name: "Remove team Acme" }).click();
+  await expect(page).not.toHaveURL(/team=/);
+  await expect(row(page, "Rotate the certs")).toBeVisible();
+  await expect(row(page, "Plan the launch")).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/[?&]team=/);
+  await expect(row(page, "Rotate the certs")).toHaveCount(0);
+  await expect(row(page, "Plan the launch")).toBeVisible();
+});
+
+test("the heap switcher's All <team> items row opens the team's list", async ({ page, heapPath }) => {
+  const launch = await makeLaunchHeap(page);
+  await seed(page, heapPath, "Rotate the certs");
+  await seed(page, launch, "Plan the launch");
+  await page.goto("/all");
+  await expect(row(page, "Rotate the certs")).toBeVisible();
+
+  await page.getByRole("button", { name: /^Switch heap/ }).click();
+  await page.getByRole("menuitem", { name: /^All Acme items/ }).click();
+
+  await expect(page).toHaveURL(/\/all\?team=/);
+  await expect(row(page, "Rotate the certs")).toHaveCount(0);
+  await expect(row(page, "Plan the launch")).toBeVisible();
+});
+
+test("a team the person is not in says so", async ({ page, heapPath }) => {
+  await seed(page, heapPath, "Rotate the certs");
+  await page.goto("/all?team=nobody-here");
+  await expect(page.getByRole("alert")).toHaveText("You're not in this team.");
+  await expect(row(page, "Rotate the certs")).toHaveCount(0);
+});
+
 test("Done on a row leaves the list and offers to undo", async ({ page, heapPath }) => {
   const launch = await makeLaunchHeap(page);
   await seed(page, heapPath, "Rotate the certs");

@@ -1,4 +1,4 @@
-import { useMatch, useNavigate } from "@tanstack/react-router";
+import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
 import { Archive, Check, ChevronRight, Plus, Search, X } from "lucide-react";
 import { useCallback, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import {
@@ -26,12 +26,17 @@ import { teamName } from "./teamName";
 type SwitcherTeam = Me["teams"][number];
 type Entry = { team: SwitcherTeam; heap: SwitcherTeam["heaps"][number] };
 
-/** How many open items the person's heaps hold in all, archived ones left out: what the list across heaps counts. */
-export const openItemCount = (me: Me) =>
-  me.teams.reduce(
-    (total, team) => total + team.heaps.reduce((sum, heap) => sum + (heap.archived ? 0 : heap.open_count), 0),
-    0,
-  );
+/**
+ * How many open items the person's heaps hold in all, archived ones left out: what the list across heaps counts. With
+ * `team`, only that team's heaps count.
+ */
+export const openItemCount = (me: Me, team?: string) =>
+  me.teams
+    .filter((t) => team === undefined || t.slug === team)
+    .reduce(
+      (total, team) => total + team.heaps.reduce((sum, heap) => sum + (heap.archived ? 0 : heap.open_count), 0),
+      0,
+    );
 
 /** From this many unarchived heaps it gets a search field, Recent and folding teams (design/ux.md, Phone details). */
 const LONG_LIST = 8;
@@ -128,12 +133,14 @@ function SwitcherBody({
   const coarse = useMedia(TOUCH);
   const entries: Entry[] = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
   const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
-  // On All items the kept heap is only where Add goes; only the All heaps row is the current one.
+  const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
+  // On All items the kept heap is only where Add goes; only the All heaps row, or its team's, is the current one.
   const current = onAll
     ? undefined
     : entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
   const long = entries.filter((e) => !e.heap.archived).length >= LONG_LIST;
   const several = me.teams.length > 1;
+  const onAllHeaps = onAll && allTeam === undefined;
 
   const [text, setText] = useState("");
   const [folded, setFolded] = useState(readFoldedTeams);
@@ -213,6 +220,26 @@ function SwitcherBody({
         ) : (
           several && <SectionTitle count={unarchived.length}>{label}</SectionTitle>
         )}
+        {!isFolded && several && (
+          <MenuItem
+            id={`all:${team.id}`}
+            textValue={`All ${label} items`}
+            href={{ to: "/all", search: { team: team.slug } }}
+            onAction={close}
+            className={`${rowClass} ${onAll && allTeam === team.slug ? currentRowClass : ""}`}
+          >
+            <span className="min-w-0 flex-1 truncate">
+              All {label} items
+              {onAll && allTeam === team.slug && <span className="sr-only">, current</span>}
+            </span>
+            <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">
+              {openItemCount(me, team.slug)}
+            </span>
+            <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
+              {onAll && allTeam === team.slug && <Check className="size-4" strokeWidth={3} />}
+            </span>
+          </MenuItem>
+        )}
         {!isFolded && unarchived.map(heapItem)}
         {!isFolded && showArchived && archived.map(heapItem)}
         {!isFolded && archived.length > 0 && (
@@ -263,15 +290,17 @@ function SwitcherBody({
                 textValue="All heaps"
                 href={{ to: "/all" }}
                 onAction={close}
-                className={`${rowClass} ${onAll ? currentRowClass : ""}`}
+                className={`${rowClass} ${onAllHeaps ? currentRowClass : ""}`}
               >
                 <span className="min-w-0 flex-1 truncate">
                   All heaps
-                  {onAll && <span className="sr-only">, current</span>}
+                  {onAllHeaps && <span className="sr-only">, current</span>}
                 </span>
-                <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">{openItemCount(me)}</span>
+                <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">
+                  {openItemCount(me, allTeam)}
+                </span>
                 <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
-                  {onAll && <Check className="size-4" strokeWidth={3} />}
+                  {onAllHeaps && <Check className="size-4" strokeWidth={3} />}
                 </span>
               </MenuItem>
             </MenuSection>

@@ -1,11 +1,11 @@
 //! One ranked list across all heaps: the items of every active heap the caller may view, merged into the groups of
 //! one list view. The mechanism is in architecture.md, Ranking, Across heaps.
 
-use domain::Timestamp;
 use domain::heap::{Heap, HeapPriority};
 use domain::item::StateKind;
 use domain::list_view::ListView;
 use domain::team::Team;
+use domain::{TeamId, Timestamp};
 
 use crate::items::{RankedEntry, RankedList};
 use crate::{Principal, ServiceError, Services};
@@ -69,6 +69,9 @@ impl Services {
     /// item's position in its heap's group. So every heap's own relative order is kept. At most
     /// [`MAX_ACROSS_HEAPS_ROWS`] rows are returned, taken pinned first, then ranked, then blocked.
     ///
+    /// With `team`, only that team's heaps are ranked and merged, and the cap applies to them alone. The caller must
+    /// be in the team: resolve it with [`resolve_team`](Self::resolve_team) first.
+    ///
     /// `requested_as_of` is honoured as [`list_ranked`](Self::list_ranked) honours it. `view` must filter by no tag or
     /// parameter and sort by priority: the list across heaps has no heap to resolve those against. Ranking costs one
     /// pass over a heap's non-closed items, so heaps with none are skipped. Read-only; any member may ask, and nobody
@@ -78,8 +81,9 @@ impl Services {
         principal: Principal,
         requested_as_of: Option<Timestamp>,
         view: &ListView,
+        team: Option<TeamId>,
     ) -> Result<AcrossHeapsList, ServiceError> {
-        self.list_ranked_across_heaps_capped(principal, requested_as_of, view, MAX_ACROSS_HEAPS_ROWS)
+        self.list_ranked_across_heaps_capped(principal, requested_as_of, view, team, MAX_ACROSS_HEAPS_ROWS)
             .await
     }
 
@@ -90,11 +94,15 @@ impl Services {
         principal: Principal,
         requested_as_of: Option<Timestamp>,
         view: &ListView,
+        team: Option<TeamId>,
         max_rows: usize,
     ) -> Result<AcrossHeapsList, ServiceError> {
         let now = self.now();
         let as_of = self.effective_as_of(requested_as_of, now);
-        let viewable = self.list_viewable_heaps(principal).await?;
+        let mut viewable = self.list_viewable_heaps(principal).await?;
+        if let Some(team) = team {
+            viewable.retain(|viewable| viewable.team.id == team);
+        }
         let heap_ids: Vec<_> = viewable.iter().map(|viewable| viewable.heap.id).collect();
         let with_items = store::items::count_items_by_heap(&self.db, &heap_ids, &StateKind::OPEN, now).await?;
 

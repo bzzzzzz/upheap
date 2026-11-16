@@ -155,7 +155,11 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
 export type AcrossSearch = Pick<
   ListSearch,
   "open" | "in_progress" | "blocked" | "blocked_layout" | "need" | "effort" | "impact" | "agent" | "going_to"
-> & { item?: string };
+> & {
+  /** The slug of the team whose heaps the list is limited to. */
+  team?: string;
+  item?: string;
+};
 
 /** Keeps only what the page across heaps has of [`parseListSearch`], and the open item. */
 export function parseAcrossSearch(raw: Record<string, unknown>): AcrossSearch {
@@ -170,6 +174,7 @@ export function parseAcrossSearch(raw: Record<string, unknown>): AcrossSearch {
     impact,
     agent,
     going_to,
+    team: list(raw.team),
     item: list(raw.item),
   };
   return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined)) as AcrossSearch;
