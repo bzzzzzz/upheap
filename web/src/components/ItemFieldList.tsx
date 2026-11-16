@@ -26,7 +26,8 @@ const NOT_SET = "";
 /**
  * The item's fields as labelled values (ux.md, The item §16): Need, Effort and Impact in three columns, then Due (a
  * reminder's Date), Tags and each parameter in a row. Each value is a button that opens its editor, when the item can be
- * edited: a popover under the value on a wide screen and a tablet, a sheet on a phone. A change saves at once. An unset
+ * edited: a popover under the value on a wide screen and a tablet, a sheet on a phone, but for Tags, which turns into
+ * the tag picker in place. A change saves at once. An unset
  * effort, impact or due date the server says holds the rank back is marked, as that is where to fix it. Without `edit`
  * the values are only text.
  */
@@ -355,7 +356,10 @@ function Field({
  * at once, and a pick keeps it open for the next tag. On a phone the matches sit in the flow, as the item's sheet grows;
  * elsewhere they float under it, so the rows below stay put. It closes on Escape or Enter in the empty box, with focus
  * back on the value, and when focus leaves it, leaving focus where it went (or on the value, when it went nowhere). A
- * press inside it keeps the focus in the box, so removing a tag isn't leaving: Safari doesn't focus a pressed button.
+ * press inside it keeps the focus in the box, so removing a tag isn't leaving: Safari doesn't focus a pressed button,
+ * and a Remove reached with Tab goes once the save lands, which would drop the focus. Left by a press elsewhere, it
+ * closes when the press ends, not as it starts: the strip is taller than the value, and collapsing under a pressed
+ * button below would move it from under the pointer and lose the click.
  */
 function TagStrip({
   heapRef,
@@ -370,9 +374,21 @@ function TagStrip({
 }) {
   const onPhone = useMedia(PHONE);
   const strip = useRef<HTMLDivElement>(null);
+  const focusBox = () => strip.current?.querySelector("input")?.focus();
+  // The person asked for the strip, and expects to type in it.
+  useEffect(focusBox, []);
+  const pressing = useRef(false);
   useEffect(() => {
-    // The person asked for the strip, and expects to type in it.
-    strip.current?.querySelector("input")?.focus();
+    const down = () => (pressing.current = true);
+    const up = () => (pressing.current = false);
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
   }, []);
 
   return (
@@ -384,8 +400,15 @@ function TagStrip({
       onBlur={(e) => {
         // Switching to another window blurs it too; the strip stays for when the person comes back.
         if (strip.current?.contains(e.relatedTarget) || !document.hasFocus()) return;
-        close(e.relatedTarget === null);
+        const returnFocus = e.relatedTarget === null;
+        if (pressing.current) {
+          window.addEventListener("pointerup", () => close(returnFocus), { once: true });
+        } else {
+          close(returnFocus);
+        }
       }}
+      // After Remove, whether clicked or pressed with the keyboard.
+      onClick={focusBox}
       onKeyDown={(e) => {
         // The picker handles both keys while the box has text; in the empty box they mean done. Handled here, so
         // Escape doesn't also close the item or the sheet it is in.

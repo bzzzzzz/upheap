@@ -694,7 +694,21 @@ test("tags are edited in place in the Tags row, which closes on leaving it, Esca
   await box.press("Escape");
   await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: packing");
   await expect(fieldButton(page, "Tags")).toBeFocused();
-  await expect(pane).toBeVisible();
+  await expect(title).toBeVisible();
+
+  // A Remove reached with the keyboard hands the focus back to the box, so Escape still closes only the strip.
+  await fieldButton(page, "Tags").click();
+  await box.fill("trip");
+  await box.press("Enter");
+  await expect(pane.getByRole("button", { name: "Remove tag trip" })).toBeVisible();
+  await box.press("Shift+Tab");
+  await expect(pane.getByRole("button", { name: "Remove tag trip" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(pane.getByRole("button", { name: "Remove tag trip" })).toHaveCount(0);
+  await expect(box).toBeFocused();
+  await box.press("Escape");
+  await expect(fieldButton(page, "Tags")).toBeFocused();
+  await expect(title).toBeVisible();
 
   // An existing tag is picked from the matches; leaving the strip closes it, and focus stays where it went.
   await fieldButton(page, "Tags").click();
@@ -704,6 +718,12 @@ test("tags are edited in place in the Tags row, which closes on leaving it, Esca
   await title.click();
   await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: packing, travel");
   await expect(title).toBeFocused();
+
+  // A click on a control below the strip lands, though the row grows shorter as the strip closes.
+  await fieldButton(page, "Tags").click();
+  await expect(box).toBeFocused();
+  await editContext(page);
+  await expect(box).toHaveCount(0);
 });
 
 test("on a phone, need, effort and impact open sheets, and the bar holds the main button and ⋯", async ({ page }) => {
