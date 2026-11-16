@@ -1,6 +1,7 @@
 ---
 name: status
-description: Shows where things stand in Upheap, the ranked todo list, through the `upheap` command-line tool: what's in progress, what waits for the user, and what's next and why, for one heap or across all heaps. Read-only. Use ONLY when the user runs /upheap:status or names Upheap in the request ("upheap status", "what's next in Upheap", "where are we in the launch heap in upheap"). Do not use for a status question that doesn't name Upheap, and do not use to add, change or work on items.
+description: >-
+  Shows where things stand in Upheap, the ranked todo list, through the `upheap` command-line tool: what's in progress, what waits for the user, and what's next and why, for one heap or across all heaps. Read-only. Use ONLY when the user runs /upheap:status or names Upheap in the request ("upheap status", "what's next in Upheap", "where are we in the launch heap in upheap"). Do not use for a status question that doesn't name Upheap, and do not use to add, change or work on items.
 argument-hint: "[team/heap | all]"
 ---
 
