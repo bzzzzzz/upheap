@@ -1,9 +1,9 @@
 import { ChevronDown } from "lucide-react";
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ToggleButtonGroup } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
-import type { Item, ItemPatchRequest, Need, RankedItem, Size } from "../api/schema";
+import type { Item, ItemPatchRequest, ItemTag, Need, RankedItem, Size } from "../api/schema";
 import { useParameters } from "../api/queries";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DateField } from "./DateField";
@@ -26,7 +26,8 @@ const NOT_SET = "";
 /**
  * The item's fields as labelled values (ux.md, The item §16): Need, Effort and Impact in three columns, then Due (a
  * reminder's Date), Tags and each parameter in a row. Each value is a button that opens its editor, when the item can be
- * edited: a popover under the value on a wide screen and a tablet, a sheet on a phone. A change saves at once. An unset
+ * edited: a popover under the value on a wide screen and a tablet, a sheet on a phone, but for Tags, which turns into
+ * the tag picker in place. A change saves at once. An unset
  * effort, impact or due date the server says holds the rank back is marked, as that is where to fix it. Without `edit`
  * the values are only text.
  */
@@ -175,23 +176,13 @@ export function ItemFieldList({
           }
           unset="None"
           editable={canEdit}
-          wide={() => (
-            <TagPicker
+          inPlace={(close) => (
+            <TagStrip
               heapRef={heapRef}
               value={item.tags}
-              inline
               onChange={(tags) => save({ tag_ids: tags.map((tag) => tag.id) })}
+              close={close}
             />
-          )}
-          phone={() => (
-            <div className="pt-1 pb-2">
-              <TagPicker
-                heapRef={heapRef}
-                value={item.tags}
-                inline
-                onChange={(tags) => save({ tag_ids: tags.map((tag) => tag.id) })}
-              />
-            </div>
           )}
         />
         {item.parameters.map((current) => {
@@ -245,7 +236,8 @@ export function ItemFieldList({
 /**
  * One field: its label and its value. Where the item can be edited the value is a button, named "Label: value", that
  * opens `wide`'s editor in a popover under it, or `phone`'s in a sheet; both are given `close`, for an editor whose
- * pick is the whole job. Focus returns to the value when the editor closes. With a mouse the button shows nothing at
+ * pick is the whole job. An `inPlace` editor instead takes the value's place in the row, on every screen. Focus returns
+ * to the value when the editor closes, unless it went elsewhere. With a mouse the button shows nothing at
  * rest, a tint and ▾ when pointed at or focused; on a touch screen the ▾ always shows and the button is 44 px tall.
  * `value` is what it reads as when set, `empty` what it asks to be
  * set to while unset, and `unset` what it reads as unset where it can't be edited. A `gap` marks it as what the
@@ -265,6 +257,7 @@ function Field({
   editable,
   wide,
   phone,
+  inPlace,
 }: {
   layout: "cell" | "row";
   label: string;
@@ -280,9 +273,10 @@ function Field({
   unset?: string;
   gap?: boolean;
   editable: boolean;
-  wide: (close: () => void) => ReactNode;
-  phone: (close: () => void) => ReactNode;
-}) {
+} & (
+  | { wide: (close: () => void) => ReactNode; phone: (close: () => void) => ReactNode; inPlace?: never }
+  | { inPlace: (close: (returnFocus?: boolean) => void) => ReactNode; wide?: never; phone?: never }
+)) {
   const onPhone = useMedia(PHONE);
   const focusAfterRender = useFocusAfterRender();
   const button = useRef<HTMLButtonElement>(null);
@@ -290,9 +284,9 @@ function Field({
   const buttonId = useId();
   const [open, setOpen] = useState(false);
   const shown = value ?? (editable ? (empty ?? unset) : unset);
-  const close = () => {
+  const close = (returnFocus = true) => {
     setOpen(false);
-    focusAfterRender(() => document.getElementById(buttonId));
+    if (returnFocus) focusAfterRender(() => document.getElementById(buttonId));
   };
 
   const valueSpan = (
@@ -300,14 +294,18 @@ function Field({
       {value === null ? shown : (display ?? value)}
     </span>
   );
-  const content = editable ? (
+  const content = !editable ? (
+    <span className="text-sm break-words">{valueSpan}</span>
+  ) : inPlace && open ? (
+    inPlace(close)
+  ) : (
     <>
       <button
         ref={button}
         id={buttonId}
         type="button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        aria-haspopup={inPlace ? undefined : "dialog"}
+        aria-expanded={inPlace ? undefined : open}
         aria-label={`${label}: ${shown}${gap ? ", holds the rank back" : ""}`}
         data-gap={gap ? "true" : undefined}
         onClick={() => setOpen(true)}
@@ -321,19 +319,19 @@ function Field({
           className="size-3.5 shrink-0 text-muted opacity-0 group-hover/value:opacity-100 group-focus-visible/value:opacity-100 pointer-coarse:opacity-100"
         />
       </button>
-      <PopoverSheet
-        title={title ?? label}
-        triggerRef={button}
-        isOpen={open}
-        onClose={close}
-        placement="bottom start"
-        size="narrow"
-      >
-        {onPhone ? phone(close) : wide(close)}
-      </PopoverSheet>
+      {wide && (
+        <PopoverSheet
+          title={title ?? label}
+          triggerRef={button}
+          isOpen={open}
+          onClose={close}
+          placement="bottom start"
+          size="narrow"
+        >
+          {onPhone ? phone?.(close) : wide(close)}
+        </PopoverSheet>
+      )}
     </>
-  ) : (
-    <span className="text-sm break-words">{valueSpan}</span>
   );
 
   const labelClass = `text-xs ${tone === "param" ? "text-param-ink" : "text-muted"}`;
@@ -349,6 +347,80 @@ function Field({
     <div className="flex items-center gap-2">
       <dt className={`w-24 shrink-0 break-words ${labelClass}`}>{label}</dt>
       <dd className="min-w-0 flex-1">{content}</dd>
+    </div>
+  );
+}
+
+/**
+ * The item's tags edited in place: the tag picker in the Tags row, with the box focused as it opens. Each change saves
+ * at once, and a pick keeps it open for the next tag. On a phone the matches sit in the flow, as the item's sheet grows;
+ * elsewhere they float under it, so the rows below stay put. It closes on Escape or Enter in the empty box, with focus
+ * back on the value, and when focus leaves it, leaving focus where it went (or on the value, when it went nowhere). A
+ * press inside it keeps the focus in the box, so removing a tag isn't leaving: Safari doesn't focus a pressed button,
+ * and a Remove reached with Tab goes once the save lands, which would drop the focus. Left by a press elsewhere, it
+ * closes when the press ends, not as it starts: the strip is taller than the value, and collapsing under a pressed
+ * button below would move it from under the pointer and lose the click.
+ */
+function TagStrip({
+  heapRef,
+  value,
+  onChange,
+  close,
+}: {
+  heapRef: HeapRef;
+  value: ItemTag[];
+  onChange: (tags: ItemTag[]) => void;
+  close: (returnFocus?: boolean) => void;
+}) {
+  const onPhone = useMedia(PHONE);
+  const strip = useRef<HTMLDivElement>(null);
+  const focusBox = () => strip.current?.querySelector("input")?.focus();
+  // The person asked for the strip, and expects to type in it.
+  useEffect(focusBox, []);
+  const pressing = useRef(false);
+  useEffect(() => {
+    const down = () => (pressing.current = true);
+    const up = () => (pressing.current = false);
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={strip}
+      onMouseDown={(e) => {
+        if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+      }}
+      onBlur={(e) => {
+        // Switching to another window blurs it too; the strip stays for when the person comes back.
+        if (strip.current?.contains(e.relatedTarget) || !document.hasFocus()) return;
+        const returnFocus = e.relatedTarget === null;
+        if (pressing.current) {
+          window.addEventListener("pointerup", () => close(returnFocus), { once: true });
+        } else {
+          close(returnFocus);
+        }
+      }}
+      // After Remove, whether clicked or pressed with the keyboard.
+      onClick={focusBox}
+      onKeyDown={(e) => {
+        // The picker handles both keys while the box has text; in the empty box they mean done. Handled here, so
+        // Escape doesn't also close the item or the sheet it is in.
+        const box = e.target;
+        if ((e.key === "Escape" || e.key === "Enter") && box instanceof HTMLInputElement && box.value === "") {
+          e.preventDefault();
+          e.stopPropagation();
+          close();
+        }
+      }}
+    >
+      <TagPicker heapRef={heapRef} value={value} onChange={onChange} inline={onPhone} label={null} />
     </div>
   );
 }

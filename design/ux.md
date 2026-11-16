@@ -460,9 +460,14 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     (point 9) name it, it is marked with an amber pill. With a mouse a value has no border at rest, a tint and ▾ when
     pointed at or focused; on a touch screen the ▾ always shows and the value is 44 px tall. A click opens a popover
     under the value on a wide screen and a tablet, a sheet on a phone: the need's four steps, S M L XL (pressing the
-    picked one clears it), the due choices (staying open while an exact date is chosen), the date, the tags (staying
-    open for several picks) or the parameter's options. A pick saves at once and closes it, and focus goes back to
-    the value. Without `edit` (a reader, an archived heap, a closed item) the values are plain text.
+    picked one clears it), the due choices (staying open while an exact date is chosen), the date or the parameter's
+    options. A pick saves at once and closes it, and focus goes back to the value. Tags are the exception, as the one
+    field with many values: a click turns the row itself into the tag picker, on every screen, its box focused, with
+    no popover or sheet. Its matches float under it on a wide screen and a tablet, and sit in the flow in a phone's
+    item sheet. Each add, create or remove saves at once and keeps it open for the next; it has no Done. Escape or
+    Enter in the empty box closes it with focus back on the value (Escape with text only clears it), and so does
+    leaving it, with focus left where it went. Without `edit` (a reader, an archived heap, a closed item) the values
+    are plain text.
 17. The **context** is the item's description rendered as Markdown text (see Toolkit), with an Edit button, shown
     with `edit`. With none it says "No context yet." and the
     button reads Add. Edit swaps the text in place for a form with Save and Cancel, and on a phone opens the same form
