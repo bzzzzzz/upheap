@@ -277,6 +277,6 @@ impl FromRequestParts<AppState> for InviteLinkPath {
     }
 }
 
-fn handle(raw: &str) -> Result<Handle, ServiceError> {
+pub(crate) fn handle(raw: &str) -> Result<Handle, ServiceError> {
     Handle::parse(raw, Field::Slug).map_err(|_| ServiceError::NotFound)
 }

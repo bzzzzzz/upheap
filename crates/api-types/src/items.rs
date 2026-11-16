@@ -154,6 +154,9 @@ fn with_agent_filters(
 #[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
 pub struct AcrossHeapsQuery {
+    /// Only the heaps of this team, by its slug. A team you aren't in is `not_found`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
     /// The `as_of` from an earlier response, to keep the order stable. Omit to rank at the current time.
     pub as_of: Option<i64>,
     /// Where open items go. Defaults to `shown`.

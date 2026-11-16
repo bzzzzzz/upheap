@@ -370,7 +370,10 @@ heap, the same rule `GET /me/waiting` and the agents' queue order by (the queue 
 for one heap, 1 to 10: a `heap_priorities` row per person and heap, 1 when there is none, so teammates in a shared
 heap each order it their own way. Since a heap's group is already in score order and the priority is the same
 positive factor for all of a heap's items, the merge keeps every heap's own order. A change to it is audited in the
-person's personal team, not the heap's, because the value is private and the heap's log is read by the team. The view takes no tag, parameter or sort, which belong to one heap. It returns at most
+person's personal team, not the heap's, because the value is private and the heap's log is read by the team. The view takes no tag, parameter or sort, which belong to one heap. An optional `team`, a team's slug, limits the
+list to that team's heaps: they are filtered from the viewable heaps before any is ranked or merged, so the order
+within them is the unscoped list's, and the cap below applies after. A team that doesn't exist, that the caller isn't
+in or that isn't a valid handle is `not_found`, as every handle lookup answers, so teams can't be probed. It returns at most
 500 rows, pinned first, with `count` the true total: the size assumption that lets it skip paging.
 
 ### Session-stable order

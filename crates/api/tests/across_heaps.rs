@@ -84,6 +84,66 @@ async fn nothing_listed_is_an_empty_list() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_team_limits_the_list_to_its_heaps_in_the_same_relative_order() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, personal) = app.register("ada@example.test").await?;
+    let (_, shared) = app.shared_heap(&session).await?;
+    item(&app, &session, &personal, "A critical", "critical").await?;
+    item(&app, &session, &shared, "B expected", "expected").await?;
+    item(&app, &session, &personal, "A idea", "idea").await?;
+    item(&app, &session, &shared, "B nice", "nice_to_have").await?;
+
+    // Act
+    let all = across(&app, &session, "").await?;
+    let scoped = across(&app, &session, "?team=shared").await?;
+
+    // Assert
+    expect_that!(all["count"], eq(&json!(4)));
+    expect_that!(scoped["count"], eq(&json!(2)));
+    let in_all: Vec<String> = titles(&all, "ranked")
+        .into_iter()
+        .filter(|title| title.starts_with('B'))
+        .collect();
+    expect_that!(titles(&scoped, "ranked"), eq(&in_all));
+    expect_that!(titles(&scoped, "ranked").len(), eq(2));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_team_the_caller_is_not_in_is_not_found() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    app.register("bob@example.test").await?;
+
+    // Act
+    let other = app
+        .send(Method::GET, "/api/v1/me/items?team=bob", Some(&session), None)
+        .await?;
+    let missing = app
+        .send(Method::GET, "/api/v1/me/items?team=no-such-team", Some(&session), None)
+        .await?;
+    let malformed = app
+        .send(
+            Method::GET,
+            "/api/v1/me/items?team=Not%20A%20Handle",
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    for response in [other, missing, malformed] {
+        expect_that!(response.status, eq(StatusCode::NOT_FOUND));
+        expect_that!(response.body["code"], eq(&json!("not_found")));
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn items_are_ordered_by_score_across_heaps_each_with_its_heap() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

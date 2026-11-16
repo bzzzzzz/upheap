@@ -128,7 +128,11 @@ item, as that count is.
 items" in the sidebar with the person's open items on the right, "All" in the rail with no count. The count is the sum
 of the open counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when
 those do. On a phone the heap switcher's sheet starts with an "All heaps" row, the same count at its right, marked
-current on `/all`, where no heap's row is; the tablet's and wide screen's popovers don't have it, as they have the entry. The tabs and the top
+current on `/all` with no team, where no heap's row is; the tablet's and wide screen's popovers don't have it, as they have the entry. While
+the person is on `/all` with a team chosen (All items §8), that count, the sidebar's and the phone row's, is the sum
+over that team's active heaps only; the sidebar link still goes to `/all` with no team. A person in more than one team
+also finds, at the top of each team's section in the switcher, on every width, a row "All <team> items" with that team's
+open count, which opens `/all?team=<slug>` and is marked current there; it isn't among search results. The tabs and the top
 bar are as on Waiting for me.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
@@ -693,6 +697,19 @@ filter, heap filter, position numbers or reminders to come.
    nothing, "No items match."; a failed first load shows its message. A failed refresh keeps the rows. The list is
    fetched again every 30 seconds and after any change that changes a heap's list, and keeps its order within the
    session, as a heap's list does.
+7. The list can be limited to one team's heaps: `/all?team=<slug>`. The team is in the address only, never remembered
+   elsewhere, and choosing or removing it is a history step, so Back returns to the list as it was; every other
+   change of the view replaces the entry. A person in more than one team has a first row in Filters' Narrow down,
+   "Team": All teams, then each team by its name in `me.teams` order, with All teams checked when none is set. A person
+   in one team sees no such row, and nothing else changes for them, except that a link with their own team in it works
+   and shows the chip. With a team of the person's chosen, a chip "Team: <team>" takes it off, shown even when nothing else
+   is changed; Reset all leaves the team, and it isn't counted as a filter. The heading stays "All items · n" with n the
+   team's count; the line under it reads "<team>'s heaps, most important first." ("Your personal team's heaps, most
+   important first." for a personal team); rows show the heap's name alone, with no " · <team>". Add goes to the kept
+   heap if it is in that team, else the team's first active heap, and is disabled when the team has none, as the phone's + and
+   the shell's heap follow. "Nothing open in your heaps." stays the empty line.
+8. A team the person isn't in (never joined, left, or no such team) is the page's error with "You're not in this team."
+   in place of the server's message, with no controls and no fallback to all teams.
 
 ## Closed
 
@@ -735,7 +752,8 @@ table for screen readers. While another choice loads, the figures stay, dimmed; 
 
 ## Teams and Team
 
-Teams lists the user's teams ("Admin · 4 members · 2 heaps", "Only you · 1 heap" for the personal team) with Open,
+Teams lists the user's teams ("Admin · 4 members · 2 heaps", "Only you · 1 heap" for the personal team) with Open and,
+for a person in more than one team, All items beside it, which opens `/all?team=<slug>` (All items §7),
 and + Create team, which opens a form with Name and an optional Link name; the server's errors show under the field
 they name. After sign-up, the empty heap offers the next two steps, Add your first item and Create a team; once a
 team exists, the Team page itself shows New heap and Add member, with no extra prompt.

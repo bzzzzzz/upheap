@@ -214,7 +214,7 @@ impl TestApp {
         };
         let list = self
             .services
-            .list_ranked_across_heaps_capped(principal, None, &domain::list_view::ListView::default(), max_rows)
+            .list_ranked_across_heaps_capped(principal, None, &domain::list_view::ListView::default(), None, max_rows)
             .await?;
         Ok((list.count, list.pinned.len() + list.ranked.len() + list.blocked.len()))
     }

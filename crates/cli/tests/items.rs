@@ -601,6 +601,34 @@ async fn item_list_all_heaps_quiet_prints_team_heap_key_in_order_and_json_is_the
 
 #[gtest]
 #[tokio::test]
+async fn item_list_all_heaps_team_prints_only_that_teams_items() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_two_heaps(&server).await?;
+    server
+        .send(&ada, "POST", "/teams", Some(json!({ "name": "Crew", "slug": "crew" })))
+        .await?;
+    server
+        .send(&ada, "POST", "/teams/crew/heaps", Some(json!({ "name": "Ops" })))
+        .await?;
+    let added = server
+        .add_item(&ada, "crew/ops", json!({ "title": "Row the boat", "need": "expected" }))
+        .await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let listed = cli.run(&["item", "list", "-q", "--all-heaps", "--team", "crew"]).await;
+    let without_all_heaps = cli.run(&["item", "list", "--team", "crew"]).await;
+
+    // Assert
+    let key = added["key"].as_str().context("key")?;
+    expect_that!(listed.stdout, eq(&format!("crew/ops/{key}\n")));
+    expect_that!(without_all_heaps.exited(0), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_list_all_heaps_narrows_by_text_and_by_the_view_flags() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;

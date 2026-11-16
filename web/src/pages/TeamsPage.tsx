@@ -47,7 +47,7 @@ export function TeamsPage() {
       {me.teams.length > 0 && (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface p-1">
           {me.teams.map((team) => (
-            <TeamRow key={team.id} team={team} label={teamName(team, me)} />
+            <TeamRow key={team.id} team={team} label={teamName(team, me)} several={me.teams.length > 1} />
           ))}
         </ul>
       )}
@@ -56,7 +56,7 @@ export function TeamsPage() {
 }
 
 /** "Admin · 4 members · 2 heaps", or for a personal team "Only you · 1 heap". */
-function TeamRow({ team, label }: { team: Me["teams"][number]; label: string }) {
+function TeamRow({ team, label, several }: { team: Me["teams"][number]; label: string; several: boolean }) {
   const who = team.personal
     ? "Only you"
     : `${team.role === "admin" ? "Admin" : "Member"} · ${plural(team.member_count, "member")}`;
@@ -68,6 +68,16 @@ function TeamRow({ team, label }: { team: Me["teams"][number]; label: string }) 
           {who} · {plural(team.heaps.length, "heap")}
         </span>
       </div>
+      {several && (
+        <Link
+          to="/all"
+          search={{ team: team.slug }}
+          aria-label={`All items in ${label}`}
+          className="flex shrink-0 items-center rounded-lg px-2 py-1 text-[13px] text-ink-soft hover:bg-sunken hover:text-ink max-sm:min-h-11 max-sm:px-3"
+        >
+          All items
+        </Link>
+      )}
       <Link
         to="/teams/$team"
         params={{ team: team.slug }}
