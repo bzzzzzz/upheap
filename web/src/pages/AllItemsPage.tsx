@@ -85,6 +85,8 @@ export function AllItemsPage({
   if (!me) return null;
   const filters = filterCount(view);
   const chosen = me.teams.find((t) => t.slug === view.team);
+  // A link to a team the person isn't in (or has left): the server answers not found, and the page says why.
+  const unknownTeam = view.team !== undefined && chosen === undefined;
   const changed = filters > 0 || viewChanges(view).length > 0 || chosen !== undefined;
   const kept = keptHeap(me, view.team);
   const keptArchived = me.teams.find((t) => t.slug === kept?.team)?.heaps.find((h) => h.slug === kept?.heap)?.archived;
@@ -151,11 +153,13 @@ export function AllItemsPage({
               <h1 className="text-[22px] font-semibold tracking-[-0.015em]">
                 All items{data && data.count > 0 && ` · ${data.count}`}
               </h1>
-              <p className="text-[13px] text-ink-soft max-sm:text-sm">
-                {chosen
-                  ? `${chosen.personal ? "Your personal team" : teamName(chosen, me)}'s heaps, most important first.`
-                  : "All your heaps, most important first."}
-              </p>
+              {!unknownTeam && (
+                <p className="text-[13px] text-ink-soft max-sm:text-sm">
+                  {chosen
+                    ? `${chosen.personal ? "Your personal team" : teamName(chosen, me)}'s heaps, most important first.`
+                    : "All your heaps, most important first."}
+                </p>
+              )}
             </div>
             <AddItem
               heapRef={kept ?? NO_HEAP}
@@ -170,7 +174,7 @@ export function AllItemsPage({
             <p className="py-16 text-center text-muted">Loading…</p>
           ) : !data || !sections ? (
             <p role="alert" className="py-16 text-center text-red-700 dark:text-red-400">
-              {view.team !== undefined && !chosen ? "You're not in this team." : list.error?.message}
+              {unknownTeam ? "You're not in this team." : list.error?.message}
             </p>
           ) : (
             <>

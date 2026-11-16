@@ -290,13 +290,16 @@ export function FilterChips({
           {shown} of {total}
         </span>
       )}
-      <button
-        type="button"
-        onClick={() => onChange(withoutFiltersOrViewChanges(view))}
-        className="ml-1 rounded-md px-1 text-xs font-medium text-accent-ink hover:underline pointer-coarse:h-9"
-      >
-        Reset all
-      </button>
+      {/* The team is the list's scope, not a filter: with only a team chosen there is nothing to reset. */}
+      {(filters.length > 0 || settings.length > 0) && (
+        <button
+          type="button"
+          onClick={() => onChange(withoutFiltersOrViewChanges(view))}
+          className="ml-1 rounded-md px-1 text-xs font-medium text-accent-ink hover:underline pointer-coarse:h-9"
+        >
+          Reset all
+        </button>
+      )}
     </div>
   );
 }

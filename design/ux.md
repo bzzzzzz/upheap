@@ -129,7 +129,7 @@ items" in the sidebar with the person's open items on the right, "All" in the ra
 of the open counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when
 those do. On a phone the heap switcher's sheet starts with an "All heaps" row, the same count at its right, marked
 current on `/all` with no team, where no heap's row is; the tablet's and wide screen's popovers don't have it, as they have the entry. While
-the person is on `/all` with a team chosen (All items §8), that count, the sidebar's and the phone row's, is the sum
+the person is on `/all` with a team chosen (All items §7), that count, the sidebar's and the phone row's, is the sum
 over that team's active heaps only; the sidebar link still goes to `/all` with no team. A person in more than one team
 also finds, at the top of each team's section in the switcher, on every width, a row "All <team> items" with that team's
 open count, which opens `/all?team=<slug>` and is marked current there; it isn't among search results. The tabs and the top
