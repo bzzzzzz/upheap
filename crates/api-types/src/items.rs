@@ -730,6 +730,12 @@ pub struct RankingPreviewRequestDto {
     /// 0 to 100. Value per effort.
     #[schema(minimum = 0, maximum = 100)]
     pub value: Option<i64>,
+    /// 0 to 100. The weight of the heap's tag order.
+    #[schema(minimum = 0, maximum = 100)]
+    pub tags: Option<i64>,
+    /// A tag order to rank with instead of the stored one: the heap's tags, the highest first, each once. `[]` ranks
+    /// with no tag order.
+    pub tag_order: Option<Vec<Uuid>>,
     /// Parameters of the heap in use to give another weight, each listed once.
     #[serde(default)]
     pub parameters: Vec<ParameterWeightDraftDto>,

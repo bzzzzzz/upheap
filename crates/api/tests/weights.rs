@@ -782,3 +782,45 @@ async fn a_tag_order_refuses_a_duplicate_and_a_tag_that_is_not_the_heaps() -> Re
     expect_that!(unknown.body["code"], eq(&json!("tag_not_in_heap")));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_preview_ranks_with_a_draft_tag_order_and_weight_and_saves_nothing() -> Result<()> {
+    // Arrange
+    let s = setup().await?;
+    let billing = s.app.new_tag_id(&s.admin, &s.heap, "billing").await?;
+    let docs = s.app.new_tag_id(&s.admin, &s.heap, "docs").await?;
+    for (title, tags) in [
+        ("Plain", json!([])),
+        ("Docs", json!([docs])),
+        ("Invoices", json!([billing])),
+    ] {
+        s.app
+            .new_item(&s.admin, &s.heap, json!({ "title": title, "tag_ids": tags }))
+            .await?;
+    }
+    let version = s.heap_version().await?;
+    let list = s.ranked_titles().await?;
+    let stranger = uuid::Uuid::new_v4().to_string();
+
+    // Act
+    let top_docs = s
+        .preview(&s.member, json!({ "tags": 40, "tag_order": [docs, billing] }))
+        .await?;
+    let cleared = s.preview(&s.member, json!({ "tags": 40, "tag_order": [] })).await?;
+    let duplicate = s.preview(&s.member, json!({ "tag_order": [docs, docs] })).await?;
+    let unknown = s.preview(&s.member, json!({ "tag_order": [stranger] })).await?;
+
+    // Assert
+    expect_that!(top_docs.status, eq(StatusCode::OK));
+    expect_that!(
+        preview_titles(&top_docs.body),
+        elements_are![eq("Docs"), eq("Plain"), eq("Invoices")]
+    );
+    expect_that!(preview_titles(&cleared.body), eq(&list));
+    expect_that!(duplicate.body["code"], eq(&json!("duplicate_tag")));
+    expect_that!(unknown.body["code"], eq(&json!("tag_not_in_heap")));
+    expect_that!(s.heap_version().await?, eq(&version));
+    expect_that!(s.ranked_titles().await?, eq(&list));
+    Ok(())
+}

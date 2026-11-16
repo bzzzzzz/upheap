@@ -259,6 +259,8 @@ pub struct RankedList {
 #[derive(Clone, Debug, Default)]
 pub struct WeightsDraft {
     pub heap: HeapPolicyPatch,
+    /// A tag order to rank with instead of the stored one, the highest first.
+    pub tag_order: Option<Vec<TagId>>,
     pub parameters: Vec<ParameterWeightDraft>,
 }
 
@@ -555,7 +557,8 @@ impl Services {
     /// member may ask, and an archived heap can be previewed.
     ///
     /// A parameter in the draft must be one in use of the heap ([`ParameterError::NotInHeap`],
-    /// [`ParameterError::Archived`]) and listed once ([`ValidationError::DuplicateParameter`]).
+    /// [`ParameterError::Archived`]) and listed once ([`ValidationError::DuplicateParameter`]). A draft tag order
+    /// holds only tags of the heap ([`ServiceError::TagNotInHeap`]), each once ([`ValidationError::DuplicateTag`]).
     pub async fn preview_ranking(
         &self,
         principal: Principal,
@@ -567,7 +570,18 @@ impl Services {
         let as_of = self.now();
         let (items, stored_parameters) = load_ranked_items(&self.db, heap_id, as_of).await?;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
-        let tag_order = ordered_tags(&access.heap, &heap_tags);
+        let tag_order = ordered_tags(&access.heap.tag_order, &heap_tags);
+        let drafted_tag_order = match &draft.tag_order {
+            Some(order) => {
+                let distinct: BTreeSet<TagId> = order.iter().copied().collect();
+                if distinct.len() != order.len() {
+                    return Err(ValidationError::DuplicateTag.into());
+                }
+                ensure_tags_in_heap(&heap_tags, &distinct)?;
+                ordered_tags(order, &heap_tags)
+            }
+            None => tag_order.clone(),
+        };
         let drafted_parameters = apply_parameter_draft(&stored_parameters, &draft.parameters)?;
         let drafted_policy = draft.heap.apply(&access.heap.policy);
 
@@ -580,7 +594,14 @@ impl Services {
             &tag_order,
             as_of,
         );
-        let drafted = ranked_group(&view, &items, &drafted_policy, &drafted_parameters, &tag_order, as_of);
+        let drafted = ranked_group(
+            &view,
+            &items,
+            &drafted_policy,
+            &drafted_parameters,
+            &drafted_tag_order,
+            as_of,
+        );
         let current_positions: HashMap<ItemId, usize> =
             current.iter().enumerate().map(|(i, id)| (*id, i + 1)).collect();
         let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
@@ -1607,7 +1628,7 @@ pub(crate) async fn rank_open_items(
         CURRENT_FORMULA,
         &heap.policy,
         &parameters,
-        &ordered_tags(heap, &tags),
+        &ordered_tags(&heap.tag_order, &tags),
         &inputs,
         as_of,
     );
@@ -1621,8 +1642,8 @@ pub(crate) async fn rank_open_items(
 }
 
 /// The heap's ranked tags in its tag order, the highest first, out of all its tags.
-fn ordered_tags<'t>(heap: &Heap, tags: &'t [Tag]) -> Vec<&'t Tag> {
-    heap.tag_order
+fn ordered_tags<'t>(order: &[TagId], tags: &'t [Tag]) -> Vec<&'t Tag> {
+    order
         .iter()
         .filter_map(|id| tags.iter().find(|tag| tag.id == *id))
         .collect()

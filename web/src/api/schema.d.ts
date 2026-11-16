@@ -3576,6 +3576,16 @@ export interface components {
             /** @description Parameters of the heap in use to give another weight, each listed once. */
             parameters?: components["schemas"]["ParameterWeightDraft"][];
             /**
+             * @description A tag order to rank with instead of the stored one: the heap's tags, the highest first, each once. `[]` ranks
+             *     with no tag order.
+             */
+            tag_order?: string[] | null;
+            /**
+             * Format: int64
+             * @description 0 to 100. The weight of the heap's tag order.
+             */
+            tags?: number | null;
+            /**
              * Format: int64
              * @description 0 to 100. Value per effort.
              */
@@ -8382,7 +8392,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap` */
+            /** @description Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter`, `duplicate_tag`, `parameter_not_in_heap` or `tag_not_in_heap` */
             422: {
                 headers: {
                     [name: string]: unknown;
