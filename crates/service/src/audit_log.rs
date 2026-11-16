@@ -674,6 +674,8 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::AgeWeight => "Age weight",
         AuditField::DeadlineWeight => "Deadline weight",
         AuditField::ValueWeight => "Value per effort weight",
+        AuditField::TagsWeight => "Tags weight",
+        AuditField::TagOrder => "Tag order",
         AuditField::Options => "Options",
         AuditField::ArchivedOptions => "Archived options",
         AuditField::ItemsSwitched => "Items switched",
@@ -756,7 +758,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::Due => shown(Form::Due),
         AuditField::BlockedBy | AuditField::Origin | AuditField::BlockerDone => shown(Form::Named("Unknown item")),
         AuditField::Heap => shown(Form::Named("Unknown heap")),
-        AuditField::Tags => shown(Form::Tags),
+        AuditField::Tags | AuditField::TagOrder => shown(Form::Tags),
         AuditField::Options | AuditField::ArchivedOptions => shown(Form::OptionLabels),
         AuditField::ItemsSwitched => shown(Form::ItemCount),
         AuditField::ListView => shown(Form::NoShort),
@@ -791,6 +793,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         | AuditField::AgeWeight
         | AuditField::DeadlineWeight
         | AuditField::ValueWeight
+        | AuditField::TagsWeight
         | AuditField::EndedSignIns
         | AuditField::AgentsPrepare
         | AuditField::EndsAt

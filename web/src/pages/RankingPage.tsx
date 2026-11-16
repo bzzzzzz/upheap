@@ -1,18 +1,22 @@
 import { Link } from "@tanstack/react-router";
-import { RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowUp, Ellipsis, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
-import type { Heap, HeapWeightsPatchRequest, Parameter, RankingPreview } from "../api/schema";
+import type { Heap, HeapWeightsPatchRequest, Parameter, RankingPreview, Tag } from "../api/schema";
 import {
   PREVIEW_ITEMS,
   useHeap,
   useParameters,
   useRankingPreview,
+  useTags,
   useUpdateWeights,
   type RankingPreviewDraft,
 } from "../api/queries";
 import { compactButtonClass } from "../components/buttons";
+import { MenuEntry, MenuPopover } from "../components/Menu";
+import { useFocusAfterRender } from "../components/useFocusAfterRender";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, clampWeight, inputClass, introClass, labelClass } from "./settingsForm";
 
@@ -35,9 +39,17 @@ const BUILT_IN = [
   },
 ] as const;
 
+/** The factor row of the heap's tag order, in the Tags card. */
+const TAGS_FACTOR = {
+  key: "tags",
+  name: "Tag order",
+  description:
+    "An item's highest tag in the order lifts it or holds it back. Items with no tag here sit in the middle.",
+} as const;
+
 /** One factor of the ranking, as a row: the heap's own, or a parameter in use. */
 type Factor = {
-  /** `need`, `age`, `deadline`, `value` or `parameter:{id}`: where its draft is kept. */
+  /** `need`, `age`, `deadline`, `value`, `tags` or `parameter:{id}`: where its draft is kept. */
   key: string;
   name: string;
   description: string;
@@ -60,9 +72,10 @@ type Draft = Record<string, number>;
 export function HeapRankingSettings({ heap: heapRef }: { heap: HeapRef }) {
   const heap = useHeap(heapRef);
   const parameters = useParameters(heapRef);
+  const tags = useTags(heapRef);
 
   // A failed refetch keeps the data, so what is on screen (and any draft in it) stays; the error shows only without it.
-  const failure = (!heap.data && heap.error) || (!parameters.data && parameters.error);
+  const failure = (!heap.data && heap.error) || (!parameters.data && parameters.error) || (!tags.data && tags.error);
   if (failure) {
     return (
       <p role="alert" className="py-16 text-center text-overdue-ink">
@@ -70,13 +83,29 @@ export function HeapRankingSettings({ heap: heapRef }: { heap: HeapRef }) {
       </p>
     );
   }
-  if (!heap.data || !parameters.data) return <p className="py-16 text-center text-muted">Loading…</p>;
-  return <RankingForm heapRef={heapRef} heap={heap.data} parameters={parameters.data.parameters} />;
+  if (!heap.data || !parameters.data || !tags.data) {
+    return <p className="py-16 text-center text-muted">Loading…</p>;
+  }
+  return (
+    <RankingForm heapRef={heapRef} heap={heap.data} parameters={parameters.data.parameters} tags={tags.data.tags} />
+  );
 }
 
-function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: Heap; parameters: Parameter[] }) {
+function RankingForm({
+  heapRef,
+  heap,
+  parameters,
+  tags,
+}: {
+  heapRef: HeapRef;
+  heap: Heap;
+  parameters: Parameter[];
+  tags: Tag[];
+}) {
   const update = useUpdateWeights(heapRef);
   const [draft, setDraft] = useState<Draft>({});
+  // The tag order as the user arranged it; `null` while it is the saved one, so a refetch updates it.
+  const [orderDraft, setOrderDraft] = useState<string[] | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const firstInput = useRef<HTMLInputElement>(null);
   const status = useRef<HTMLParagraphElement>(null);
@@ -88,6 +117,7 @@ function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: He
     saved: heap.weights[factor.key],
     editable: canEdit,
   }));
+  const tagsFactor: Factor = { ...TAGS_FACTOR, saved: heap.weights.tags ?? 0, editable: canEdit };
   const custom: Factor[] = parameters.map((parameter) => ({
     key: `parameter:${parameter.id}`,
     name: parameter.name,
@@ -97,12 +127,16 @@ function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: He
     editable: canEdit && parameter.allowed_actions.includes("edit"),
     parameter,
   }));
-  const factors = [...builtIn, ...custom];
+  const factors = [...builtIn, tagsFactor, ...custom];
 
   // A factor the user hasn't moved, or can't, shows its saved weight, so a refetch updates it.
   const valueOf = (factor: Factor) => (factor.editable ? (draft[factor.key] ?? factor.saved) : factor.saved);
   const changed = factors.filter((factor) => valueOf(factor) !== factor.saved);
-  const dirty = changed.length > 0;
+  const order = canEdit ? (orderDraft ?? heap.tag_order) : heap.tag_order;
+  const orderChanged = !sameOrder(order, heap.tag_order);
+  // A changed order counts once, however many tags moved.
+  const unsaved = changed.length + (orderChanged ? 1 : 0);
+  const dirty = unsaved > 0;
   const total = factors.reduce((sum, factor) => sum + valueOf(factor), 0);
   const atDefaults = factors.every((factor) => !factor.editable || valueOf(factor) === DEFAULT_WEIGHT);
 
@@ -116,8 +150,13 @@ function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: He
     setJustSaved(false);
     setDraft((current) => ({ ...current, [factor.key]: clampWeight(raw) }));
   };
+  const editOrder = (next: string[]) => {
+    setJustSaved(false);
+    setOrderDraft(next);
+  };
   const cancel = () => {
     setDraft({});
+    setOrderDraft(null);
     setJustSaved(false);
     update.reset();
     firstInput.current?.focus();
@@ -130,12 +169,14 @@ function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: He
     event.preventDefault();
     if (!dirty || update.isPending) return;
     const sent = Object.fromEntries(changed.map((factor) => [factor.key, valueOf(factor)]));
+    const sentOrder = orderChanged ? order : undefined;
     update.mutate(
-      { heap, body: toPatch(changed, sent) },
+      { heap, body: toPatch(changed, sent, sentOrder) },
       {
         onSuccess: () => {
-          // A weight moved again while this was on its way stays in the draft.
+          // A weight moved again while this was on its way stays in the draft, and so does an order changed again.
           setDraft((current) => Object.fromEntries(Object.entries(current).filter(([key, v]) => sent[key] !== v)));
+          setOrderDraft((current) => (current && sentOrder && !sameOrder(current, sentOrder) ? current : null));
           setJustSaved(true);
         },
       },
@@ -145,7 +186,7 @@ function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: He
     if (event.key === "Escape") cancel();
   };
 
-  const previewDraft = useSettled(toPreviewDraft(changed, valueOf), PREVIEW_DELAY_MS);
+  const previewDraft = useSettled(toPreviewDraft(changed, valueOf, orderChanged ? order : undefined), PREVIEW_DELAY_MS);
   const barShown = dirty || savedMessageShown;
 
   return (
@@ -173,6 +214,34 @@ function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: He
                 inputRef={index === 0 ? firstInput : undefined}
               />
             ))}
+          </FactorCard>
+          <FactorCard
+            id="ranking-tags"
+            title="Tags"
+            end={
+              orderChanged ? (
+                <span className="rounded-full bg-accent-soft px-2 py-px text-xs font-normal tracking-normal text-accent-ink normal-case">
+                  Order changed
+                </span>
+              ) : (
+                <Link
+                  to="/teams/$team/heaps/$heap/settings/tags"
+                  params={heapRef}
+                  className="text-[13px] font-normal tracking-normal text-accent-ink normal-case hover:underline max-sm:text-sm"
+                >
+                  Edit tags
+                </Link>
+              )
+            }
+          >
+            <FactorRow
+              factor={tagsFactor}
+              value={valueOf(tagsFactor)}
+              total={total}
+              onChange={(raw) => edit(tagsFactor, raw)}
+              onEscape={onEscape}
+            />
+            <TagOrder order={order} tags={tags} editable={canEdit} onChange={editOrder} onEscape={onEscape} />
           </FactorCard>
           {custom.length > 0 && (
             <FactorCard
@@ -223,7 +292,7 @@ function RankingForm({ heapRef, heap, parameters }: { heapRef: HeapRef; heap: He
                     Cancel
                   </button>
                   <span className="text-[13px] text-accent-ink max-sm:order-1 max-sm:flex-1 max-sm:text-sm">
-                    {changed.length} unsaved
+                    {unsaved} unsaved
                   </span>
                 </>
               )}
@@ -358,6 +427,192 @@ function FactorRow({
 }
 
 /**
+ * The heap's tag order, the highest first: a numbered list with what each tag does next to an untagged item, and for
+ * editors ↑ ↓ and Remove on each row (a ⋯ menu on a phone) and a picker of the tags not yet ranked, which adds one at
+ * the bottom. A draft, saved with the weights.
+ */
+function TagOrder({
+  order,
+  tags,
+  editable,
+  onChange,
+  onEscape,
+}: {
+  order: string[];
+  tags: Tag[];
+  editable: boolean;
+  onChange: (order: string[]) => void;
+  onEscape: (event: KeyboardEvent) => void;
+}) {
+  const listRef = useRef<HTMLOListElement>(null);
+  const pickerRef = useRef<HTMLSelectElement>(null);
+  // After a move, focus stays on the moved tag's button, or its other one at the top or bottom; after a remove it
+  // goes to the picker. Both are found once the list has re-rendered, and a remove may come from a closing menu.
+  const focusAfterRender = useFocusAfterRender();
+
+  const byId = new Map(tags.map((tag) => [tag.id, tag]));
+  const ranked = order.flatMap((id) => {
+    const tag = byId.get(id);
+    return tag ? [tag] : [];
+  });
+  const unranked = tags.filter((tag) => !order.includes(tag.id));
+
+  const move = (index: number, by: -1 | 1) => {
+    const next = [...order];
+    const [moved] = next.splice(index, 1);
+    if (moved === undefined) return;
+    next.splice(index + by, 0, moved);
+    onChange(next);
+    const direction = by < 0 ? "up" : "down";
+    focusAfterRender(() => {
+      const buttons = [...(listRef.current?.querySelectorAll<HTMLButtonElement>(`button[data-tag="${moved}"]`) ?? [])];
+      return buttons.find((b) => b.dataset.move === direction && !b.disabled) ?? buttons.find((b) => !b.disabled);
+    });
+  };
+  const remove = (id: string) => {
+    onChange(order.filter((other) => other !== id));
+    focusAfterRender(() => pickerRef.current);
+  };
+
+  if (ranked.length === 0 && !editable) {
+    return <li className="pb-3.5 text-[13px] text-muted max-sm:text-sm">No tags ranked.</li>;
+  }
+  return (
+    <li className="pb-3.5">
+      {ranked.length === 0 ? (
+        <p className="py-1.5 text-sm text-muted">No tags ranked yet. Add one to start.</p>
+      ) : (
+        <>
+          <ol ref={listRef} aria-label="Tag order, highest first" className="flex flex-col">
+            {ranked.map((tag, index) => (
+              <li key={tag.id} className="flex min-h-9 items-center gap-2 max-sm:min-h-11">
+                <span className={rankClass}>{index + 1}</span>
+                <span className="rounded-md bg-sunken px-1.5 text-[13px] text-ink-soft">{tag.name}</span>
+                <span className="text-xs text-muted">{tagEffect(index, ranked.length)}</span>
+                <span className="flex-1" />
+                {editable && (
+                  <>
+                    <button
+                      type="button"
+                      data-tag={tag.id}
+                      data-move="up"
+                      disabled={index === 0}
+                      onClick={() => move(index, -1)}
+                      onKeyDown={onEscape}
+                      aria-label={`Move ${tag.name} up`}
+                      className={compactButtonClass.icon}
+                    >
+                      <ArrowUp aria-hidden="true" className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      data-tag={tag.id}
+                      data-move="down"
+                      disabled={index === ranked.length - 1}
+                      onClick={() => move(index, 1)}
+                      onKeyDown={onEscape}
+                      aria-label={`Move ${tag.name} down`}
+                      className={compactButtonClass.icon}
+                    >
+                      <ArrowDown aria-hidden="true" className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(tag.id)}
+                      onKeyDown={onEscape}
+                      aria-label={`Remove ${tag.name} from the order`}
+                      className={`${compactButtonClass.quiet} px-2 text-[13px] max-sm:hidden`}
+                    >
+                      Remove
+                    </button>
+                    <MenuTrigger>
+                      <Button
+                        aria-label={`More for ${tag.name}`}
+                        className="flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent sm:hidden"
+                      >
+                        <Ellipsis aria-hidden="true" className="size-4" />
+                      </Button>
+                      <MenuPopover placement="bottom end">
+                        <Menu aria-label={`More for ${tag.name}`} className="outline-none">
+                          <MenuEntry id="remove" onAction={() => remove(tag.id)}>
+                            Remove from the order
+                          </MenuEntry>
+                        </Menu>
+                      </MenuPopover>
+                    </MenuTrigger>
+                  </>
+                )}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-1 text-[13px] text-muted max-sm:text-sm">{untaggedPlace(ranked.length)}</p>
+        </>
+      )}
+      {editable && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {unranked.length > 0 ? (
+            <>
+              <select
+                ref={pickerRef}
+                value=""
+                aria-label="Add a tag to the order"
+                onChange={(e) => {
+                  if (e.target.value !== "") onChange([...order, e.target.value]);
+                }}
+                onKeyDown={onEscape}
+                className={`${inputClass} max-sm:min-h-11 max-sm:w-full max-sm:text-base`}
+              >
+                <option value="">Add a tag to the order</option>
+                {unranked.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[13px] text-muted max-sm:text-sm">
+                {unranked.length === 1 ? "1 tag not ranked" : `${unranked.length} tags not ranked`}
+              </span>
+            </>
+          ) : (
+            <span className="text-[13px] text-muted max-sm:text-sm">
+              {tags.length === 0 ? "This heap has no tags yet." : "Every tag is ranked."}
+            </span>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** A tag's place in the order, like an option's, in grey: violet is kept for parameters. */
+const rankClass =
+  "inline-flex size-[22px] shrink-0 items-center justify-center rounded-md bg-sunken text-xs font-semibold text-ink-soft max-sm:size-6";
+
+/**
+ * What the tag at `index` of `count` does next to an untagged item. A ranked tag scores from 1 at the top to 0 at the
+ * bottom, a single one 1, and an item with no ranked tag 0.5 (architecture.md, Priority score).
+ */
+function tagEffect(index: number, count: number): string {
+  if (count === 1) return "lifts";
+  // Its score, (count - 1 - index) / (count - 1), against 1/2, in whole numbers.
+  const twice = 2 * (count - 1 - index);
+  if (twice > count - 1) return "lifts";
+  if (twice === count - 1) return "as untagged";
+  return "holds back";
+}
+
+/** Where an untagged item sits among `count` ranked tags. */
+function untaggedPlace(count: number): string {
+  if (count === 1) return "Untagged items score below #1.";
+  if (count % 2 === 1) return `Untagged items score the same as #${(count + 1) / 2}.`;
+  return `Untagged items score between #${count / 2} and #${count / 2 + 1}.`;
+}
+
+function sameOrder(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/**
  * The first items of the list as the draft weights would rank them, each with how far it moves from where it is now.
  * Everyone sees it; without a draft it is the current top of the list.
  */
@@ -461,13 +716,16 @@ function Move({ position, current }: { position: number; current: number }) {
 }
 
 /** The request for the factors whose weight changed: the heap's by name, parameters with the version they were seen at. */
-function toPatch(changed: Factor[], weights: Draft): HeapWeightsPatchRequest {
+function toPatch(changed: Factor[], weights: Draft, tagOrder: string[] | undefined): HeapWeightsPatchRequest {
   const patch: HeapWeightsPatchRequest = { parameters: [] };
+  if (tagOrder) patch.tag_order = tagOrder;
   for (const factor of changed) {
     const weight = weights[factor.key];
     if (weight === undefined) continue;
     if (factor.parameter) {
       patch.parameters?.push({ id: factor.parameter.id, weight, version: factor.parameter.version });
+    } else if (factor.key === TAGS_FACTOR.key) {
+      patch.tags = weight;
     } else if (isBuiltIn(factor.key)) {
       patch[factor.key] = weight;
     }
@@ -475,12 +733,18 @@ function toPatch(changed: Factor[], weights: Draft): HeapWeightsPatchRequest {
   return patch;
 }
 
-/** What a preview ranks with: the weights that differ from the saved ones. */
-function toPreviewDraft(changed: Factor[], valueOf: (factor: Factor) => number): RankingPreviewDraft {
+/** What a preview ranks with: the weights that differ from the saved ones, and the tag order when it does. */
+function toPreviewDraft(
+  changed: Factor[],
+  valueOf: (factor: Factor) => number,
+  tagOrder: string[] | undefined,
+): RankingPreviewDraft {
   const draft: RankingPreviewDraft = {};
+  if (tagOrder) draft.tag_order = tagOrder;
   const parameters: { id: string; weight: number }[] = [];
   for (const factor of changed) {
     if (factor.parameter) parameters.push({ id: factor.parameter.id, weight: valueOf(factor) });
+    else if (factor.key === TAGS_FACTOR.key) draft.tags = valueOf(factor);
     else if (isBuiltIn(factor.key)) draft[factor.key] = valueOf(factor);
   }
   if (parameters.length > 0) draft.parameters = parameters;

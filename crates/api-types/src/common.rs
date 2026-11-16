@@ -1027,6 +1027,8 @@ pub enum FactorDto {
     Value,
     /// A custom parameter.
     Parameter,
+    /// The item's highest-ranked tag in the heap's tag order.
+    Tags,
     /// Priority taken on from an item this one blocks.
     Blocks,
     /// A factor this client doesn't know: one the server added later. Clients show the contributor's `label`, which
@@ -1043,6 +1045,7 @@ impl From<Contributor> for ContributorDto {
             Factor::Deadline => FactorDto::Deadline,
             Factor::Value => FactorDto::Value,
             Factor::Parameter => FactorDto::Parameter,
+            Factor::Tags => FactorDto::Tags,
             Factor::Blocks => FactorDto::Blocks,
         };
         Self {
@@ -1072,6 +1075,8 @@ pub enum HeldBackGapDto {
     Due,
     /// Effort or impact is unset.
     Size,
+    /// The item's best ranked tag is low in the heap's tag order.
+    Tags,
     /// A gap this client doesn't know: one the server added later. Clients show the entry's `label`, which the
     /// server writes. Only read, never sent, so it isn't in the API's schema.
     #[serde(other, skip_serializing)]
@@ -1084,6 +1089,7 @@ impl From<HeldBack> for HeldBackDto {
             Gap::Need => HeldBackGapDto::Need,
             Gap::Due => HeldBackGapDto::Due,
             Gap::Size => HeldBackGapDto::Size,
+            Gap::Tags => HeldBackGapDto::Tags,
         };
         Self {
             gap,

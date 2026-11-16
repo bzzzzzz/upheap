@@ -205,19 +205,19 @@ async fn heap_show_prints_the_context_indented_or_how_to_write_one() -> Result<(
     expect_that!(
         written.stdout,
         eq(
-            "ops · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
+            "ops · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n  Tags      0 (off)\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
         )
     );
     expect_that!(
         empty.stdout,
         eq(
-            "backlog · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  None. Write one with: upheap heap edit infra/backlog --context-file <file>\n"
+            "backlog · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n  Tags      0 (off)\n\nContext\n  None. Write one with: upheap heap edit infra/backlog --context-file <file>\n"
         )
     );
     expect_that!(
         default.stdout,
         starts_with(
-            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n"
+            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n  Tags      0 (off)\n\nContext\n"
         )
     );
     expect_that!(
@@ -299,7 +299,7 @@ async fn heap_edit_writes_the_context_from_a_file_or_stdin_and_clears_it() -> Re
     expect_that!(
         shown.stdout,
         eq(
-            "ops · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
+            "ops · Infrastructure · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       10\n  Deadline  10\n  Value     10\n  Tags      0 (off)\n\nContext\n  Docs: the wiki\n      Review on GitHub\n"
         )
     );
     expect_that!(again.stdout, eq("No change to infra/ops.\n"));
@@ -492,7 +492,7 @@ async fn heap_show_prints_the_weights_with_the_parameters_in_use() -> Result<()>
     expect_that!(
         shown.stdout,
         starts_with(
-            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       0 (off)\n  Deadline  10\n  Value     10\n  Area      20       parameter\n  Customer  10       parameter\n\nContext\n"
+            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       0 (off)\n  Deadline  10\n  Value     10\n  Tags      0 (off)\n  Area      20       parameter\n  Customer  10       parameter\n\nContext\n"
         )
     );
     expect_that!(shown.stdout, not(contains_substring("Legacy")));
@@ -528,13 +528,59 @@ async fn heap_weights_changes_heap_and_parameter_weights_in_one_save() -> Result
     expect_that!(
         changed.stdout,
         eq(
-            "Updated the weights of ada/personal.\n\nWeights\n  Need      30\n  Age       10\n  Deadline  10\n  Value     0 (off)\n  Area      40       parameter\n  Customer  10       parameter\n"
+            "Updated the weights of ada/personal.\n\nWeights\n  Need      30\n  Age       10\n  Deadline  10\n  Value     0 (off)\n  Tags      0 (off)\n  Area      40       parameter\n  Customer  10       parameter\n"
         )
     );
     expect_that!(stored.0, eq(&vec![30, 10, 10, 0]));
     expect_that!(
         stored.1,
         eq(&vec![("Area".to_owned(), 40), ("Customer".to_owned(), 10)])
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn heap_weights_sets_the_tag_order_and_heap_show_prints_it() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    for name in ["billing", "infra"] {
+        server
+            .send(
+                &ada,
+                "POST",
+                "/teams/ada/heaps/personal/tags",
+                Some(json!({ "name": name })),
+            )
+            .await?;
+    }
+    let cli = common::cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let changed = cli
+        .run(&[
+            "heap",
+            "weights",
+            "--tags",
+            "20",
+            "--tag-order",
+            "infra",
+            "--tag-order",
+            "Billing",
+        ])
+        .await;
+    let shown = cli.run(&["heap", "show"]).await;
+
+    // Assert
+    expect_that!(changed.exited(0), eq(true));
+    expect_that!(
+        changed.stdout,
+        contains_substring("  Tags      20\n  Tag order: infra, billing\n")
+    );
+    expect_that!(
+        shown.stdout,
+        contains_substring("  Tags      20\n  Tag order: infra, billing\n")
     );
     Ok(())
 }
@@ -595,7 +641,7 @@ async fn heap_weights_without_a_flag_does_nothing() -> Result<()> {
     expect_that!(human.exited(0), eq(true));
     expect_that!(
         human.stdout,
-        eq("Nothing to change: give --need, --age, --deadline, --value or --parameter.\n")
+        eq("Nothing to change: give --need, --age, --deadline, --value, --tags, --tag-order or --parameter.\n")
     );
     expect_that!(quiet.exited(0), eq(true));
     expect_that!(quiet.stdout, eq(""));

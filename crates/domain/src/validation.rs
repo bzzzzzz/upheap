@@ -33,6 +33,9 @@ pub enum ValidationError {
     /// A weights save or preview names a parameter more than once.
     #[error("each parameter may be listed once")]
     DuplicateParameter,
+    /// A weights save names a tag more than once in the tag order.
+    #[error("each tag may be listed once in the tag order")]
+    DuplicateTag,
     #[error("limit must be from {min} to {max}")]
     LimitOutOfRange { min: usize, max: usize },
     /// Not a valid username or slug. `hint` is one made from the input that would be, when there is one.

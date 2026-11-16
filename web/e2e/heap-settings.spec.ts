@@ -152,16 +152,20 @@ test("Cancel puts the weights back", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Save weights" })).toHaveCount(0);
   await expect(need).toBeFocused();
 
-  // Escape in a weight does the same, and Reset all to 10 only draws weights back to the default.
+  // Escape in a weight does the same, and Reset all to 10 only draws weights back to the default: the Tags weight
+  // too, which a new heap starts at 0.
+  const tags = page.getByLabel("Tag order weight, 0 to 100");
   await age.fill("30");
   await age.press("Escape");
   await expect(age).toHaveValue("10");
-  await expect(page.getByRole("button", { name: "Reset all to 10" })).toBeDisabled();
+  await expect(tags).toHaveValue("0");
   await age.fill("30");
   await page.getByRole("button", { name: "Reset all to 10" }).click();
   await expect(age).toHaveValue("10");
+  await expect(tags).toHaveValue("10");
   await expect(page.getByRole("button", { name: "Reset all to 10" })).toBeDisabled();
-  await expect(page.getByText("1 unsaved")).toHaveCount(0);
+  await expect(page.getByText("1 unsaved")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save weights" })).toBeVisible();
 });
 
 test("the preview shows how the top of the list would move", async ({ page }) => {
@@ -191,6 +195,59 @@ test("the preview shows how the top of the list would move", async ({ page }) =>
   await expect(preview.getByRole("img")).toHaveCount(0);
   await goTo(page, "Open");
   await expectOrder(page, ["Quick win", "Urgent"]);
+});
+
+test("Ranking orders the heap's tags and saves the order with the weights", async ({ page }) => {
+  await goTo(page, "Tags");
+  for (const [index, name] of ["billing", "docs", "infra"].entries()) {
+    await page.getByLabel("New tag name").fill(name);
+    await page.getByRole("button", { name: "Add tag" }).click();
+    await expect(page.getByRole("heading", { name: index === 0 ? "1 tag" : `${index + 1} tags` })).toBeVisible();
+  }
+
+  await goTo(page, "Ranking");
+  const card = page.getByRole("region", { name: "Tags" });
+  await expect(card.getByText("No tags ranked yet. Add one to start.")).toBeVisible();
+  await expect(card.getByText("3 tags not ranked")).toBeVisible();
+  const picker = card.getByLabel("Add a tag to the order");
+  for (const name of ["billing", "docs", "infra"]) await picker.selectOption({ label: name });
+  await expect(card.getByText("Every tag is ranked.")).toBeVisible();
+
+  const order = card.getByRole("list", { name: "Tag order, highest first" }).getByRole("listitem");
+  await expect(order).toHaveText([/billing\s*lifts/, /docs\s*as untagged/, /infra\s*holds back/]);
+  await expect(card.getByText("Untagged items score the same as #2.")).toBeVisible();
+  await expect(card.getByText("Order changed")).toBeVisible();
+  await expect(page.getByText("1 unsaved")).toBeVisible();
+
+  // ↑ moves a tag one place and keeps focus on it; at the top its ↑ is off.
+  const infraUp = card.getByRole("button", { name: "Move infra up" });
+  await infraUp.click();
+  await expect(infraUp).toBeFocused();
+  await expect(order).toHaveText([/billing/, /infra/, /docs/]);
+  await card.getByRole("button", { name: "Move billing down" }).click();
+  await expect(order).toHaveText([/infra/, /billing/, /docs/]);
+  await expect(card.getByRole("button", { name: "Move infra up" })).toBeDisabled();
+
+  // Remove takes a tag out of the order, back into the picker: a ⋯ menu on a phone.
+  if (test.info().project.name === "phone") {
+    await card.getByRole("button", { name: "More for docs" }).click();
+    await page.getByRole("menuitem", { name: "Remove from the order" }).click();
+  } else {
+    await card.getByRole("button", { name: "Remove docs from the order" }).click();
+  }
+  await expect(order).toHaveText([/infra\s*lifts/, /billing\s*holds back/]);
+  await expect(card.getByText("Untagged items score between #1 and #2.")).toBeVisible();
+  await expect(card.getByText("1 tag not ranked")).toBeVisible();
+
+  await page.getByLabel("Tag order weight, 0 to 100").fill("20");
+  await expect(page.getByText("2 unsaved")).toBeVisible();
+  await page.getByRole("button", { name: "Save weights" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Weights saved." })).toBeVisible();
+  await expect(card.getByText("Order changed")).toHaveCount(0);
+
+  await page.reload();
+  await expect(order).toHaveText([/infra/, /billing/]);
+  await expect(page.getByLabel("Tag order weight, 0 to 100")).toHaveValue("20");
 });
 
 test("General has no Context card, and Context is a tab between General and Tags", async ({ page, heapPath }) => {

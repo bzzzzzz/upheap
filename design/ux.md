@@ -187,12 +187,18 @@ buttons span the width, and every control is 44 px to a finger.
 
 **Ranking** (the canvas boards "Wide · Ranking" and "Phone · Ranking") sets how much each factor counts. A Built in
 card has a row each for need, age, deadline and value per effort, and a Parameters card, shown when the heap has
-parameters in use, has one per parameter, with its options as the description. A row shows the factor's name, its
+parameters in use, has one per parameter, with its options as the description. Between them, a **Tags** card holds
+the Tags weight as a factor row ("Tag order") and the heap's tag order as a numbered list, the highest first. Each row
+says, dim, what the tag does next to an untagged item ("lifts", "as untagged", "holds back"), and a line under the list
+says where untagged items sit ("Untagged items score the same as #2."). Editors get ↑ ↓ and Remove on each row (a ⋯
+menu with Remove on a phone) and an "Add a tag to the order" picker of the tags not yet ranked, which adds one at the
+bottom; the order is a draft saved with Save weights, counts once in "{n} unsaved" and shows "Order changed" on the
+card. Others read the order without buttons, or "No tags ranked." A row shows the factor's name, its
 share of the total as a bar and a percentage (plain arithmetic on the weights on screen; "–" when all are 0), and for
 editors a slider and a number input that move together. One Save weights writes every changed weight at once; a "was
-{n}" chip and an "{n} unsaved" count mark what changed, Cancel (or Escape) puts the weights back, and Reset all to 10
-sets every draft to the default without saving. Others read "Weight {n}" and a note that only admins can change it. A
-**Top of the list** card, for everyone, shows the first five items as the draft weights would rank them, each with how
+{n}" chip and an "{n} unsaved" count mark what changed, Cancel (or Escape) puts the weights and the order back, and Reset
+all to 10 sets every weight's draft to the default, the Tags weight too, without saving or touching the order. Others read "Weight {n}" and a note that only admins can change it. A
+**Top of the list** card, for everyone, shows the first five items as the draft weights and tag order would rank them, each with how
 far it moves (↑2, ↓1, New), so the effect shows before saving. Wide: a sticky save bar under the cards and the preview
 beside them. Phone: one column, the preview under the cards, the save bar fixed above the bottom tabs.
 

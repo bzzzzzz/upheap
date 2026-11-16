@@ -263,7 +263,9 @@ Making, promoting and renaming a team tag
    - every item that carries one of them, open or closed, carries the team tag instead, and its history says so
      and keeps the entries that named the heap tag;
    - every saved view whose filter names one names the team tag;
-   - every custom parameter linked to one is linked to the team tag.
+   - every custom parameter linked to one is linked to the team tag;
+   - in each heap whose tag order ranks one, the team tag takes its place in that order (the highest, if the order
+     ranks several of them).
 8. The team tag a merge makes keeps the description given when it is made. A promotion carries the promoted heap
    tag's description. The other heap tags' descriptions stay in their history and the merge's entry.
 9. A write that would merge is first shown what it reaches, the heaps and how many items in each, and happens only
@@ -279,7 +281,9 @@ Using a team tag in a heap
 
 12. A heap's tag filter, its saved views, the tag picker and a parameter's links take any of the heap's tags, and
     treat a team tag and a heap tag alike (commitment 8). A heap's parameter linked to a team tag is suggested when
-    that tag is put on an item in that heap only, since the parameter is the heap's.
+    that tag is put on an item in that heap only, since the parameter is the heap's. A heap's tag order (product.md,
+    Priority §10) ranks any of the heap's tags too: each heap orders a team tag on its own, since the ranking
+    policy is the heap's, and a team tag joins each heap's order unranked until that heap's admin places it.
 13. Where tags are listed or offered, each shows which kind it is.
 14. Typing a name that matches none of the heap's tags makes a heap tag (commitment 9). In the CLI and the API a name
     with no tag is refused, as today, with the hint to make it (flow H).

@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use domain::heap::HeapPolicyPatch;
 use domain::item::{ItemPatch, StateKind};
 use domain::parameter::{ParameterError, Weight};
-use domain::{HeapId, ItemId, ParameterId, Timestamp, ValidationError};
+use domain::{HeapId, ItemId, ParameterId, TagId, Timestamp, ValidationError};
 use service::ServiceError;
 use service::items::{ClosedCursor, ParameterWeightDraft, WeightsDraft, parse_preview_limit};
 use utoipa_axum::router::OpenApiRouter;
@@ -94,7 +94,7 @@ async fn list_ranked(
         (status = 200, body = RankingPreviewDto),
         (status = 404, body = Problem),
         (status = 409, description = "`parameter_archived`", body = Problem),
-        (status = 422, description = "Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap`", body = Problem),
+        (status = 422, description = "Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter`, `duplicate_tag`, `parameter_not_in_heap` or `tag_not_in_heap`", body = Problem),
     ))]
 async fn preview_ranking(
     State(state): State<AppState>,
@@ -139,7 +139,12 @@ fn to_weights_draft(body: &RankingPreviewRequestDto) -> Result<WeightsDraft, Val
             age: weight(body.age)?,
             deadline: weight(body.deadline)?,
             value: weight(body.value)?,
+            tags: weight(body.tags)?,
         },
+        tag_order: body
+            .tag_order
+            .as_ref()
+            .map(|ids| ids.iter().copied().map(TagId::from_uuid).collect()),
         parameters,
     })
 }

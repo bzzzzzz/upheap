@@ -124,6 +124,8 @@ coded_enum! {
         AgeWeight = "age_weight",
         DeadlineWeight = "deadline_weight",
         ValueWeight = "value_weight",
+        TagsWeight = "tags_weight",
+        TagOrder = "tag_order",
         Options = "options",
         ArchivedOptions = "archived_options",
         ItemsSwitched = "items_switched",

@@ -50,6 +50,7 @@ async fn item_in_new_database() -> Result<(DatabaseConnection, ItemId, UserId)> 
         name: Name::parse("Heap")?,
         policy: HeapPolicy::default(),
         context: None,
+        tag_order: Vec::new(),
         agents_prepare: false,
         origin_id: None,
         archived_at: None,

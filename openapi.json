@@ -6245,7 +6245,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap`",
+            "description": "Invalid fields, `weight_out_of_range`, `limit_out_of_range`, `duplicate_parameter`, `duplicate_tag`, `parameter_not_in_heap` or `tag_not_in_heap`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7044,7 +7044,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `weight_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap`",
+            "description": "Invalid fields, `weight_out_of_range`, `duplicate_parameter`, `duplicate_tag`, `parameter_not_in_heap` or `tag_not_in_heap`",
             "content": {
               "application/json": {
                 "schema": {
@@ -9778,6 +9778,7 @@
           "deadline",
           "value",
           "parameter",
+          "tags",
           "blocks"
         ]
       },
@@ -9854,6 +9855,7 @@
           "slug",
           "name",
           "agents_prepare",
+          "tag_order",
           "open_count",
           "weights",
           "priority",
@@ -9920,6 +9922,14 @@
           "slug": {
             "type": "string",
             "description": "Unique within the team; the heap's path is `/teams/{team}/heaps/{slug}`."
+          },
+          "tag_order": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The heap's tag order for ranking, the highest first: the tags that count in ranking, each once. Read-only\nhere; admins set it with `PATCH …/weights`."
           },
           "team_id": {
             "type": "string",
@@ -10082,6 +10092,12 @@
             "description": "0 to 100. The weight of need.",
             "minimum": 0
           },
+          "tags": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 to 100. The weight of the heap's tag order.",
+            "minimum": 0
+          },
           "value": {
             "type": "integer",
             "format": "int32",
@@ -10130,6 +10146,27 @@
               "$ref": "#/components/schemas/ParameterWeightChange"
             },
             "description": "Parameters of the heap in use whose weight changes, each listed once."
+          },
+          "tag_order": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The heap's tags that count in ranking, the highest first, each once. Replaces the whole order; `[]` clears it."
+          },
+          "tags": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100. The weight of the heap's tag order.",
+            "maximum": 100,
+            "minimum": 0
           },
           "value": {
             "type": [
@@ -10186,7 +10223,8 @@
         "enum": [
           "need",
           "due",
-          "size"
+          "size",
+          "tags"
         ]
       },
       "Invitation": {
@@ -12870,6 +12908,27 @@
               "$ref": "#/components/schemas/ParameterWeightDraft"
             },
             "description": "Parameters of the heap in use to give another weight, each listed once."
+          },
+          "tag_order": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "A tag order to rank with instead of the stored one: the heap's tags, the highest first, each once. `[]` ranks\nwith no tag order."
+          },
+          "tags": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "0 to 100. The weight of the heap's tag order.",
+            "maximum": 100,
+            "minimum": 0
           },
           "value": {
             "type": [

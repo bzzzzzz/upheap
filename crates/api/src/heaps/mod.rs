@@ -12,7 +12,7 @@ use domain::heap::{HeapPolicyPatch, HeapPriority};
 use domain::parameter::Weight;
 use domain::text::{Context, Name};
 use domain::validation::Field;
-use domain::{ParameterId, Version};
+use domain::{ParameterId, TagId, Version};
 use service::ServiceError;
 use service::heaps::{HeapPatch, HeapWeightsView, ParameterWeightChange, WeightsChange};
 use service::teams::HeapView;
@@ -44,6 +44,7 @@ pub(crate) fn to_heap_dto(view: HeapView) -> HeapDto {
         name: heap.name.as_str().to_owned(),
         context: heap.context.as_ref().map(|context| context.as_str().to_owned()),
         agents_prepare: heap.agents_prepare,
+        tag_order: heap.tag_order.iter().map(|id| *id.as_uuid()).collect(),
         archived_at: heap.archived_at.map(domain::Timestamp::as_millis),
         open_count: view.open_count,
         weights: HeapWeightsDto::from(&heap.policy),
@@ -90,7 +91,12 @@ fn to_weights_change(body: &HeapWeightsPatchDto) -> Result<WeightsChange, Servic
             age: weight(body.age)?,
             deadline: weight(body.deadline)?,
             value: weight(body.value)?,
+            tags: weight(body.tags)?,
         },
+        tag_order: body
+            .tag_order
+            .as_ref()
+            .map(|ids| ids.iter().copied().map(TagId::from_uuid).collect()),
         parameters,
     })
 }
@@ -147,7 +153,7 @@ async fn update_heap(
         (status = 403, body = Problem),
         (status = 404, body = Problem),
         (status = 409, description = "`version_conflict`, `heap_archived` or `parameter_archived`", body = Problem),
-        (status = 422, description = "Invalid fields, `weight_out_of_range`, `duplicate_parameter` or `parameter_not_in_heap`", body = Problem),
+        (status = 422, description = "Invalid fields, `weight_out_of_range`, `duplicate_parameter`, `duplicate_tag`, `parameter_not_in_heap` or `tag_not_in_heap`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn update_weights(

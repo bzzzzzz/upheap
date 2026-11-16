@@ -218,6 +218,8 @@ mod tests {
                 "age_weight",
                 "deadline_weight",
                 "value_weight",
+                "tags_weight",
+                "tag_order",
                 "options",
                 "archived_options",
                 "items_switched",
