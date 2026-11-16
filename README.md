@@ -209,6 +209,7 @@ cargo run -p cli -- heap weights --need 20 --parameter Area=30   # ranking weigh
 cargo run -p cli -- heap priority 3 work                        # your own priority for a heap, 1 to 10; orders it against your other heaps
 cargo run -p cli -- item list --effort s,m --tag infra
 cargo run -p cli -- item list --all-heaps
+cargo run -p cli -- item list --all-heaps --team acme            # only one team's heaps
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item add "Order the new certificate" --task -q    # added as a task; -q prints its key
