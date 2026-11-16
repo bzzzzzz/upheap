@@ -492,7 +492,7 @@ async fn heap_show_prints_the_weights_with_the_parameters_in_use() -> Result<()>
     expect_that!(
         shown.stdout,
         starts_with(
-            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       0 (off)\n  Deadline  10\n  Value     10\n  Area      20       parameter\n  Customer  10       parameter\n\nContext\n"
+            "Personal · Ada · agents prepare new notes: off · your priority: 1\n\nWeights\n  Need      10\n  Age       0 (off)\n  Deadline  10\n  Value     10\n  Tags      0 (off)\n  Area      20       parameter\n  Customer  10       parameter\n\nContext\n"
         )
     );
     expect_that!(shown.stdout, not(contains_substring("Legacy")));
@@ -528,7 +528,7 @@ async fn heap_weights_changes_heap_and_parameter_weights_in_one_save() -> Result
     expect_that!(
         changed.stdout,
         eq(
-            "Updated the weights of ada/personal.\n\nWeights\n  Need      30\n  Age       10\n  Deadline  10\n  Value     0 (off)\n  Area      40       parameter\n  Customer  10       parameter\n"
+            "Updated the weights of ada/personal.\n\nWeights\n  Need      30\n  Age       10\n  Deadline  10\n  Value     0 (off)\n  Tags      0 (off)\n  Area      40       parameter\n  Customer  10       parameter\n"
         )
     );
     expect_that!(stored.0, eq(&vec![30, 10, 10, 0]));

@@ -765,6 +765,7 @@ mod tests {
             name: Name::parse("Blog move").expect("valid"),
             policy: HeapPolicy::default(),
             context: context.map(|text| Context::parse(text).expect("valid").expect("some")),
+            tag_order: Vec::new(),
             agents_prepare: false,
             origin_id: Some(ItemId::from_uuid(Uuid::from_u128(3))),
             archived_at: None,

@@ -356,8 +356,8 @@ impl Services {
             parameters,
             ranking,
             to_come,
+            tags: heap_tags,
         } = rank_open_items(&self.db, &heap, as_of, now).await?;
-        let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         ensure_view_in_heap(&heap_tags, &parameters, view)?;
 
         let item_count = items.len();
@@ -566,12 +566,21 @@ impl Services {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let as_of = self.now();
         let (items, stored_parameters) = load_ranked_items(&self.db, heap_id, as_of).await?;
+        let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
+        let tag_order = ordered_tags(&access.heap, &heap_tags);
         let drafted_parameters = apply_parameter_draft(&stored_parameters, &draft.parameters)?;
         let drafted_policy = draft.heap.apply(&access.heap.policy);
 
         let view = ListView::default();
-        let current = ranked_group(&view, &items, &access.heap.policy, &stored_parameters, as_of);
-        let drafted = ranked_group(&view, &items, &drafted_policy, &drafted_parameters, as_of);
+        let current = ranked_group(
+            &view,
+            &items,
+            &access.heap.policy,
+            &stored_parameters,
+            &tag_order,
+            as_of,
+        );
+        let drafted = ranked_group(&view, &items, &drafted_policy, &drafted_parameters, &tag_order, as_of);
         let current_positions: HashMap<ItemId, usize> =
             current.iter().enumerate().map(|(i, id)| (*id, i + 1)).collect();
         let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
@@ -1573,13 +1582,16 @@ pub(crate) struct OpenRanking {
     /// The items that rank, which is every open item but the reminders to come.
     pub items: Vec<Item>,
     pub parameters: Vec<Parameter>,
+    /// The heap's tags, by name.
+    pub tags: Vec<Tag>,
     pub ranking: Vec<RankedItem>,
     /// The heap's reminders to come: out of the ranking until their date, in no particular order.
     pub to_come: Vec<Item>,
 }
 
 /// Ranks every open item of the heap that isn't a reminder to come at `now`, at `as_of` and under its stored
-/// weights, as its list does, and returns the items and parameters with the ranking, and the reminders left out.
+/// weights and tag order, as its list does, and returns the items, parameters and tags with the ranking, and the
+/// reminders left out.
 /// Every ranked item is ranked, because a blocker inherits from what it blocks even when that is left out of what a
 /// caller shows. The one place that says how a heap's current order is made, so no list drifts from another.
 pub(crate) async fn rank_open_items(
@@ -1590,13 +1602,30 @@ pub(crate) async fn rank_open_items(
 ) -> Result<OpenRanking, StoreError> {
     let (items, to_come, parameters) = load_open_items(db, heap.id, now).await?;
     let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
-    let ranking = rank(CURRENT_FORMULA, &heap.policy, &parameters, &inputs, as_of);
+    let tags = store::tags::list_tags(db, heap.id).await?;
+    let ranking = rank(
+        CURRENT_FORMULA,
+        &heap.policy,
+        &parameters,
+        &ordered_tags(heap, &tags),
+        &inputs,
+        as_of,
+    );
     Ok(OpenRanking {
         items,
         parameters,
+        tags,
         ranking,
         to_come,
     })
+}
+
+/// The heap's ranked tags in its tag order, the highest first, out of all its tags.
+fn ordered_tags<'t>(heap: &Heap, tags: &'t [Tag]) -> Vec<&'t Tag> {
+    heap.tag_order
+        .iter()
+        .filter_map(|id| tags.iter().find(|tag| tag.id == *id))
+        .collect()
 }
 
 /// The IDs of the items `view` lists in its ranked group, in order, with every item ranked first because a blocker
@@ -1606,10 +1635,11 @@ fn ranked_group(
     items: &[Item],
     policy: &HeapPolicy,
     parameters: &[Parameter],
+    tag_order: &[&Tag],
     as_of: Timestamp,
 ) -> Vec<ItemId> {
     let inputs: Vec<ItemForRanking<'_>> = items.iter().map(ItemForRanking::from).collect();
-    let ranking = rank(CURRENT_FORMULA, policy, parameters, &inputs, as_of);
+    let ranking = rank(CURRENT_FORMULA, policy, parameters, tag_order, &inputs, as_of);
     let by_id: HashMap<ItemId, &Item> = items.iter().map(|item| (item.id, item)).collect();
     let mut group: Vec<&Item> = ranking
         .iter()

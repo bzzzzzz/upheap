@@ -4,15 +4,16 @@ use std::collections::BTreeMap;
 
 use api_types::heaps::{HeapDto, HeapWeightsPatchDto, HeapWeightsResultDto, ParameterWeightChangeDto};
 use api_types::parameters::ParameterListDto;
+use api_types::tags::TagListDto;
 use clap::Args;
 use domain::parameter::Weight;
 use uuid::Uuid;
 
 use crate::client::NO_QUERY;
-use crate::commands::heap::show::render_weights;
+use crate::commands::heap::show::{render_weights, tag_order_names};
 use crate::commands::heap_api::{HeapApi, named_heap, resolve_heap_handle};
 use crate::commands::{SharedArgs, UsageError};
-use crate::lookup::{HeapHandle, find_parameter};
+use crate::lookup::{HeapHandle, find_parameter, resolve_tags};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -33,6 +34,12 @@ pub struct WeightsArgs {
     /// The weight of value per effort (impact and effort together), 0 to 100
     #[arg(long, value_name = "N", value_parser = parse_weight)]
     pub value: Option<u16>,
+    /// The weight of the heap's tag order, 0 to 100
+    #[arg(long, value_name = "N", value_parser = parse_weight)]
+    pub tags: Option<u16>,
+    /// A tag to rank, by name or ID. Repeat for more, the highest first; they replace the heap's tag order
+    #[arg(long = "tag-order", value_name = "NAME")]
+    pub tag_order: Vec<String>,
     /// A parameter's weight, as NAME=N, the parameter by name or ID, 0 to 100. Repeat for more
     #[arg(long = "parameter", value_name = "NAME=N", value_parser = parse_parameter_weight)]
     pub parameters: Vec<ParameterWeight>,
@@ -78,10 +85,14 @@ pub async fn run(args: WeightsArgs, app: &App, out: &mut Output) -> Result<(), C
         && args.age.is_none()
         && args.deadline.is_none()
         && args.value.is_none()
+        && args.tags.is_none()
+        && args.tag_order.is_empty()
         && args.parameters.is_empty();
     if nothing_given {
         if out.mode() == Mode::Human {
-            out.line("Nothing to change: give --need, --age, --deadline, --value or --parameter.")?;
+            out.line(
+                "Nothing to change: give --need, --age, --deadline, --value, --tags, --tag-order or --parameter.",
+            )?;
         }
         return Ok(());
     }
@@ -101,11 +112,19 @@ pub async fn run(args: WeightsArgs, app: &App, out: &mut Output) -> Result<(), C
         let list = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;
         resolve_parameter_weights(&args.parameters, &list.value, &handle)?
     };
+    let tag_order = if args.tag_order.is_empty() {
+        None
+    } else {
+        let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
+        Some(resolve_tags(&args.tag_order, &tags.value, &handle)?)
+    };
     let patch = HeapWeightsPatchDto {
         need: args.need.map(i64::from),
         age: args.age.map(i64::from),
         deadline: args.deadline.map(i64::from),
         value: args.value.map(i64::from),
+        tags: args.tags.map(i64::from),
+        tag_order,
         parameters: changes,
     };
     let saved = api
@@ -120,7 +139,8 @@ pub async fn run(args: WeightsArgs, app: &App, out: &mut Output) -> Result<(), C
         Mode::Human => {
             out.line(&format!("Updated the weights of {handle}."))?;
             out.line("")?;
-            render_weights(&saved.value.heap.weights, &saved.value.parameters, out)?;
+            let tag_order = tag_order_names(&saved.value.heap, &api).await?;
+            render_weights(&saved.value.heap.weights, &tag_order, &saved.value.parameters, out)?;
         }
     }
     Ok(())

@@ -13,6 +13,9 @@ pub struct Model {
     pub age_weight: i32,
     pub deadline_weight: i32,
     pub value_weight: i32,
+    pub tags_weight: i32,
+    /// A JSON list of tag IDs, the highest first; `NULL` when no tag is ranked.
+    pub tag_order: Option<String>,
     pub context: Option<String>,
     pub agents_prepare: bool,
     /// The note that became this heap.

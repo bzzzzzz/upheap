@@ -4,7 +4,7 @@ use crate::handle::Handle;
 use crate::parameter::Weight;
 use crate::text::{Context, Name};
 use crate::validation::ValidationError;
-use crate::{HeapId, ItemId, TeamId, Timestamp, Version};
+use crate::{HeapId, ItemId, TagId, TeamId, Timestamp, Version};
 
 /// The heap's ranking weights. Each weight scales one factor's influence relative to the others; `0` turns the
 /// factor off. The custom parameters' weights count next to these.
@@ -15,6 +15,8 @@ pub struct HeapPolicy {
     pub deadline_weight: Weight,
     /// Shared by effort and impact, which count together as one value-per-effort factor.
     pub value_weight: Weight,
+    /// The weight of the heap's tag order. Off in a new heap: no tag is ranked until an admin orders some.
+    pub tags_weight: Weight,
 }
 
 impl Default for HeapPolicy {
@@ -24,6 +26,7 @@ impl Default for HeapPolicy {
             age_weight: Weight::DEFAULT,
             deadline_weight: Weight::DEFAULT,
             value_weight: Weight::DEFAULT,
+            tags_weight: Weight::OFF,
         }
     }
 }
@@ -68,6 +71,7 @@ pub struct HeapPolicyPatch {
     pub age: Option<Weight>,
     pub deadline: Option<Weight>,
     pub value: Option<Weight>,
+    pub tags: Option<Weight>,
 }
 
 impl HeapPolicyPatch {
@@ -78,6 +82,7 @@ impl HeapPolicyPatch {
             age_weight: self.age.unwrap_or(policy.age_weight),
             deadline_weight: self.deadline.unwrap_or(policy.deadline_weight),
             value_weight: self.value.unwrap_or(policy.value_weight),
+            tags_weight: self.tags.unwrap_or(policy.tags_weight),
         }
     }
 }
@@ -109,6 +114,7 @@ mod tests {
         let patch = HeapPolicyPatch {
             need: Some(weight(30)),
             value: Some(weight(0)),
+            tags: Some(weight(20)),
             ..HeapPolicyPatch::default()
         };
 
@@ -119,9 +125,11 @@ mod tests {
             eq(HeapPolicy {
                 need_weight: weight(30),
                 value_weight: weight(0),
+                tags_weight: weight(20),
                 ..HeapPolicy::default()
             })
         );
+        expect_that!(HeapPolicy::default().tags_weight, eq(weight(0)));
         expect_that!(HeapPolicyPatch::default().apply(&patched), eq(patched));
     }
 }
@@ -134,6 +142,8 @@ pub struct Heap {
     pub slug: Handle,
     pub name: Name,
     pub policy: HeapPolicy,
+    /// The heap's tags that take part in ranking, the highest first, each once. Empty when none is ranked.
+    pub tag_order: Vec<TagId>,
     /// What the project is and where its work lives, as written; `None` when nobody has written one.
     pub context: Option<Context>,
     /// Whether every item added here is sent to an agent to take it one stable state forward (Work with agents, Opening a turn).

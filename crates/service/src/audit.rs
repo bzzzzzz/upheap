@@ -2,7 +2,7 @@
 
 use domain::audit::AuditField;
 use domain::comment::Comment;
-use domain::heap::HeapPolicy;
+use domain::heap::{Heap, HeapPolicy};
 use domain::item::{Due, Item, Kind, Stage};
 use domain::list_view::ListView;
 use domain::parameter::Parameter;
@@ -11,7 +11,7 @@ use domain::saved_view::SavedView;
 use domain::step::Step;
 use domain::tag::Tag;
 use domain::turn::{Goal, TakeBackWhy, Turn};
-use domain::{OptionId, ParameterId};
+use domain::{OptionId, ParameterId, TagId};
 use serde_json::{Map, Value, json};
 
 /// The fields of a newly created item, for its `item_created` entry. The kind and the stage are left out while they
@@ -318,9 +318,12 @@ pub(crate) fn diff_parameters(before: &Parameter, after: &Parameter) -> Value {
     diff_fields(parameter_fields(before), parameter_fields(after))
 }
 
-/// Changed weights between two policies of a heap, named like the heap's columns.
-pub(crate) fn diff_policies(before: &HeapPolicy, after: &HeapPolicy) -> Value {
-    diff_fields(policy_fields(before), policy_fields(after))
+/// Changed weights and tag order between a heap and its new `policy` and `tag_order`, named like the heap's columns.
+pub(crate) fn diff_policies(before: &Heap, policy: &HeapPolicy, tag_order: &[TagId]) -> Value {
+    diff_fields(
+        policy_fields(&before.policy, &before.tag_order),
+        policy_fields(policy, tag_order),
+    )
 }
 
 fn diff_fields(before: Map<String, Value>, after: Map<String, Value>) -> Value {
@@ -394,7 +397,7 @@ fn parameter_fields(parameter: &Parameter) -> Map<String, Value> {
     fields
 }
 
-fn policy_fields(policy: &HeapPolicy) -> Map<String, Value> {
+fn policy_fields(policy: &HeapPolicy, tag_order: &[TagId]) -> Map<String, Value> {
     let mut fields = Map::new();
     fields.insert(AuditField::NeedWeight.code().into(), json!(policy.need_weight.get()));
     fields.insert(AuditField::AgeWeight.code().into(), json!(policy.age_weight.get()));
@@ -403,6 +406,11 @@ fn policy_fields(policy: &HeapPolicy) -> Map<String, Value> {
         json!(policy.deadline_weight.get()),
     );
     fields.insert(AuditField::ValueWeight.code().into(), json!(policy.value_weight.get()));
+    fields.insert(AuditField::TagsWeight.code().into(), json!(policy.tags_weight.get()));
+    fields.insert(
+        AuditField::TagOrder.code().into(),
+        json!(tag_order.iter().map(ToString::to_string).collect::<Vec<_>>()),
+    );
     fields
 }
 

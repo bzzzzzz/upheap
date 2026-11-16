@@ -4,7 +4,7 @@ use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
 use domain::parameter::Weight;
 use domain::text::{Context, Name};
-use domain::{HeapId, ItemId, TeamId, Timestamp, Version};
+use domain::{HeapId, ItemId, TagId, TeamId, Timestamp, Version};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait,
 };
@@ -28,6 +28,8 @@ pub async fn insert_heap(db: &impl ConnectionTrait, heap: &Heap, created_at: Tim
         age_weight: Set(weight_to_db(heap.policy.age_weight)),
         deadline_weight: Set(weight_to_db(heap.policy.deadline_weight)),
         value_weight: Set(weight_to_db(heap.policy.value_weight)),
+        tags_weight: Set(weight_to_db(heap.policy.tags_weight)),
+        tag_order: Set(tag_order_to_db(&heap.tag_order)),
         context: Set(heap.context.as_ref().map(|c| c.as_str().to_owned())),
         agents_prepare: Set(heap.agents_prepare),
         origin_id: Set(heap.origin_id.map(|origin| id_to_db(origin.as_uuid()))),
@@ -95,6 +97,8 @@ pub async fn update_heap(
         age_weight: Set(weight_to_db(saved.policy.age_weight)),
         deadline_weight: Set(weight_to_db(saved.policy.deadline_weight)),
         value_weight: Set(weight_to_db(saved.policy.value_weight)),
+        tags_weight: Set(weight_to_db(saved.policy.tags_weight)),
+        tag_order: Set(tag_order_to_db(&saved.tag_order)),
         context: Set(saved.context.as_ref().map(|c| c.as_str().to_owned())),
         agents_prepare: Set(saved.agents_prepare),
         archived_at: Set(saved.archived_at.map(Timestamp::as_millis)),
@@ -179,7 +183,9 @@ fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
             age_weight: read.weight(row.age_weight)?,
             deadline_weight: read.weight(row.deadline_weight)?,
             value_weight: read.weight(row.value_weight)?,
+            tags_weight: read.weight(row.tags_weight)?,
         },
+        tag_order: tag_order_from_db(&read, row.tag_order.as_deref())?,
         context: match row.context.as_deref() {
             Some(raw) => Context::parse(raw).map_err(|e| read.corrupt(e.to_string()))?,
             None => None,
@@ -193,6 +199,24 @@ fn to_heap(row: heaps::Model) -> Result<Heap, StoreError> {
         archived_at: read.optional_timestamp(row.archived_at)?,
         version: read.version(row.version)?,
     })
+}
+
+/// The column's value for `order`: `NULL` for an empty order, otherwise a JSON list of tag IDs.
+fn tag_order_to_db(order: &[TagId]) -> Option<String> {
+    if order.is_empty() {
+        return None;
+    }
+    let ids: Vec<String> = order.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    Some(serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_owned()))
+}
+
+fn tag_order_from_db(read: &RowReader<'_>, raw: Option<&str>) -> Result<Vec<TagId>, StoreError> {
+    let Some(raw) = raw else {
+        return Ok(Vec::new());
+    };
+    let ids: Vec<String> =
+        serde_json::from_str(raw).map_err(|e| read.corrupt(format!("tag order is not a list: {e}")))?;
+    ids.iter().map(|id| read.uuid(id).map(TagId::from_uuid)).collect()
 }
 
 fn weight_to_db(weight: Weight) -> i32 {

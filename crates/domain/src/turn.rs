@@ -581,6 +581,7 @@ mod tests {
             name: Name::parse("Ops").expect("valid"),
             policy: crate::heap::HeapPolicy::default(),
             context: None,
+            tag_order: Vec::new(),
             agents_prepare: false,
             origin_id: None,
             archived_at: archived.then_some(Timestamp::EPOCH),

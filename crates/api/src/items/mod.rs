@@ -139,6 +139,7 @@ fn to_weights_draft(body: &RankingPreviewRequestDto) -> Result<WeightsDraft, Val
             age: weight(body.age)?,
             deadline: weight(body.deadline)?,
             value: weight(body.value)?,
+            tags: None,
         },
         parameters,
     })

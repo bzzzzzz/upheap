@@ -165,7 +165,7 @@ async fn a_heap_shows_its_weights_and_only_admins_may_edit_them() -> Result<()> 
     let member = s.get_heap(&s.member).await?;
 
     // Assert
-    let tens = json!({ "need": 10, "age": 10, "deadline": 10, "value": 10 });
+    let tens = json!({ "need": 10, "age": 10, "deadline": 10, "value": 10, "tags": 0 });
     expect_that!(admin.body["weights"], eq(&tens));
     expect_that!(
         admin.body["allowed_actions"],
@@ -207,7 +207,7 @@ async fn one_save_sets_the_heap_and_parameter_weights_and_moves_both_versions() 
     expect_that!(saved.status, eq(StatusCode::OK));
     expect_that!(
         saved.body["heap"]["weights"],
-        eq(&json!({ "need": 30, "age": 10, "deadline": 10, "value": 10 }))
+        eq(&json!({ "need": 30, "age": 10, "deadline": 10, "value": 10, "tags": 0 }))
     );
     expect_that!(
         saved.body["heap"]["version"],
@@ -689,5 +689,96 @@ async fn a_preview_takes_parameter_weights_and_checks_the_limit() -> Result<()> 
         expect_that!(refused.body["code"], eq(&json!("limit_out_of_range")));
     }
     expect_that!(archived.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_tag_order_and_weight_save_with_the_weights_and_rank_the_list() -> Result<()> {
+    // Arrange
+    let s = setup().await?;
+    let billing = s.app.new_tag_id(&s.admin, &s.heap, "billing").await?;
+    let docs = s.app.new_tag_id(&s.admin, &s.heap, "docs").await?;
+    for (title, tags) in [
+        ("Plain", json!([])),
+        ("Docs", json!([docs])),
+        ("Invoices", json!([billing])),
+    ] {
+        s.app
+            .new_item(&s.admin, &s.heap, json!({ "title": title, "tag_ids": tags }))
+            .await?;
+    }
+    let before = s.ranked_titles().await?;
+    let version = s.heap_version().await?;
+
+    // Act
+    let saved = s.save(json!({ "tags": 40, "tag_order": [billing, docs] })).await?;
+    let again = s.save(json!({ "tags": 40, "tag_order": [billing, docs] })).await?;
+    let list = s
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/items", s.heap_path().await?),
+            Some(&s.admin),
+            None,
+        )
+        .await?;
+    let history = s
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/audit?entity_id={}", s.heap_path().await?, s.heap),
+            Some(&s.admin),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(before, elements_are![eq("Plain"), eq("Docs"), eq("Invoices")]);
+    expect_that!(saved.status, eq(StatusCode::OK));
+    expect_that!(saved.body["heap"]["weights"]["tags"], eq(&json!(40)));
+    expect_that!(saved.body["heap"]["tag_order"], eq(&json!([billing, docs])));
+    expect_that!(saved.body["heap"]["version"], not(eq(&version)));
+    expect_that!(again.body["heap"]["version"], eq(&saved.body["heap"]["version"]));
+    expect_that!(
+        titles(&list.body["ranked"]),
+        elements_are![eq("Invoices"), eq("Plain"), eq("Docs")]
+    );
+    expect_that!(
+        list.body["ranked"][0]["contributors"][0]["label"],
+        eq(&json!("Tagged billing"))
+    );
+    expect_that!(
+        list.body["ranked"][2]["held_back_by"].to_string(),
+        contains_substring("Tagged docs")
+    );
+    let fields: Vec<&Value> = history.body["entries"][0]["changes"]
+        .as_array()
+        .map(|changes| changes.iter().map(|c| &c["field"]).collect())
+        .unwrap_or_default();
+    expect_that!(
+        fields,
+        unordered_elements_are![eq(&&json!("tags_weight")), eq(&&json!("tag_order"))]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_tag_order_refuses_a_duplicate_and_a_tag_that_is_not_the_heaps() -> Result<()> {
+    // Arrange
+    let s = setup().await?;
+    let billing = s.app.new_tag_id(&s.admin, &s.heap, "billing").await?;
+    let stranger = uuid::Uuid::new_v4().to_string();
+
+    // Act
+    let duplicate = s.save(json!({ "tag_order": [billing, billing] })).await?;
+    let unknown = s.save(json!({ "tag_order": [billing, stranger] })).await?;
+
+    // Assert
+    expect_that!(duplicate.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(duplicate.body["code"], eq(&json!("duplicate_tag")));
+    expect_that!(unknown.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(unknown.body["code"], eq(&json!("tag_not_in_heap")));
     Ok(())
 }

@@ -70,6 +70,8 @@ impl Weight {
     pub const MAX: u16 = 100;
     /// The weight of a new parameter, the same as the heap's default weights.
     pub const DEFAULT: Self = Self(10);
+    /// A weight that turns its factor off.
+    pub const OFF: Self = Self(0);
 
     /// Takes any integer, so a negative or huge weight from a request is refused as out of range.
     pub fn parse(raw: i64) -> Result<Self, ValidationError> {

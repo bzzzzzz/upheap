@@ -12,7 +12,13 @@
 //! item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value
 //! counts as the last option (product.md, Priority §4), and an archived option as the option that replaced it.
 //!
-//! **Held back by** lists the fields the person could change to lift an item: a low need, no due date, unset sizes.
+//! **Tags** take part through the heap's tag order: an item's highest-ranked tag among those in the order scores
+//! from 1 for the first tag down to 0 for the last, times the Tags weight. An item with no ranked tag sits at the
+//! middle, 0.5, so tags lift an item above the untagged and a tag low in the order pushes it below. Its other tags
+//! never add. With the weight at 0 the component is nothing and the score is the one formula V2 gave.
+//!
+//! **Held back by** lists the fields the person could change to lift an item: a low need, no due date, unset sizes, a tag low in the
+//! order.
 //! It follows the formula's weights and its defaults for unset sizes (product.md, Priority §9). A blocker ranked by
 //! what it blocks has none, since its own fields don't move it.
 //!
@@ -20,27 +26,28 @@
 //! chains. The blocking edges form a forest because cycles are refused on write; the walk still tolerates a cycle
 //! in stored data by ignoring the edge that closes it.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::due::fuzzy_label;
 use crate::heap::HeapPolicy;
 use crate::item::{Due, Item, Need, Size};
 use crate::parameter::Parameter;
-use crate::{ItemId, OptionId, ParameterId, Timestamp};
+use crate::tag::Tag;
+use crate::{ItemId, OptionId, ParameterId, TagId, Timestamp};
 
 /// A named version of the scoring formula.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaVersion {
-    /// A weighted sum of need, age scaled by need, deadline proximity, value per effort and the custom parameters.
+    /// V2 plus the Tags factor; with the Tags weight at 0 every score is V2's.
     ///
-    /// It replaced `V1`, which had no need. Items it ranked all count as expected, the step that leaves their age
-    /// as it was, so they mostly keep their order among themselves. The exception is blockers: expected adds the
-    /// same amount to every item, and a blocker takes on 1.1 times the score of what it blocks, so a blocker can
-    /// move above an item it was just below.
-    V2,
+    /// V2 is a weighted sum of need, age scaled by need, deadline proximity, value per effort and the custom
+    /// parameters. It replaced `V1`, which had no need: items it ranked all count as expected, so they mostly kept
+    /// their order, except that a blocker, which takes on 1.1 times the score of what it blocks, could move above
+    /// an item it was just below.
+    V3,
 }
 
-pub const CURRENT_FORMULA: FormulaVersion = FormulaVersion::V2;
+pub const CURRENT_FORMULA: FormulaVersion = FormulaVersion::V3;
 
 /// At most this many contributors are returned per item.
 pub const MAX_CONTRIBUTORS: usize = 2;
@@ -64,6 +71,8 @@ pub struct ItemForRanking<'a> {
     pub blocked_by: Option<ItemId>,
     /// The item's option for each custom parameter that is set.
     pub parameters: &'a BTreeMap<ParameterId, OptionId>,
+    /// The item's tags; only those in the heap's tag order count.
+    pub tags: &'a BTreeSet<TagId>,
 }
 
 impl<'a> From<&'a Item> for ItemForRanking<'a> {
@@ -78,6 +87,7 @@ impl<'a> From<&'a Item> for ItemForRanking<'a> {
             due: item.due,
             blocked_by: item.blocked_by(),
             parameters: &item.parameters,
+            tags: &item.tags,
         }
     }
 }
@@ -91,6 +101,8 @@ pub enum Factor {
     Value,
     /// A custom parameter.
     Parameter,
+    /// The item's highest-ranked tag in the heap's tag order.
+    Tags,
     /// Priority inherited from an item this one blocks.
     Blocks,
 }
@@ -114,6 +126,8 @@ pub enum Gap {
     Due,
     /// Effort or impact is unset.
     Size,
+    /// The item's best ranked tag is low in the heap's tag order.
+    Tags,
 }
 
 /// One thing holding an item back.
@@ -134,13 +148,13 @@ pub struct RankedItem {
     pub score: f64,
     /// Largest contributors first.
     pub contributors: Vec<Contributor>,
-    /// What keeps it from ranking higher, in a fixed order (need, due, sizes); empty for a blocker ranked by what
+    /// What keeps it from ranking higher, in a fixed order (need, due, sizes, tags); empty for a blocker ranked by what
     /// it blocks.
     pub held_back_by: Vec<HeldBack>,
 }
 
 /// Ranks `items` under `policy` and the heap's `parameters` at `as_of`, highest priority first. Archived
-/// parameters don't count.
+/// parameters don't count. `tag_order` is the heap's ranked tags, the highest first.
 ///
 /// An item that blocks others ranks at least as high as each of them. Ties go to the item that blocks the longer
 /// chain, then to the older item, then to the lower ID, so the order is fully deterministic.
@@ -148,6 +162,7 @@ pub fn rank(
     formula: FormulaVersion,
     policy: &HeapPolicy,
     parameters: &[Parameter],
+    tag_order: &[&Tag],
     items: &[ItemForRanking<'_>],
     as_of: Timestamp,
 ) -> Vec<RankedItem> {
@@ -155,7 +170,7 @@ pub fn rank(
     let own: Vec<(f64, Vec<Component>)> = items
         .iter()
         .map(|item| {
-            let components = score_components(formula, policy, &parameters, item, as_of);
+            let components = score_components(formula, policy, &parameters, tag_order, item, as_of);
             let total = components.iter().map(|c| c.value).sum();
             (total, components)
         })
@@ -198,17 +213,22 @@ pub fn rank(
             held_back_by: if inherited.via.is_some() {
                 Vec::new()
             } else {
-                find_gaps(formula, policy, item)
+                find_gaps(formula, policy, tag_order, item)
             },
         })
         .collect()
 }
 
-/// What keeps `item` from ranking higher: a low need, no due date and unset sizes, each only while its factor
+/// What keeps `item` from ranking higher: a low need, no due date and unset sizes and a tag low in the order, each only while its factor
 /// counts, since otherwise changing it would move nothing. The need counts through its weight and through the
 /// age factor, which it scales. Unset values count as the lowest (product.md, Priority §4), and the item answers
 /// "why isn't this higher?" with them (Priority §9). Custom parameters are not named.
-fn find_gaps(formula: FormulaVersion, policy: &HeapPolicy, item: &ItemForRanking<'_>) -> Vec<HeldBack> {
+fn find_gaps(
+    formula: FormulaVersion,
+    policy: &HeapPolicy,
+    tag_order: &[&Tag],
+    item: &ItemForRanking<'_>,
+) -> Vec<HeldBack> {
     let mut gaps = Vec::new();
     if (policy.need_weight.get() > 0 || policy.age_weight.get() > 0)
         && matches!(item.need, Need::Idea | Need::NiceToHave)
@@ -226,7 +246,7 @@ fn find_gaps(formula: FormulaVersion, policy: &HeapPolicy, item: &ItemForRanking
     }
     if policy.value_weight.get() > 0 {
         let (unset_effort, unset_impact) = match formula {
-            FormulaVersion::V2 => (v2::UNSET_EFFORT, v2::UNSET_IMPACT),
+            FormulaVersion::V3 => (v3::UNSET_EFFORT, v3::UNSET_IMPACT),
         };
         let label = match (item.effort, item.impact) {
             (None, None) => Some("Effort and impact not set".to_owned()),
@@ -238,7 +258,32 @@ fn find_gaps(formula: FormulaVersion, policy: &HeapPolicy, item: &ItemForRanking
             gaps.push(HeldBack { gap: Gap::Size, label });
         }
     }
+    if policy.tags_weight.get() > 0
+        && let Some((tag, raw)) = best_tag(tag_order, item)
+        && raw < v3::NEUTRAL_TAG
+    {
+        gaps.push(HeldBack {
+            gap: Gap::Tags,
+            label: format!("Tagged {}", tag.name.as_str()),
+        });
+    }
     gaps
+}
+
+/// The item's highest-ranked tag among `tag_order`, with its raw score: 1 for the first tag down to 0 for the last,
+/// and 1 for a single ranked tag. `None` when the item has none of them.
+fn best_tag<'t>(tag_order: &[&'t Tag], item: &ItemForRanking<'_>) -> Option<(&'t Tag, f64)> {
+    let last = tag_order.len().saturating_sub(1);
+    let (index, tag) = tag_order
+        .iter()
+        .enumerate()
+        .find(|(_, tag)| item.tags.contains(&tag.id))?;
+    let raw = if last == 0 {
+        1.0
+    } else {
+        (last - index) as f64 / last as f64
+    };
+    Some((*tag, raw))
 }
 
 /// An item's score after taking on the priority of the items it blocks.
@@ -318,6 +363,7 @@ fn inherit_from_blocked(items: &[ItemForRanking<'_>], own: &[(f64, Vec<Component
 struct Component {
     factor: Factor,
     value: f64,
+    /// Empty when the component counts in the score but isn't offered as a reason.
     label: String,
 }
 
@@ -325,18 +371,19 @@ fn score_components(
     formula: FormulaVersion,
     policy: &HeapPolicy,
     parameters: &[&Parameter],
+    tag_order: &[&Tag],
     item: &ItemForRanking<'_>,
     as_of: Timestamp,
 ) -> Vec<Component> {
     match formula {
-        FormulaVersion::V2 => v2::components(policy, parameters, item, as_of),
+        FormulaVersion::V3 => v3::components(policy, parameters, tag_order, item, as_of),
     }
 }
 
 /// Factor applied to a score a blocker inherits, because finishing both takes more work than finishing one.
 const fn blocker_boost(formula: FormulaVersion) -> f64 {
     match formula {
-        FormulaVersion::V2 => v2::BLOCKER_BOOST,
+        FormulaVersion::V3 => v3::BLOCKER_BOOST,
     }
 }
 
@@ -347,7 +394,7 @@ fn select_contributors(mut components: Vec<Component>, total: f64) -> Vec<Contri
     components.sort_by(|a, b| b.value.total_cmp(&a.value));
     components
         .into_iter()
-        .filter(|c| c.value > 0.0)
+        .filter(|c| c.value > 0.0 && !c.label.is_empty())
         .map(|c| Contributor {
             factor: c.factor,
             label: c.label,
@@ -360,13 +407,14 @@ fn select_contributors(mut components: Vec<Component>, total: f64) -> Vec<Contri
         .collect()
 }
 
-mod v2 {
+mod v3 {
     //! Each factor yields a value of roughly 0 to 1 for typical items, multiplied by the heap's weight for it.
 
-    use super::{Component, Factor, ItemForRanking, fuzzy_label};
+    use super::{Component, Factor, ItemForRanking, best_tag, fuzzy_label};
     use crate::heap::HeapPolicy;
     use crate::item::{Due, Need, Size};
     use crate::parameter::Parameter;
+    use crate::tag::Tag;
     use crate::{Duration, Timestamp};
 
     /// Age at which the age factor reaches 1. It keeps growing slowly after that.
@@ -379,6 +427,8 @@ mod v2 {
     const LOOSE_PAST_RATE: f64 = 0.1;
     /// A blocker ranks as if it were this much more important than the item it blocks.
     pub(super) const BLOCKER_BOOST: f64 = 1.1;
+    /// The raw score of an item with no ranked tag: a tag above it lifts the item, one below it holds the item back.
+    pub(super) const NEUTRAL_TAG: f64 = 0.5;
     /// What an unset effort counts as: the largest.
     pub(super) const UNSET_EFFORT: Size = Size::Xl;
     /// What an unset impact counts as: the smallest.
@@ -387,10 +437,12 @@ mod v2 {
     pub(super) fn components(
         policy: &HeapPolicy,
         parameters: &[&Parameter],
+        tag_order: &[&Tag],
         item: &ItemForRanking<'_>,
         as_of: Timestamp,
     ) -> Vec<Component> {
         let mut components = vec![
+            tags(policy.tags_weight.get(), tag_order, item),
             age(policy.age_weight.get(), item.need, item.waiting_since, as_of),
             value(policy.value_weight.get(), item),
         ];
@@ -401,6 +453,22 @@ mod v2 {
         // Last, so a tie in the contributors goes to the other factor: most items are expected, which says less.
         components.push(need(policy.need_weight.get(), item.need));
         components
+    }
+
+    /// The item's highest-ranked tag in the heap's order. It is a contributor only above neutral, since a neutral
+    /// value doesn't separate the item from untagged ones (its label is empty); it still counts in the score.
+    fn tags(weight: u16, tag_order: &[&Tag], item: &ItemForRanking<'_>) -> Component {
+        let best = best_tag(tag_order, item);
+        let raw = best.map_or(NEUTRAL_TAG, |(_, raw)| raw);
+        let label = match best {
+            Some((tag, raw)) if raw > NEUTRAL_TAG => format!("Tagged {}", tag.name.as_str()),
+            _ => String::new(),
+        };
+        Component {
+            factor: Factor::Tags,
+            value: f64::from(weight) * raw,
+            label,
+        }
     }
 
     /// Where the item's option sits in the parameter's order: 1 for the first, 0 for the last. Unset values add
@@ -574,6 +642,7 @@ mod tests {
     }
 
     static NO_VALUES: BTreeMap<ParameterId, OptionId> = BTreeMap::new();
+    static NO_TAGS: BTreeSet<TagId> = BTreeSet::new();
 
     fn item(n: u128, created_day: i64) -> ItemForRanking<'static> {
         ItemForRanking {
@@ -586,6 +655,7 @@ mod tests {
             due: None,
             blocked_by: None,
             parameters: &NO_VALUES,
+            tags: &NO_TAGS,
         }
     }
 
@@ -597,6 +667,7 @@ mod tests {
             age_weight: off,
             deadline_weight: off,
             value_weight: off,
+            tags_weight: off,
         }
     }
 
@@ -612,7 +683,7 @@ mod tests {
     fn older_items_rank_first_when_otherwise_equal() {
         let items = [item(1, 0), item(2, -10), item(3, -5)];
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &items, day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &items, day(0));
 
         expect_that!(
             order(&ranked),
@@ -628,7 +699,7 @@ mod tests {
     fn the_score_is_what_the_order_is_by() {
         let items = [item(1, 0), item(2, -10), item(3, -5)];
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &items, day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &items, day(0));
 
         expect_that!(ranked.windows(2).all(|pair| pair[0].score > pair[1].score), eq(true));
     }
@@ -646,7 +717,14 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[large, small], day(0));
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[],
+            &[large, small],
+            day(0),
+        );
 
         expect_that!(order(&ranked), elements_are![eq(&small.id), eq(&large.id)]);
     }
@@ -662,7 +740,14 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[old, overdue], day(0));
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[],
+            &[old, overdue],
+            day(0),
+        );
 
         expect_that!(order(&ranked), elements_are![eq(&overdue.id), eq(&old.id)]);
         expect_that!(ranked[0].contributors[0].label, eq("Overdue by 2 days"));
@@ -681,8 +766,8 @@ mod tests {
             ..HeapPolicy::default()
         };
 
-        let by_default = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[old, soon], day(0));
-        let by_deadline = rank(CURRENT_FORMULA, &heavy, &[], &[old, soon], day(0));
+        let by_default = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &[old, soon], day(0));
+        let by_deadline = rank(CURRENT_FORMULA, &heavy, &[], &[], &[old, soon], day(0));
 
         expect_that!(order(&by_default), elements_are![eq(&old.id), eq(&soon.id)]);
         expect_that!(order(&by_deadline), elements_are![eq(&soon.id), eq(&old.id)]);
@@ -705,7 +790,14 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[loose, firm], day(0));
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[],
+            &[loose, firm],
+            day(0),
+        );
 
         expect_that!(order(&ranked), elements_are![eq(&firm.id), eq(&loose.id)]);
     }
@@ -719,7 +811,7 @@ mod tests {
             due: Some(Due { at: day(1), firm: true }),
             ..item(1, -100)
         };
-        let ranked = rank(CURRENT_FORMULA, policy, &[], &[top, second], day(0));
+        let ranked = rank(CURRENT_FORMULA, policy, &[], &[], &[top, second], day(0));
         assert_eq!(ranked[0].item_id, top.id);
         ranked[1].held_back_by.clone()
     }
@@ -850,6 +942,7 @@ mod tests {
         };
         let no_value = HeapPolicy {
             value_weight: off,
+            tags_weight: off,
             ..HeapPolicy::default()
         };
 
@@ -915,6 +1008,7 @@ mod tests {
             CURRENT_FORMULA,
             &HeapPolicy::default(),
             &[],
+            &[],
             &[blocker, blocked],
             day(0),
         );
@@ -928,7 +1022,7 @@ mod tests {
         let policy = all_off();
         let items = [item(2, 0), item(1, 0)];
 
-        let ranked = rank(CURRENT_FORMULA, &policy, &[], &items, day(1));
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(1));
 
         expect_that!(order(&ranked), elements_are![eq(&items[1].id), eq(&items[0].id)]);
         expect_that!(ranked[0].contributors, is_empty());
@@ -951,6 +1045,7 @@ mod tests {
         let ranked = rank(
             CURRENT_FORMULA,
             &HeapPolicy::default(),
+            &[],
             &[],
             &[middle, blocked, blocker],
             day(0),
@@ -988,6 +1083,7 @@ mod tests {
             CURRENT_FORMULA,
             &HeapPolicy::default(),
             &[],
+            &[],
             &[other, urgent, middle, root],
             day(0),
         );
@@ -1009,7 +1105,7 @@ mod tests {
         };
         let blocker = item(2, 0);
 
-        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[blocked, blocker], day(0));
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[], &[blocked, blocker], day(0));
 
         expect_that!(order(&ranked), elements_are![eq(&blocker.id), eq(&blocked.id)]);
     }
@@ -1025,7 +1121,7 @@ mod tests {
             ..item(2, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[a, b], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &[a, b], day(0));
 
         expect_that!(ranked.len(), eq(2));
     }
@@ -1037,7 +1133,7 @@ mod tests {
             ..item(1, 0)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[blocked], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &[blocked], day(0));
 
         expect_that!(order(&ranked), elements_are![eq(&blocked.id)]);
         expect_that!(
@@ -1061,7 +1157,14 @@ mod tests {
             ..item(2, -30)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[win, critical], day(0));
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[],
+            &[win, critical],
+            day(0),
+        );
 
         expect_that!(order(&ranked), elements_are![eq(&critical.id), eq(&win.id)]);
         expect_that!(ranked[0].contributors[0].factor, eq(Factor::Need));
@@ -1076,7 +1179,14 @@ mod tests {
         };
         let expected = item(2, -1);
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[idea, expected], day(0));
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[],
+            &[idea, expected],
+            day(0),
+        );
 
         expect_that!(order(&ranked), elements_are![eq(&expected.id), eq(&idea.id)]);
     }
@@ -1115,7 +1225,7 @@ mod tests {
         let reminder = reminder(-90, -3);
 
         let input = ItemForRanking::from(&reminder);
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[input], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &[input], day(0));
 
         expect_that!(input.waiting_since, eq(day(-3)));
         let age = ranked[0]
@@ -1138,7 +1248,7 @@ mod tests {
             ..item(need as u128 + 1, -60)
         });
 
-        let ranked = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0));
 
         expect_that!(
             order(&ranked),
@@ -1161,7 +1271,7 @@ mod tests {
             ..item(1, -10)
         };
 
-        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[idea], day(0));
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &[idea], day(0));
 
         expect_that!(
             ranked[0].contributors.iter().map(|c| c.factor).collect::<Vec<_>>(),
@@ -1213,6 +1323,7 @@ mod tests {
             CURRENT_FORMULA,
             &HeapPolicy::default(),
             std::slice::from_ref(&customer),
+            &[],
             &[unset, small, big],
             day(0),
         );
@@ -1220,6 +1331,7 @@ mod tests {
             CURRENT_FORMULA,
             &HeapPolicy::default(),
             &[customer.archive(day(0)).expect("changed")],
+            &[],
             &[unset, small, big],
             day(0),
         );
@@ -1245,6 +1357,7 @@ mod tests {
                 CURRENT_FORMULA,
                 &HeapPolicy::default(),
                 &[parameter],
+                &[],
                 &[set, item(2, 0)],
                 day(0),
             );
@@ -1254,6 +1367,202 @@ mod tests {
                 not(contains(eq(&Factor::Parameter)))
             );
         }
+    }
+
+    fn tag(n: u128, name: &str) -> Tag {
+        Tag::new(
+            TagId::from_uuid(Uuid::from_u128(n)),
+            crate::HeapId::from_uuid(Uuid::nil()),
+            crate::tag::NewTag {
+                name: crate::tag::TagName::parse(name).expect("valid"),
+                description: None,
+            },
+            day(0),
+        )
+    }
+
+    fn tagged(n: u128, tags: &'static BTreeSet<TagId>) -> ItemForRanking<'static> {
+        ItemForRanking { tags, ..item(n, 0) }
+    }
+
+    fn with_tags_weight(weight: i64) -> HeapPolicy {
+        HeapPolicy {
+            tags_weight: Weight::parse(weight).expect("valid"),
+            ..HeapPolicy::default()
+        }
+    }
+
+    #[gtest]
+    fn the_top_tag_lifts_an_item_and_the_bottom_tag_holds_it_back() {
+        let (billing, infra, docs) = (tag(1, "billing"), tag(2, "infra"), tag(3, "docs"));
+        let top = BTreeSet::from([billing.id]);
+        let bottom = BTreeSet::from([docs.id]);
+        let lifted = tagged(1, Box::leak(Box::new(top)));
+        let lowered = tagged(2, Box::leak(Box::new(bottom)));
+        let plain = item(3, 0);
+        let tag_order = [&billing, &infra, &docs];
+
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &with_tags_weight(30),
+            &[],
+            &tag_order,
+            &[plain, lowered, lifted],
+            day(0),
+        );
+
+        expect_that!(
+            order(&ranked),
+            elements_are![eq(&lifted.id), eq(&plain.id), eq(&lowered.id)]
+        );
+        expect_that!(ranked[0].contributors[0].factor, eq(Factor::Tags));
+        expect_that!(ranked[0].contributors[0].label, eq("Tagged billing"));
+        expect_that!(ranked[2].held_back_by, contains(eq(&gap(Gap::Tags, "Tagged docs"))));
+        expect_that!(
+            ranked[1].held_back_by.iter().map(|g| g.gap).collect::<Vec<_>>(),
+            not(contains(eq(&Gap::Tags)))
+        );
+    }
+
+    #[gtest]
+    fn the_tags_gap_comes_after_the_other_gaps() {
+        let (billing, docs) = (tag(1, "billing"), tag(2, "docs"));
+        let bottom = BTreeSet::from([docs.id]);
+        let idea = ItemForRanking {
+            need: Need::Idea,
+            tags: Box::leak(Box::new(bottom)),
+            ..item(2, 0)
+        };
+
+        let gaps = held_back_by_tags(&with_tags_weight(30), &[&billing, &docs], idea);
+
+        expect_that!(
+            gaps.iter().map(|g| g.gap).collect::<Vec<_>>(),
+            elements_are![eq(&Gap::Need), eq(&Gap::Due), eq(&Gap::Size), eq(&Gap::Tags)]
+        );
+    }
+
+    /// The gaps of an item ranked second, behind a top item with everything set.
+    fn held_back_by_tags(policy: &HeapPolicy, order: &[&Tag], second: ItemForRanking<'static>) -> Vec<HeldBack> {
+        let top = ItemForRanking {
+            need: Need::Critical,
+            effort: Some(Size::S),
+            impact: Some(Size::Xl),
+            due: Some(Due { at: day(1), firm: true }),
+            ..item(1, -100)
+        };
+        let ranked = rank(CURRENT_FORMULA, policy, &[], order, &[top, second], day(0));
+        ranked
+            .into_iter()
+            .find(|r| r.item_id == second.id)
+            .expect("ranked")
+            .held_back_by
+    }
+
+    #[gtest]
+    fn an_item_scores_by_its_highest_ranked_tag_and_ignores_unranked_ones() {
+        let (billing, infra, docs) = (tag(1, "billing"), tag(2, "infra"), tag(3, "docs"));
+        let tag_order = [&billing, &infra, &docs];
+        let both = tagged(1, Box::leak(Box::new(BTreeSet::from([billing.id, docs.id]))));
+        let only_top = tagged(2, Box::leak(Box::new(BTreeSet::from([billing.id]))));
+        let unranked = tagged(
+            3,
+            Box::leak(Box::new(BTreeSet::from([TagId::from_uuid(Uuid::from_u128(99))]))),
+        );
+        let unranked_and_bottom = tagged(
+            4,
+            Box::leak(Box::new(BTreeSet::from([
+                TagId::from_uuid(Uuid::from_u128(99)),
+                docs.id,
+            ]))),
+        );
+        let plain = item(5, 0);
+
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &with_tags_weight(30),
+            &[],
+            &tag_order,
+            &[both, only_top, unranked, unranked_and_bottom, plain],
+            day(0),
+        );
+        let score = |item: ItemForRanking<'_>| ranked[position_of(&ranked, item.id)].score;
+
+        expect_that!(score(both), eq(score(only_top)));
+        expect_that!(score(unranked), eq(score(plain)));
+        expect_that!(score(unranked_and_bottom), lt(score(plain)));
+    }
+
+    #[gtest]
+    fn a_single_ranked_tag_scores_as_the_top() {
+        let billing = tag(1, "billing");
+        let with = tagged(1, Box::leak(Box::new(BTreeSet::from([billing.id]))));
+
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &with_tags_weight(30),
+            &[],
+            &[&billing],
+            &[item(2, 0), with],
+            day(0),
+        );
+
+        expect_that!(ranked[0].item_id, eq(with.id));
+        expect_that!(ranked[0].contributors[0].label, eq("Tagged billing"));
+    }
+
+    #[gtest]
+    fn a_tag_in_the_middle_of_the_order_neither_lifts_nor_holds_back() {
+        let (a, b, c) = (tag(1, "a"), tag(2, "b"), tag(3, "c"));
+        let middle = tagged(1, Box::leak(Box::new(BTreeSet::from([b.id]))));
+        let plain = item(2, -1);
+
+        let ranked = rank(
+            CURRENT_FORMULA,
+            &with_tags_weight(30),
+            &[],
+            &[&a, &b, &c],
+            &[middle, plain],
+            day(0),
+        );
+
+        expect_that!(
+            ranked
+                .iter()
+                .flat_map(|r| r.contributors.iter().map(|c| c.factor))
+                .collect::<Vec<_>>(),
+            not(contains(eq(&Factor::Tags)))
+        );
+        expect_that!(
+            ranked
+                .iter()
+                .flat_map(|r| r.held_back_by.iter().map(|g| g.gap))
+                .collect::<Vec<_>>(),
+            not(contains(eq(&Gap::Tags)))
+        );
+    }
+
+    #[gtest]
+    fn with_the_tags_weight_at_zero_the_order_is_the_one_without_tags() {
+        let (billing, docs) = (tag(1, "billing"), tag(2, "docs"));
+        let top = tagged(1, Box::leak(Box::new(BTreeSet::from([billing.id]))));
+        let bottom = ItemForRanking {
+            tags: Box::leak(Box::new(BTreeSet::from([docs.id]))),
+            ..item(2, -5)
+        };
+        let items = [top, bottom, item(3, -10), item(4, 0)];
+
+        let with_order = rank(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[&billing, &docs],
+            &items,
+            day(0),
+        );
+        let without = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &items, day(0));
+
+        expect_that!(with_order, eq(&without));
     }
 
     fn arb_size() -> impl Strategy<Value = Option<Size>> {
@@ -1283,6 +1592,7 @@ mod tests {
                 due: due.map(|(d, firm)| Due { at: day(d), firm }),
                 blocked_by: None,
                 parameters: &NO_VALUES,
+                tags: &NO_TAGS,
             })
     }
 
@@ -1305,9 +1615,9 @@ mod tests {
         #[test]
         fn ranking_ignores_input_order(mut items in prop::collection::vec(arb_item(), 0..40)) {
             let policy = HeapPolicy::default();
-            let first = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
+            let first = rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0));
             items.reverse();
-            let second = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
+            let second = rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0));
             prop_assert_eq!(first, second);
         }
 
@@ -1326,8 +1636,8 @@ mod tests {
                 ranked.into_iter().map(|r| r.item_id).filter(|id| *id != edited_id).collect()
             };
 
-            let before = without(rank(CURRENT_FORMULA, &policy, &[], &items, day(0)));
-            let after = without(rank(CURRENT_FORMULA, &policy, &[], &edited, day(0)));
+            let before = without(rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0)));
+            let after = without(rank(CURRENT_FORMULA, &policy, &[], &[], &edited, day(0)));
 
             prop_assert_eq!(before, after);
         }
@@ -1343,15 +1653,15 @@ mod tests {
             raised[raised_at].need = Need::Critical;
             let id = items[raised_at].id;
 
-            let before = position_of(&rank(CURRENT_FORMULA, &policy, &[], &items, day(0)), id);
-            let after = position_of(&rank(CURRENT_FORMULA, &policy, &[], &raised, day(0)), id);
+            let before = position_of(&rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0)), id);
+            let after = position_of(&rank(CURRENT_FORMULA, &policy, &[], &[], &raised, day(0)), id);
 
             prop_assert!(after <= before);
         }
 
         #[test]
         fn an_item_blocking_another_never_ranks_below_it(items in arb_forest()) {
-            let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &items, day(0));
+            let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &items, day(0));
             for item in &items {
                 if let Some(blocker) = item.blocked_by {
                     prop_assert!(position_of(&ranked, blocker) < position_of(&ranked, item.id));
@@ -1362,9 +1672,9 @@ mod tests {
         #[test]
         fn ranking_with_blockers_ignores_input_order(mut items in arb_forest()) {
             let policy = HeapPolicy::default();
-            let first = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
+            let first = rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0));
             items.reverse();
-            let second = rank(CURRENT_FORMULA, &policy, &[], &items, day(0));
+            let second = rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0));
             prop_assert_eq!(first, second);
         }
     }

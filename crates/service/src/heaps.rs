@@ -12,7 +12,7 @@ use domain::permission::{Permission, allowed_heap_actions};
 use domain::text::{Context, Name};
 use domain::turn::TakeBackWhy;
 use domain::validation::Field;
-use domain::{HeapId, ItemId, ParameterId, TeamId, Timestamp, ValidationError, Version};
+use domain::{HeapId, ItemId, ParameterId, TagId, TeamId, Timestamp, ValidationError, Version};
 use serde_json::json;
 use std::collections::BTreeSet;
 use store::audit::NewAuditEntry;
@@ -22,6 +22,7 @@ use crate::access::{authorize_heap, authorize_heap_write, authorize_team, ensure
 use crate::audit::{diff_parameters, diff_policies};
 use crate::error::handle_taken_on_duplicate;
 use crate::handles::{free_heap_slug, retry_derived_slug};
+use crate::items::load_heap_tags;
 use crate::parameters::{ParameterEntry, list_parameters_in_use, lock_listed};
 use crate::teams::{HeapView, count_heap_open_items, load_heap_priority, load_heap_view, to_heap_view, with_origin};
 use crate::{Principal, ServiceError, Services};
@@ -41,6 +42,8 @@ pub struct HeapPatch {
 #[derive(Clone, Debug, Default)]
 pub struct WeightsChange {
     pub heap: HeapPolicyPatch,
+    /// The heap's whole tag order, the highest first; `None` keeps it, an empty list clears it.
+    pub tag_order: Option<Vec<TagId>>,
     pub parameters: Vec<ParameterWeightChange>,
 }
 
@@ -116,6 +119,7 @@ impl Services {
             slug,
             name,
             policy: HeapPolicy::default(),
+            tag_order: Vec::new(),
             context,
             agents_prepare: false,
             origin_id: origin_item.as_ref().map(|note| note.id),
@@ -297,8 +301,9 @@ impl Services {
     /// each listed parameter must also be at its given version ([`ServiceError::VersionConflict`]). Edits through
     /// the parameter use cases are guarded by each parameter's version alone. A parameter must be one in use of this heap
     /// ([`domain::parameter::ParameterError::NotInHeap`], [`domain::parameter::ParameterError::Archived`]) and
-    /// listed once ([`ValidationError::DuplicateParameter`]). An archived heap is read-only
-    /// ([`ServiceError::HeapArchived`]). Any failure saves nothing.
+    /// listed once ([`ValidationError::DuplicateParameter`]). A tag order lists each tag once
+    /// ([`ValidationError::DuplicateTag`]) and only tags of this heap ([`ServiceError::TagNotInHeap`]). An archived
+    /// heap is read-only ([`ServiceError::HeapArchived`]). Any failure saves nothing.
     ///
     /// Weights equal to the stored ones are skipped. The heap's version moves on whenever any weight changes, with a
     /// `heap_updated` entry only when one of its own weights changes; each parameter whose weight changes gets a
@@ -323,6 +328,18 @@ impl Services {
         if listed.len() != change.parameters.len() {
             return Err(ValidationError::DuplicateParameter.into());
         }
+
+        let tag_order = match &change.tag_order {
+            Some(order) => {
+                let distinct: BTreeSet<TagId> = order.iter().copied().collect();
+                if distinct.len() != order.len() {
+                    return Err(ValidationError::DuplicateTag.into());
+                }
+                load_heap_tags(&txn, heap_id, &distinct).await?;
+                order.clone()
+            }
+            None => heap.tag_order.clone(),
+        };
 
         let now = self.now();
         let mut parameters_changed = 0_usize;
@@ -350,10 +367,14 @@ impl Services {
         }
 
         let policy = change.heap.apply(&heap.policy);
-        let heap_changed = policy != heap.policy;
+        let heap_changed = policy != heap.policy || tag_order != heap.tag_order;
         let heap = if heap_changed {
-            let diff = diff_policies(&heap.policy, &policy);
-            let edited = Heap { policy, ..heap.clone() };
+            let diff = diff_policies(&heap, &policy, &tag_order);
+            let edited = Heap {
+                policy,
+                tag_order,
+                ..heap.clone()
+            };
             self.write_heap(&txn, principal, &edited, expected, AuditAction::HeapUpdated, diff, now)
                 .await?
         } else if parameters_changed > 0 {

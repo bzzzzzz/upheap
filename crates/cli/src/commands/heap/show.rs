@@ -3,6 +3,7 @@
 use api_types::heaps::{HeapDto, HeapWeightsDto};
 use api_types::me::MeDto;
 use api_types::parameters::{ParameterDto, ParameterListDto};
+use api_types::tags::TagListDto;
 use clap::Args;
 
 use crate::client::NO_QUERY;
@@ -46,8 +47,10 @@ pub async fn run(args: ShowArgs, app: &App, out: &mut Output) -> Result<(), CliE
                 .find(|team| team.slug == handle.team)
                 .map_or(handle.team.as_str(), |team| team.name.as_str());
             let parameters = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;
+            let tag_order = tag_order_names(&heap.value, &api).await?;
             render(
                 &heap.value,
+                &tag_order,
                 &parameters.value.parameters,
                 team,
                 &handle.to_string(),
@@ -58,8 +61,29 @@ pub async fn run(args: ShowArgs, app: &App, out: &mut Output) -> Result<(), CliE
     Ok(())
 }
 
+/// The names of the heap's ranked tags, the highest first. The tags cost a request, made only when the heap has an
+/// order.
+pub(super) async fn tag_order_names(heap: &HeapDto, api: &HeapApi<'_>) -> Result<Vec<String>, CliError> {
+    if heap.tag_order.is_empty() {
+        return Ok(Vec::new());
+    }
+    let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
+    Ok(heap
+        .tag_order
+        .iter()
+        .map(|id| {
+            tags.value
+                .tags
+                .iter()
+                .find(|tag| tag.id == *id)
+                .map_or_else(|| id.to_string(), |tag| tag.name.clone())
+        })
+        .collect())
+}
+
 fn render(
     heap: &HeapDto,
+    tag_order: &[String],
     parameters: &[ParameterDto],
     team: &str,
     handle: &str,
@@ -75,7 +99,7 @@ fn render(
         Tone::Strong,
     )?;
     out.line("")?;
-    render_weights(&heap.weights, parameters, out)?;
+    render_weights(&heap.weights, tag_order, parameters, out)?;
     out.line("")?;
     out.line_toned("Context", Tone::Strong)?;
     match heap.context.as_deref().filter(|text| !text.is_empty()) {
@@ -92,10 +116,12 @@ fn render(
     Ok(())
 }
 
-/// The Weights section: the heap's four weights, then each of `parameters` (those in use) in the order given, with
-/// the word `parameter` dim after it. Doesn't end with a blank line.
+/// The Weights section: the heap's five weights, then each of `parameters` (those in use) in the order given, with
+/// the word `parameter` dim after it, then the names of the ranked tags in `tag_order` when there are any. Doesn't
+/// end with a blank line.
 pub(super) fn render_weights(
     weights: &HeapWeightsDto,
+    tag_order: &[String],
     parameters: &[ParameterDto],
     out: &mut Output,
 ) -> std::io::Result<()> {
@@ -104,6 +130,7 @@ pub(super) fn render_weights(
         ("Age", weights.age),
         ("Deadline", weights.deadline),
         ("Value", weights.value),
+        ("Tags", weights.tags),
     ]
     .into_iter()
     .map(|(name, weight)| vec![Cell::new(name), Cell::new(weight_text(weight))])
@@ -118,6 +145,9 @@ pub(super) fn render_weights(
     out.line_toned("Weights", Tone::Strong)?;
     for line in out.render_table(&rows) {
         out.table_line("  ", &line)?;
+    }
+    if !tag_order.is_empty() {
+        out.line(&format!("Tag order: {}", tag_order.join(", ")))?;
     }
     Ok(())
 }

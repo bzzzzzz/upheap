@@ -55,6 +55,7 @@ async fn world() -> Result<World> {
         name: Name::parse("Heap")?,
         policy: HeapPolicy::default(),
         context: None,
+        tag_order: Vec::new(),
         agents_prepare: false,
         origin_id: None,
         archived_at: None,

@@ -58,6 +58,10 @@ pub struct HeapWeightsDto {
     pub deadline: u16,
     /// 0 to 100. The weight of value per effort: effort and impact count together as one factor.
     pub value: u16,
+    /// 0 to 100. The weight of the heap's tag order.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does.
+    #[serde(default)]
+    pub tags: u16,
 }
 
 impl From<&HeapPolicy> for HeapWeightsDto {
@@ -67,6 +71,7 @@ impl From<&HeapPolicy> for HeapWeightsDto {
             age: policy.age_weight.get(),
             deadline: policy.deadline_weight.get(),
             value: policy.value_weight.get(),
+            tags: policy.tags_weight.get(),
         }
     }
 }
@@ -89,6 +94,13 @@ pub struct HeapDto {
     #[serde(default)]
     #[schema(required = true)]
     pub agents_prepare: bool,
+    /// The heap's tag order for ranking, the highest first: the tags that count in ranking, each once. Read-only
+    /// here; admins set it with `PATCH …/weights`.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub tag_order: Vec<Uuid>,
     /// When it was archived, in UTC milliseconds; `null` while it is active. An archived heap is read-only.
     pub archived_at: Option<i64>,
     /// Items the heap's list shows by default, before filters: open and in progress ones, as the list's
@@ -156,6 +168,13 @@ pub struct HeapWeightsPatchDto {
     #[schema(minimum = 0, maximum = 100)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<i64>,
+    /// 0 to 100. The weight of the heap's tag order.
+    #[schema(minimum = 0, maximum = 100)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<i64>,
+    /// The heap's tags that count in ranking, the highest first, each once. Replaces the whole order; `[]` clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_order: Option<Vec<Uuid>>,
     /// Parameters of the heap in use whose weight changes, each listed once.
     #[serde(default)]
     pub parameters: Vec<ParameterWeightChangeDto>,
