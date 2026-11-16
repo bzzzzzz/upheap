@@ -679,7 +679,7 @@ test("tags are edited in place in the Tags row, which closes on leaving it, Esca
 
   // Enter in the empty box closes it, and focus goes back to the value.
   await box.press("Enter");
-  await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: travel, packing");
+  await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: packing, travel");
   await expect(fieldButton(page, "Tags")).toBeFocused();
 
   // Removing a tag keeps it open. Escape clears typed text first; in the empty box it closes the strip, not the item.
