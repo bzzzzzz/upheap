@@ -1,6 +1,7 @@
 ---
 name: add
-description: Adds notes, tasks and reminders to Upheap, the ranked todo list, through the `upheap` command-line tool: one item or a set of them, into an existing heap, or into a new heap when the user asks for one. Use ONLY when the user runs /upheap:add or names Upheap in the request ("add this to Upheap", "put a reminder in upheap", "upheap note: ...", "make an Upheap heap for the launch"). Do not use for a todo, note or reminder request that doesn't name Upheap, and do not use to work on, rank, list or close items.
+description: >-
+  Adds notes, tasks and reminders to Upheap, the ranked todo list, through the `upheap` command-line tool: one item or a set of them, into an existing heap, or into a new heap when the user asks for one. Use ONLY when the user runs /upheap:add or names Upheap in the request ("add this to Upheap", "put a reminder in upheap", "upheap note: ...", "make an Upheap heap for the launch"). Do not use for a todo, note or reminder request that doesn't name Upheap, and do not use to work on, rank, list or close items.
 ---
 
 # Add to Upheap
