@@ -654,6 +654,58 @@ test("a short link opens the item it names", async ({ page, heapPath }) => {
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Share the plan");
 });
 
+test("tags are edited in place in the Tags row, which closes on leaving it, Escape or Enter", async ({ page }) => {
+  await addItem(page, "Pack for the trip");
+  await openItem(page, "Pack for the trip");
+  const pane = itemPane(page);
+  const title = pane.getByLabel("Title", { exact: true });
+  await expect(title).toBeVisible();
+  const box = pane.getByRole("combobox", { name: "Add a tag" });
+
+  // A click turns the row into the strip, its box focused, with no popover or sheet.
+  await fieldButton(page, "Tags").click();
+  await expect(box).toBeFocused();
+  await expect(fieldButton(page, "Tags")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Tags", exact: true })).toHaveCount(0);
+
+  // Each new tag saves, and the strip stays for the next one. The chips come from the server's answer.
+  await box.fill("travel");
+  await page.getByRole("option", { name: "Create tag “travel”" }).click();
+  await expect(pane.getByRole("button", { name: "Remove tag travel" })).toBeVisible();
+  await box.fill("packing");
+  await box.press("Enter");
+  await expect(pane.getByRole("button", { name: "Remove tag packing" })).toBeVisible();
+  await expect(box).toBeFocused();
+
+  // Enter in the empty box closes it, and focus goes back to the value.
+  await box.press("Enter");
+  await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: travel, packing");
+  await expect(fieldButton(page, "Tags")).toBeFocused();
+
+  // Removing a tag keeps it open. Escape clears typed text first; in the empty box it closes the strip, not the item.
+  await fieldButton(page, "Tags").click();
+  await pane.getByRole("button", { name: "Remove tag travel" }).click();
+  await expect(pane.getByRole("button", { name: "Remove tag travel" })).toHaveCount(0);
+  await expect(box).toBeFocused();
+  await box.fill("x");
+  await box.press("Escape");
+  await expect(box).toHaveValue("");
+  await expect(box).toBeFocused();
+  await box.press("Escape");
+  await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: packing");
+  await expect(fieldButton(page, "Tags")).toBeFocused();
+  await expect(pane).toBeVisible();
+
+  // An existing tag is picked from the matches; leaving the strip closes it, and focus stays where it went.
+  await fieldButton(page, "Tags").click();
+  await box.fill("trav");
+  await page.getByRole("option", { name: "travel", exact: true }).click();
+  await expect(pane.getByRole("button", { name: "Remove tag travel" })).toBeVisible();
+  await title.click();
+  await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: packing, travel");
+  await expect(title).toBeFocused();
+});
+
 test("on a phone, need, effort and impact open sheets, and the bar holds the main button and ⋯", async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 640, "Only a phone has the sheets and the bar.");
   await addItem(page, "Plan the offsite");
@@ -695,11 +747,12 @@ test("on a phone, need, effort and impact open sheets, and the bar holds the mai
   await (await editContext(page)).fill("Venue, then dates");
   await saveContext(page, "Venue, then dates");
 
-  // A new tag from the Tags sheet, its offer in view under the field.
-  const tags = await field(page, "Tags");
-  await tags.getByLabel("Add a tag").fill("travel");
-  await tags.getByRole("option", { name: "Create tag “travel”" }).click();
-  await closeField(page);
+  // A new tag in the Tags row, in place in the item's sheet, its offer in view under the field.
+  await fieldButton(page, "Tags").click();
+  await pane.getByLabel("Add a tag").fill("travel");
+  await pane.getByRole("option", { name: "Create tag “travel”" }).click();
+  await expect(pane.getByRole("button", { name: "Remove tag travel" })).toBeVisible();
+  await pane.getByLabel("Add a tag").press("Escape");
   await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: travel");
 
   // Won't do is under ⋯; a closed item shows all its fields, unchangeable.
