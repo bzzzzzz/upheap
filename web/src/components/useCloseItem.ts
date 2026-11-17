@@ -1,4 +1,10 @@
-import { useNavigate, useRouter, useRouterState, type NavigateOptions } from "@tanstack/react-router";
+import {
+  useNavigate,
+  useRouter,
+  useRouterState,
+  type NavigateOptions,
+  type ParsedLocation,
+} from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
 
 import { focusRowOf } from "./ItemRow";
@@ -43,10 +49,11 @@ export function useCloseItem(list: NavigateOptions, itemKey: string | undefined)
 
 /**
  * Keeps the list at `listPath` where it is when a move leaves the item open over it for the list, or for another item
- * over the same list, as the browser's Back and Forward between two items do. On a Back or Forward the router scrolls
- * to the top, and the browser to where the list was when that entry was left, so the window goes back to its place
- * once both are done, before the next paint. The place is taken as the router starts the move, before either has
- * scrolled. The returned function keeps the place now, for a Back the app makes itself.
+ * over the same list, as the browser's Back and Forward between two items do. The open item is in the path over a
+ * heap's list, and in the search over All items. On a Back or Forward the router scrolls to the top, and the browser
+ * to where the list was when that entry was left, so the window goes back to its place once both are done, before the
+ * next paint. The place is taken as the router starts the move, before either has scrolled. The returned function
+ * keeps the place now, for a Back the app makes itself.
  *
  * On a phone the item covers the list, and the browser's Back returns the list to where it was when the item opened.
  */
@@ -63,10 +70,16 @@ function useKeepPlaceOnBack(listPath: string, itemOpen: boolean) {
   useEffect(() => {
     const itemPath = `${listPath}/items/`;
     const overList = (pathname: string) => pathname === listPath || pathname.startsWith(itemPath);
+    // The item open at a location over the list: a heap's in the path, All items' in the search, as `item`. A view
+    // change keeps it, so the list starts at the top as any view change does.
+    const itemAt = (location: ParsedLocation) => {
+      if (location.pathname.startsWith(itemPath)) return location.pathname;
+      const item: unknown = location.pathname === listPath ? (location.search as { item?: unknown }).item : undefined;
+      return typeof item === "string" ? item : undefined;
+    };
     const unsubscribeLoad = router.subscribe("onBeforeLoad", (event) => {
-      const from = event.fromLocation?.pathname;
-      const to = event.toLocation.pathname;
-      const stays = from !== undefined && from.startsWith(itemPath) && to !== from && overList(to);
+      const from = event.fromLocation && itemAt(event.fromLocation);
+      const stays = from !== undefined && overList(event.toLocation.pathname) && itemAt(event.toLocation) !== from;
       if (open.current && stays && keep.current === undefined && !window.matchMedia(PHONE).matches) {
         keep.current = windowPlace();
       }
