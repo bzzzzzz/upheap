@@ -81,7 +81,7 @@ What it is not:
 
 ## Teams
 
-1. Users form teams. A team has one or more admins.
+1. Users form teams. A team has one or more admins, unless its groups took the last one out (§9).
 2. Any user can create a team and becomes its admin.
 3. Every new user gets a personal team, shown as "\<their name\>'s team", with a first heap called "Personal". The personal
    team is theirs alone: it holds as many heaps as they like, but it can't be shared. Anything shared lives in
@@ -90,15 +90,23 @@ What it is not:
 5. A heap belongs to exactly one team, and only that team's members can access it. Everyone in the team sees the
    same items and ranking in its heaps, and can add and edit items.
 6. Users join a team in two ways: an admin picks an existing user, who is added directly, or the person comes
-   through one of the team's invite links (Invite links).
+   through one of the team's invite links (Invite links). A group-managed team takes neither (§9).
 7. A team admin can make any other member an admin, remove admin rights from another admin, and remove another admin
    from the team.
 8. A team always has at least one admin. The last admin can't leave, be demoted or be removed until another member
-   has been made admin.
+   has been made admin. The one exception is a group-managed team's sync (§9).
+9. The operator can map groups of the identity provider to existing teams in the server's settings. Such a team is
+   group-managed: the groups decide who joins it. Each sign-in through the provider adds the person to the mapped
+   teams their groups name and takes them out of those their groups no longer name, the team's last admin
+   included. Groups never make an admin or a team. When the provider doesn't say which groups a person is in,
+   nobody is added or removed.
+10. A team with no admin keeps working for its members. The operator makes one of its members admin with a
+    command on the server.
 
 ## Invite links
 
-1. A team admin can make an invite link for a team they administer. A personal team has none.
+1. A team admin can make an invite link for a team they administer. A personal team has none, nor does a
+   group-managed team (Teams §9): its links stop working while it is one.
 2. A link works for one week, for any number of people. It can't be extended; the admin makes a new one.
 3. Any admin of the team can revoke a link, and it stops working at once. People who already joined through it
    stay.
@@ -343,8 +351,8 @@ A supporting view, for team admins only.
 | Set a heap so agents prepare what's added | | ✓ |
 | Rename the team | | ✓ |
 | Join a team through a working invite link | ✓ | ✓ |
-| Add users to the team and remove them | | ✓ |
-| Make, see and revoke the team's invite links | | ✓ |
+| Add users to the team and remove them (a group-managed team: only remove) | | ✓ |
+| Make, see and revoke the team's invite links (not on a group-managed team) | | ✓ |
 | Make a member an admin, demote an admin | | ✓ |
 | Create, rename, archive and unarchive heaps | | ✓ |
 | Configure a heap's ranking: its weights, tag order, parameters and options | | ✓ |
@@ -353,7 +361,7 @@ A supporting view, for team admins only.
 ## Audit log
 
 1. Every action by a user or an admin is recorded in an audit log.
-2. Each entry shows who made the change and what changed.
+2. Each entry shows who made the change and what changed. A change the provider's groups made says so.
 3. Entries can't be edited or deleted, and they are kept forever.
 4. Users see audit entries on the page where the action happens, for every kind of action they are allowed to do. For
    example, every member sees item and tag changes on the heap page, and only admins see team membership changes and
