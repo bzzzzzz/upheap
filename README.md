@@ -76,6 +76,7 @@ curl -fsSLO "$base/upheap-server-$target.tar.gz"
 curl -fsSLO "$base/SHA256SUMS"
 grep " upheap-server-$target.tar.gz\$" SHA256SUMS | sha256sum -c   # on macOS: shasum -a 256 -c
 tar -xzf "upheap-server-$target.tar.gz" upheap-server
+./upheap-server --version   # upheap-server <version>
 DATABASE_URL="sqlite://heap.db?mode=rwc" BASE_URL=http://localhost:8080 ./upheap-server
 # open http://localhost:8080
 ```
