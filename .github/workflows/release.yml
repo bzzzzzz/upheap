@@ -174,10 +174,10 @@ jobs:
       - name: Smoke test the server
         run: |
           bin="target/$TARGET/release/upheap-server"
-          out=$("$bin" openapi | jq -r .info.version)
+          out=$("$bin" --version)
           echo "$out"
-          if [ "$out" != "$VERSION" ]; then
-            echo "::error::The server's API is at version '$out', expected '$VERSION'."
+          if [ "$out" != "upheap-server $VERSION" ]; then
+            echo "::error::The server printed '$out', expected 'upheap-server $VERSION'."
             exit 1
           fi
           log="$RUNNER_TEMP/server.log"
