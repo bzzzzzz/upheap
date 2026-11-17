@@ -80,8 +80,8 @@ closed(
       // Account's history has the reset link and its use, newest first. The account is shared, so earlier tests
       // may have added more.
       await goTo(page, "Account");
-      const card = page.getByRole("region", { name: "Password", exact: true });
-      await card.getByText("History", { exact: true }).click();
+      const card = page.getByRole("region", { name: "History", exact: true });
+      await card.getByText("Changes to your account", { exact: true }).click();
       const entries = card.getByRole("listitem");
       await expect(entries.first()).toContainText("Password set with a reset link.");
       await expect(card.getByText("Reset link made by whoever runs the server.").first()).toBeVisible();

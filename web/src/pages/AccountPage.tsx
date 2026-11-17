@@ -3,6 +3,7 @@ import { useId } from "react";
 import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
 import { useMe, useSignOut, useUpdateMe } from "../api/queries";
+import { HistoryCard } from "../components/AccountHistory";
 import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
@@ -27,7 +28,7 @@ const themes: readonly { id: Theme; label: string }[] = [
 
 /**
  * The signed-in user's display name, which teammates see, their password, this browser's theme and where the CLI is
- * signed in as them.
+ * signed in as them, and the history of their account.
  * Sign out is here rather than in the navigation, at the bottom, where the server allows it.
  */
 export function AccountPage() {
@@ -73,6 +74,7 @@ export function AccountPage() {
         )}
         <AppearanceSection />
         {me.allowed_actions.includes("manage_sign_ins") && <SignInsSection />}
+        <HistoryCard />
         {me.allowed_actions.includes("sign_out") && (
           <div className="flex flex-wrap items-center gap-3">
             <button

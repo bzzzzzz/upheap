@@ -299,7 +299,8 @@ export interface paths {
         };
         /**
          * The caller's account history, newest first: their password changes, reset links made for them by whoever runs
-         *     the server, and passwords set with a reset link. Each entry carries a sentence worded by the server. Only the
+         *     the server, passwords set with a reset link, and
+         *     their own heap priority changes. Each entry carries a sentence worded by the server. Only the
          *     caller's own history can be read. Read-only, so a command-line sign-in may read it too.
          */
         get: operations["get_history"];
@@ -1671,7 +1672,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description One password event in the account's history. */
+        /** @description One event in the account's history. */
         AccountEvent: {
             /**
              * Format: int64
@@ -1680,7 +1681,7 @@ export interface components {
             created_at: number;
             /** @description When it happened, in the request's timezone, as the audit log words it: "9 Nov 2026, 14:05". */
             created_label: string;
-            /** @description One sentence worded by the server, without a name: "Password changed. 2 other sign-ins ended." */
+            /** @description One sentence worded by the server: "Password changed. 2 other sign-ins ended." */
             description: string;
             /** Format: uuid */
             id: string;
@@ -1690,7 +1691,7 @@ export interface components {
          * @description What happened to the account.
          * @enum {string}
          */
-        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset";
+        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset" | "heap_priority_changed";
         /** @description A page of the caller's account history, newest first. */
         AccountHistory: {
             entries: components["schemas"]["AccountEvent"][];

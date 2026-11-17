@@ -438,6 +438,7 @@ impl Services {
             *principal.user_id.as_uuid(),
             json!({
                 AuditField::HeapId.code(): heap_id.to_string(),
+                AuditField::Name.code(): access.heap.name.as_str(),
                 AuditField::Priority.code(): { "before": before.get(), "after": priority.get() },
             }),
             now,

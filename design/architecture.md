@@ -602,11 +602,14 @@ a fixed time.
      doesn't wait for the provider. A send that fails is logged once and not retried; in-flight sends aren't drained
      at shutdown, and the user asks again. Without mail the endpoint is `404`.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
-     go: a password change, a reset link made for them (actor: the user, for the reason above) and a password set
-     with one. `GET /me/history` reads exactly those three actions for the caller, with no way to name another user or
+     go: a password change, a reset link made for them (actor: the user, for the reason above), a password set with
+     one, and their own heap priority change (recorded here and not in the heap's team, since the value is private to
+     them). `GET /me/history` reads exactly those four actions for the caller, with no way to name another user or
      team, so only the user sees them and team admins never do. It is not the team log: the server words each entry
-     as one sentence with no actor ("Password changed. 2 other sign-ins ended.") from the entry's diff, and the
-     sentence is made on reading, so a wording fix reaches old entries. Cookie or bearer token may read it.
+     as one sentence with no actor ("Password changed. 2 other sign-ins ended.", "You changed your priority for Work
+     from 1 to 3.") from the entry's diff, and the sentence is made on reading, so a wording fix reaches old entries.
+     A priority entry's diff carries the heap's name at the time of the change; an older entry without one reads the
+     heap's current name by its ID, and "a heap" when that is gone. Cookie or bearer token may read it.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`, and the service layer
    enforces access ([Access control](#access-control)).
 

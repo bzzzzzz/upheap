@@ -167,6 +167,7 @@ async fn setting_the_same_value_twice_records_one_entry_in_the_personal_team() -
     expect_that!(changed.len(), eq(1));
     expect_that!(changed[0].1["priority"], eq(&json!({ "before": 1, "after": 2 })));
     expect_that!(changed[0].1["heap_id"], eq(&json!(s.heap)));
+    expect_that!(changed[0].1["name"], eq(&json!("Shared")));
     // Nothing in the heap's own team log, and the one-row table holds one row for the member.
     expect_that!(s.app.count_rows("heap_priorities").await?, eq(1));
     let team_log = s.app.audit_entries(&s.team).await?;

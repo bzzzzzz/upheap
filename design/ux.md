@@ -910,16 +910,8 @@ Focus goes to Change password, and the Command line card is read again, since th
 browser the change was made in stays signed in, on a new session cookie the server sets; another browser of the user
 lands on sign-in at its next request. A change also cancels the user's working reset link ([Reset page](#reset-page)),
 so a copy of it can't be used afterwards. Without the server's `change_password` action, as for a person who signs
-in through the identity provider and has no password, the card keeps its heading and History, and where the button
+in through the identity provider and has no password, the card keeps its heading, and where the button
 would be says "You sign in through Acme SSO." ("an identity provider" if the server has none).
-
-At the bottom of the card, whether the form is closed or open, is a collapsed **History** like the ones on a tag or a
-member, with the same chevron and touch target. It loads only when opened, and lists the user's password events newest
-first, each a sentence from the server and its time: "Password changed. 2 other sign-ins ended.", "Reset link made by
-whoever runs the server.", "Reset link sent by mail, as asked on the sign-in page." and "Password set with a reset link. 3 sign-ins ended." It names no actor, since it is the
-user's own account, and holds nothing else of the account (not sign-ups or profile changes). Empty, it says "No
-password changes or resets yet."; an error shows the server's message; **Load more** fetches the next page. A password
-change adds its entry to an open History at once, and to a closed one by the time it is opened.
 
 ## Command line
 
@@ -944,6 +936,18 @@ A made token replaces the form with a panel that says it is shown once, the secr
 itself on focus, a Copy button that has focus (the field is selected for copying by hand when the clipboard isn't
 there), and the command to use it with the secret left as `<token>`. Done closes the panel and gives focus back to
 Make a token. The secret lives only in the page's state, so leaving the page drops it.
+
+## History
+
+Account's last card, after Command line and before Sign out, is headed "History" and holds one collapsed disclosure,
+"Changes to your account", like the ones on a tag or a member, with the same chevron and touch target. It loads only
+when opened, and lists the user's password events and their own heap priority changes, newest first, each a sentence
+from the server and its time: "Password changed. 2 other sign-ins ended.", "Reset link made by whoever runs the
+server.", "Reset link sent by mail, as asked on the sign-in page.", "Password set with a reset link. 3 sign-ins ended."
+and "You changed your priority for Work from 1 to 3." It names no actor, since it is the user's own account, and holds
+nothing else of the account (not sign-ups or profile changes). Empty, it says "No account changes yet."; an error
+shows the server's message; **Load more** fetches the next page. A password change or a priority change adds its entry
+to an open History at once, and to a closed one by the time it is opened.
 
 ## Conflicts and errors
 
