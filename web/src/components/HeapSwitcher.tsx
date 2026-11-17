@@ -1,5 +1,5 @@
 import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
-import { Archive, Check, ChevronRight, Plus, Search, X } from "lucide-react";
+import { Archive, Check, ChevronRight, Clock, Plus, Search, X } from "lucide-react";
 import { useCallback, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import {
   Autocomplete,
@@ -11,6 +11,7 @@ import {
   MenuItem,
   MenuSection,
   SearchField,
+  Separator,
 } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
@@ -43,8 +44,16 @@ const LONG_LIST = 8;
 /** How many recent heaps show. */
 const RECENT_SHOWN = 4;
 
-/** A heap row: 52 px on a phone, 36 px where the pointer is fine on a tablet or wide screen, 44 px where it's coarse. */
-const rowClass = `${sheetRowClass} sm:min-h-9 sm:pointer-coarse:min-h-11 data-[focused]:bg-sunken`;
+/**
+ * A heap row: 52 px on a phone, 36 px where the pointer is fine on a tablet or wide screen, 44 px where it's coarse.
+ * In the popover the rows are denser than a sheet's: smaller text, tighter corners.
+ */
+const rowClass = `${sheetRowClass} sm:min-h-9 sm:gap-2.5 sm:rounded-lg sm:px-2.5 sm:text-sm sm:pointer-coarse:min-h-11 data-[focused]:bg-sunken`;
+/** Under a team's fold header in the popover, rows start where the header's name does, past its chevron. */
+const indentClass = "sm:pl-7";
+/** A key's name beside what it does. */
+const kbdClass =
+  "shrink-0 rounded-[5px] border border-line-strong bg-surface px-1.5 text-[11px] font-normal text-ink-soft";
 const currentRowClass = "bg-accent-soft font-semibold";
 /** Recent on a phone: chips in a row that scrolls sideways. */
 const chipClass =
@@ -87,6 +96,7 @@ export function HeapSwitcher({
         placement={placement}
         size="narrow"
         scrollBody
+        bare
       >
         <SwitcherPanel me={me} heapRef={heapRef} close={close} />
       </PopoverSheet>
@@ -152,6 +162,8 @@ function SwitcherBody({
   // The new heap's name while its form is open.
   const [draft, setDraft] = useState<string | null>(null);
 
+  // Key hints are for a keyboard: not on a phone, nor where the pointer is a finger.
+  const hint = !phone && !coarse;
   const query = long ? text.trim() : "";
   const searching = query !== "";
   const toggleFold = (id: string) => {
@@ -177,9 +189,9 @@ function SwitcherBody({
       onAction={() => setDraft(query)}
       className={rowClass}
     >
-      <Plus aria-hidden="true" className="size-4 shrink-0 text-ink-soft" />
+      <Plus aria-hidden="true" className="size-4 shrink-0 text-accent-ink" strokeWidth={2.5} />
       <span className="min-w-0 flex-1 truncate">
-        New heap “{query}” in {teamName(createIn, me)}
+        New heap “{query}” <span className="text-muted">in {teamName(createIn, me)}</span>
       </span>
     </MenuItem>
   );
@@ -191,28 +203,31 @@ function SwitcherBody({
     const isFolded = canFold && folded.has(team.id);
     const showArchived = revealed.has(team.id);
     const label = teamName(team, me);
+    const indent = canFold ? indentClass : "";
     const heapItem = (heap: Entry["heap"]) => (
       <HeapItem
         key={heap.id}
         id={`heap:${heap.id}`}
         entry={{ team, heap }}
         current={heap.id === current?.heap.id}
+        extraClass={indent}
         onOpen={close}
       />
     );
     return (
-      <MenuSection key={team.id} aria-label={label} className="flex flex-col">
+      <MenuSection key={team.id} aria-label={label} className={sectionClass}>
         {canFold ? (
           <MenuItem
             id={`fold:${team.id}`}
             textValue={label}
             aria-expanded={!isFolded}
             onAction={() => toggleFold(team.id)}
-            className={`${rowClass} text-xs font-semibold tracking-wide text-muted uppercase sm:min-h-8`}
+            className={`${rowClass} sticky top-0 z-10 mb-1 bg-sunken text-xs font-semibold tracking-wide text-ink-soft uppercase hover:text-ink data-[focused]:text-ink max-sm:min-h-11 sm:min-h-8 sm:gap-1.5 sm:text-[11px]`}
           >
             <ChevronRight
               aria-hidden="true"
-              className={`size-4 shrink-0 motion-safe:transition-transform ${isFolded ? "" : "rotate-90"}`}
+              strokeWidth={2.5}
+              className={`size-3.5 shrink-0 max-sm:order-last motion-safe:transition-transform ${isFolded ? "" : "rotate-90"}`}
             />
             <span className="min-w-0 flex-1 truncate">{label}</span>
             <span className="shrink-0 font-normal">{unarchived.length}</span>
@@ -226,7 +241,7 @@ function SwitcherBody({
             textValue={`All ${label} items`}
             href={{ to: "/all", search: { team: team.slug } }}
             onAction={close}
-            className={`${rowClass} ${onAll && allTeam === team.slug ? currentRowClass : ""}`}
+            className={`${rowClass} ${indent} ${onAll && allTeam === team.slug ? currentRowClass : ""}`}
           >
             <span className="min-w-0 flex-1 truncate">
               All {label} items
@@ -252,9 +267,9 @@ function SwitcherBody({
               if (!next.delete(team.id)) next.add(team.id);
               setRevealed(next);
             }}
-            className={`${rowClass} text-muted`}
+            className={`${rowClass} ${indent} text-muted sm:text-[13px]`}
           >
-            <Archive aria-hidden="true" className="size-4 shrink-0" />
+            <Archive aria-hidden="true" className="size-4 shrink-0 sm:size-3.5" />
             <span className="min-w-0 flex-1 truncate">
               {showArchived ? "Hide archived" : `${archived.length} archived`}
             </span>
@@ -276,15 +291,17 @@ function SwitcherBody({
               current={isCurrent(entry)}
               teamLabel={teamLabel(entry)}
               query={query}
+              enterHint={hint}
               onOpen={close}
             />
           ))}
+          {createRow && results.length > 0 && <Separator className="mx-1 my-1.5 h-px border-0 bg-line" />}
           {createRow}
         </>
       ) : (
         <>
           {phone && (
-            <MenuSection aria-label="All heaps" className="flex flex-col">
+            <MenuSection aria-label="All heaps" className={sectionClass}>
               <MenuItem
                 id="all"
                 textValue="All heaps"
@@ -308,7 +325,7 @@ function SwitcherBody({
           {long && recent.length > 0 && (
             <MenuSection
               aria-label="Recent"
-              className="flex flex-col max-sm:flex-row max-sm:items-center max-sm:gap-2 max-sm:overflow-x-auto max-sm:pb-1"
+              className={`${sectionClass} max-sm:flex-row max-sm:items-center max-sm:gap-2 max-sm:overflow-x-auto max-sm:pb-2`}
             >
               <SectionTitle>Recent</SectionTitle>
 
@@ -318,6 +335,7 @@ function SwitcherBody({
                   id={`recent:${entry.heap.id}`}
                   entry={entry}
                   teamLabel={teamLabel(entry)}
+                  recent
                   extraClass={chipClass}
                   onOpen={close}
                 />
@@ -335,12 +353,16 @@ function SwitcherBody({
     several ? ` in ${me.teams.length} teams` : ""
   }, archived ones too.`;
   const scrolling = (
-    <div className="-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto max-sm:-mx-1 max-sm:px-1 sm:px-1.5 sm:pt-1 sm:pb-2">
       {/* Mounted for as long as the panel is, so a screen reader announces the text when it changes. */}
       {long && (
         <p
           role="status"
-          className={searching && results.length > 0 ? "px-3 pt-1 pb-1 text-[13px] text-muted" : "sr-only"}
+          className={
+            searching && results.length > 0
+              ? "px-3 pt-1 pb-1 text-[13px] text-muted sm:px-2.5 sm:pt-1.5 sm:text-xs"
+              : "sr-only"
+          }
         >
           {!searching ? "" : results.length > 0 ? resultsSummary(results, me) : `${noMatch}. ${searched}`}
         </p>
@@ -355,15 +377,19 @@ function SwitcherBody({
     </div>
   );
 
-  const hint = !phone && !coarse;
   const footer = (createIn || hint) && (
-    <div className="shrink-0 border-t border-line pt-3">
+    <div className="shrink-0 border-t border-line max-sm:pt-3 sm:bg-canvas sm:px-2.5 sm:py-2">
       {createIn && draft !== null ? (
         <NewHeapForm me={me} team={createIn} initialName={draft} onCancel={() => setDraft(null)} onCreated={close} />
       ) : (
         <div className="flex items-center gap-3">
-          {createIn && <NewHeapButton me={me} team={createIn} onClick={() => setDraft("")} />}
-          {hint && <p className="ml-auto shrink-0 text-xs text-muted">↑↓ move · ↵ open · esc</p>}
+          {/* While searching with a keyboard, the results' own row makes the heap, and the footer says what matched. */}
+          {searching && hint ? (
+            <p className="min-w-0 truncate text-[11px] text-muted">Archived heaps match too, listed last</p>
+          ) : (
+            createIn && <NewHeapButton me={me} team={createIn} onClick={() => setDraft("")} />
+          )}
+          {hint && <p className="ml-auto shrink-0 text-[11px] text-muted">↑↓ move · ↵ open · esc</p>}
         </div>
       )}
     </div>
@@ -373,17 +399,23 @@ function SwitcherBody({
     <>
       {long ? (
         <Autocomplete inputValue={text} onInputChange={setText}>
-          <SearchField autoFocus={!phone && !coarse} className="relative flex shrink-0 items-center">
+          <SearchField
+            autoFocus={hint}
+            className="relative flex shrink-0 items-center sm:border-b sm:border-line sm:p-2.5"
+          >
             <Label className="sr-only">Find a heap</Label>
-            <Search aria-hidden="true" className="pointer-events-none absolute left-3 size-4 text-muted" />
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3.5 size-4 text-muted sm:left-5.5"
+            />
             <Input
               placeholder="Find a heap"
-              className="h-12 w-full rounded-xl border border-line bg-surface pr-11 pl-9 text-base outline-none placeholder:text-muted focus:border-accent sm:h-10 sm:pr-9 sm:text-sm [&::-webkit-search-cancel-button]:hidden"
+              className="h-12 w-full rounded-xl border-2 border-transparent bg-sunken pr-11 pl-10 text-base outline-none placeholder:text-muted focus:border-accent sm:h-10 sm:rounded-[9px] sm:pr-10 sm:pl-9 sm:text-sm [&::-webkit-search-cancel-button]:hidden"
             />
             {text !== "" && (
               <Button
                 aria-label="Clear"
-                className="absolute right-0 flex size-12 items-center justify-center rounded-xl text-ink-soft outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-accent sm:size-10"
+                className="absolute right-0 flex size-12 items-center justify-center rounded-xl text-ink-soft outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-accent sm:right-2.5 sm:size-10"
               >
                 <X aria-hidden="true" className="size-4" />
               </Button>
@@ -399,9 +431,12 @@ function SwitcherBody({
   );
 }
 
+/** A section of the list, set apart from the one above; its title is a band a shade off the panel. */
+const sectionClass = "flex flex-col not-first:mt-3";
+
 function SectionTitle({ children, count }: { children: ReactNode; count?: number }) {
   return (
-    <Header className="max-sm:shrink-0 flex items-center px-3 pt-2.5 pb-0.5 text-xs font-semibold tracking-wide text-muted uppercase">
+    <Header className="flex items-center px-3 text-xs font-semibold tracking-wide text-ink-soft uppercase max-sm:shrink-0 max-sm:pt-2.5 max-sm:pb-0.5 sm:mb-1 sm:min-h-8 sm:rounded-lg sm:bg-sunken sm:px-2.5 sm:text-[11px]">
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {count !== undefined && <span className="shrink-0 font-normal">{count}</span>}
     </Header>
@@ -440,6 +475,8 @@ function HeapItem({
   current = false,
   teamLabel,
   query,
+  recent = false,
+  enterHint = false,
   extraClass = "",
   onOpen,
 }: {
@@ -448,6 +485,10 @@ function HeapItem({
   current?: boolean;
   teamLabel?: string;
   query?: string;
+  /** A row of Recent: a clock before the name in the popover. */
+  recent?: boolean;
+  /** Shows ↵ on the row while the keyboard is on it. */
+  enterHint?: boolean;
   extraClass?: string;
   onOpen: () => void;
 }) {
@@ -460,23 +501,33 @@ function HeapItem({
       onAction={onOpen}
       className={`${rowClass} ${current ? currentRowClass : ""} ${extraClass}`}
     >
-      <span className="min-w-0 flex-1 truncate">
-        {query === undefined ? heap.name : <Highlighted text={heap.name} query={query} />}
-        {heap.archived &&
-          (query === undefined ? (
-            <span className="font-normal text-muted"> (archived)</span>
-          ) : (
-            <span className="ml-2 rounded-full border border-line px-1.5 py-px text-[11px] font-normal text-muted">
-              archived
-            </span>
-          ))}
-        {/* MenuItem has no aria-current or aria-checked here, so a screen reader hears it from the name. */}
-        {current && <span className="sr-only">, current</span>}
-      </span>
-      {teamLabel && <span className="shrink-0 text-[13px] font-normal text-muted">{teamLabel}</span>}
-      <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
-        {current && <Check className="size-4" strokeWidth={3} />}
-      </span>
+      {({ isFocused }) => (
+        <>
+          {recent && <Clock aria-hidden="true" className="size-3.5 shrink-0 text-muted max-sm:hidden" />}
+          <span className="min-w-0 flex-1 truncate">
+            {query === undefined ? heap.name : <Highlighted text={heap.name} query={query} />}
+            {heap.archived &&
+              (query === undefined ? (
+                <span className="font-normal text-muted"> (archived)</span>
+              ) : (
+                <span className="ml-2 rounded-full border border-line px-1.5 py-px text-[11px] font-normal text-muted">
+                  archived
+                </span>
+              ))}
+            {/* MenuItem has no aria-current or aria-checked here, so a screen reader hears it from the name. */}
+            {current && <span className="sr-only">, current</span>}
+          </span>
+          {teamLabel && <span className="shrink-0 text-[13px] font-normal text-muted sm:text-xs">{teamLabel}</span>}
+          {enterHint && isFocused && (
+            <kbd aria-hidden="true" className={kbdClass}>
+              ↵
+            </kbd>
+          )}
+          <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink sm:w-4">
+            {current && <Check className="size-4" strokeWidth={3} />}
+          </span>
+        </>
+      )}
     </MenuItem>
   );
 }
@@ -487,8 +538,12 @@ const newHeapButtonClass =
 /** "New heap in <team>", for those the team lets create heaps. */
 function NewHeapButton({ me, team, onClick }: { me: Me; team: SwitcherTeam; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={`${newHeapButtonClass} min-w-0`}>
-      <Plus aria-hidden="true" className="size-4 shrink-0" />
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${newHeapButtonClass} min-w-0 sm:min-h-[34px] sm:flex-none sm:rounded-lg sm:px-2.5 sm:text-[13px] sm:font-medium sm:pointer-coarse:min-h-11`}
+    >
+      <Plus aria-hidden="true" className="size-4 shrink-0 sm:size-3.5" strokeWidth={2.5} />
       <span className="truncate">New heap in {teamName(team, me)}</span>
     </button>
   );

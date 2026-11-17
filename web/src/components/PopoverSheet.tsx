@@ -18,6 +18,7 @@ export function PopoverSheet({
   action,
   size = "default",
   scrollBody = false,
+  bare = false,
   children,
 }: {
   title: string;
@@ -31,6 +32,11 @@ export function PopoverSheet({
   size?: "default" | "narrow";
   /** The body scrolls itself, so its own sticky parts stay put; the title bar stays too. The body is a flex column. */
   scrollBody?: boolean;
+  /**
+   * On a tablet or wide screen the popover has no title bar and no padding: the panel starts with its own first
+   * control and lays out its sections edge to edge. The title still names the dialog. The phone's sheet is unchanged.
+   */
+  bare?: boolean;
   children: ReactNode;
 }) {
   const phone = useMedia(PHONE);
@@ -52,25 +58,30 @@ export function PopoverSheet({
       offset={6}
       className={`max-h-[70dvh] ${
         size === "narrow" ? "w-[min(24rem,calc(100vw-2rem))]" : "w-[min(34rem,calc(100vw-2rem))]"
-      } rounded-xl border border-line bg-surface p-4 text-ink shadow-lg outline-none ${
+      } rounded-xl border border-line bg-surface text-ink shadow-lg outline-none ${bare ? "" : "p-4"} ${
         scrollBody ? "flex flex-col overflow-hidden" : "overflow-y-auto"
       }`}
     >
-      <Dialog aria-label={title} className={`flex flex-col gap-3 outline-none ${scrollBody ? "min-h-0 flex-1" : ""}`}>
-        <div className="flex items-center justify-between gap-2">
-          <Heading slot="title" className="text-sm font-semibold">
-            {title}
-          </Heading>
-          <span className="ml-auto">{action}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="-my-1 flex size-9 items-center justify-center rounded-lg text-ink-soft hover:bg-sunken pointer-coarse:size-11"
-          >
-            <X aria-hidden="true" className="size-4" />
-          </button>
-        </div>
+      <Dialog
+        aria-label={title}
+        className={`flex flex-col outline-none ${bare ? "" : "gap-3"} ${scrollBody ? "min-h-0 flex-1" : ""}`}
+      >
+        {!bare && (
+          <div className="flex items-center justify-between gap-2">
+            <Heading slot="title" className="text-sm font-semibold">
+              {title}
+            </Heading>
+            <span className="ml-auto">{action}</span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="-my-1 flex size-9 items-center justify-center rounded-lg text-ink-soft hover:bg-sunken pointer-coarse:size-11"
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </div>
+        )}
         {children}
       </Dialog>
     </Popover>

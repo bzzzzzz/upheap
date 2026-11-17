@@ -17,6 +17,7 @@ import {
   Building2,
   ChartColumn,
   ChevronDown,
+  ChevronsUpDown,
   CircleCheck,
   Ellipsis,
   Inbox,
@@ -320,7 +321,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
                   <span className="text-ink-soft">Choose a heap</span>
                 )}
               </span>
-              <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted" />
+              <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-muted" />
             </button>
           )}
         </HeapSwitcher>

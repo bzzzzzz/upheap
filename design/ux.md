@@ -232,7 +232,10 @@ since a "last opened" on the server would cost a write on every heap visit;
 they don't follow the user to another device. Search gives a flat list with the team and an
 "archived" tag, a "New heap “…”" row, and a message when nothing matches. Arrows move, Enter opens and Escape
 clears the field, then closes. It ends with "New heap in \<team\>", in the heap's own team, when the team allows
-it. On a tablet it is a popover beside the rail.
+it. On a tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts
+with the search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each
+team's name, and Recent's title, sits on a band a shade off the panel, with space above it, and a team's fold header
+stays in view while its heaps scroll.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 
