@@ -17,6 +17,7 @@ fn heap(slug: &str) -> serde_json::Value {
 fn team(slug: &str, heaps: &[&str]) -> serde_json::Value {
     json!({
         "id": Uuid::new_v4(), "slug": slug, "name": slug, "personal": slug == "ada", "role": "admin", "member_count": 1,
+        "group_managed": false,
         "heaps": heaps.iter().map(|h| heap(h)).collect::<Vec<_>>(),
     })
 }
