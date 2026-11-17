@@ -2,7 +2,7 @@
 // Server build only, as it is the list of the account's heaps.
 import type { Page } from "@playwright/test";
 
-import { addItem, closeItem, expect, isPhone, itemPane, markDoneFromList, row, test } from "./fixtures";
+import { addItem, closeItem, expect, isPhone, itemPane, markDoneFromList, openItem, row, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -252,4 +252,50 @@ test("Add on All items names the heap, not a place, and Open it opens the item o
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
   await expect(page).toHaveURL((url) => url.pathname.endsWith("/all") && url.searchParams.has("item"));
   await expect(page.getByRole("heading", { name: /^All items/, level: 1 })).toBeVisible();
+});
+
+test("the browser's Back from an item leaves the list where it was scrolled beside it", async ({ page, heapPath }) => {
+  for (let i = 1; i <= 40; i++) await seed(page, heapPath, `Item ${String(i).padStart(2, "0")}`);
+  await page.goto("/all");
+  const scrollY = () => page.evaluate(() => window.scrollY);
+  await row(page, "Item 30")
+    .locator("[data-row-link]")
+    .evaluate((link) => link.scrollIntoView({ block: "center" }));
+  const opened = await scrollY();
+  expect(opened).toBeGreaterThan(200);
+
+  await openItem(page, "Item 30");
+  await expect.poll(scrollY).toBe(opened);
+  await page.evaluate(() => window.scrollBy(0, -100));
+  await expect.poll(scrollY).toBe(opened - 100);
+  await page.goBack();
+  await expect(itemPane(page)).toHaveCount(0);
+  // Beside the item, the list stays where it is now, as ✕ leaves it; on a phone, where the item covers the list, the
+  // list goes back to where it was when the item opened.
+  await expect.poll(scrollY).toBe(isPhone(page) ? opened : opened - 100);
+
+  // Forward opens the item again, and the browser puts the list back where it was when the item was left.
+  await page.goForward();
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Item 30");
+  await expect.poll(scrollY).toBe(opened - 100);
+});
+
+test("a view change with an item open starts the list at the top", async ({ page, heapPath }) => {
+  for (let i = 1; i <= 40; i++) await seed(page, heapPath, `Item ${String(i).padStart(2, "0")}`);
+  await page.goto("/all?need=expected");
+  const scrollY = () => page.evaluate(() => window.scrollY);
+  await row(page, "Item 30")
+    .locator("[data-row-link]")
+    .evaluate((link) => link.scrollIntoView({ block: "center" }));
+  expect(await scrollY()).toBeGreaterThan(200);
+  await openItem(page, "Item 30");
+
+  // Without scrolling to the chip first, as a click would.
+  await page
+    .getByRole("group", { name: "Filters on" })
+    .getByRole("button", { name: "Remove filter Need: Expected" })
+    .dispatchEvent("click");
+  await expect(page).not.toHaveURL(/need=/);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Item 30");
+  await expect.poll(scrollY).toBe(0);
 });
