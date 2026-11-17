@@ -9,6 +9,7 @@ use domain::handle::Handle;
 use domain::permission::Permission;
 use domain::team::{Membership, Role, Team, ensure_admin_remains};
 use domain::text::Name;
+use domain::user::User;
 use domain::validation::Field;
 use domain::{TeamId, UserId, Version};
 use serde_json::json;
@@ -24,6 +25,34 @@ use crate::{Principal, ServiceError, Services};
 pub enum MemberAdded {
     Added,
     AlreadyMember,
+}
+
+/// What [`Services::make_admin_by_operator`] did.
+#[derive(Debug)]
+pub struct OperatorAdmin {
+    pub team: Team,
+    pub user: User,
+    /// Whether they were an admin already, so nothing changed.
+    pub already_admin: bool,
+}
+
+/// Why [`Services::make_admin_by_operator`] found nobody to make an admin.
+#[derive(Debug, thiserror::Error)]
+pub enum MakeAdminError {
+    #[error("no team has this slug")]
+    NoSuchTeam,
+    #[error("no user has this username")]
+    NoSuchUser,
+    #[error("the user is not a member of the team")]
+    NotAMember,
+    #[error(transparent)]
+    Service(#[from] ServiceError),
+}
+
+impl From<StoreError> for MakeAdminError {
+    fn from(error: StoreError) -> Self {
+        Self::Service(error.into())
+    }
 }
 
 /// A change to a team's name and slug. `None` leaves it as it is.
@@ -116,7 +145,7 @@ impl Services {
         for entry in &entries {
             store::audit::insert_audit_entry(&txn, entry).await?;
         }
-        let detail = load_team_detail(&txn, principal, team, self.now()).await?;
+        let detail = load_team_detail(&txn, &self.settings.group_teams, principal, team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(team_id = %detail.team.id, user_id = %principal.user_id, "team created");
@@ -145,10 +174,11 @@ impl Services {
         let name = patch.name.filter(|name| *name != current.name);
         let slug = patch.slug.filter(|slug| *slug != current.slug);
         if name.is_none() && slug.is_none() {
-            return load_team_detail(&txn, principal, current, self.now()).await;
+            return load_team_detail(&txn, &self.settings.group_teams, principal, current, self.now()).await;
         }
         if slug.is_some() {
             current.ensure_shared()?;
+            self.ensure_not_group_managed(team_id)?;
         }
 
         let mut diff = serde_json::Map::new();
@@ -187,7 +217,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let detail = load_team_detail(&txn, principal, saved, self.now()).await?;
+        let detail = load_team_detail(&txn, &self.settings.group_teams, principal, saved, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, user_id = %principal.user_id, "team updated");
@@ -196,7 +226,8 @@ impl Services {
 
     /// Adds an existing user to the team as a member. Adding someone who is already a member changes nothing and
     /// succeeds. Fails with [`ServiceError::UserNotFound`] when there is no such user, and with
-    /// [`domain::team::TeamError::PersonalTeam`] on a personal team.
+    /// [`domain::team::TeamError::PersonalTeam`] on a personal team and [`domain::team::TeamError::GroupManaged`] on
+    /// a group-managed one.
     pub async fn add_member(
         &self,
         principal: Principal,
@@ -206,8 +237,9 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let locked = lock_team_for(&txn, principal, team_id, Permission::ManageTeam).await?;
         locked.team.ensure_shared()?;
+        self.ensure_not_group_managed(team_id)?;
         if locked.find(user_id).is_some() {
-            let detail = load_team_detail(&txn, principal, locked.team, self.now()).await?;
+            let detail = load_team_detail(&txn, &self.settings.group_teams, principal, locked.team, self.now()).await?;
             return Ok((detail, MemberAdded::AlreadyMember));
         }
         store::users::find_user(&txn, user_id)
@@ -232,7 +264,7 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let detail = load_team_detail(&txn, principal, locked.team, self.now()).await?;
+        let detail = load_team_detail(&txn, &self.settings.group_teams, principal, locked.team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, member_id = %user_id, user_id = %principal.user_id, "member added");
@@ -253,7 +285,7 @@ impl Services {
         let locked = lock_team_for(&txn, principal, team_id, Permission::ManageTeam).await?;
         let target = locked.find(user_id).ok_or(ServiceError::NotFound)?;
         if target.role == role {
-            return load_team_detail(&txn, principal, locked.team, self.now()).await;
+            return load_team_detail(&txn, &self.settings.group_teams, principal, locked.team, self.now()).await;
         }
         ensure_admin_remains(team_id, &locked.members, user_id, Some(role))?;
 
@@ -269,11 +301,68 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        let detail = load_team_detail(&txn, principal, locked.team, self.now()).await?;
+        let detail = load_team_detail(&txn, &self.settings.group_teams, principal, locked.team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, member_id = %user_id, user_id = %principal.user_id, role = role.code(), "member role changed");
         Ok(detail)
+    }
+
+    /// Makes a member of the team with slug `slug` an admin, for the operator at the command line: a team can lose
+    /// its last admin to a sync of provider groups, and nobody in it can make another. Someone who is an admin
+    /// already succeeds without a change or an audit entry. Otherwise the change is recorded as made by the
+    /// operator, with the person as its actor.
+    pub async fn make_admin_by_operator(&self, slug: &str, username: &str) -> Result<OperatorAdmin, MakeAdminError> {
+        let slug = Handle::parse(slug, Field::Slug).map_err(|_| MakeAdminError::NoSuchTeam)?;
+        let username = Handle::parse(username, Field::Username).map_err(|_| MakeAdminError::NoSuchUser)?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let found = store::teams::find_team_by_slug(&txn, &slug)
+            .await?
+            .ok_or(MakeAdminError::NoSuchTeam)?;
+        let user = store::users::find_user_by_username(&txn, &username)
+            .await?
+            .ok_or(MakeAdminError::NoSuchUser)?;
+        let team = store::teams::lock_team(&txn, found.id)
+            .await?
+            .ok_or(MakeAdminError::NoSuchTeam)?;
+        let members = store::teams::list_memberships(&txn, team.id).await?;
+        let member = members
+            .iter()
+            .find(|m| m.user_id == user.id)
+            .ok_or(MakeAdminError::NotAMember)?;
+        if member.role == Role::Admin {
+            return Ok(OperatorAdmin {
+                team,
+                user,
+                already_admin: true,
+            });
+        }
+
+        store::teams::update_role(&txn, team.id, user.id, Role::Admin).await?;
+        let entry = self.team_audit_entry(
+            Principal {
+                user_id: user.id,
+                run: None,
+            },
+            team.id,
+            AuditAction::MemberRoleChanged,
+            EntityType::User,
+            *user.id.as_uuid(),
+            json!({
+                AuditField::Role.code(): { "before": member.role.code(), "after": Role::Admin.code() },
+                AuditField::MadeBy.code(): "operator",
+            }),
+            self.now(),
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(team_id = %team.id, member_id = %user.id, "member made an admin by the operator");
+        Ok(OperatorAdmin {
+            team,
+            user,
+            already_admin: false,
+        })
     }
 
     /// Takes `user_id` out of the team. Removing someone who isn't a member succeeds. Fails with

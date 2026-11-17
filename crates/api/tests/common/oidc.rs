@@ -14,12 +14,14 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Form, Json, Router};
-use openidconnect::core::{CoreIdToken, CoreIdTokenClaims, CoreJwsSigningAlgorithm, CoreRsaPrivateSigningKey};
-use openidconnect::{
-    Audience, EmptyAdditionalClaims, EndUserEmail, EndUserName, IssuerUrl, JsonWebKeyId, LocalizedClaim, Nonce,
-    PrivateSigningKey, StandardClaims, SubjectIdentifier,
+use openidconnect::core::{
+    CoreGenderClaim, CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreRsaPrivateSigningKey,
 };
-use serde::Deserialize;
+use openidconnect::{
+    AdditionalClaims, Audience, EndUserEmail, EndUserName, IdToken, IdTokenClaims, IssuerUrl, JsonWebKeyId,
+    LocalizedClaim, Nonce, PrivateSigningKey, StandardClaims, SubjectIdentifier,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use service::oidc::OidcSettings;
 use tokio::net::TcpListener;
@@ -36,6 +38,17 @@ const TEST_SIGNING_KEY: &str = include_str!("../fixtures/oidc-test-signing-key.p
 const WRONG_SIGNING_KEY: &str = include_str!("../fixtures/oidc-test-wrong-signing-key.pem");
 const KEY_ID: &str = "test-key";
 
+/// Claims the ID token carries besides the standard ones, whatever their names.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct ExtraClaims {
+    #[serde(flatten)]
+    claims: serde_json::Map<String, Value>,
+}
+
+impl AdditionalClaims for ExtraClaims {}
+
+type TestIdToken = IdToken<ExtraClaims, CoreGenderClaim, CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm>;
+
 /// What the provider vouches for with one code.
 #[derive(Clone, Debug)]
 pub struct Claims {
@@ -43,6 +56,8 @@ pub struct Claims {
     pub email: Option<String>,
     pub email_verified: Option<bool>,
     pub name: Option<String>,
+    /// Further claims in the ID token, such as the groups.
+    pub extra: serde_json::Map<String, Value>,
     /// What is wrong with the ID token, if anything. A valid token by default.
     pub fault: TokenFault,
 }
@@ -70,8 +85,16 @@ impl Claims {
             email: Some(email.to_owned()),
             email_verified: Some(true),
             name: Some(name.to_owned()),
+            extra: serde_json::Map::new(),
             fault: TokenFault::default(),
         }
+    }
+
+    /// The same claims with one more in the ID token.
+    #[must_use]
+    pub fn with_claim(mut self, name: &str, value: Value) -> Self {
+        self.extra.insert(name.to_owned(), value);
+        self
     }
 }
 
@@ -265,13 +288,15 @@ fn id_token(shared: &Shared, grant: &Grant) -> Option<String> {
     let nonce = fault.nonce.as_ref().unwrap_or(&grant.nonce);
     // Issued before it expired, even when it has.
     let issued_at = now.min(now + expires_in - chrono::Duration::minutes(1));
-    let claims = CoreIdTokenClaims::new(
+    let claims = IdTokenClaims::<ExtraClaims, CoreGenderClaim>::new(
         IssuerUrl::new(issuer.clone()).ok()?,
         vec![Audience::new(audience.to_owned())],
         now + expires_in,
         issued_at,
         standard,
-        EmptyAdditionalClaims {},
+        ExtraClaims {
+            claims: grant.claims.extra.clone(),
+        },
     )
     .set_nonce(Some(Nonce::new(nonce.clone())));
     let key = if fault.wrong_key {
@@ -279,7 +304,7 @@ fn id_token(shared: &Shared, grant: &Grant) -> Option<String> {
     } else {
         &shared.key
     };
-    CoreIdToken::new(claims, key, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256, None, None)
+    TestIdToken::new(claims, key, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256, None, None)
         .ok()
         .map(|token| token.to_string())
 }

@@ -1864,7 +1864,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2508,6 +2508,11 @@ export interface components {
             allowed_actions: components["schemas"]["InvitationAction"][];
             /** @description The display name of whoever made the link, now, even if they have left the team. */
             created_by_name: string;
+            /**
+             * @description Whether the team's members come from its groups at the sign-in provider. The link then admits nobody, and
+             *     `allowed_actions` is empty.
+             */
+            group_managed: boolean;
             /** @description Where the link is in its life. `ended` and `revoked` are shown too, so the page can say which. */
             state: components["schemas"]["InviteLinkState"];
             /** @description The team's name now. */
@@ -3956,6 +3961,11 @@ export interface components {
             heaps: components["schemas"]["Heap"][];
             /** Format: uuid */
             id: string;
+            /**
+             * @description The provider groups whose members the team has, as the operator configured them; `null` for a team that
+             *     isn't group-managed. Such a team takes no hand-added members, invite links or new slug.
+             */
+            managed_by_groups?: string[] | null;
             /** @description In the order they joined. */
             members: components["schemas"]["TeamMember"][];
             name: string;
@@ -4009,6 +4019,8 @@ export interface components {
             slug?: string | null;
         };
         TeamSummary: {
+            /** @description Whether the team's members come from its groups at the sign-in provider. */
+            group_managed: boolean;
             /** @description By name, archived ones included. */
             heaps: components["schemas"]["HeapOverview"][];
             /** Format: uuid */
@@ -4901,7 +4913,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invite_link_ended` or `invite_link_revoked` */
+            /** @description `invite_link_ended`, `invite_link_revoked` or `team_group_managed` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4946,7 +4958,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invite_link_ended`, `invite_link_revoked`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`) */
+            /** @description `invite_link_ended`, `invite_link_revoked`, `team_group_managed`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6003,7 +6015,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `handle_taken` (`field` `slug`) or `personal_team` */
+            /** @description `version_conflict`, `handle_taken` (`field` `slug`), `personal_team` or `team_group_managed` (a new slug) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9037,7 +9049,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `personal_team` */
+            /** @description `personal_team` or `team_group_managed` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9197,7 +9209,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `personal_team` */
+            /** @description `personal_team` or `team_group_managed` */
             409: {
                 headers: {
                     [name: string]: unknown;

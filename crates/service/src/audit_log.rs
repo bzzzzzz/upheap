@@ -4,6 +4,7 @@
 //! text, with IDs replaced by the names those things have now (tags, options, items, users), since a diff only
 //! records IDs (see `audit.rs`, which writes them). The raw diff stays on the entry for API clients that want it.
 
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 
 use domain::audit::{AuditAction, AuditField, EntityType};
@@ -50,7 +51,7 @@ pub struct AuditEntryView {
     pub actor_name: String,
     pub action: AuditAction,
     /// What was done, read after the actor's name: "edited item", "joined the team".
-    pub phrase: &'static str,
+    pub phrase: Cow<'static, str>,
     /// Whether the entity's name goes after `phrase`. Not when the entry is about the actor themselves, as with
     /// "updated their profile".
     pub names_entity: bool,
@@ -385,7 +386,7 @@ fn present_page(
         .into_iter()
         .map(|entry| {
             let about_actor = entry.entity_id == *entry.actor.as_uuid();
-            let (phrase, names_entity) = describe_action(entry.action, about_actor);
+            let (phrase, names_entity) = describe_phrase(entry.action, about_actor, &entry.diff);
             AuditEntryView {
                 id: entry.id,
                 created_at: entry.created_at,
@@ -407,6 +408,29 @@ fn present_page(
     AuditPage { entries, next }
 }
 
+/// [`describe_action`], with the groups named for the two actions that come from the provider's groups.
+fn describe_phrase(action: AuditAction, about_actor: bool, diff: &Value) -> (Cow<'static, str>, bool) {
+    let (phrase, names_entity) = describe_action(action, about_actor);
+    let (lead, key) = match action {
+        AuditAction::GroupMemberAdded => ("joined through", AuditField::Groups),
+        AuditAction::GroupMemberRemoved => ("left: no longer in", AuditField::Groups),
+        _ => return (Cow::Borrowed(phrase), names_entity),
+    };
+    let groups: Vec<&str> = diff
+        .get(key.code())
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let noun = match groups.split_last() {
+        Some((last, [])) => (*last).to_owned(),
+        Some((last, first)) => format!("{} or {last}", first.join(", ")),
+        None => return (Cow::Borrowed(phrase), names_entity),
+    };
+    (Cow::Owned(format!("{lead} the {noun} group")), names_entity)
+}
+
 /// What `action` says, read after the actor's name, and whether the entity's name follows it. `about_actor` is
 /// whether the entry is about the actor themselves, such as joining a team on creating it.
 const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static str, bool) {
@@ -425,6 +449,9 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::MemberLeft, _) => ("left the team", false),
         // The entry is about the link, so the line reads "Sam joined through Ana's invite link".
         (AuditAction::MemberJoined, _) => ("joined through", true),
+        // The entry is about the person signing in; `describe_phrase` names the groups.
+        (AuditAction::GroupMemberAdded, _) => ("joined through their groups", false),
+        (AuditAction::GroupMemberRemoved, _) => ("left: no longer in their groups", false),
         (AuditAction::HeapCreated, _) => ("created heap", true),
         (AuditAction::HeapUpdated, _) => ("changed heap", true),
         (AuditAction::HeapContextUpdated, _) => ("changed the context of heap", true),
@@ -481,6 +508,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::TeamCreated
         | AuditAction::MemberAdded
         | AuditAction::MemberJoined
+        | AuditAction::GroupMemberAdded
         | AuditAction::HeapCreated
         | AuditAction::ItemCreated
         | AuditAction::StepAdded
@@ -499,7 +527,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::PasswordChanged
         | AuditAction::PasswordResetLinkMade
         | AuditAction::PasswordReset => DiffShape::Created,
-        AuditAction::MemberRemoved | AuditAction::MemberLeft => DiffShape::Ended,
+        AuditAction::MemberRemoved | AuditAction::MemberLeft | AuditAction::GroupMemberRemoved => DiffShape::Ended,
         AuditAction::UserUpdated
         | AuditAction::TeamUpdated
         | AuditAction::MemberRoleChanged
@@ -700,6 +728,9 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::Priority => "Priority",
         AuditField::HeapId => "Heap",
         AuditField::MadeBy => "Made by",
+        // Never shown as changes of their own (see `reading`): the phrase names the groups.
+        AuditField::Groups => "Groups",
+        AuditField::By => "By",
         AuditField::EndsAt => "Ends",
         // Never shown as one change of their own (see `reading`).
         AuditField::ArchivedAt | AuditField::Parameters => field.code(),
@@ -753,6 +784,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
     match field {
         // `ends_at` is only on an invite link's creation, whose entries show no changes.
         AuditField::ArchivedAt | AuditField::EndsAt => Reading::Unshown,
+        // Group membership entries say the groups in their phrase, and `by` is always the provider's groups.
+        AuditField::Groups | AuditField::By => Reading::Unshown,
         // A heap priority change, the only entry about a user with a name, records the heap's for account history;
         // its `heap_id` already names the heap here.
         AuditField::Name if entity_type == EntityType::User => Reading::Unshown,
@@ -1336,6 +1369,46 @@ mod tests {
         expect_that!(
             unknown,
             contains(eq(&change("heap_id", "Heap", None, Some("Unknown heap"))))
+        );
+    }
+
+    #[gtest]
+    fn a_group_membership_names_the_groups_in_its_phrase() {
+        let phrase = |action, groups: Value| {
+            describe_phrase(action, true, &json!({ "groups": groups, "by": "provider_groups" }))
+        };
+
+        expect_that!(
+            phrase(AuditAction::GroupMemberAdded, json!(["engineering"])),
+            eq(&(Cow::Borrowed("joined through the engineering group"), false))
+        );
+        expect_that!(
+            phrase(AuditAction::GroupMemberRemoved, json!(["engineering", "sre"])),
+            eq(&(Cow::Borrowed("left: no longer in the engineering or sre group"), false))
+        );
+        expect_that!(
+            phrase(AuditAction::GroupMemberAdded, json!(["a", "b", "c"])).0,
+            eq("joined through the a, b or c group")
+        );
+    }
+
+    #[gtest]
+    fn a_group_membership_shows_no_change_rows_but_the_role_it_ended() {
+        let added = entry(
+            AuditAction::GroupMemberAdded,
+            EntityType::User,
+            json!({ "groups": ["engineering"], "by": "provider_groups" }),
+        );
+        let removed = entry(
+            AuditAction::GroupMemberRemoved,
+            EntityType::User,
+            json!({ "role": "admin", "groups": ["engineering"], "by": "provider_groups" }),
+        );
+
+        expect_that!(describe_changes(&added, &Names::default(), &TimeZone::UTC), is_empty());
+        expect_that!(
+            describe_changes(&removed, &Names::default(), &TimeZone::UTC),
+            elements_are![eq(&change("role", "Role", Some("Admin"), None))]
         );
     }
 

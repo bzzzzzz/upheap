@@ -24,6 +24,7 @@ use store::oidc_sign_ins::{NewOidcSignIn, OidcSignIn, VerifiedIdentity};
 use store::{StoreError, TransactionTrait};
 
 use crate::auth::{SessionGrant, random_token, sha256_hex};
+use crate::group_teams::{Groups, read_groups};
 use crate::{ServiceError, Services};
 
 /// The path the provider sends the person back to, after `BASE_URL`.
@@ -34,6 +35,9 @@ const HTTP_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 
 /// Sign-ins in flight that ended are deleted this many at a time, by each start.
 const HOUSEKEEPING_BATCH: u64 = 10;
+
+/// The claim the provider's groups are read from when the operator names none.
+const DEFAULT_GROUPS_CLAIM: &str = "groups";
 
 /// The provider, from the operator's configuration (README, Configuration).
 #[derive(Clone, Debug)]
@@ -47,6 +51,8 @@ pub struct OidcSettings {
     /// What is asked besides `openid`, which openidconnect always sends.
     scopes: Vec<String>,
     label: String,
+    /// The ID token claim that lists the person's groups.
+    groups_claim: String,
     /// `BASE_URL`, without a trailing slash: where a finished sign-in sends the browser.
     app_url: String,
     redirect_uri: RedirectUrl,
@@ -98,11 +104,24 @@ impl OidcSettings {
                 .map(str::to_owned)
                 .collect(),
             label: label.to_owned(),
+            groups_claim: DEFAULT_GROUPS_CLAIM.to_owned(),
             app_url: app_url.to_owned(),
             redirect_uri: RedirectUrl::new(format!("{app_url}{CALLBACK_PATH}"))
                 .map_err(OidcSettingsError::RedirectUri)?,
             http,
         })
+    }
+
+    /// Reads groups from the ID token claim `claim` instead of `groups`. Blank means `groups`.
+    #[must_use]
+    pub fn with_groups_claim(mut self, claim: &str) -> Self {
+        let claim = claim.trim();
+        self.groups_claim = if claim.is_empty() { DEFAULT_GROUPS_CLAIM } else { claim }.to_owned();
+        self
+    }
+
+    pub fn groups_claim(&self) -> &str {
+        &self.groups_claim
     }
 
     pub fn label(&self) -> &str {
@@ -322,15 +341,27 @@ impl Services {
             .await;
         };
 
-        let claims = match verify_code(oidc, code, current).await {
+        // Groups matter only when a team is mapped to them.
+        let groups_claim = (!self.settings.group_teams.is_empty()).then_some(oidc.groups_claim());
+        let claims = match verify_code(oidc, groups_claim, code, current).await {
             Ok(claims) => claims,
             Err(failure) => return refuse(failure.reason(), failure.log(), None).await,
         };
+        if let Some(Groups::Unknown(reason)) = &claims.groups {
+            tracing::warn!(
+                claim = oidc.groups_claim(),
+                reason,
+                "provider sign-in has no usable groups; team memberships kept"
+            );
+        }
         if let Some(user_id) = store::identities::find_identity_user(&self.db, oidc.issuer(), &claims.subject).await? {
             let user = store::users::find_user(&self.db, user_id)
                 .await?
                 .ok_or_else(|| StoreError::corrupt("user_identities", &claims.subject, "no such user"))?;
             let txn = self.db.begin().await.map_err(StoreError::from)?;
+            if let Some(groups) = &claims.groups {
+                self.sync_group_teams(&txn, user.id, groups, now).await?;
+            }
             let grant = self.open_session(&txn, user, now).await?;
             store::oidc_sign_ins::delete_oidc_sign_in(&txn, state_hash).await?;
             txn.commit().await.map_err(StoreError::from)?;
@@ -361,6 +392,10 @@ impl Services {
             subject: claims.subject,
             email,
             display_name,
+            groups: match claims.groups {
+                Some(Groups::Known(groups)) => Some(groups.into_iter().collect()),
+                Some(Groups::Unknown(_)) | None => None,
+            },
         };
         if !store::oidc_sign_ins::set_oidc_sign_in_verified(&self.db, state_hash, &identity, ends_at).await? {
             return refuse(OidcRefusal::SignInExpired, "the sign-in ended meanwhile", None).await;
@@ -395,6 +430,11 @@ impl Services {
             .insert_personal_user(&txn, verified.email, username, verified.display_name, team_name, now)
             .await?;
         store::identities::insert_identity(&txn, made.user.id, oidc.issuer(), &verified.subject, now).await?;
+        // A sign-in that didn't know the groups, or came before they were kept, changes no membership.
+        if let Some(groups) = verified.groups {
+            let groups = Groups::Known(groups.into_iter().collect());
+            self.sync_group_teams(&txn, made.user.id, &groups, now).await?;
+        }
         let grant = self.open_session(&txn, made.user, now).await?;
         store::oidc_sign_ins::delete_oidc_sign_in(&txn, &sha256_hex(state)).await?;
         txn.commit().await.map_err(StoreError::from)?;
@@ -444,6 +484,8 @@ struct IdentityClaims {
     email: Option<String>,
     email_verified: Option<bool>,
     name: Option<String>,
+    /// `None` when the groups weren't asked for.
+    groups: Option<Groups>,
 }
 
 impl IdentityClaims {
@@ -479,7 +521,13 @@ impl VerifyFailure {
 
 /// Exchanges the code with the sign-in's verifier, and checks the ID token's signature, issuer, audience, expiry and
 /// the sign-in's nonce. A network failure is told apart from a provider that answered no.
-async fn verify_code(oidc: &OidcSettings, code: String, sign_in: &OidcSignIn) -> Result<IdentityClaims, VerifyFailure> {
+/// The groups are read from the claim `groups_claim` when it is given.
+async fn verify_code(
+    oidc: &OidcSettings,
+    groups_claim: Option<&str>,
+    code: String,
+    sign_in: &OidcSignIn,
+) -> Result<IdentityClaims, VerifyFailure> {
     let client = match discover(oidc).await {
         Ok(client) => client,
         Err(error @ openidconnect::DiscoveryError::Request(_)) => {
@@ -509,5 +557,7 @@ async fn verify_code(oidc: &OidcSettings, code: String, sign_in: &OidcSignIn) ->
             .name()
             .and_then(|name| name.get(None))
             .map(|name| name.as_str().trim().to_owned()),
+        // The signature was checked above, so the payload can be read as it is.
+        groups: groups_claim.map(|claim| read_groups(&id_token.to_string(), claim)),
     })
 }

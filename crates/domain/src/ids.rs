@@ -129,6 +129,8 @@ mod tests {
                 "member_removed",
                 "member_left",
                 "member_joined",
+                "group_member_added",
+                "group_member_removed",
                 "heap_created",
                 "heap_updated",
                 "heap_context_updated",
@@ -235,6 +237,8 @@ mod tests {
                 "question_round",
                 "slug",
                 "username",
+                "groups",
+                "by",
                 "archived_at"
             ]
         );

@@ -31,9 +31,12 @@ pub struct Config {
     /// `LOG_FORMAT`: `json` (default) or `pretty`.
     pub log_format: LogFormat,
     /// `UPHEAP_OIDC_ISSUER`, `UPHEAP_OIDC_CLIENT_ID`, `UPHEAP_OIDC_CLIENT_SECRET` and `UPHEAP_OIDC_LABEL`, all or
-    /// none, and `UPHEAP_OIDC_SCOPES`, default `openid email profile`: the provider people may sign in through. No
-    /// request is made to it at startup.
+    /// none, `UPHEAP_OIDC_SCOPES`, default `openid email profile`, and `UPHEAP_OIDC_GROUPS_CLAIM`, default `groups`:
+    /// the provider people may sign in through. No request is made to it at startup.
     pub oidc: Option<OidcSettings>,
+    /// `UPHEAP_OIDC_GROUP_TEAMS`: a JSON object from team slug to the provider groups whose members the team has.
+    /// Empty when unset. The slugs are checked against the teams once the database is up, not here.
+    pub group_teams: Vec<(String, Vec<String>)>,
     /// `MAIL_URL` and `MAIL_FROM`: where mail goes and who it is from. `None` when `MAIL_URL` is unset: mail is off.
     pub mail: Option<Arc<mail::Mailer>>,
 }
@@ -104,6 +107,7 @@ impl Config {
             Some(other) => bail!("LOG_FORMAT must be json or pretty, not {other:?}"),
         };
         let oidc = oidc_settings(&lookup, &base_url)?;
+        let group_teams = group_teams(&lookup, oidc.is_some())?;
         let mail = match lookup("MAIL_URL").filter(|v| !v.trim().is_empty()) {
             None => None,
             Some(url) => {
@@ -129,6 +133,7 @@ impl Config {
             session_ttl_days,
             log_format,
             oidc,
+            group_teams,
             mail,
         })
     }
@@ -164,8 +169,38 @@ fn oidc_settings(lookup: &impl Fn(&str) -> Option<String>, base_url: &str) -> an
     let scopes = lookup("UPHEAP_OIDC_SCOPES").unwrap_or_else(|| "openid email profile".to_owned());
     // The issuer is kept as given: the ID token's `iss` must equal it byte for byte.
     let settings = OidcSettings::new(issuer, client_id, client_secret, label, &scopes, base_url)
-        .context("UPHEAP_OIDC_ISSUER, UPHEAP_OIDC_LABEL or BASE_URL is not usable for the OpenID Connect provider")?;
+        .context("UPHEAP_OIDC_ISSUER, UPHEAP_OIDC_LABEL or BASE_URL is not usable for the OpenID Connect provider")?
+        .with_groups_claim(&lookup("UPHEAP_OIDC_GROUPS_CLAIM").unwrap_or_default());
     Ok(Some(settings))
+}
+
+/// The map from team slug to provider groups: none when `UPHEAP_OIDC_GROUP_TEAMS` is unset or blank, and an error
+/// when it is set without a provider, isn't a JSON object of arrays of strings, or gives a team no group (which
+/// would take every member out at their next sign-in).
+fn group_teams(
+    lookup: &impl Fn(&str) -> Option<String>,
+    has_provider: bool,
+) -> anyhow::Result<Vec<(String, Vec<String>)>> {
+    const NAME: &str = "UPHEAP_OIDC_GROUP_TEAMS";
+    let Some(raw) = lookup(NAME).filter(|value| !value.trim().is_empty()) else {
+        return Ok(Vec::new());
+    };
+    if !has_provider {
+        bail!("{NAME} is set, but there is no OpenID Connect provider to read groups from");
+    }
+    let shape = || format!("{NAME} must be a JSON object from team slug to a list of provider groups");
+    let serde_json::Value::Object(map) = serde_json::from_str(&raw).with_context(shape)? else {
+        bail!("{}", shape());
+    };
+    map.into_iter()
+        .map(|(slug, value)| {
+            let groups: Vec<String> = serde_json::from_value(value).with_context(shape)?;
+            if groups.is_empty() {
+                bail!("{NAME} gives the team {slug:?} no group");
+            }
+            Ok((slug, groups))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -311,6 +346,70 @@ mod tests {
         assert!(message.contains("UPHEAP_OIDC_CLIENT_SECRET is required"), "{message}");
         assert!(message.contains("UPHEAP_OIDC_LABEL is required"), "{message}");
         assert!(!message.contains("UPHEAP_OIDC_CLIENT_ID is required"), "{message}");
+    }
+
+    fn with_groups(extra: &[(&'static str, &'static str)]) -> anyhow::Result<Config> {
+        let vars: Vec<_> = BASE.iter().chain(&OIDC).chain(extra).copied().collect();
+        config(&vars)
+    }
+
+    #[test]
+    fn reads_the_group_teams_in_slug_order() -> anyhow::Result<()> {
+        let json = r#"{ "sre": ["sre", "oncall"], "eng": ["engineering"] }"#;
+        let teams = with_groups(&[("UPHEAP_OIDC_GROUP_TEAMS", json)])?.group_teams;
+        assert_eq!(
+            teams,
+            [
+                ("eng".to_owned(), vec!["engineering".to_owned()]),
+                ("sre".to_owned(), vec!["sre".to_owned(), "oncall".to_owned()]),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn has_no_group_teams_when_unset_or_blank() -> anyhow::Result<()> {
+        assert!(with_groups(&[])?.group_teams.is_empty());
+        assert!(
+            with_groups(&[("UPHEAP_OIDC_GROUP_TEAMS", "  ")])?
+                .group_teams
+                .is_empty()
+        );
+        // Even without a provider, a blank value is no map.
+        assert!(
+            config(&[BASE[0], BASE[1], ("UPHEAP_OIDC_GROUP_TEAMS", "")])?
+                .group_teams
+                .is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_groups_claim_defaults_to_groups_and_is_trimmed() -> anyhow::Result<()> {
+        let claim = |extra: &[(&'static str, &'static str)]| -> anyhow::Result<String> {
+            Ok(with_groups(extra)?
+                .oidc
+                .context("a provider")?
+                .groups_claim()
+                .to_owned())
+        };
+        assert_eq!(claim(&[])?, "groups");
+        assert_eq!(claim(&[("UPHEAP_OIDC_GROUPS_CLAIM", "   ")])?, "groups");
+        assert_eq!(claim(&[("UPHEAP_OIDC_GROUPS_CLAIM", " roles ")])?, "roles");
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_a_group_map_that_cant_work() {
+        let without_provider = config(&[BASE[0], BASE[1], ("UPHEAP_OIDC_GROUP_TEAMS", r#"{"eng":["a"]}"#)]);
+        let mut errors = vec![without_provider.expect_err("no provider")];
+        for json in ["not json", "[]", r#"{"eng":"a"}"#, r#"{"eng":[1]}"#, r#"{"eng":[]}"#] {
+            errors.push(with_groups(&[("UPHEAP_OIDC_GROUP_TEAMS", json)]).expect_err(json));
+        }
+        for error in errors {
+            let message = format!("{error:#}");
+            assert!(message.contains("UPHEAP_OIDC_GROUP_TEAMS"), "{message}");
+        }
     }
 
     #[test]

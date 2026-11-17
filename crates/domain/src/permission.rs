@@ -57,6 +57,8 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::MemberRemoved
         | AuditAction::MemberLeft
         | AuditAction::MemberJoined
+        | AuditAction::GroupMemberAdded
+        | AuditAction::GroupMemberRemoved
         | AuditAction::InviteLinkCreated
         | AuditAction::InviteLinkRevoked
         | AuditAction::PasswordChanged
@@ -391,8 +393,14 @@ pub enum TeamAction {
     Leave,
 }
 
-/// What `user_id` can do with `team`, whose memberships are `members`. Empty for non-members.
-pub fn allowed_team_actions(team: &Team, members: &[Membership], user_id: UserId) -> Vec<TeamAction> {
+/// What `user_id` can do with `team`, whose memberships are `members`. Empty for non-members. A group-managed team
+/// (`group_managed`) takes no new slug, no hand-added members and no invite links: its groups decide who joins.
+pub fn allowed_team_actions(
+    team: &Team,
+    members: &[Membership],
+    user_id: UserId,
+    group_managed: bool,
+) -> Vec<TeamAction> {
     let Some(role) = members.iter().find(|m| m.user_id == user_id).map(|m| m.role) else {
         return Vec::new();
     };
@@ -400,7 +408,7 @@ pub fn allowed_team_actions(team: &Team, members: &[Membership], user_id: UserId
     let shared = !team.is_personal();
     if Permission::ManageTeam.is_granted_to(role) {
         actions.push(TeamAction::Rename);
-        if shared {
+        if shared && !group_managed {
             actions.extend([
                 TeamAction::ChangeSlug,
                 TeamAction::AddMember,
@@ -662,7 +670,7 @@ mod tests {
         let members = [admin, other];
 
         expect_that!(
-            allowed_team_actions(&team(None), &members, admin.user_id),
+            allowed_team_actions(&team(None), &members, admin.user_id, false),
             elements_are![
                 eq(&TeamAction::Rename),
                 eq(&TeamAction::ChangeSlug),
@@ -679,13 +687,24 @@ mod tests {
     }
 
     #[gtest]
+    fn a_group_managed_team_offers_no_new_slug_members_or_invite_links() {
+        let admin = member(10, Role::Admin);
+        let members = [admin, member(11, Role::Member)];
+
+        expect_that!(
+            allowed_team_actions(&team(None), &members, admin.user_id, true),
+            elements_are![eq(&TeamAction::Rename), eq(&TeamAction::CreateHeap)]
+        );
+    }
+
+    #[gtest]
     fn with_two_admins_either_can_leave_or_be_demoted() {
         let first = member(10, Role::Admin);
         let second = member(11, Role::Admin);
         let members = [first, second];
 
         expect_that!(
-            allowed_team_actions(&team(None), &members, first.user_id),
+            allowed_team_actions(&team(None), &members, first.user_id, false),
             contains(eq(&TeamAction::Leave))
         );
         expect_that!(
@@ -704,7 +723,7 @@ mod tests {
         let personal = team(Some(owner.user_id));
 
         expect_that!(
-            allowed_team_actions(&personal, &[owner], owner.user_id),
+            allowed_team_actions(&personal, &[owner], owner.user_id, false),
             elements_are![eq(&TeamAction::Rename), eq(&TeamAction::CreateHeap)]
         );
     }
@@ -716,12 +735,12 @@ mod tests {
         let members = [admin, plain];
 
         expect_that!(
-            allowed_team_actions(&team(None), &members, plain.user_id),
+            allowed_team_actions(&team(None), &members, plain.user_id, false),
             elements_are![eq(&TeamAction::Leave)]
         );
         expect_that!(allowed_member_actions(&members, &plain, &admin), is_empty());
         expect_that!(
-            allowed_team_actions(&team(None), &members, UserId::from_uuid(Uuid::from_u128(99))),
+            allowed_team_actions(&team(None), &members, UserId::from_uuid(Uuid::from_u128(99)), false),
             is_empty()
         );
     }

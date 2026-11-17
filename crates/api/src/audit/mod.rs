@@ -50,7 +50,7 @@ fn to_audit_entry_dto(view: AuditEntryView) -> AuditEntryDto {
             display_name: view.actor_name,
         },
         action: view.action.into(),
-        phrase: view.phrase.to_owned(),
+        phrase: view.phrase.into_owned(),
         names_entity: view.names_entity,
         entity: AuditEntityDto {
             entity_type: view.entity_type.into(),

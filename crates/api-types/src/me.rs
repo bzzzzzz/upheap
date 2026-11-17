@@ -45,6 +45,8 @@ pub struct TeamDto {
     pub role: RoleDto,
     /// Everyone in the team, the caller included.
     pub member_count: u32,
+    /// Whether the team's members come from its groups at the sign-in provider.
+    pub group_managed: bool,
     /// By name, archived ones included.
     pub heaps: Vec<HeapOverviewDto>,
 }

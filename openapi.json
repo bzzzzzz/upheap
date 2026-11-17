@@ -572,7 +572,7 @@
             }
           },
           "409": {
-            "description": "`invite_link_ended` or `invite_link_revoked`",
+            "description": "`invite_link_ended`, `invite_link_revoked` or `team_group_managed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -639,7 +639,7 @@
             }
           },
           "409": {
-            "description": "`invite_link_ended`, `invite_link_revoked`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)",
+            "description": "`invite_link_ended`, `invite_link_revoked`, `team_group_managed`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2254,7 +2254,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `handle_taken` (`field` `slug`) or `personal_team`",
+            "description": "`version_conflict`, `handle_taken` (`field` `slug`), `personal_team` or `team_group_managed` (a new slug)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7228,7 +7228,7 @@
             }
           },
           "409": {
-            "description": "`personal_team`",
+            "description": "`personal_team` or `team_group_managed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7465,7 +7465,7 @@
             }
           },
           "409": {
-            "description": "`personal_team`",
+            "description": "`personal_team` or `team_group_managed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8707,6 +8707,8 @@
           "member_removed",
           "member_left",
           "member_joined",
+          "group_member_added",
+          "group_member_removed",
           "heap_created",
           "heap_updated",
           "heap_context_updated",
@@ -10249,6 +10251,7 @@
           "team_name",
           "created_by_name",
           "state",
+          "group_managed",
           "allowed_actions"
         ],
         "properties": {
@@ -10261,6 +10264,10 @@
           "created_by_name": {
             "type": "string",
             "description": "The display name of whoever made the link, now, even if they have left the team."
+          },
+          "group_managed": {
+            "type": "boolean",
+            "description": "Whether the team's members come from its groups at the sign-in provider. The link then admits nobody, and\n`allowed_actions` is empty."
           },
           "state": {
             "$ref": "#/components/schemas/InviteLinkState",
@@ -13800,6 +13807,16 @@
             "type": "string",
             "format": "uuid"
           },
+          "managed_by_groups": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The provider groups whose members the team has, as the operator configured them; `null` for a team that\nisn't group-managed. Such a team takes no hand-added members, invite links or new slug."
+          },
           "members": {
             "type": "array",
             "items": {
@@ -13934,9 +13951,14 @@
           "personal",
           "role",
           "member_count",
+          "group_managed",
           "heaps"
         ],
         "properties": {
+          "group_managed": {
+            "type": "boolean",
+            "description": "Whether the team's members come from its groups at the sign-in provider."
+          },
           "heaps": {
             "type": "array",
             "items": {

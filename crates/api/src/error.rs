@@ -358,6 +358,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Team(TeamError::PersonalTeam { .. }) => {
             simple(StatusCode::CONFLICT, "personal_team", Category::Conflict)
         }
+        ServiceError::Team(TeamError::GroupManaged { .. }) => {
+            simple(StatusCode::CONFLICT, "team_group_managed", Category::Conflict)
+        }
         ServiceError::InviteLink(InviteLinkError::Ended { .. }) => {
             simple(StatusCode::CONFLICT, "invite_link_ended", Category::Conflict)
         }

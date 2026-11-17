@@ -15,6 +15,8 @@ coded_enum! {
         MemberRemoved = "member_removed",
         MemberLeft = "member_left",
         MemberJoined = "member_joined",
+        GroupMemberAdded = "group_member_added",
+        GroupMemberRemoved = "group_member_removed",
         HeapCreated = "heap_created",
         HeapUpdated = "heap_updated",
         HeapContextUpdated = "heap_context_updated",
@@ -141,6 +143,8 @@ coded_enum! {
         QuestionRound = "question_round",
         Slug = "slug",
         Username = "username",
+        Groups = "groups",
+        By = "by",
         ArchivedAt = "archived_at",
     }
 }

@@ -3,12 +3,15 @@
 //! `upheap-server` runs the server. `upheap-server --version` (or `-V`) prints `upheap-server <version>` and exits.
 //! `upheap-server openapi` prints the OpenAPI document and exits.
 //! `upheap-server user reset-link <username or email>` makes a password reset link ([`user_command`]).
+//! `upheap-server team make-admin <team slug> <username>` makes a member an admin ([`team_command`]).
 //! `upheap-server mail test <address>` sends a test mail ([`mail_command`]).
 
 mod assets;
 mod config;
 mod database;
 mod mail_command;
+mod team_command;
+mod terminal;
 mod user_command;
 
 use std::process::ExitCode;
@@ -18,6 +21,7 @@ use std::time::Duration as StdDuration;
 use anyhow::Context;
 use api::{AppState, CookieSettings};
 use config::{Config, LogFormat};
+use service::group_teams::{GroupTeams, resolve_group_teams};
 use service::{Services, Settings, SystemClock};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
@@ -42,6 +46,7 @@ async fn main() -> anyhow::Result<ExitCode> {
         }
         Some("user") => return Ok(user_command::run(&args[1..]).await),
         Some("mail") => return Ok(mail_command::run(&args[1..]).await),
+        Some("team") => return Ok(team_command::run(&args[1..]).await),
         _ => {}
     }
 
@@ -54,8 +59,9 @@ async fn main() -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// The use cases with the deployment settings from `config`, on `db`.
-fn build_services(config: &Config, db: store::DatabaseConnection) -> Services {
+/// The use cases with the deployment settings from `config`, on `db`. `group_teams` is the configured map once
+/// resolved: the commands that never sign anyone in pass none.
+fn build_services(config: &Config, group_teams: GroupTeams, db: store::DatabaseConnection) -> Services {
     let services = Services::new(
         db,
         Arc::new(SystemClock),
@@ -64,6 +70,7 @@ fn build_services(config: &Config, db: store::DatabaseConnection) -> Services {
             session_ttl: domain::Duration::from_days(i64::from(config.session_ttl_days)),
             sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
             oidc: config.oidc.clone(),
+            group_teams,
         },
     );
     match &config.mail {
@@ -83,7 +90,10 @@ async fn run(config: Config) -> anyhow::Result<()> {
     .context("can't connect to the database")?;
     store::run_migrations(&db).await.context("migrations failed")?;
 
-    let services = build_services(&config, db);
+    let group_teams = resolve_group_teams(&db, &config.group_teams)
+        .await
+        .context("UPHEAP_OIDC_GROUP_TEAMS can't be used")?;
+    let services = build_services(&config, group_teams, db);
     let cookies = CookieSettings {
         secure: config.cookies_secure(),
         max_age: StdDuration::from_secs(u64::from(config.session_ttl_days) * 24 * 60 * 60),

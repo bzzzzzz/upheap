@@ -85,7 +85,7 @@ async fn list_invite_links(
         (status = 401, description = "`unauthenticated`", body = Problem),
         (status = 403, body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`personal_team`", body = Problem),
+        (status = 409, description = "`personal_team` or `team_group_managed`", body = Problem),
     ))]
 async fn create_invite_link(
     State(state): State<AppState>,

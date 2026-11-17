@@ -101,6 +101,9 @@ pub struct InvitationDto {
     pub state: InviteLinkStateDto,
     /// The caller's standing in the team; `null` when the request has no signed-in user.
     pub viewer: Option<InviteViewerDto>,
+    /// Whether the team's members come from its groups at the sign-in provider. The link then admits nobody, and
+    /// `allowed_actions` is empty.
+    pub group_managed: bool,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<InvitationActionDto>,
 }

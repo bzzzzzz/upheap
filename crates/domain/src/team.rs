@@ -65,6 +65,8 @@ pub enum TeamError {
     LastAdmin { team_id: TeamId },
     #[error("team {team_id} is a personal team, which only its owner belongs to")]
     PersonalTeam { team_id: TeamId },
+    #[error("team {team_id} gets its members from provider groups, so nobody is added to it or invited by hand")]
+    GroupManaged { team_id: TeamId },
 }
 
 /// Whether the team whose memberships are `members` still has an admin once `user_id` gets `new_role`, or leaves

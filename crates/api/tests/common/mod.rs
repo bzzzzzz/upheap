@@ -21,6 +21,7 @@ use domain::team::{Membership, Role};
 use domain::{Duration, TeamId, Timestamp, UserId};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
+use service::group_teams::GroupTeams;
 use service::{Clock, ManualClock, RandomSource, Services, Settings, SystemRandom};
 use store::{ConnectionTrait, DatabaseConnection, Statement};
 use tower::ServiceExt;
@@ -114,6 +115,7 @@ fn test_settings(allow_registration: bool) -> Settings {
         session_ttl: Duration::from_days(30),
         sign_in_limit: SignInLimit::DEFAULT,
         oidc: None,
+        group_teams: GroupTeams::default(),
     }
 }
 
@@ -162,6 +164,25 @@ impl TestApp {
             oidc: Some(oidc),
             ..test_settings(false)
         })
+    }
+
+    /// [`TestApp::with_oidc`], with each team slug of `mapping` managed by the provider groups beside it. The teams
+    /// must exist.
+    pub async fn with_oidc_groups(
+        &self,
+        oidc: service::oidc::OidcSettings,
+        mapping: &[(&str, &[&str])],
+    ) -> Result<TestApp> {
+        let configured: Vec<(String, Vec<String>)> = mapping
+            .iter()
+            .map(|(slug, groups)| ((*slug).to_owned(), groups.iter().map(|g| (*g).to_owned()).collect()))
+            .collect();
+        let group_teams = service::group_teams::resolve_group_teams(&self.db, &configured).await?;
+        Ok(self.with_settings(Settings {
+            oidc: Some(oidc),
+            group_teams,
+            ..test_settings(false)
+        }))
     }
 
     /// The same server, with mail set up: a second router over the same database and clock, whose mail is written

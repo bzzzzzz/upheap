@@ -66,7 +66,7 @@ async fn create_team(
         (status = 200, body = TeamDto),
         (status = 403, body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`version_conflict`, `handle_taken` (`field` `slug`) or `personal_team`", body = Problem),
+        (status = 409, description = "`version_conflict`, `handle_taken` (`field` `slug`), `personal_team` or `team_group_managed` (a new slug)", body = Problem),
         (status = 422, description = "Invalid fields, or `invalid_handle` with a `hint`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
@@ -92,7 +92,7 @@ pub(super) async fn update_team(
         (status = 200, description = "Already a member", body = TeamDto),
         (status = 403, body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`personal_team`", body = Problem),
+        (status = 409, description = "`personal_team` or `team_group_managed`", body = Problem),
         (status = 422, description = "`user_not_found`", body = Problem),
     ))]
 async fn add_member(

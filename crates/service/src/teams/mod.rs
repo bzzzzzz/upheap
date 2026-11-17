@@ -9,16 +9,17 @@ use domain::permission::{
     HeapAction, MemberAction, Permission, TeamAction, allowed_heap_actions, allowed_member_actions,
     allowed_team_actions,
 };
-use domain::team::{Membership, Role, Team};
+use domain::team::{Membership, Role, Team, TeamError};
 use domain::user::User;
 use domain::{HeapId, TeamId, Timestamp, UserId};
 pub use invite_links::{InvitationView, InviteLinkView, InviteViewer};
-pub use manage::{MemberAdded, TeamPatch};
+pub use manage::{MakeAdminError, MemberAdded, OperatorAdmin, TeamPatch};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError};
 use uuid::Uuid;
 
 use crate::access::authorize_team;
+use crate::group_teams::GroupTeams;
 use crate::items::{ItemOrigin, count_open_items};
 use crate::{Principal, ServiceError, Services};
 
@@ -33,6 +34,8 @@ pub struct TeamDetail {
     /// By name, archived ones included.
     pub heaps: Vec<HeapView>,
     pub allowed_actions: Vec<TeamAction>,
+    /// The provider groups whose members the team has, as configured, when the team is group-managed.
+    pub managed_by_groups: Option<Vec<String>>,
 }
 
 /// One member of a team, with what the caller may do with them.
@@ -156,7 +159,15 @@ impl Services {
         let team = store::teams::find_team(&self.db, team_id)
             .await?
             .ok_or(ServiceError::NotFound)?;
-        load_team_detail(&self.db, principal, team, self.now()).await
+        load_team_detail(&self.db, &self.settings.group_teams, principal, team, self.now()).await
+    }
+
+    /// Refuses with [`TeamError::GroupManaged`] when the team's members come from provider groups.
+    pub(crate) fn ensure_not_group_managed(&self, team_id: TeamId) -> Result<(), ServiceError> {
+        match self.settings.group_teams.get(team_id) {
+            Some(_) => Err(TeamError::GroupManaged { team_id }.into()),
+            None => Ok(()),
+        }
     }
 
     #[allow(clippy::too_many_arguments)] // Every field of the entry differs between callers.
@@ -188,6 +199,7 @@ impl Services {
 /// The team as the caller sees it. Fails with [`ServiceError::NotFound`] if the caller isn't a member.
 pub(super) async fn load_team_detail(
     db: &impl ConnectionTrait,
+    group_teams: &GroupTeams,
     principal: Principal,
     team: Team,
     now: Timestamp,
@@ -222,8 +234,10 @@ pub(super) async fn load_team_detail(
         .collect::<Result<Vec<_>, ServiceError>>()?;
     let heaps = store::heaps::list_heaps_for_teams(db, &[team.id]).await?;
     let heaps = load_heap_views(db, heaps, caller.role, principal.user_id, now).await?;
+    let managed_by_groups = group_teams.get(team.id).map(<[String]>::to_vec);
     Ok(TeamDetail {
-        allowed_actions: allowed_team_actions(&team, &memberships, principal.user_id),
+        allowed_actions: allowed_team_actions(&team, &memberships, principal.user_id, managed_by_groups.is_some()),
+        managed_by_groups,
         role: caller.role,
         team,
         members,

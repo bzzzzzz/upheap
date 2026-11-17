@@ -28,6 +28,9 @@ uuid.workspace = true
 
 [dev-dependencies]
 googletest.workspace = true
+# A database for the tests of the code that reads and writes one.
+store = { workspace = true, features = ["sqlite"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]
 workspace = true

@@ -57,6 +57,7 @@ fn to_invitation_dto(view: InvitationView) -> InvitationDto {
         created_by_name: view.created_by.display_name.as_str().to_owned(),
         state: InviteLinkStateDto::from(view.state),
         viewer: viewer.map(|(status, team_slug)| InviteViewerDto { status, team_slug }),
+        group_managed: view.group_managed,
         allowed_actions: view
             .allowed_actions
             .into_iter()
@@ -98,7 +99,7 @@ async fn open_invite(
         (status = 401, description = "`unauthenticated`: no session cookie, or the request carried a bearer token", body = Problem),
         (status = 403, description = "`removed_from_team`: removed from the team after the link was made", body = Problem),
         (status = 404, description = "No such link", body = Problem),
-        (status = 409, description = "`invite_link_ended` or `invite_link_revoked`", body = Problem),
+        (status = 409, description = "`invite_link_ended`, `invite_link_revoked` or `team_group_managed`", body = Problem),
     ))]
 async fn join_by_invite(
     State(state): State<AppState>,
@@ -124,7 +125,7 @@ async fn join_by_invite(
     responses(
         (status = 201, description = "Registered, joined and signed in; sets the session cookie", body = InviteRegistrationDto),
         (status = 404, description = "No such link", body = Problem),
-        (status = 409, description = "`invite_link_ended`, `invite_link_revoked`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)", body = Problem),
+        (status = 409, description = "`invite_link_ended`, `invite_link_revoked`, `team_group_managed`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)", body = Problem),
         (status = 422, description = "Invalid email, name or password, or `invalid_handle` with a `hint`", body = Problem),
     ))]
 async fn register_by_invite(
