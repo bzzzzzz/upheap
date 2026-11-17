@@ -918,7 +918,7 @@ section is how it maps onto this API.
    allowed for the loop without loosening every session on the machine. With `--instructions` the brief also carries
    the runner's own instructions, between Upheap's and the heap's context: a heap's context is shared by everyone who
    works the heap and says what the work is, and how it is done is for the one who does it, so each
-   runner keeps that in a file of its own and it wins over the context on how. The tool runs in its own process
+   runner keeps that in files of its own (a shared one and one for its machine, say) and it wins over the context on how. The tool runs in its own process
    group, so a Ctrl-C typed in the terminal reaches the loop and not the tool: the first lets the run end and stops
    the loop, the second stops the tool, and the run counts as failed unless it had asked a question. Stopping asks the tool
    to end and kills its group after a few seconds if it hasn't: Claude runs each command in a group of its own and
