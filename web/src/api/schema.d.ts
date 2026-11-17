@@ -299,9 +299,9 @@ export interface paths {
         };
         /**
          * The caller's account history, newest first: their password changes, reset links made for them by whoever runs
-         *     the server, passwords set with a reset link, and
-         *     their own heap priority changes. Each entry carries a sentence worded by the server. Only the
-         *     caller's own history can be read. Read-only, so a command-line sign-in may read it too.
+         *     the server, passwords set with a reset link, and their own heap priority changes. Each entry carries a sentence
+         *     worded by the server. Only the caller's own history can be read. Read-only, so a command-line sign-in may read it
+         *     too.
          */
         get: operations["get_history"];
         put?: never;

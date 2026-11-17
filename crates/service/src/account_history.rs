@@ -4,11 +4,11 @@
 //! The entries are the audit log's, in the user's personal team where their account entries go. The history is
 //! theirs alone, so there is no way to name another user or team.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use domain::audit::{AuditAction, AuditField};
 use domain::due::describe_time;
-use domain::{HeapId, Timestamp};
+use domain::{HeapId, TeamId, Timestamp};
 use jiff::tz::TimeZone;
 use serde_json::Value;
 use store::audit::{AuditEntry, AuditScope};
@@ -105,7 +105,7 @@ impl Services {
         let (entries, next) = self
             .read_page(AuditScope::Team(personal_team), &ACCOUNT_ACTIONS, request)
             .await?;
-        let names = self.heap_names_for(&entries).await?;
+        let names = self.heap_names_for(principal, &entries).await?;
         let entries = entries
             .into_iter()
             .filter_map(|entry| {
@@ -122,8 +122,13 @@ impl Services {
         Ok(AccountHistoryPage { entries, next })
     }
 
-    /// The current names of the heaps that priority entries without a recorded name point to, by heap ID.
-    async fn heap_names_for(&self, entries: &[AuditEntry]) -> Result<HashMap<HeapId, String>, ServiceError> {
+    /// The current names of the heaps that priority entries without a recorded name point to, by heap ID. Only heaps
+    /// of teams the caller is still in: a heap they left may have been renamed since, and that name isn't theirs to see.
+    async fn heap_names_for(
+        &self,
+        principal: Principal,
+        entries: &[AuditEntry],
+    ) -> Result<HashMap<HeapId, String>, ServiceError> {
         let ids: Vec<HeapId> = entries
             .iter()
             .filter(|entry| entry.action == AuditAction::HeapPriorityChanged)
@@ -133,9 +138,15 @@ impl Services {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
+        let teams: HashSet<TeamId> = store::teams::list_teams_for_user(&self.db, principal.user_id)
+            .await?
+            .into_iter()
+            .map(|(team, _)| team.id)
+            .collect();
         let heaps = store::heaps::find_heaps(&self.db, &ids).await?;
         Ok(heaps
             .into_iter()
+            .filter(|heap| teams.contains(&heap.team_id))
             .map(|heap| (heap.id, heap.name.as_str().to_owned()))
             .collect())
     }

@@ -43,9 +43,9 @@ fn to_account_history_dto(page: AccountHistoryPage) -> AccountHistoryDto {
 }
 
 /// The caller's account history, newest first: their password changes, reset links made for them by whoever runs
-/// the server, passwords set with a reset link, and
-/// their own heap priority changes. Each entry carries a sentence worded by the server. Only the
-/// caller's own history can be read. Read-only, so a command-line sign-in may read it too.
+/// the server, passwords set with a reset link, and their own heap priority changes. Each entry carries a sentence
+/// worded by the server. Only the caller's own history can be read. Read-only, so a command-line sign-in may read it
+/// too.
 #[utoipa::path(get, path = "/me/history", tag = "me", security(("session" = [])),
     params(AccountHistoryQueryDto, TimeZoneHeader),
     responses(

@@ -347,3 +347,35 @@ async fn an_entry_without_a_name_reads_the_heaps_current_name() -> Result<()> {
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn an_entry_without_a_name_says_a_heap_once_the_person_has_left_its_team() -> Result<()> {
+    // Arrange: Bob's entry was written before the name was recorded; then he is removed and the heap renamed.
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register(EMAIL).await?;
+    let (bob, _) = app.register("bob@example.test").await?;
+    let bob_id = user_id(&app, &bob).await?;
+    let (team, heap) = app.shared_heap(&ada).await?;
+    app.add_member(&team, &bob_id, Role::Member).await?;
+    app.set_priority(&bob, &heap, 3).await?;
+    app.strip_audit_names(&bob_id).await?;
+    let removed = app
+        .send(Method::DELETE, &app.member_url(&team, &bob_id).await?, Some(&ada), None)
+        .await?;
+    anyhow::ensure!(removed.status.is_success(), "remove: {}", removed.body);
+    let heap_path = app.heap_url(&heap).await?;
+    let read = app.send(Method::GET, &heap_path, Some(&ada), None).await?;
+    app.patch(&ada, &heap_path, &read.body["version"], json!({ "name": "Renamed" }))
+        .await?;
+
+    // Act
+    let listed = history(&app, &bob, "").await?;
+
+    // Assert
+    expect_that!(
+        field(entries(&listed), "description"),
+        elements_are![eq(&"You changed your priority for a heap from 1 to 3.")]
+    );
+    Ok(())
+}

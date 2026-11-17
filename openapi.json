@@ -846,7 +846,7 @@
         "tags": [
           "me"
         ],
-        "summary": "The caller's account history, newest first: their password changes, reset links made for them by whoever runs\nthe server, passwords set with a reset link, and\ntheir own heap priority changes. Each entry carries a sentence worded by the server. Only the\ncaller's own history can be read. Read-only, so a command-line sign-in may read it too.",
+        "summary": "The caller's account history, newest first: their password changes, reset links made for them by whoever runs\nthe server, passwords set with a reset link, and their own heap priority changes. Each entry carries a sentence\nworded by the server. Only the caller's own history can be read. Read-only, so a command-line sign-in may read it\ntoo.",
         "operationId": "get_history",
         "parameters": [
           {
