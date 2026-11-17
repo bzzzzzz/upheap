@@ -170,7 +170,9 @@ The tables and columns are in the migrations. These are the conventions they fol
   claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it
   ended (`reached`, `asked`, `failed`, `taken_back`, `handed_back` or `limited`), what it said it reached and made (`result`, `links`), why it
   failed, and its cost in micro-dollars. `work run` also sends the agent tool's own start and exit times with `finish`
-  (`tool_started_at`, `tool_ended_at`, each set once, null for older runs and for runs whose tool never started).
+  (`tool_started_at`, `tool_ended_at`, each set once, null for older runs and for runs whose tool never started), and
+  the tool's name and model (`agent_tool`, `agent_model`: free text cut to 100 characters, null for older runs, set by
+  `finish` and replaced by a later one).
   Like turns, runs are never deleted and never bump the item's `version`.
   A run that ends as `reached` also records what it reached (`reached`: `with_context` or `defined`, the item's stage
   after the reach, or `became` for a note that became items, heaps or a step), null for every other end and for runs
@@ -844,8 +846,11 @@ section is how it maps onto this API.
    output for 30 minutes the loop stops it and fails the run with its own message, "The agent showed no activity
    for 30 minutes." That timer uses the monotonic clock on purpose: it stands still while the machine sleeps, as
    claude does, so a sleep isn't silence. The loop stops the tool when the server answers
-   `run_over`. When the tool ends it sends `finish` with the cost the tool reported and, only if the tool itself
-   failed, why: the server decides whether the run reached its goal, asked, handed back, hit the limit, or failed, and
+   `run_over`. A run's model is read from the tool's own stream when it names one, else it is the `--model` the loop
+   was given (which it passes to the tool as it is): Claude's `system` event with subtype `init` carries `model`, and
+   Copilot's usage checkpoint carries `data.accountingSnapshot.currentModel`, the last one winning. `finish` sends
+   the tool's name and that model along with the tool's times, for a run whose tool was started. When the tool ends
+   it sends `finish` with the cost the tool reported and, only if the tool itself failed, why: the server decides whether the run reached its goal, asked, handed back, hit the limit, or failed, and
    the loop never works that out. The exception is the agent tool's usage limit, recognised for Claude only: a run whose claude stream had a rejected
    `rate_limit_event` (not overage use) or `api_error` `usage_limit_reached` on its result is sent with `limited`, and
    ends as `limited`, not failed, so the turn's failed runs are left alone. The loop then holds every worker until the

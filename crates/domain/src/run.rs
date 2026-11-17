@@ -181,6 +181,9 @@ pub struct Run {
     /// tool never started and for runs made before they were recorded.
     pub tool_started_at: Option<Timestamp>,
     pub tool_ended_at: Option<Timestamp>,
+    /// The agent tool that ran it and the model it used. Set by `finish`; `None` when not recorded.
+    pub tool: Option<String>,
+    pub model: Option<String>,
 }
 
 impl Run {
@@ -198,6 +201,8 @@ impl Run {
             cost_micro_usd: None,
             tool_started_at: None,
             tool_ended_at: None,
+            tool: None,
+            model: None,
         }
     }
 
@@ -426,11 +431,24 @@ pub const MAX_FAILURE_CHARS: usize = 2_000;
 /// A failure text from a tool: trimmed and cut to [`MAX_FAILURE_CHARS`] characters, on a character boundary. Not
 /// refused when it is long. Blank gives `None`.
 pub fn cut_failure(raw: &str) -> Option<String> {
+    cut_text(raw, MAX_FAILURE_CHARS)
+}
+
+/// Most characters of a run's tool name or model kept.
+pub const MAX_TOOL_TEXT_CHARS: usize = 100;
+
+/// A tool name or model from the loop: cut like [`cut_failure`], to [`MAX_TOOL_TEXT_CHARS`] characters. Blank gives
+/// `None`.
+pub fn cut_tool_text(raw: &str) -> Option<String> {
+    cut_text(raw, MAX_TOOL_TEXT_CHARS)
+}
+
+fn cut_text(raw: &str, limit: usize) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return None;
     }
-    Some(trimmed.chars().take(MAX_FAILURE_CHARS).collect())
+    Some(trimmed.chars().take(limit).collect())
 }
 
 /// Most a run may cost, in US dollars.
@@ -629,6 +647,14 @@ mod tests {
         let cut = cut_failure(&long).expect("some");
         expect_that!(cut.chars().count(), eq(2_000));
         expect_that!(cut.len(), eq(4_000));
+    }
+
+    #[gtest]
+    fn a_tool_text_is_trimmed_cut_to_a_hundred_characters_and_blank_is_none() {
+        expect_that!(cut_tool_text(" \n"), none());
+        expect_that!(cut_tool_text("  claude \n").as_deref(), some(eq("claude")));
+        let cut = cut_tool_text(&"é".repeat(150)).expect("some");
+        expect_that!(cut.chars().count(), eq(100));
     }
 
     #[gtest]

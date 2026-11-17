@@ -167,6 +167,32 @@ pub async fn set_run_cost(db: &impl ConnectionTrait, id: RunId, cost_micro_usd: 
     Ok(result.rows_affected == 1)
 }
 
+/// Sets the agent tool and model of the run `id`, replacing what was there; each only when given, so a call with
+/// neither changes nothing.
+pub async fn set_run_tool_and_model(
+    db: &impl ConnectionTrait,
+    id: RunId,
+    tool: Option<&str>,
+    model: Option<&str>,
+) -> Result<(), StoreError> {
+    if tool.is_none() && model.is_none() {
+        return Ok(());
+    }
+    let mut set = item_runs::ActiveModel::default();
+    if let Some(tool) = tool {
+        set.agent_tool = Set(Some(tool.to_owned()));
+    }
+    if let Some(model) = model {
+        set.agent_model = Set(Some(model.to_owned()));
+    }
+    item_runs::Entity::update_many()
+        .set(set)
+        .filter(item_runs::Column::Id.eq(id_to_db(id.as_uuid())))
+        .exec(db)
+        .await?;
+    Ok(())
+}
+
 /// Sets the tool start and exit times of the run `id`, each only where it is still unset: a run's times are never
 /// changed once set, so a second call changes nothing.
 pub async fn set_run_tool_times(
@@ -511,6 +537,8 @@ fn to_row(run: &Run) -> item_runs::ActiveModel {
         cost_micro_usd: Set(run.cost_micro_usd),
         tool_started_at: Set(run.tool_started_at.map(Timestamp::as_millis)),
         tool_ended_at: Set(run.tool_ended_at.map(Timestamp::as_millis)),
+        agent_tool: Set(run.tool.clone()),
+        agent_model: Set(run.model.clone()),
     }
 }
 
@@ -566,5 +594,7 @@ fn to_run(row: item_runs::Model) -> Result<Run, StoreError> {
         cost_micro_usd: row.cost_micro_usd,
         tool_started_at: row.tool_started_at.map(|at| read.timestamp(at)).transpose()?,
         tool_ended_at: row.tool_ended_at.map(|at| read.timestamp(at)).transpose()?,
+        tool: row.agent_tool,
+        model: row.agent_model,
     })
 }

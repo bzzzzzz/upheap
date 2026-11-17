@@ -447,7 +447,8 @@ impl Services {
     ///
     /// The cost, in millionths of a US dollar, is set once: a second one fails with [`RunError::CostRecorded`]. The
     /// tool's start and exit times (already checked by [`domain::run::check_tool_times`]) are each set once too, but a
-    /// second one is ignored without an error.
+    /// second one is ignored without an error. The tool and model (already cut by [`domain::run::cut_tool_text`])
+    /// replace what was recorded, each only when given.
     #[allow(clippy::too_many_arguments)] // Every one differs between the callers.
     pub async fn finish_run(
         &self,
@@ -456,6 +457,8 @@ impl Services {
         cost_micro_usd: Option<i64>,
         tool_started_at: Option<Timestamp>,
         tool_ended_at: Option<Timestamp>,
+        tool: Option<String>,
+        model: Option<String>,
         failure: Option<String>,
         limited: bool,
     ) -> Result<RunView, ServiceError> {
@@ -496,6 +499,7 @@ impl Services {
         store::runs::set_run_tool_times(&txn, run.id, tool_started_at, tool_ended_at).await?;
         run.tool_started_at = run.tool_started_at.or(tool_started_at);
         run.tool_ended_at = run.tool_ended_at.or(tool_ended_at);
+        store::runs::set_run_tool_and_model(&txn, run.id, tool.as_deref(), model.as_deref()).await?;
         let view = self.run_view(&txn, run).await?;
         txn.commit().await.map_err(StoreError::from)?;
 

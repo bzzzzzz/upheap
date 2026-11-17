@@ -60,6 +60,9 @@ pub struct RunArgs {
     /// The agent tool to start on each item
     #[arg(long, value_enum)]
     pub tool: Tool,
+    /// The model every run's agent tool uses, passed to the tool as it is. Left out, the tool's own default
+    #[arg(long, value_name = "MODEL", value_parser = clap::builder::NonEmptyStringValueParser::new())]
+    pub model: Option<String>,
     #[command(flatten)]
     pub heaps: HeapsArgs,
     /// Do one run, or nothing when there is nothing to do, and exit. With --workers, one run for each worker
@@ -153,6 +156,9 @@ impl AllowRules {
 /// item is closed or can't be found, or when no run has been in it for 7 days. Directories from before, named by
 /// an item's key and a run's ID, are never touched.
 ///
+/// With `--model`, every run's tool is started with `--model <model>`, the value as given. Each run records the tool
+/// and the model: the one the tool's own output names, else the one given, else none.
+///
 /// A run whose tool stopped at the account's usage limit ends as `limited`, not failed. The loop then claims nothing
 /// until the limit resets and a minute more (30 minutes when the tool gave no time), by the wall clock, and says so;
 /// live runs end as usual. With `--once` it says when to run again and exits at once.
@@ -208,6 +214,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         app,
         server,
         tool: args.tool,
+        model: args.model,
         heaps: heaps.into_iter().map(|heap| heap.handle).collect(),
         once: args.once,
         workers: args.workers,
@@ -391,6 +398,8 @@ struct Shared<'a> {
     app: &'a App,
     server: Url,
     tool: Tool,
+    /// The `--model` the tool is started with; `None` for the tool's own default.
+    model: Option<String>,
     /// The heaps the queue is over, each as `team/heap`.
     heaps: Vec<String>,
     once: bool,
@@ -702,6 +711,7 @@ impl Shared<'_> {
             dir: None,
             allow: self.allow.for_access(goal.access()),
             log: log.clone(),
+            model: self.model.clone(),
         };
         tracing::info!(run_id = %run.id, item = %run.item.key, goal = ?goal, "starting the tool");
         // Registered before the directory is made or touched, and kept until the run is recorded below, so a sweep
@@ -759,6 +769,8 @@ impl Shared<'_> {
         let tool_times = |request: FinishRequestDto| FinishRequestDto {
             tool_started_at: tool_started.map(|at| at.as_millisecond()),
             tool_ended_at: tool_started.map(|_| tool_ended.as_millisecond()),
+            tool: tool_started.map(|_| self.tool.name().to_owned()),
+            model: request.model.or_else(|| self.model.clone()),
             ..request
         };
         // Used until now, so a run longer than the unused period doesn't lose its directory the moment it ends.
@@ -777,6 +789,7 @@ impl Shared<'_> {
                     cost_usd: report.cost_usd,
                     limited: limit.is_some(),
                     failure: report.failure,
+                    model: report.model,
                     ..Default::default()
                 });
                 (request, None)

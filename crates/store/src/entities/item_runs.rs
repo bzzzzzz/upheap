@@ -21,6 +21,8 @@ pub struct Model {
     pub cost_micro_usd: Option<i64>,
     pub tool_started_at: Option<i64>,
     pub tool_ended_at: Option<i64>,
+    pub agent_tool: Option<String>,
+    pub agent_model: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

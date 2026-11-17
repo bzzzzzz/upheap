@@ -1591,6 +1591,7 @@ export interface paths {
          *     stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
          *     its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
          *     The tool's start and exit times are each set once too, but sending them again changes nothing and is no error.
+         *     The tool and the model, each trimmed and cut to 100 characters, replace what was recorded and are never refused.
          */
         post: operations["finish_run"];
         delete?: never;
@@ -2285,6 +2286,16 @@ export interface components {
              */
             limited?: boolean;
             /**
+             * @description The model it used. Trimmed and cut to 100 characters; blank is the same as left out. Replaces what was
+             *     recorded.
+             */
+            model?: string | null;
+            /**
+             * @description The agent tool that ran it. Trimmed and cut to 100 characters; blank is the same as left out. Replaces what
+             *     was recorded.
+             */
+            tool?: string | null;
+            /**
              * Format: int64
              * @description When the run's agent tool exited, in UTC milliseconds; not before `tool_started_at` when both are sent. Set
              *     once: a later value for a run that has one is ignored.
@@ -2851,6 +2862,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             links: string[];
+            /** @description The model it used. `null` when not recorded. */
+            model?: string | null;
             /**
              * @description What the run said it reached, or why it handed the turn back; `null` unless it ended as `reached` or
              *     `handed_back`.
@@ -2866,6 +2879,8 @@ export interface components {
              *     in the request's timezone.
              */
             started_label: string;
+            /** @description The agent tool that ran it (`claude`, `copilot`). `null` when not recorded. */
+            tool?: string | null;
             /**
              * Format: int64
              * @description UTC milliseconds: when the run's agent tool exited. `null` when not recorded.

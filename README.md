@@ -248,6 +248,7 @@ cargo run -p cli -- work run --tool claude --root ~/agent-runs   # each item in 
 cargo run -p cli -- work run --tool claude --root ~/agent-runs --workers 3  # up to 3 runs at once, each on its own item
 cargo run -p cli -- work run --tool claude --instructions ~/how-i-work.md  # tell every run how you want work done on this machine
 cargo run -p cli -- work run --tool claude --allow mcp__claude_ai_Claude_Docs --allow-do 'Bash(npm:*)'  # let runs use a tool your settings don't allow; --allow-prepare / --allow-do for one kind of run only
+cargo run -p cli -- work run --tool claude --model opus            # start every run's claude with --model opus
 cargo run -p cli -- work run --tool copilot --root ~/agent-runs  # the same loop with GitHub Copilot CLI
 UPHEAP_RUN=<id> cargo run -p cli -- item edit k3x9a --context-file context.md  # with a run, writes are the run's
 UPHEAP_RUN=<id> cargo run -p cli -- work reached --result "Wrote the context"  # the turn's goal is reached
@@ -267,7 +268,9 @@ app's Account page, wins over the keychain sign-in: when it is set, every comman
 browser, except `auth login` and `auth logout`, which manage the keychain sign-in. With `UPHEAP_RUN` set to a run's ID, every
 request is made inside that run: it may write the item's context, steps, questions and comments, make a note or a
 reminder a task and start it, on the run's own item only, and is refused anything else with exit 3. `work run`
-starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. To prepare an
+starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. With `--model <model>`,
+the value is passed to the tool as it is, as `--model <model>`; each run records the tool and the model (the one the
+tool's own output names, else the one given), and the item's Runs list shows them. To prepare an
 item (give it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not
 `auth`), read files under that directory and use the web, and nothing else. To do a task, it may also edit files,
 and run what your own and the project's Claude settings allow. With `--root`, each run starts in a directory

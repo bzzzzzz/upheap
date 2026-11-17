@@ -66,6 +66,8 @@ pub struct ToolStart {
     /// A file for the tool's streamed output, one event a line, made with the directory it is in. `None` for no log.
     /// A log that can't be written is a warning, not a failure of the run.
     pub log: Option<PathBuf>,
+    /// The model to hand the tool as `--model`, as given. `None` to leave it to the tool's own default.
+    pub model: Option<String>,
 }
 
 /// What the tool reported when it ended.
@@ -80,6 +82,8 @@ pub struct ToolReport {
     pub last_message: Option<String>,
     /// Set when the run failed because the account hit the tool's usage limit.
     pub limit: Option<UsageLimit>,
+    /// The model the tool's own stream named; `None` when it named none.
+    pub model: Option<String>,
 }
 
 /// An account's usage limit the tool stopped at.

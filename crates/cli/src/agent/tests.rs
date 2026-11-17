@@ -67,6 +67,7 @@ mod processes {
             dir: None,
             allow: vec![],
             log: None,
+            model: None,
         }
     }
 

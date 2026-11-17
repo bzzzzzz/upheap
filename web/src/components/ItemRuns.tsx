@@ -17,6 +17,9 @@ const END_LABELS: Record<RunEnd, string> = {
 /** How the run ended, in a word; "running" while it hasn't. */
 const endWord = (run: ItemRun) => (run.end ? END_LABELS[run.end] : "running");
 
+/** The tool and the model that ran it, joined; whichever was recorded alone; empty when neither was. */
+const toolAndModel = (run: ItemRun) => [run.tool, run.model].filter(Boolean).join(" · ");
+
 /** The label's tooltip: the tool's own start when it was recorded, else when the run started, in local time. */
 const startTitle = (run: ItemRun) =>
   run.tool_started_at == null
@@ -25,7 +28,7 @@ const startTitle = (run: ItemRun) =>
 
 /**
  * An item's runs (ux.md, The item): a folded section after the questions, shown only when the item has runs. Opened,
- * a row for each run, newest first: when it started, from where to where, how it ended and what it cost, and under
+ * a row for each run, newest first: when it started, from where to where, how it ended, the tool and model that ran it when recorded, and what it cost, and under
  * it the result or the failure and the links. Read-only for every role, so it has no actions. Nothing is fetched
  * here: `item` is a single-item response, the only kind that carries the runs.
  */
@@ -66,6 +69,7 @@ export function ItemRuns({ item }: { item: Item }) {
                   {STAGE_LABELS[run.from_stage].toLowerCase()} → {GOAL_LABELS[run.goal]}
                 </span>
                 <span className="text-ink-soft">{endWord(run)}</span>
+                {toolAndModel(run) && <span className="break-all text-ink-soft">{toolAndModel(run)}</span>}
                 {run.cost_usd != null && <span className="ml-auto tabular-nums">{usd(run.cost_usd)}</span>}
               </p>
               {(run.result ?? run.failure) && (

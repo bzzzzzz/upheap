@@ -12,7 +12,7 @@ use axum::extract::{FromRequestParts, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use domain::item::Stage;
-use domain::run::{RunLink, RunResult, check_tool_times, cut_failure, parse_cost_usd};
+use domain::run::{RunLink, RunResult, check_tool_times, cut_failure, cut_tool_text, parse_cost_usd};
 use domain::{RunId, Timestamp, ValidationError};
 use serde::Deserialize;
 use service::ServiceError;
@@ -317,6 +317,7 @@ async fn hand_back(
 /// stuck turn. A run nobody heard from for 30 minutes ends as `failed` whatever is sent. A run that has ended keeps
 /// its end, and only the cost is recorded. The cost is set once: sending it for a run that has one is `run_cost_recorded`.
 /// The tool's start and exit times are each set once too, but sending them again changes nothing and is no error.
+/// The tool and the model, each trimmed and cut to 100 characters, replace what was recorded and are never refused.
 #[utoipa::path(post, path = "/work/runs/{run}/finish", tag = "work", security(("session" = [])),
     params(RunParams), request_body = FinishRequestDto,
     responses(
@@ -340,6 +341,8 @@ async fn finish_run(
     let tool_ended_at = body.tool_ended_at.map(parse_tool_time).transpose()?;
     check_tool_times(tool_started_at, tool_ended_at).map_err(ServiceError::from)?;
     let failure = body.failure.as_deref().and_then(cut_failure);
+    let tool = body.tool.as_deref().and_then(cut_tool_text);
+    let model = body.model.as_deref().and_then(cut_tool_text);
     let view = state
         .services
         .finish_run(
@@ -348,6 +351,8 @@ async fn finish_run(
             cost,
             tool_started_at,
             tool_ended_at,
+            tool,
+            model,
             failure,
             body.limited,
         )

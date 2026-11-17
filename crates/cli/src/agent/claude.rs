@@ -26,15 +26,26 @@ use crate::output::shorten;
 /// The person's own `allow` rules come right after all of these, as more values of `--allowedTools`, in the order
 /// given. `upheap auth` is denied last, in every run: a rule of the person's (or their own settings) may allow `Bash`
 /// wholesale, and Claude's deny wins over any allow.
-pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String]) -> Vec<&str> {
+///
+/// A `model` goes in as `--model <model>`, as given, right before `--permission-mode`: after `--allowedTools` it
+/// would be taken for one more of that flag's values.
+pub(super) fn arguments<'a>(
+    access: Access,
+    own_directory: bool,
+    allow: &'a [String],
+    model: Option<&'a str>,
+) -> Vec<&'a str> {
     let mut arguments = vec![
         "-p",
         "--output-format",
         "stream-json",
         "--verbose",
         "--no-session-persistence",
-        "--permission-mode",
     ];
+    if let Some(model) = model {
+        arguments.extend(["--model", model]);
+    }
+    arguments.push("--permission-mode");
     match access {
         Access::Prepare => {
             arguments.extend(["dontAsk", "--allowedTools"]);
@@ -144,6 +155,7 @@ pub(super) fn read_report(
         failure,
         last_message,
         limit: limit.flatten(),
+        model: None,
     }
 }
 
@@ -154,11 +166,17 @@ struct Stream {
     result_line: Option<Vec<u8>>,
     /// The last line that was a `rate_limit_event` the account was rejected by, not counting one for overage use.
     rejected_line: Option<Vec<u8>>,
+    /// The model of the first `system` event with subtype `init`: the one the session's main turns run on.
+    model: Option<String>,
 }
 
 impl Output for Stream {
-    /// Remembers `line` when it is the `result` event, or a rejected `rate_limit_event`.
+    /// Remembers `line` when it is the `result` event, or a rejected `rate_limit_event`, or the first `init` event's
+    /// model.
     fn take(&mut self, line: &[u8]) {
+        if self.model.is_none() {
+            self.model = init_model(line);
+        }
         if is_result_line(line) {
             self.result_line = Some(line.to_vec());
         } else if is_rejected_line(line) {
@@ -173,7 +191,10 @@ impl Output for Stream {
     fn report(&self, exit: Exit, stderr: &str) -> ToolReport {
         let result_line = self.result_line.as_deref().map(String::from_utf8_lossy);
         let rejected_line = self.rejected_line.as_deref().map(String::from_utf8_lossy);
-        read_report(exit, result_line.as_deref(), rejected_line.as_deref(), stderr)
+        ToolReport {
+            model: self.model.clone(),
+            ..read_report(exit, result_line.as_deref(), rejected_line.as_deref(), stderr)
+        }
     }
 }
 
@@ -185,7 +206,7 @@ pub(super) async fn run(
     stops: StopTracker,
     silence_limit: Duration,
 ) -> Result<ToolReport, ToolError> {
-    let arguments = arguments(start.access, start.dir.is_some(), &start.allow)
+    let arguments = arguments(start.access, start.dir.is_some(), &start.allow, start.model.as_deref())
         .into_iter()
         .map(str::to_owned)
         .collect();
@@ -206,6 +227,23 @@ pub(super) async fn run(
 fn is_result_line(line: &[u8]) -> bool {
     serde_json::from_slice::<Value>(line)
         .is_ok_and(|event| event.is_object() && event.get("type").and_then(Value::as_str) == Some("result"))
+}
+
+/// The `model` of `line` when it is the `system` event with subtype `init`, which names the model the session runs
+/// on.
+fn init_model(line: &[u8]) -> Option<String> {
+    // Most lines are messages and tool output, some of them large: only a line that holds `"init"` is parsed.
+    const SUBTYPE: &[u8] = b"\"init\"";
+    if !line.windows(SUBTYPE.len()).any(|window| window == SUBTYPE) {
+        return None;
+    }
+    let event: Value = serde_json::from_slice(line).ok()?;
+    if event.get("type").and_then(Value::as_str) != Some("system")
+        || event.get("subtype").and_then(Value::as_str) != Some("init")
+    {
+        return None;
+    }
+    event.get("model").and_then(Value::as_str).map(str::to_owned)
 }
 
 /// Whether `line` is a JSON object whose `type` is `rate_limit_event` with status `rejected` and `isUsingOverage` not
@@ -235,7 +273,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_preparing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Prepare, false, &[]),
+            arguments(Access::Prepare, false, &[], None),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -270,7 +308,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_doing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Do, false, &[]),
+            arguments(Access::Do, false, &[], None),
             eq(&vec![
                 "-p",
                 "--output-format",
@@ -297,11 +335,25 @@ mod tests {
         );
     }
 
+    #[gtest]
+    fn a_model_goes_in_as_two_arguments_before_the_permission_mode() {
+        for access in [Access::Prepare, Access::Do] {
+            let mut expected = arguments(access, false, &[], None);
+            let at = expected
+                .iter()
+                .position(|argument| *argument == "--permission-mode")
+                .expect("flag");
+            expected.splice(at..at, ["--model", "opus"]);
+
+            expect_that!(arguments(access, false, &[], Some("opus")), eq(&expected));
+        }
+    }
+
     const AUTH_DENY: [&str; 2] = ["--disallowedTools", "Bash(upheap auth:*)"];
 
     /// The arguments for `access` outside its own directory and with no rules of the person's, up to the deny.
     fn narrow(access: Access) -> Vec<&'static str> {
-        let mut narrow = arguments(access, false, &[]);
+        let mut narrow = arguments(access, false, &[], None);
         narrow.truncate(narrow.len() - AUTH_DENY.len());
         narrow
     }
@@ -314,7 +366,7 @@ mod tests {
             let expected = [&narrow[..], &wide, &AUTH_DENY].concat();
 
             // The wide rules follow the narrow ones, so they are still values of `--allowedTools`.
-            expect_that!(arguments(access, true, &[]), eq(&expected));
+            expect_that!(arguments(access, true, &[], None), eq(&expected));
         }
     }
 
@@ -325,7 +377,7 @@ mod tests {
             let narrow = narrow(access);
             let expected = [&narrow[..], &["mcp__x", "Bash"], &AUTH_DENY].concat();
 
-            expect_that!(arguments(access, false, &extra), eq(&expected));
+            expect_that!(arguments(access, false, &extra, None), eq(&expected));
         }
     }
 
@@ -337,7 +389,7 @@ mod tests {
             let narrow = narrow(access);
             let expected = [&narrow[..], &wide, &["mcp__x", "Bash(npm:*)"], &AUTH_DENY].concat();
 
-            expect_that!(arguments(access, true, &extra), eq(&expected));
+            expect_that!(arguments(access, true, &extra, None), eq(&expected));
         }
     }
 
@@ -618,5 +670,23 @@ mod tests {
         stream.take(br#"{"type":"assistant"}"#);
 
         expect_that!(stream.result_line, none());
+    }
+
+    #[gtest]
+    fn a_stream_reports_the_model_of_its_init_event() {
+        let mut stream = Stream::default();
+        stream.take(br#"{"type":"system","subtype":"init","model":"claude-opus-5-5","tools":[]}"#);
+        stream.take(br#"{"type":"assistant","message":{"text":"init"}}"#);
+
+        expect_that!(stream.report(Exit::Code(0), "").model, some(eq("claude-opus-5-5")));
+    }
+
+    #[gtest]
+    fn a_stream_without_an_init_event_reports_no_model() {
+        let mut stream = Stream::default();
+        stream.take(br#"{"type":"assistant","message":{"text":"init"}}"#);
+        stream.take(br#"{"type":"system","subtype":"init"}"#);
+
+        expect_that!(stream.report(Exit::Code(0), "").model, none());
     }
 }

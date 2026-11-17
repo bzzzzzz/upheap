@@ -249,6 +249,8 @@ fn to_item_run_dto(view: ItemRunView, as_of: Timestamp, tz: &TimeZone) -> ItemRu
         ended_at: ended.map(|ended| ended.at.as_millis()),
         tool_started_at: run.tool_started_at.map(Timestamp::as_millis),
         tool_ended_at: run.tool_ended_at.map(Timestamp::as_millis),
+        tool: run.tool,
+        model: run.model,
         started_label: describe_since(run.started_at, as_of, tz),
         from_stage: run.from_stage.into(),
         goal: view.goal.into(),

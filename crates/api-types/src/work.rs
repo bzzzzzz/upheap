@@ -177,6 +177,10 @@ pub struct ItemRunDto {
     pub tool_started_at: Option<i64>,
     /// UTC milliseconds: when the run's agent tool exited. `null` when not recorded.
     pub tool_ended_at: Option<i64>,
+    /// The agent tool that ran it (`claude`, `copilot`). `null` when not recorded.
+    pub tool: Option<String>,
+    /// The model it used. `null` when not recorded.
+    pub model: Option<String>,
     /// When the run started, ready to show: the time ("14:02") if it was today, else the date ("yesterday", "3 Nov"),
     /// in the request's timezone.
     pub started_label: String,
@@ -268,4 +272,12 @@ pub struct FinishRequestDto {
     /// once: a later value for a run that has one is ignored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_ended_at: Option<i64>,
+    /// The agent tool that ran it. Trimmed and cut to 100 characters; blank is the same as left out. Replaces what
+    /// was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    /// The model it used. Trimmed and cut to 100 characters; blank is the same as left out. Replaces what was
+    /// recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
