@@ -75,8 +75,9 @@ impl Services {
         heap_id: HeapId,
         fields: NewTag,
     ) -> Result<TagView, ServiceError> {
+        let team_id = team_of_heap(&self.db, heap_id).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let access = authorize_tag_write(&txn, principal, heap_id).await?;
+        let access = authorize_tag_write(&txn, principal, heap_id, team_id).await?;
         ensure_name_free(&txn, &access.heap, &fields.name, None).await?;
 
         let now = self.now();
@@ -115,12 +116,13 @@ impl Services {
         patch: TagPatch,
         expected: Version,
     ) -> Result<TagView, ServiceError> {
+        let team_id = team_of_heap(&self.db, heap_id).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let access = authorize_tag_write(&txn, principal, heap_id, team_id).await?;
         let current = store::tags::find_tag(&txn, tag_id)
             .await?
             .filter(|tag| tag.owner == TagOwner::Heap(heap_id))
             .ok_or(ServiceError::NotFound)?;
-        let access = authorize_tag_write(&txn, principal, heap_id).await?;
         if current.version != expected {
             return Err(ServiceError::VersionConflict {
                 expected,
@@ -307,8 +309,8 @@ impl Services {
 
 /// For a write to a team's tags: locks the team row, then checks the caller may edit.
 ///
-/// The lock comes first so the reads after it see what a competing write committed; a non-member gets
-/// [`ServiceError::NotFound`], as for a missing team.
+/// The lock comes first so the plain reads after it see what a competing write committed (see
+/// [`authorize_tag_write`]); a non-member gets [`ServiceError::NotFound`], as for a missing team.
 async fn authorize_team_write(
     db: &impl ConnectionTrait,
     principal: Principal,
@@ -320,21 +322,34 @@ async fn authorize_team_write(
     authorize_team(db, principal, team_id, Permission::EditItems).await
 }
 
-/// For a write to a heap's tags: checks the caller may edit, locks the team row, then the heap row, and refuses an
-/// archived heap on the row read under the lock.
+/// The team of `heap_id`, read before a heap tag write's transaction begins (see [`authorize_tag_write`]).
+/// [`ServiceError::NotFound`] if there's no such heap.
+async fn team_of_heap(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<TeamId, ServiceError> {
+    Ok(store::heaps::find_heap(db, heap_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?
+        .team_id)
+}
+
+/// For a write to a heap's tags: locks the team row, checks the caller may edit, then locks the heap row and
+/// refuses an archived heap on the row read under the lock. `team_id` is the heap's, from [`team_of_heap`].
 ///
 /// The team row comes first so a heap tag and a team tag can't take one name at once; the heap row is locked
-/// after it, as the rest of the code locks a team before what's in it.
+/// after it, as the rest of the code locks a team before what's in it. The heap's team is read before the
+/// transaction, since a heap never changes team: on MySQL a transaction's first plain read fixes its snapshot, so
+/// every plain read in it comes after the lock and sees what a competing write committed. That is why the name
+/// checks need no locking reads, which on MySQL would take gap locks that deadlock tag writes of two teams.
 async fn authorize_tag_write(
-    db: &impl ConnectionTrait,
+    txn: &impl ConnectionTrait,
     principal: Principal,
     heap_id: HeapId,
+    team_id: TeamId,
 ) -> Result<HeapAccess, ServiceError> {
-    let access = authorize_heap(db, principal, heap_id, Permission::EditItems).await?;
-    store::teams::lock_team(db, access.heap.team_id)
+    store::teams::lock_team(txn, team_id)
         .await?
         .ok_or(ServiceError::NotFound)?;
-    let heap = store::heaps::lock_heap(db, heap_id)
+    let access = authorize_heap(txn, principal, heap_id, Permission::EditItems).await?;
+    let heap = store::heaps::lock_heap(txn, heap_id)
         .await?
         .ok_or(ServiceError::NotFound)?;
     ensure_active(&heap)?;

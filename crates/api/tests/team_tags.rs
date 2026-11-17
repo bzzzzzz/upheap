@@ -464,3 +464,36 @@ async fn making_and_renaming_a_team_tag_write_team_level_audit_entries() -> Resu
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn tag_writes_of_two_teams_at_once_both_succeed() -> Result<()> {
+    // Arrange: on MySQL, locking name checks would take gap locks here, and the two inserts would deadlock.
+    let w = world().await?;
+    let (other_session, _) = w.app.register("bob@example.test").await?;
+    let (other_team, other_heap) = w.app.shared_heap(&other_session).await?;
+    let other_path = w.app.team_url(&other_team).await?;
+    let other_tags = format!("{other_path}/tags");
+    let other_team_tag = w.app.send(
+        Method::POST,
+        &other_tags,
+        Some(&other_session),
+        Some(json!({ "name": "beta" })),
+    );
+    let other_heap_tag = w.app.create_tag(&other_session, &other_heap, "zulu");
+
+    // Act
+    let (ours, theirs, our_heap_tag, their_heap_tag) = tokio::join!(
+        w.make_team_tag("alpha"),
+        other_team_tag,
+        w.app.create_tag(&w.session, &w.first, "zeta"),
+        other_heap_tag,
+    );
+
+    // Assert
+    expect_that!(ours?.status, eq(StatusCode::CREATED));
+    expect_that!(theirs?.status, eq(StatusCode::CREATED));
+    expect_that!(our_heap_tag?.status, eq(StatusCode::CREATED));
+    expect_that!(their_heap_tag?.status, eq(StatusCode::CREATED));
+    Ok(())
+}

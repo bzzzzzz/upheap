@@ -13976,6 +13976,7 @@
         "required": [
           "heap",
           "tags",
+          "team_tags",
           "allowed_actions"
         ],
         "properties": {

@@ -5,9 +5,7 @@
 use domain::tag::{Tag, TagDescription, TagName, TagOwner};
 use domain::{HeapId, TagId, TeamId, Version};
 use sea_orm::sea_query::Query;
-use sea_orm::{
-    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-};
+use sea_orm::{ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db, version_to_db};
@@ -27,7 +25,7 @@ pub async fn find_tag(db: &impl ConnectionTrait, id: TagId) -> Result<Option<Tag
     row.map(to_tag).transpose()
 }
 
-/// The heap's tag called `name`, ignoring case, read with a lock, for the check before a write.
+/// The heap's tag called `name`, ignoring case.
 pub async fn find_tag_by_name(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
@@ -36,7 +34,6 @@ pub async fn find_tag_by_name(
     let row = tags::Entity::find()
         .filter(tags::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
         .filter(tags::Column::NameKey.eq(name.to_key()))
-        .lock_shared()
         .one(db)
         .await?;
     row.map(to_tag).transpose()
@@ -97,7 +94,7 @@ pub async fn list_tags_in_heap(
         .collect()
 }
 
-/// The team's tag called `name`, ignoring case, read with a lock, for the check before a write.
+/// The team's tag called `name`, ignoring case.
 pub async fn find_team_tag_by_name(
     db: &impl ConnectionTrait,
     team_id: TeamId,
@@ -106,7 +103,6 @@ pub async fn find_team_tag_by_name(
     let row = tags::Entity::find()
         .filter(tags::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
         .filter(tags::Column::NameKey.eq(name.to_key()))
-        .lock_shared()
         .one(db)
         .await?;
     row.map(to_tag).transpose()
@@ -125,8 +121,7 @@ pub async fn list_team_tags(db: &impl ConnectionTrait, team_id: TeamId) -> Resul
         .collect()
 }
 
-/// Whether any heap of the team, archived ones included, has a tag called `name`, ignoring case, read with a
-/// lock, for the check before a write.
+/// Whether any heap of the team, archived ones included, has a tag called `name`, ignoring case.
 pub async fn has_heap_tag_named_in_team(
     db: &impl ConnectionTrait,
     team_id: TeamId,
@@ -140,7 +135,6 @@ pub async fn has_heap_tag_named_in_team(
     let found = tags::Entity::find()
         .filter(tags::Column::HeapId.in_subquery(heaps_of_team))
         .filter(tags::Column::NameKey.eq(name.to_key()))
-        .lock_shared()
         .one(db)
         .await?;
     Ok(found.is_some())

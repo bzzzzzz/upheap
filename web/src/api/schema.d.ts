@@ -3989,7 +3989,7 @@ export interface components {
             /** @description The heap's own tags, by name. */
             tags: components["schemas"]["Tag"][];
             /** @description The heap's team's tags, by name. Every heap of the team has them too. */
-            team_tags?: components["schemas"]["Tag"][];
+            team_tags: components["schemas"]["Tag"][];
         };
         /**
          * @description An action the caller can take on a heap's tag list.

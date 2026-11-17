@@ -78,7 +78,6 @@ pub struct TagListDto {
     /// The heap's own tags, by name.
     pub tags: Vec<TagDto>,
     /// The heap's team's tags, by name. Every heap of the team has them too.
-    #[serde(default)]
     pub team_tags: Vec<TagDto>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TagListActionDto>,
