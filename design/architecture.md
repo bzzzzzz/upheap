@@ -778,7 +778,10 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
    transports, and the only places a mail's text is recorded. A failed send isn't retried. `service` sends the mail
    it needs through that mailer (the reset mail, see Authentication).
 7. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
-   with a clear message before it listens. On SIGTERM it stops accepting connections and drains in-flight requests.
+   with a clear message before it listens. The database gets time first: a database that scales to zero (Neon) can
+   take longer to wake than one try's 10 s timeout, so the connect is retried with backoff, every error alike, until
+   `DATABASE_CONNECT_DEADLINE_SECS` has passed. A try may start just before the deadline and run its full timeout,
+   so the deadline sits about 15 s under the startup probe's limit, leaving room for that try and the migrations. On SIGTERM it stops accepting connections and drains in-flight requests.
 
 ## CLI
 
