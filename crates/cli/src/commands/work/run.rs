@@ -85,9 +85,10 @@ pub struct RunArgs {
     #[arg(long, value_name = "N", default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=MAX_WORKERS as i64))]
     pub workers: u8,
     /// A file with your own instructions for every run: how you want work done on this machine. Each run is told
-    /// them after Upheap's own rules and before the heap's context. Read once, when the loop starts
+    /// them after Upheap's own rules and before the heap's context. Repeat it for several, such as a shared file and
+    /// one for this machine: they are joined in the order given. Read once, when the loop starts
     #[arg(long, value_name = "FILE")]
-    pub instructions: Option<PathBuf>,
+    pub instructions: Vec<PathBuf>,
     /// An extra allow rule for the agent tool in every run, in the tool's own syntax, such as
     /// mcp__claude_ai_Claude_Docs or Bash(npm:*) for claude, shell(npm:*) for copilot. Repeat it for several
     #[arg(long, value_name = "RULE")]
@@ -192,10 +193,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
     let heaps = resolve_named_heaps(&args.heaps, app, &client, &token).await?;
     work.tools.check(args.tool).await?;
     let root = args.root.as_deref().map(make_root).transpose()?;
-    let instructions = match args.instructions {
-        Some(path) => Some(read_instructions(path).await?),
-        None => None,
-    };
+    let instructions = read_instructions(args.instructions).await?;
     let mode = out.mode();
     if mode == Mode::Human {
         out.line(&header(&heaps, args.tool, args.once, args.workers))?;
@@ -350,9 +348,18 @@ enum Driven {
     Stopped,
 }
 
-/// The text of the file `--instructions` names. Read before the first claim, so a file that can't be read fails
-/// before any item is taken.
-async fn read_instructions(path: PathBuf) -> Result<String, CliError> {
+/// The text of each file `--instructions` names, in the order given. Read before the first claim, so a file that
+/// can't be read fails before any item is taken.
+async fn read_instructions(paths: Vec<PathBuf>) -> Result<Vec<String>, CliError> {
+    let mut texts = Vec::with_capacity(paths.len());
+    for path in paths {
+        texts.push(read_instructions_file(path).await?);
+    }
+    Ok(texts)
+}
+
+/// The text of one file `--instructions` names.
+async fn read_instructions_file(path: PathBuf) -> Result<String, CliError> {
     let read = {
         let path = path.clone();
         tokio::task::spawn_blocking(move || std::fs::read_to_string(path)).await
@@ -415,8 +422,8 @@ struct Shared<'a> {
     workers: u8,
     /// Where each item's directory is kept; `None` when runs start in this directory.
     root: Option<PathBuf>,
-    /// The runner's own instructions, for every run's brief.
-    instructions: Option<String>,
+    /// The runner's own instructions, one text per file, for every run's brief.
+    instructions: Vec<String>,
     /// The runner's extra allow rules, which each run's tool is started with.
     allow: AllowRules,
     tools: Box<dyn AgentTools>,
@@ -692,7 +699,7 @@ impl Shared<'_> {
         };
         let brief = build_brief(&BriefParts {
             goal,
-            runner_instructions: self.instructions.as_deref(),
+            runner_instructions: &self.instructions,
             heap_name: &run.item.heap.name,
             heap_handle: &handle.to_string(),
             heap_context: heap.context.as_deref(),
