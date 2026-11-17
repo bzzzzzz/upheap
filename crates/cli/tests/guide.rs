@@ -82,7 +82,9 @@ async fn guide_show_lists_the_commands_of_a_group_with_their_arguments() -> Resu
     );
     expect_that!(
         shown.stdout,
-        contains_substring("      --tool <TOOL>           The agent tool to start on each item\n")
+        contains_substring(
+            "      --tool <TOOL>           The agent tool to start on each item: claude 2.1.326 or newer, or copilot 1.0.112 or newer\n"
+        )
     );
     Ok(())
 }

@@ -57,7 +57,7 @@ const TITLE_WIDTH: usize = 40;
 
 #[derive(Args, Debug)]
 pub struct RunArgs {
-    /// The agent tool to start on each item
+    /// The agent tool to start on each item: claude 2.1.326 or newer, or copilot 1.0.112 or newer
     #[arg(long, value_enum)]
     pub tool: Tool,
     #[command(flatten)]

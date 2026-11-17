@@ -6,6 +6,7 @@ mod claude;
 mod copilot;
 pub(crate) mod leftovers;
 mod process;
+mod version;
 
 use std::ffi::OsString;
 use std::future::Future;
@@ -14,6 +15,8 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use tokio::sync::mpsc::UnboundedReceiver;
+
+pub use version::Version;
 
 /// An agent tool `work run` can start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -102,6 +105,18 @@ pub enum ToolError {
         #[source]
         source: std::io::Error,
     },
+    #[error("{tool} is version {found}, and work run needs {needed} or newer")]
+    TooOld {
+        tool: Tool,
+        found: Version,
+        needed: Version,
+    },
+    #[error("couldn't read {tool}'s version: `{} --version` printed {printed:?}", program.display())]
+    UnreadableVersion {
+        tool: Tool,
+        program: PathBuf,
+        printed: String,
+    },
     #[error("couldn't make a directory for the run at {}", dir.display())]
     NoDirectory {
         dir: PathBuf,
@@ -134,7 +149,7 @@ impl ToolError {
 
 /// The agent tools a machine has.
 pub trait AgentTools: Send + Sync {
-    /// Whether `tool` can be started here. Called once, before the first claim.
+    /// Whether `tool` can be started here, and is at least [`Tool::min_version`]. Called once, before the first claim.
     fn check(&self, tool: Tool) -> Result<(), ToolError>;
 
     /// Runs `tool` to its end. Dropping the future stops the tool.
@@ -303,7 +318,26 @@ impl Default for SystemTools {
 
 impl AgentTools for SystemTools {
     fn check(&self, tool: Tool) -> Result<(), ToolError> {
-        self.program(tool).map(|_| ())
+        let program = self.program(tool)?;
+        let output = std::process::Command::new(&program)
+            .arg("--version")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(|source| ToolError::WouldNotStart { tool, source })?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let Some(found) = version::parse(&stdout) else {
+            let printed = format!("{stdout}{}", String::from_utf8_lossy(&output.stderr));
+            return Err(ToolError::UnreadableVersion {
+                tool,
+                program,
+                printed: printed.trim().to_owned(),
+            });
+        };
+        let needed = tool.min_version();
+        if found < needed {
+            return Err(ToolError::TooOld { tool, found, needed });
+        }
+        Ok(())
     }
 
     fn run(&self, start: ToolStart) -> Pin<Box<dyn Future<Output = Result<ToolReport, ToolError>> + Send>> {
