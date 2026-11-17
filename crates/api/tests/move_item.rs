@@ -490,6 +490,51 @@ async fn a_free_key_is_kept() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn team_tags_come_along_with_the_heap_tags_that_both_heaps_have() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let team_path = w.app.heap_url(&w.from).await?;
+    let team_path = team_path.split("/heaps/").next().context("heap url")?;
+    let made = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{team_path}/tags"),
+            Some(&w.session),
+            Some(json!({ "name": "shared" })),
+        )
+        .await?;
+    let team_tag = id(&made.body);
+    let source_infra = w.app.new_tag_id(&w.session, &w.from, "infra").await?;
+    let target_infra = w.app.new_tag_id(&w.session, &w.to, "Infra").await?;
+    edit(
+        &w.app,
+        &w.session,
+        &w.item,
+        json!({ "tag_ids": [team_tag, source_infra] }),
+    )
+    .await?;
+
+    // Act
+    let moved = w.moved().await?;
+
+    // Assert
+    expect_that!(moved.status, eq(StatusCode::OK));
+    let kept: Vec<&Value> = moved.body["tags"]
+        .as_array()
+        .context("no tags")?
+        .iter()
+        .map(|t| &t["id"])
+        .collect();
+    expect_that!(
+        kept,
+        unordered_elements_are![eq(&&json!(team_tag)), eq(&&json!(target_infra))]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn tags_are_kept_by_name_ignoring_case_and_the_rest_are_dropped() -> Result<()> {
     // Arrange
     let w = world().await?;

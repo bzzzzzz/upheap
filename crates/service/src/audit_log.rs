@@ -248,6 +248,9 @@ impl Services {
         for heap in store::heaps::list_heaps_for_teams(&self.db, &teams).await? {
             names.insert(*heap.id.as_uuid(), heap.name.as_str());
         }
+        for tag in store::tags::list_team_tags(&self.db, team_id).await? {
+            names.insert(*tag.id.as_uuid(), tag.name.as_str());
+        }
         self.insert_user_names(&mut names, &entries).await?;
         self.insert_invite_link_names(&mut names, team_id, &entries).await?;
         let runs = self.find_audit_runs(principal.user_id, &entries).await?;

@@ -112,7 +112,8 @@ fn a_full_name_must_be_one_of_the_callers_heaps() -> googletest::Result<()> {
 fn tags_resolve_by_name_ignoring_case_or_by_id() -> googletest::Result<()> {
     let tags: TagListDto = serde_json::from_value(json!({
         "heap": { "id": Uuid::new_v4(), "team_id": Uuid::new_v4(), "slug": "personal", "name": "Personal", "archived": false },
-        "tags": [{ "id": TAG_INFRA, "heap_id": Uuid::new_v4(), "name": "Infra", "description": null, "version": 1, "allowed_actions": [] }],
+        "tags": [{ "id": TAG_INFRA, "kind": "heap", "heap_id": Uuid::new_v4(), "name": "Infra", "description": null, "version": 1, "allowed_actions": [] }],
+        "team_tags": [],
         "allowed_actions": [],
     }))?;
     let id: Uuid = TAG_INFRA.parse()?;
@@ -131,9 +132,10 @@ fn tags_named(names: &[&str]) -> googletest::Result<TagListDto> {
     Ok(serde_json::from_value(json!({
         "heap": { "id": Uuid::new_v4(), "team_id": Uuid::new_v4(), "slug": "personal", "name": "Personal", "archived": false },
         "tags": names.iter().enumerate().map(|(i, name)| json!({
-            "id": Uuid::from_u128(i as u128 + 1), "heap_id": Uuid::new_v4(), "name": name, "description": null,
+            "id": Uuid::from_u128(i as u128 + 1), "kind": "heap", "heap_id": Uuid::new_v4(), "name": name, "description": null,
             "version": 1, "allowed_actions": [],
         })).collect::<Vec<_>>(),
+        "team_tags": [],
         "allowed_actions": [],
     }))?)
 }

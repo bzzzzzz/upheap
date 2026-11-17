@@ -79,7 +79,7 @@ pub struct CookieSettings {
         (name = "oauth", description = "Signing in non-web clients, such as the CLI: OAuth 2.0 with PKCE"),
         (name = "me", description = "The signed-in user"),
         (name = "items", description = "Items and the ranked list"),
-        (name = "tags", description = "A heap's tags"),
+        (name = "tags", description = "A heap's tags and a team's"),
         (name = "teams", description = "Teams and their members"),
         (name = "heaps", description = "Creating, renaming and archiving heaps"),
         (name = "users", description = "Finding users to add to a team"),

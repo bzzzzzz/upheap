@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
-use domain::tag::{NewTag, Tag, TagName};
+use domain::tag::{NewTag, Tag, TagName, TagOwner};
 use domain::team::Team;
 use domain::text::Name;
 use domain::validation::Field;
@@ -51,7 +51,7 @@ fn tag(heap_id: HeapId, name: &str) -> Result<Tag> {
     };
     Ok(Tag::new(
         TagId::from_uuid(Uuid::now_v7()),
-        heap_id,
+        TagOwner::Heap(heap_id),
         fields,
         Timestamp::from_millis(0).context("in range")?,
     ))

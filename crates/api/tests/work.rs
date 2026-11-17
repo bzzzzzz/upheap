@@ -1362,6 +1362,29 @@ async fn every_other_write_in_a_run_is_refused() -> Result<()> {
         )
         .await?,
     );
+    let team_path = heap_path.split("/heaps/").next().context("heap url")?;
+    refused(
+        "new team tag",
+        w.in_run(
+            &run,
+            Method::POST,
+            &format!("{team_path}/tags"),
+            None,
+            Some(json!({ "name": "new" })),
+        )
+        .await?,
+    );
+    refused(
+        "team tag patch",
+        w.in_run(
+            &run,
+            Method::PATCH,
+            &format!("{team_path}/tags/{}", uuid::Uuid::new_v4()),
+            Some(&json!(1)),
+            Some(json!({ "name": "renamed" })),
+        )
+        .await?,
+    );
     let heap = w.app.send(Method::GET, &heap_path, Some(&w.session), None).await?;
     refused(
         "heap patch",

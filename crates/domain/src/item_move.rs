@@ -1,8 +1,9 @@
 //! Moving an item to another heap of its team: which of its tags and parameter values the target heap has too.
 //!
-//! Tags and parameters belong to one heap, so an item that moves keeps only what the target heap has under the same
-//! name: a tag by name, a value by parameter name and option label, each ignoring case. The rest is dropped, and the
-//! caller records what was dropped (product.md, Items).
+//! A heap's tags and parameters belong to that heap, so an item that moves keeps only what the target heap has under
+//! the same name (a team's tag is in both heaps' tags and carries over as itself): a tag by name, a value by
+//! parameter name and option label, each ignoring case. The rest is dropped, and the caller records what was
+//! dropped (product.md, Items).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -82,13 +83,13 @@ mod tests {
 
     use super::*;
     use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, Weight};
-    use crate::tag::{NewTag, TagName};
+    use crate::tag::{NewTag, TagName, TagOwner};
     use crate::{HeapId, Timestamp};
 
     fn tag(n: u128, name: &str) -> Tag {
         Tag::new(
             TagId::from_uuid(Uuid::from_u128(n)),
-            HeapId::from_uuid(Uuid::nil()),
+            TagOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             NewTag {
                 name: TagName::parse(name).expect("valid"),
                 description: None,
