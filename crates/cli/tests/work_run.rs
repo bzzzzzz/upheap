@@ -1827,6 +1827,54 @@ async fn with_instructions_every_run_is_told_them_before_the_heap() -> Result<()
     Ok(())
 }
 
+#[gtest]
+#[tokio::test]
+async fn with_several_instructions_every_run_is_told_them_all_in_order_without_the_blank_ones() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let dir = tempfile::tempdir()?;
+    let shared = dir.path().join("shared.md");
+    std::fs::write(&shared, "\nUse the implement skill for code changes.\n\n")?;
+    let blank = dir.path().join("blank.md");
+    std::fs::write(&blank, " \n")?;
+    let machine = dir.path().join("machine.md");
+    std::fs::write(&machine, "On this machine, run the e2e tests too.\n")?;
+    let [shared, blank, machine] = [shared, blank, machine].map(|path| path.to_string_lossy().into_owned());
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli
+        .run_work(
+            &[
+                ONCE,
+                &[
+                    "--instructions",
+                    &shared,
+                    "--instructions",
+                    &blank,
+                    "--instructions",
+                    &machine,
+                ],
+            ]
+            .concat(),
+            &tool,
+        )
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let starts = tool.starts();
+    assert_that!(starts.len(), eq(1));
+    expect_that!(
+        starts[0].brief,
+        contains_substring(
+            "it wins. The rules above still hold.\n\nUse the implement skill for code changes.\n\n\
+             On this machine, run the e2e tests too.\n\n# The heap:"
+        )
+    );
+    Ok(())
+}
+
 /// `--allow A --allow B --allow-prepare P --allow-do D`.
 const ALLOW_FLAGS: &[&str] = &[
     "--allow",
@@ -2027,6 +2075,38 @@ async fn the_allow_flags_are_in_the_help() -> Result<()> {
     expect_that!(help.stdout, contains_substring("--allow <RULE>"));
     expect_that!(help.stdout, contains_substring("--allow-prepare <RULE>"));
     expect_that!(help.stdout, contains_substring("--allow-do <RULE>"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn one_of_several_instructions_that_cannot_be_read_is_named_and_nothing_is_claimed() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, note) = with_prepared_note().await?;
+    let dir = tempfile::tempdir()?;
+    let readable = dir.path().join("shared.md");
+    std::fs::write(&readable, "Use the implement skill for code changes.\n")?;
+    let readable = readable.to_string_lossy().into_owned();
+    let missing = dir.path().join("not-there.md").to_string_lossy().into_owned();
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli
+        .run_work(
+            &[ONCE, &["--instructions", &readable, "--instructions", &missing]].concat(),
+            &tool,
+        )
+        .await;
+    let next = cli.run(&["work", "next"]).await;
+
+    // Assert
+    expect_that!(outcome.exited(6), eq(true));
+    expect_that!(
+        outcome.stderr,
+        starts_with(format!("error: couldn't read the instructions at {missing}").as_str())
+    );
+    expect_that!(tool.starts().len(), eq(0));
+    expect_that!(next.stdout, contains_substring(note.as_str()));
     Ok(())
 }
 

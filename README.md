@@ -285,7 +285,8 @@ streamed output for each run is saved in `<config dir>/runs/<run id>.jsonl` (kep
 no output for 30 minutes is stopped and its run failed. `claude` prints nothing while a single tool call runs, so a
 tool call longer than 30 minutes (a raised Bash timeout, a slow MCP tool) counts as silence. With `--instructions <file>`, every run is also told what the file
 says: your own way of working on this machine (which skills to use, how to check and review a change), which
-comes before the heap's context on how the work is done. The file is read once, when the loop starts. With
+comes before the heap's context on how the work is done. Repeat it to pass several files, such as a shared one
+and one for this machine: they are joined in the order given. The files are read once, when the loop starts. With
 `--allow <rule>`, every run's `claude` may also use what the rule allows (Claude's rule syntax, such as
 `mcp__claude_ai_Claude_Docs`), without allowing it in your own sessions; `--allow-prepare` and `--allow-do` add a
 rule to runs that prepare an item or do a task only. Each flag takes one rule and can be repeated; a rule with a
