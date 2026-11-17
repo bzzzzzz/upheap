@@ -849,8 +849,10 @@ section is how it maps onto this API.
    `run_over`. A run's model is read from the tool's own stream when it names one, else it is the `--model` the loop
    was given (which it passes to the tool as it is): Claude's `system` event with subtype `init` carries `model`, and
    Copilot's usage checkpoint carries `data.accountingSnapshot.currentModel`, the last one winning. `finish` sends
-   the tool's name and that model along with the tool's times, for a run whose tool was started. When the tool ends
-   it sends `finish` with the cost the tool reported and, only if the tool itself failed, why: the server decides whether the run reached its goal, asked, handed back, hit the limit, or failed, and
+   the tool's name and that model along with the tool's times, for a run whose tool was started. A run that was
+   stopped or taken back left no report, so it records the `--model` given, if any. When the tool ends it sends
+   `finish` with the cost the tool reported and, only if the tool itself failed, why: the server decides whether the
+   run reached its goal, asked, handed back, hit the limit, or failed, and
    the loop never works that out. The exception is the agent tool's usage limit, recognised for Claude only: a run whose claude stream had a rejected
    `rate_limit_event` (not overage use) or `api_error` `usage_limit_reached` on its result is sent with `limited`, and
    ends as `limited`, not failed, so the turn's failed runs are left alone. The loop then holds every worker until the

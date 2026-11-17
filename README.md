@@ -268,9 +268,9 @@ app's Account page, wins over the keychain sign-in: when it is set, every comman
 browser, except `auth login` and `auth logout`, which manage the keychain sign-in. With `UPHEAP_RUN` set to a run's ID, every
 request is made inside that run: it may write the item's context, steps, questions and comments, make a note or a
 reminder a task and start it, on the run's own item only, and is refused anything else with exit 3. `work run`
-starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. With `--model <model>`,
-the value is passed to the tool as it is, as `--model <model>`; each run records the tool and the model (the one the
-tool's own output names, else the one given), and the item's Runs list shows them. To prepare an
+starts `claude` on each item it claims, with `UPHEAP_RUN` set, in the directory it was started in. With
+`--model <model>`, the value is passed to the tool as it is, as `--model <model>`; each run records the tool and the
+model (the one the tool's own output names, else the one given), and the item's Runs list shows them. To prepare an
 item (give it its context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not
 `auth`), read files under that directory and use the web, and nothing else. To do a task, it may also edit files,
 and run what your own and the project's Claude settings allow. With `--root`, each run starts in a directory

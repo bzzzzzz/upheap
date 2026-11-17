@@ -518,8 +518,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     heading "Runs 3 · $1.20": the count and the runs' total cost, with no cost part when no run reported one. Opened,
     a row for each run, newest first: when it started (the time today, else the date as the server words it), "from →
     to" (the stage it started at and the goal), how it ended ("reached", "asked", "failed", "taken back", "handed
-    back", or "running"), the tool and model that ran it ("claude · claude-opus-5-5") when recorded, and its cost on the right, blank when unknown. Under it the result or the failure, and the
-    links. It only reads, for every role, so it has no controls. Each run can be linked to (point 21).
+    back", or "running"), the tool and model that ran it ("claude · claude-opus-5-5") when recorded, and its cost on
+    the right, blank when unknown. Under it the result or the failure, and the links. It only reads, for every role, so it has no controls. Each run can be linked to (point 21).
 21. **History** marks a change an agent made in a run: a robot and "Your agent" (or "Ana's agent") in place of the
     name, linking to the run: the item opens with Runs unfolded at that run, tinted for 2 seconds. Without access to
     the run's item, the mark shows with no link. A person's change shows as before. The heap's Activity marks an
