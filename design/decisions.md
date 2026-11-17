@@ -511,3 +511,24 @@ too, which puts a service on the machines of people who only want the client.
 **Consequences.** The server's archive names are public download URLs for good, like the CLI's. Every release builds
 the web app and runs the server once per target in its smoke test, so a server that doesn't start on a platform fails
 the release before anything is published.
+
+## 41. A group-managed team's sync can remove its last admin; the operator makes a new one
+
+**Context.** A team can be mapped to groups of the identity provider, and each sign-in through the provider then adds
+the person to it or takes them out by their groups. Every other change to a team's members refuses to leave it with
+no admin (product.md, Teams §8), but a sync has nobody to refuse: the provider has already said the person is out,
+and they are signing in.
+
+**Decision.** A sync takes the person out whatever their role, the last admin included, and the team can then have no
+admin. Its members keep working in its heaps. The operator makes a member admin with a server command
+(`upheap-server team make-admin`), which opens the database like `user reset-link` does. Hand changes keep the rule:
+an admin still can't demote or remove the last admin, or leave as one.
+
+**Instead of.** Keeping the last admin in the team against the provider, which lets someone who left the
+organisation keep administering its team. Refusing the whole sign-in, which locks a person out of all their teams
+over one. Promoting another member automatically, which hands the admin role to whoever happens to be next, and a
+group never gives the admin role.
+
+**Consequences.** Code that assumed a shared team always has an admin must not: the Team page says when one is
+missing, and the admin-only actions wait for the operator. Removing the map later leaves the team as it is, with or
+without an admin, so `make-admin` works on any shared team.
