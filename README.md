@@ -91,6 +91,7 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | --- | --- | --- |
 | `DATABASE_URL` | required | `sqlite://path?mode=rwc`, `mysql://…` or `postgres://…` |
 | `DATABASE_MAX_CONNECTIONS` | `5` | Most database connections the server keeps open. Size it to the database's limit divided by the instances that may run; earlier versions used 10. In-memory SQLite always keeps one |
+| `DATABASE_CONNECT_DEADLINE_SECS` | `55` | How long startup keeps retrying the database, with backoff from 1 s to 8 s, before the server exits with the last error. `0` tries once. Keep it under the startup probe's limit |
 | `BASE_URL` | required | Public URL. Cookies are `Secure` unless it starts with `http://` |
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address |
 | `ALLOW_REGISTRATION` | `true` | Set to `false` to close sign-ups; a team admin's invite link still lets a new person create an account |

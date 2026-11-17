@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, bail};
 use service::oidc::OidcSettings;
@@ -15,6 +16,9 @@ pub struct Config {
     /// `DATABASE_MAX_CONNECTIONS`, default `5`: the most database connections this server keeps open. Small, because
     /// on Cloud Run several instances may share one database's connection limit.
     pub database_max_connections: u32,
+    /// `DATABASE_CONNECT_DEADLINE_SECS`, default `55`: how long startup keeps retrying the database before it gives
+    /// up. Just under the ~60 s the Cloud Run startup probe allows, so a slow-waking Neon database still makes it.
+    pub database_connect_deadline: Duration,
     /// `BASE_URL`, required: the public URL users open, for example `https://heap.example.com`.
     /// Session cookies are `Secure` unless it starts with `http://`.
     pub base_url: String,
@@ -66,6 +70,13 @@ impl Config {
                 .filter(|n| *n >= 1)
                 .context("DATABASE_MAX_CONNECTIONS must be a whole number, at least 1")?,
         };
+        let database_connect_deadline = match lookup("DATABASE_CONNECT_DEADLINE_SECS") {
+            None => Duration::from_secs(55),
+            Some(raw) => Duration::from_secs(
+                raw.parse()
+                    .context("DATABASE_CONNECT_DEADLINE_SECS must be a whole number of seconds")?,
+            ),
+        };
         let base_url = required("BASE_URL")?.trim_end_matches('/').to_owned();
         if !(base_url.starts_with("https://") || base_url.starts_with("http://")) {
             bail!("BASE_URL must start with https:// or http://");
@@ -111,6 +122,7 @@ impl Config {
         Ok(Self {
             database_url,
             database_max_connections,
+            database_connect_deadline,
             base_url,
             bind_addr,
             allow_registration,
@@ -192,6 +204,7 @@ mod tests {
         assert!(config(&[base[0], base[1], ("DATABASE_URL", "mssql://x")]).is_err());
         assert!(config(&[base[0], base[1], ("DATABASE_MAX_CONNECTIONS", "0")]).is_err());
         assert!(config(&[base[0], base[1], ("DATABASE_MAX_CONNECTIONS", "five")]).is_err());
+        assert!(config(&[base[0], base[1], ("DATABASE_CONNECT_DEADLINE_SECS", "1m")]).is_err());
     }
 
     #[test]
@@ -200,6 +213,15 @@ mod tests {
         assert_eq!(config(&base)?.database_max_connections, 5);
         let config = config(&[base[0], base[1], ("DATABASE_MAX_CONNECTIONS", "20")])?;
         assert_eq!(config.database_max_connections, 20);
+        Ok(())
+    }
+
+    #[test]
+    fn sets_the_connect_deadline() -> anyhow::Result<()> {
+        let base = [("DATABASE_URL", "sqlite://x.db"), ("BASE_URL", "https://x")];
+        assert_eq!(config(&base)?.database_connect_deadline, Duration::from_secs(55));
+        let config = config(&[base[0], base[1], ("DATABASE_CONNECT_DEADLINE_SECS", "0")])?;
+        assert_eq!(config.database_connect_deadline, Duration::ZERO);
         Ok(())
     }
 
