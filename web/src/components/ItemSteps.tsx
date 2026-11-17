@@ -8,6 +8,7 @@ import type { Item, Step, StepPatch } from "../api/schema";
 import { useAddStep, useUpdateStep } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
+import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { Markdown } from "./Markdown";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { useOverListLink } from "./overList";
@@ -102,24 +103,24 @@ function StepRow({
   const dropped = step.state === "dropped";
   const hasDisclosure = Boolean(step.context) || canEdit;
   const overList = useOverListLink();
-  // Whether the context's textarea is open. An editor sees it at once for a step with no context, so adding takes one
-  // step; with a context it shows rendered until Edit. Focusing the textarea sets the flag, so a context arriving from
+  // Whether the context's editor is open. An editor sees it at once for a step with no context, so adding takes one
+  // step; with a context it shows rendered until Edit. Focusing the editor sets the flag, so a context arriving from
   // elsewhere never swaps a draft out from under the typing.
   const [editingContext, setEditingContext] = useState(false);
-  const contextField = useRef<HTMLTextAreaElement>(null);
+  // The text in the editor, started from the saved context when Edit was pressed.
+  const [contextDraft, setContextDraftState] = useState(step.context ?? "");
+  // What the blur reads: on Android the editor hands over its last keystrokes as focus leaves, in the same event the
+  // blur is handled in, before a render could give it the state.
+  const contextDraftNow = useRef(contextDraft);
+  const setContextDraft = (text: string) => {
+    contextDraftNow.current = text;
+    setContextDraftState(text);
+  };
+  // Set by Edit, so the editor takes focus as it mounts; a field that is open from the start must not.
+  const [focusContext, setFocusContext] = useState(false);
   // Counts the context's saves, so only the latest one closes the field: an earlier save landing while a later one
   // is in flight (and may fail) must not take its draft away.
   const contextSaves = useRef(0);
-  // Set by Edit, so focus goes into the field once it is there.
-  const focusContext = useRef(false);
-  useEffect(() => {
-    if (editingContext && focusContext.current) {
-      focusContext.current = false;
-      const field = contextField.current;
-      field?.focus();
-      field?.setSelectionRange(field.value.length, field.value.length);
-    }
-  }, [editingContext]);
 
   const saveTitle = (field: HTMLTextAreaElement) => {
     const title = field.value.trim();
@@ -235,11 +236,11 @@ function StepRow({
       {contextShown && (
         <div className="pr-1 pb-2 pl-9 pointer-coarse:pl-11">
           {canEdit && (editingContext || !step.context) ? (
-            <textarea
-              ref={contextField}
+            <LazyMarkdownEditor
               aria-label="Step context"
-              defaultValue={step.context ?? ""}
-              rows={2}
+              value={contextDraft}
+              onChange={setContextDraft}
+              autoFocus={focusContext}
               placeholder="Background for this step"
               onFocus={() => setEditingContext(true)}
               onKeyDown={(e) => {
@@ -250,17 +251,20 @@ function StepRow({
                 }
               }}
               onBlur={(e) => {
-                const field = e.currentTarget;
+                // Focus moving on inside the editor isn't leaving it.
+                if (e.currentTarget.contains(e.relatedTarget)) return;
+                const box = e.currentTarget;
                 const save = ++contextSaves.current;
-                void saveContext(field.value).then((landed) => {
+                void saveContext(contextDraftNow.current).then((landed) => {
                   // Back to the rendered text, unless the save failed, a later one is on its way, or the person came
                   // back to the field meanwhile.
-                  if (landed && save === contextSaves.current && document.activeElement !== field) {
+                  if (landed && save === contextSaves.current && !box.contains(document.activeElement)) {
                     setEditingContext(false);
+                    setFocusContext(false);
                   }
                 });
               }}
-              className="field-sizing-content min-h-14 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base"
+              className="min-h-14 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
             />
           ) : (
             <>
@@ -269,7 +273,8 @@ function StepRow({
                 <Button
                   aria-label="Edit step context"
                   onPress={() => {
-                    focusContext.current = true;
+                    setContextDraft(step.context ?? "");
+                    setFocusContext(true);
                     setEditingContext(true);
                   }}
                   className={`${compactButtonClass.quiet} -ml-3 min-h-9 outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent`}

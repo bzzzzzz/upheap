@@ -1,5 +1,5 @@
 // The heap's settings (design/ux.md, Heap settings): General, Context, Tags, Parameters and Ranking as tabs, each at its own path.
-import { addItem, expect, expectOrder, goTo, test } from "./fixtures";
+import { addItem, expect, expectOrder, fillEditor, goTo, test } from "./fixtures";
 
 test("General renames the heap, changes its link name and archives it", async ({ page, heapPath }) => {
   await goTo(page, "Settings");
@@ -316,7 +316,7 @@ test("the heap's context is written on the Context tab: Edit, Save, Cancel and c
   // The text keeps its line breaks (as a break), and focus goes back to Edit once it is saved.
   await edit.click();
   await expect(field).toBeFocused();
-  await field.fill("Docs are in the wiki.\nWork is reviewed on GitHub.");
+  await fillEditor(field, "Docs are in the wiki.\nWork is reviewed on GitHub.");
   await card.getByRole("button", { name: "Save" }).click();
   await expect(field).toHaveCount(0);
   await expect(edit).toBeFocused();
@@ -328,10 +328,10 @@ test("the heap's context is written on the Context tab: Edit, Save, Cancel and c
 
   // Cancel drops the draft, and Escape does nothing to it.
   await edit.click();
-  await expect(field).toHaveValue("Docs are in the wiki.\nWork is reviewed on GitHub.");
-  await field.fill("A draft");
+  await expect(field).toHaveText("Docs are in the wiki.\nWork is reviewed on GitHub.", { useInnerText: true });
+  await fillEditor(field, "A draft");
   await field.press("Escape");
-  await expect(field).toHaveValue("A draft");
+  await expect(field).toHaveText("A draft");
   await card.getByRole("button", { name: "Cancel" }).click();
   await expect(field).toHaveCount(0);
   await expect(edit).toBeFocused();
@@ -339,7 +339,7 @@ test("the heap's context is written on the Context tab: Edit, Save, Cancel and c
 
   // Clearing all the text empties it.
   await edit.click();
-  await field.fill("");
+  await fillEditor(field, "");
   await card.getByRole("button", { name: "Save" }).click();
   await expect(empty).toBeVisible();
   await expect(edit).toBeFocused();
@@ -353,7 +353,7 @@ test("a context saved by someone else meanwhile is shown above the draft, which 
   const card = page.getByRole("region", { name: "Context", exact: true });
   const field = page.getByLabel("Heap context");
   await card.getByRole("button", { name: "Edit" }).click();
-  await field.fill("My version");
+  await fillEditor(field, "My version");
 
   // Another member saves a context while the form is open, through the API with the page's session.
   const url = `/api/v1${heapPath}`;
@@ -369,7 +369,7 @@ test("a context saved by someone else meanwhile is shown above the draft, which 
   await card.getByRole("button", { name: "Save" }).click();
   await expect(card.getByRole("heading", { name: "Saved meanwhile" })).toBeVisible();
   await expect(card.getByText("Their version", { exact: true })).toBeVisible();
-  await expect(field).toHaveValue("My version");
+  await expect(field).toHaveText("My version");
   await expect(card.getByRole("alert")).toContainText("Someone else changed the context while you were editing.");
 
   // The second Save replaces theirs with the draft.

@@ -12,6 +12,7 @@ import {
   expectOrder,
   field,
   fieldButton,
+  fillEditor,
   goTo,
   isPhone,
   itemPane,
@@ -57,7 +58,7 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   await expect(fieldButton(page, "Impact")).toHaveAccessibleName("Impact: XL");
   await pane.getByLabel("Title", { exact: true }).fill("Write the team rota");
   await pane.getByLabel("Title", { exact: true }).press("Enter");
-  await (await editContext(page)).fill("For the next quarter");
+  await fillEditor(await editContext(page), "For the next quarter");
   await saveContext(page, "For the next quarter");
   // The likeliest next state is the main button: Start, for an open item, then Done once it's started.
   const state = pane.getByRole("group", { name: "State", exact: true });
@@ -178,7 +179,7 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   await expect(context).toContainText("No context yet.");
 
   const source = "**bold** and a [link](https://example.com)\n\n- one\n- two\n\n<script>window.pwned = true</script>";
-  await (await editContext(page)).fill(source);
+  await fillEditor(await editContext(page), source);
   await saveContext(page, "bold and a link");
   await expect(context.locator("strong")).toHaveText("bold");
   const link = context.getByRole("link", { name: "link", exact: true });
@@ -186,7 +187,7 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   await expect(context.getByRole("listitem")).toHaveText(["one", "two"]);
   // A script-scheme link and a remote image are never live: the link reads as plain text, the image as a link.
-  await (await editContext(page)).fill("[bad](javascript:alert(1)) and ![x](https://example.com/t.png)");
+  await fillEditor(await editContext(page), "[bad](javascript:alert(1)) and ![x](https://example.com/t.png)");
   await saveContext(page, "bad and");
   await expect(context.locator("a[href^='javascript:' i]")).toHaveCount(0);
   await expect(context.getByRole("link", { name: "bad", exact: true })).toHaveCount(0);
@@ -195,7 +196,7 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
     "href",
     "https://example.com/t.png",
   );
-  await (await editContext(page)).fill(source);
+  await fillEditor(await editContext(page), source);
   await saveContext(page, "bold and a link");
   // Raw HTML is dropped, not run.
   await expect(pane.locator("script")).toHaveCount(0);
@@ -204,13 +205,13 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   // Save and Cancel are the ways out of the form; the focus goes back to Edit. The rest is checked on a wider screen.
   test.skip(isPhone(page), "the phone's sheet is checked in its own test");
   const area = await editContext(page);
-  await expect(area).toHaveValue(source);
-  await area.fill("Just this");
+  await expect(area).toHaveText(source, { useInnerText: true });
+  await fillEditor(area, "Just this");
   await pane.getByRole("button", { name: "Save", exact: true }).click();
   await expect(context).toContainText("Just this");
   await expect(pane.getByRole("button", { name: "Edit context" })).toBeFocused();
 
-  await (await editContext(page)).fill("Never mind");
+  await fillEditor(await editContext(page), "Never mind");
   await pane.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(context).toContainText("Just this");
   await expect(context).not.toContainText("Never mind");
@@ -218,15 +219,24 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
 
   // Escape in the textarea does nothing: the draft stays and the item stays open.
   const kept = await editContext(page);
-  await kept.fill("Not lost to a stray key");
+  await fillEditor(kept, "Not lost to a stray key");
   await page.keyboard.press("Escape");
-  await expect(kept).toHaveValue("Not lost to a stray key");
+  await expect(kept).toHaveText("Not lost to a stray key");
   await expect(pane).toBeVisible();
   await pane.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(context).toContainText("Just this");
 
+  // The editor styles the Markdown as it is typed, and what is saved is the plain text.
+  const styled = await editContext(page);
+  await fillEditor(styled, "# Title\n\n**bold**");
+  await expect(styled.getByText("bold", { exact: true })).toHaveCSS("font-weight", "600");
+  await expect(styled.getByText("Title", { exact: true })).toHaveCSS("font-weight", "600");
+  await expect(styled.getByText("Title", { exact: true })).toHaveCSS("font-size", "15px");
+  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(context.getByRole("heading", { name: "Title" })).toBeVisible();
+
   // Closing the item with a changed draft saves it, so nothing typed is lost.
-  await (await editContext(page)).fill("Kept on close");
+  await fillEditor(await editContext(page), "Kept on close");
   await closeItem(page);
   await openItem(page, "Write the plan");
   await expect(context).toContainText("Kept on close");
@@ -346,9 +356,9 @@ test("History shows an edited context as a diff, its long unchanged start folded
   await addItem(page, "Plan the launch");
   await openItem(page, "Plan the launch");
   const start = Array.from({ length: 30 }, (_, i) => `step${i + 1}`).join(" ");
-  await (await editContext(page)).fill(`${start} then ship on Friday`);
+  await fillEditor(await editContext(page), `${start} then ship on Friday`);
   await saveContext(page, "ship on Friday");
-  await (await editContext(page)).fill(`${start} then ship on Monday`);
+  await fillEditor(await editContext(page), `${start} then ship on Monday`);
   await saveContext(page, "ship on Monday");
 
   const history = await openHistory(page);
@@ -759,12 +769,12 @@ test("on a phone, need, effort and impact open sheets, and the bar holds the mai
   // Escape does nothing; a tap on the dimmed page saves a changed draft like Save does, and Save does too.
   const context = pane.getByRole("region", { name: "Context", exact: true });
   const area = await editContext(page);
-  await area.fill("Venue first");
+  await fillEditor(area, "Venue first");
   await page.keyboard.press("Escape");
-  await expect(area).toHaveValue("Venue first");
+  await expect(area).toHaveText("Venue first");
   await page.mouse.click(200, 20);
   await expect(context).toContainText("Venue first");
-  await (await editContext(page)).fill("Venue, then dates");
+  await fillEditor(await editContext(page), "Venue, then dates");
   await saveContext(page, "Venue, then dates");
 
   // A new tag in the Tags row, in place in the item's sheet, its offer in view under the field.
@@ -904,19 +914,19 @@ test("saving a context someone else changed meanwhile shows theirs above the dra
   const saved = pane.getByRole("heading", { name: "Saved meanwhile", exact: true });
 
   // Cancel keeps theirs.
-  await (await editContext(page)).fill("Mine");
+  await fillEditor(await editContext(page), "Mine");
   await changeElsewhere(page, heapPath, { description: "Theirs", title: "Renamed once" });
   await refetchShowing(page, "Renamed once");
   await pane.getByRole("button", { name: "Save", exact: true }).click();
   await expect(saved).toBeVisible();
   await expect(pane.getByText("Theirs", { exact: true })).toBeVisible();
-  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveValue("Mine");
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveText("Mine");
   await pane.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(context).toContainText("Theirs");
   await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveCount(0);
 
   // Save again replaces it with the draft.
-  await (await editContext(page)).fill("Mine again");
+  await fillEditor(await editContext(page), "Mine again");
   await changeElsewhere(page, heapPath, { description: "Theirs again", title: "Renamed twice" });
   await refetchShowing(page, "Renamed twice");
   await pane.getByRole("button", { name: "Save", exact: true }).click();
@@ -931,13 +941,13 @@ test("a conflict on Done keeps the item open, with theirs shown above the draft"
   await addItem(page, "Ship the release");
   await openItem(page, "Ship the release");
   const pane = itemPane(page);
-  await (await editContext(page)).fill("Shipped");
+  await fillEditor(await editContext(page), "Shipped");
   await changeElsewhere(page, heapPath, { description: "Held back", title: "Renamed" });
   await refetchShowing(page, "Renamed");
 
   await changeState(page, "Done", "more");
   await expect(pane.getByRole("heading", { name: "Saved meanwhile", exact: true })).toBeVisible();
-  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveValue("Shipped");
+  await expect(pane.getByRole("textbox", { name: "Context", exact: true })).toHaveText("Shipped");
   const state = pane.getByRole("group", { name: "State", exact: true });
   await expect(state.getByRole("button", { name: "Start", exact: true })).toBeVisible();
   await expect(state.getByRole("button", { name: "Reopen", exact: true })).toHaveCount(0);
@@ -951,15 +961,15 @@ test("a draft stays readable when the item is closed elsewhere, and says it wasn
   await addItem(page, "Ship the release");
   await openItem(page, "Ship the release");
   const pane = itemPane(page);
-  await (await editContext(page)).fill("Original");
+  await fillEditor(await editContext(page), "Original");
   await saveContext(page, "Original");
-  await (await editContext(page)).fill("Wrap-up that never got saved");
+  await fillEditor(await editContext(page), "Wrap-up that never got saved");
   await changeElsewhere(page, heapPath, { state: "done" });
   await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
 
   await expect(pane.getByText("This item can't be edited any more; your text wasn't saved.")).toBeVisible();
   const draft = pane.getByRole("textbox", { name: "Context", exact: true });
-  await expect(draft).toHaveValue("Wrap-up that never got saved");
+  await expect(draft).toHaveText("Wrap-up that never got saved");
   await expect(draft).toHaveJSProperty("readOnly", true);
   await pane
     .getByRole("region", { name: "Context", exact: true })
@@ -974,7 +984,7 @@ test("on a phone the context sheet has Save and Cancel, and a conflict keeps it 
   await addItem(page, "Write the plan");
   await openItem(page, "Write the plan");
   const sheet = page.getByRole("dialog", { name: "Context", exact: true });
-  await (await editContext(page)).fill("Mine");
+  await fillEditor(await editContext(page), "Mine");
   await expect(sheet.getByRole("button", { name: "Save", exact: true })).toBeVisible();
   await expect(sheet.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
 
@@ -983,7 +993,7 @@ test("on a phone the context sheet has Save and Cancel, and a conflict keeps it 
   // Dismissing with a changed draft runs the same save, so the conflict keeps the sheet open.
   await sheet.getByRole("button", { name: "Close", exact: true }).click();
   await expect(sheet.getByRole("heading", { name: "Saved meanwhile", exact: true })).toBeVisible();
-  await expect(sheet.getByRole("textbox", { name: "Context", exact: true })).toHaveValue("Mine");
+  await expect(sheet.getByRole("textbox", { name: "Context", exact: true })).toHaveText("Mine");
 
   await sheet.getByRole("button", { name: "Save again", exact: true }).click();
   await expect(sheet).toHaveCount(0);
@@ -995,7 +1005,7 @@ test("a context typed for the wrap-up is saved before Done closes the item", asy
   await addItem(page, "Ship the release");
   await openItem(page, "Ship the release");
   const pane = itemPane(page);
-  await (await editContext(page)).fill("Shipped, and the notes are in the wiki");
+  await fillEditor(await editContext(page), "Shipped, and the notes are in the wiki");
 
   await changeState(page, "Done", "more");
   await expect(
@@ -1012,7 +1022,7 @@ test("leaving with a conflict shown doesn't save the draft over theirs", async (
   await addItem(page, "Write the plan");
   await openItem(page, "Write the plan");
   const pane = itemPane(page);
-  await (await editContext(page)).fill("Mine");
+  await fillEditor(await editContext(page), "Mine");
   await changeElsewhere(page, heapPath, { description: "Theirs", title: "Renamed" });
   await refetchShowing(page, "Renamed");
   await pane.getByRole("button", { name: "Save", exact: true }).click();
@@ -1032,7 +1042,7 @@ test("on a phone the sheet of an item closed elsewhere shows the draft and still
   await addItem(page, "Ship the release");
   await openItem(page, "Ship the release");
   const sheet = page.getByRole("dialog", { name: "Context", exact: true });
-  await (await editContext(page)).fill("Wrap-up that never got saved");
+  await fillEditor(await editContext(page), "Wrap-up that never got saved");
   await changeElsewhere(page, heapPath, { state: "done" });
   await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
   await expect(sheet.getByText("This item can't be edited any more; your text wasn't saved.")).toBeVisible();
@@ -1072,7 +1082,7 @@ test("a step's context renders as Markdown, and Edit opens its source in a field
   // With no context the field is there at once, so adding takes one step; leaving it saves and shows it rendered.
   await steps.getByRole("button", { name: "Show context" }).click();
   const field = steps.getByRole("textbox", { name: "Step context" });
-  await field.fill("Use **bold**\nand <b>raw</b>");
+  await fillEditor(field, "Use **bold**\nand <b>raw</b>");
   await field.press("Tab");
   await expect(steps.locator("strong")).toHaveText("bold");
   await expect(field).toHaveCount(0);
@@ -1083,7 +1093,7 @@ test("a step's context renders as Markdown, and Edit opens its source in a field
   // Edit shows the source, focused with the caret at the end; leaving it saves the change.
   await edit.click();
   await expect(field).toBeFocused();
-  await expect(field).toHaveValue("Use **bold**\nand <b>raw</b>");
+  await expect(field).toHaveText("Use **bold**\nand <b>raw</b>", { useInnerText: true });
   await page.keyboard.type(" more");
   await field.press("Tab");
   await expect(steps.getByText("raw more")).toBeVisible();
@@ -1118,11 +1128,11 @@ test("a step's context edit that fails to save stays in the field, and Escape ne
   await steps.getByRole("button", { name: "Show context" }).click();
   await steps.getByRole("button", { name: "Edit step context" }).click();
   const field = steps.getByRole("textbox", { name: "Step context" });
-  await field.fill("New");
+  await fillEditor(field, "New");
   // Escape leaves the draft and the item open: typing goes on in the same field.
   await field.press("Escape");
   await page.keyboard.type(" text");
-  await expect(field).toHaveValue("New text");
+  await expect(field).toHaveText("New text");
   await expect(page).toHaveURL(/\/items\//);
 
   // The save is refused: the field stays, with the draft, and the reason shows.
@@ -1137,7 +1147,7 @@ test("a step's context edit that fails to save stays in the field, and Escape ne
   );
   await field.press("Tab");
   await expect(steps.getByRole("alert")).toBeVisible();
-  await expect(field).toHaveValue("New text");
+  await expect(field).toHaveText("New text");
   await expect(steps.locator("p", { hasText: "Old text" })).toHaveCount(0);
 
   // Once it can be saved, leaving the field again saves it and shows it rendered.

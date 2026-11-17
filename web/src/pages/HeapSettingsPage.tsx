@@ -10,10 +10,11 @@ import { useArchiveHeap } from "../components/archiveHeap";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";
+import { LazyMarkdownEditor } from "../components/LazyMarkdownEditor";
 import { Markdown } from "../components/Markdown";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
-import { cardClass, cardTitleClass, inputClass, nameFormClasses } from "./settingsForm";
+import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
@@ -285,8 +286,6 @@ function PriorityCard({ team, heap, canSet }: { team: string; heap: Heap; canSet
   );
 }
 
-const CONTEXT_MAX_CHARS = 20_000;
-
 /**
  * The Context tab (ux.md, Heap settings): the heap's context card, with the same loading and error handling as General.
  */
@@ -338,16 +337,11 @@ function HeapContextCard({ team, heap, canEdit }: { team: string; heap: Heap; ca
   const [startedFrom, setStartedFrom] = useState<string | null>(null);
   // Set when a save finds the heap changed meanwhile; the heap is refetched, so `heap.context` is the saved one.
   const [conflicted, setConflicted] = useState(false);
-  const textarea = useRef<HTMLTextAreaElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   // Set when the form closes, so focus goes to the Edit button once it is back.
   const refocus = useRef(false);
   useEffect(() => {
-    if (editing) {
-      const field = textarea.current;
-      field?.focus();
-      field?.setSelectionRange(field.value.length, field.value.length);
-    } else if (refocus.current) {
+    if (!editing && refocus.current) {
       refocus.current = false;
       editButton.current?.focus();
     }
@@ -393,13 +387,12 @@ function HeapContextCard({ team, heap, canEdit }: { team: string; heap: Heap; ca
               </div>
             </div>
           )}
-          <textarea
-            ref={textarea}
+          <LazyMarkdownEditor
             aria-label="Heap context"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            maxLength={CONTEXT_MAX_CHARS}
-            className={`${inputClass} field-sizing-content min-h-48 w-full`}
+            onChange={setDraft}
+            autoFocus
+            className="min-h-48 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
           />
           <button type="submit" disabled={update.isPending} className={`${compactButtonClass.primary} max-sm:flex-1`}>
             Save

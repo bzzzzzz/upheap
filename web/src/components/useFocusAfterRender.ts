@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+/** An element, or the handle of a component that focuses its own (the Markdown editor). */
+type Focusable = { focus: () => void };
+
 /**
  * Returns a function that moves focus to the element `find` returns, in an effect after the next render: call it from
  * the handler that closes a dialog, sheet, menu or form, so the close and the request land in one render.
@@ -18,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * `find` runs after the render, so it can look up an element that only exists then. If it finds none, nothing happens.
  */
 export function useFocusAfterRender() {
-  const target = useRef<(() => HTMLElement | null | undefined) | null>(null);
+  const target = useRef<(() => Focusable | null | undefined) | null>(null);
   const [request, setRequest] = useState(0);
   useEffect(() => {
     const find = target.current;
@@ -26,7 +29,7 @@ export function useFocusAfterRender() {
     target.current = null;
     find()?.focus();
   }, [request]);
-  return useCallback((find: () => HTMLElement | null | undefined) => {
+  return useCallback((find: () => Focusable | null | undefined) => {
     target.current = find;
     setRequest((n) => n + 1);
   }, []);
