@@ -24,7 +24,7 @@ use crate::output::shorten;
 /// has trusted, which a new directory never is.
 ///
 /// The person's own `allow` rules come right after all of these, as more values of `--allowedTools`, in the order
-/// given. `upheap auth` is denied last, in every run: a rule of the person's (or their own settings) may allow `Bash`
+/// given. [`DENY`] comes last, in every run: a rule of the person's (or their own settings) may allow `Bash`
 /// wholesale, and Claude's deny wins over any allow.
 ///
 /// A `model` goes in as `--model <model>`, as given, right before `--permission-mode`: after `--allowedTools` it
@@ -61,18 +61,24 @@ pub(super) fn arguments<'a>(
         arguments.extend(IN_OWN_DIRECTORY);
     }
     arguments.extend(allow.iter().map(String::as_str));
-    arguments.extend(["--disallowedTools", "Bash(upheap auth:*)"]);
+    arguments.push("--disallowedTools");
+    arguments.extend(DENY);
     arguments
 }
 
+/// What every run is refused, as deny rules: `upheap auth` and `upheap heap use`. Both write on the person's own
+/// machine (their sign-in, their default heap and server), which the server has no say in and nothing tells the
+/// person about, so text an agent reads must not be able to talk it into them.
+const DENY: [&str; 2] = ["Bash(upheap auth:*)", "Bash(upheap heap use:*)"];
+
 /// What a run may do in a directory made for it, as allow rules: nearly everything. A run there has to clone and
-/// build what it works on, and which commands that takes isn't known yet. `upheap auth` stays refused by the deny
-/// every run gets, for the reason [`UPHEAP_COMMANDS`] leaves it out.
+/// build what it works on, and which commands that takes isn't known yet. `upheap auth` and `upheap heap use` stay
+/// refused by the [`DENY`] every run gets, for the reason [`UPHEAP_COMMANDS`] leaves them out.
 const IN_OWN_DIRECTORY: [&str; 6] = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
 
 /// The `upheap` commands a run needs, as allow rules: reading, writing its item, asking, and saying reached or
-/// handing the turn back. Not all of `upheap`: text an agent reads could talk it into `upheap auth logout`, which
-/// the server has no say in.
+/// handing the turn back. Not all of `upheap`: text an agent reads could talk it into `upheap auth logout` or
+/// `upheap heap use`, which the server has no say in.
 const UPHEAP_COMMANDS: [&str; 11] = [
     "Bash(upheap item:*)",
     "Bash(upheap step:*)",
@@ -301,6 +307,7 @@ mod tests {
                 "WebSearch",
                 "--disallowedTools",
                 "Bash(upheap auth:*)",
+                "Bash(upheap heap use:*)",
             ])
         );
     }
@@ -331,6 +338,7 @@ mod tests {
                 "Bash(upheap parameter list:*)",
                 "--disallowedTools",
                 "Bash(upheap auth:*)",
+                "Bash(upheap heap use:*)",
             ])
         );
     }
@@ -349,21 +357,21 @@ mod tests {
         }
     }
 
-    const AUTH_DENY: [&str; 2] = ["--disallowedTools", "Bash(upheap auth:*)"];
+    const DENIES: [&str; 3] = ["--disallowedTools", "Bash(upheap auth:*)", "Bash(upheap heap use:*)"];
 
-    /// The arguments for `access` outside its own directory and with no rules of the person's, up to the deny.
+    /// The arguments for `access` outside its own directory and with no rules of the person's, up to the denies.
     fn narrow(access: Access) -> Vec<&'static str> {
         let mut narrow = arguments(access, false, &[], None);
-        narrow.truncate(narrow.len() - AUTH_DENY.len());
+        narrow.truncate(narrow.len() - DENIES.len());
         narrow
     }
 
     #[gtest]
-    fn in_its_own_directory_either_access_may_do_anything_but_upheap_auth() {
+    fn in_its_own_directory_either_access_may_do_anything_but_upheap_auth_and_heap_use() {
         let wide = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
         for access in [Access::Prepare, Access::Do] {
             let narrow = narrow(access);
-            let expected = [&narrow[..], &wide, &AUTH_DENY].concat();
+            let expected = [&narrow[..], &wide, &DENIES].concat();
 
             // The wide rules follow the narrow ones, so they are still values of `--allowedTools`.
             expect_that!(arguments(access, true, &[], None), eq(&expected));
@@ -371,23 +379,23 @@ mod tests {
     }
 
     #[gtest]
-    fn extra_allow_rules_follow_the_fixed_ones_and_upheap_auth_is_still_denied_after_them() {
+    fn extra_allow_rules_follow_the_fixed_ones_and_the_denies_still_come_after_them() {
         let extra = ["mcp__x".to_owned(), "Bash".to_owned()];
         for access in [Access::Prepare, Access::Do] {
             let narrow = narrow(access);
-            let expected = [&narrow[..], &["mcp__x", "Bash"], &AUTH_DENY].concat();
+            let expected = [&narrow[..], &["mcp__x", "Bash"], &DENIES].concat();
 
             expect_that!(arguments(access, false, &extra, None), eq(&expected));
         }
     }
 
     #[gtest]
-    fn in_its_own_directory_extra_rules_come_after_the_wide_ones_and_before_the_auth_deny() {
+    fn in_its_own_directory_extra_rules_come_after_the_wide_ones_and_before_the_denies() {
         let extra = ["mcp__x".to_owned(), "Bash(npm:*)".to_owned()];
         let wide = ["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch"];
         for access in [Access::Prepare, Access::Do] {
             let narrow = narrow(access);
-            let expected = [&narrow[..], &wide, &["mcp__x", "Bash(npm:*)"], &AUTH_DENY].concat();
+            let expected = [&narrow[..], &wide, &["mcp__x", "Bash(npm:*)"], &DENIES].concat();
 
             expect_that!(arguments(access, true, &extra, None), eq(&expected));
         }

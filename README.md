@@ -288,7 +288,7 @@ comes before the heap's context on how the work is done. The file is read once, 
 `--allow <rule>`, every run's `claude` may also use what the rule allows (Claude's rule syntax, such as
 `mcp__claude_ai_Claude_Docs`), without allowing it in your own sessions; `--allow-prepare` and `--allow-do` add a
 rule to runs that prepare an item or do a task only. Each flag takes one rule and can be repeated; a rule with a
-comma or a space, or one starting with `-`, is refused. Every run is still denied `upheap auth`, though a rule as
+comma or a space, or one starting with `-`, is refused. Every run is still denied `upheap auth` and `upheap heap use`, though a rule as
 wide as `Bash` lets a run get around that through a shell.
 
 With `--tool copilot`, the loop starts GitHub Copilot CLI (`copilot`) the same way, and these differ. A run may
