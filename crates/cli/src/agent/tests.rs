@@ -22,21 +22,23 @@ fn a_program_is_found_on_the_path_only_when_it_is_runnable() -> googletest::Resu
 }
 
 #[gtest]
-fn a_tool_that_is_not_there_is_not_installed() {
+#[tokio::test]
+async fn a_tool_that_is_not_there_is_not_installed() {
     let tools = SystemTools::with_claude(PathBuf::from("/definitely/not/here/claude"));
 
     expect_that!(
-        tools.check(Tool::Claude),
+        tools.check(Tool::Claude).await,
         err(matches_pattern!(ToolError::NotInstalled { .. }))
     );
 }
 
 #[gtest]
-fn copilot_that_is_not_there_is_not_installed() {
+#[tokio::test]
+async fn copilot_that_is_not_there_is_not_installed() {
     let tools = SystemTools::with_copilot(PathBuf::from("/definitely/not/here/copilot"));
 
     expect_that!(
-        tools.check(Tool::Copilot),
+        tools.check(Tool::Copilot).await,
         err(matches_pattern!(ToolError::NotInstalled {
             tool: eq(&Tool::Copilot)
         }))
@@ -668,6 +670,78 @@ mod processes {
         let settled = tokio::time::timeout(Duration::from_millis(500), tools.settled()).await;
 
         verify_that!(settled.is_ok(), eq(true))
+    }
+
+    /// Tools whose `tool` is a script that prints `printed` when asked for its version.
+    fn tools_printing(dir: &Path, tool: Tool, printed: &str) -> std::io::Result<SystemTools> {
+        let path = dir.join(tool.name());
+        std::fs::write(
+            &path,
+            format!("#!/bin/sh\n[ \"$1\" = --version ] || exit 9\nprintf '%s\\n' '{printed}'\n"),
+        )?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+        Ok(match tool {
+            Tool::Claude => SystemTools::with_claude(path),
+            Tool::Copilot => SystemTools::with_copilot(path),
+        })
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_tool_at_or_above_its_minimum_version_passes_the_check() -> googletest::Result<()> {
+        for (tool, printed) in [
+            (Tool::Claude, "2.1.326 (Claude Code)"),
+            (Tool::Claude, "2.2.0 (Claude Code)"),
+            (Tool::Copilot, "GitHub Copilot CLI 1.0.112."),
+            (Tool::Copilot, "GitHub Copilot CLI 1.1.3."),
+        ] {
+            let dir = tempfile::tempdir()?;
+            let tools = tools_printing(dir.path(), tool, printed)?;
+
+            expect_that!(tools.check(tool).await, ok(anything()), "{printed}");
+        }
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_tool_older_than_its_minimum_version_is_refused_with_both_versions() -> googletest::Result<()> {
+        for (tool, printed, found) in [
+            (Tool::Claude, "2.1.325 (Claude Code)", Version(2, 1, 325)),
+            (Tool::Copilot, "GitHub Copilot CLI 0.9.200.", Version(0, 9, 200)),
+        ] {
+            let dir = tempfile::tempdir()?;
+            let tools = tools_printing(dir.path(), tool, printed)?;
+
+            expect_that!(
+                tools.check(tool).await,
+                err(matches_pattern!(ToolError::TooOld {
+                    tool: eq(&tool),
+                    found: eq(&found),
+                    needed: eq(&tool.min_version()),
+                }))
+            );
+        }
+        Ok(())
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn a_tool_whose_version_cannot_be_read_is_refused_with_what_it_printed() -> googletest::Result<()> {
+        for tool in [Tool::Claude, Tool::Copilot] {
+            let dir = tempfile::tempdir()?;
+            let tools = tools_printing(dir.path(), tool, "a wrapper, version unknown")?;
+
+            expect_that!(
+                tools.check(tool).await,
+                err(matches_pattern!(ToolError::UnreadableVersion {
+                    tool: eq(&tool),
+                    printed: eq("a wrapper, version unknown"),
+                    ..
+                }))
+            );
+        }
+        Ok(())
     }
 
     #[gtest]

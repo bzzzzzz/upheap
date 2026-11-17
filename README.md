@@ -294,8 +294,12 @@ tool is allowed. `--allow` rules are in Copilot's syntax (`shell(npm:*)`) and ma
 Copilot's AI credits, at 100 credits to the dollar. A usage limit is not recognised yet, so a run that stops at one
 fails. Copilot saves each run as a session in `~/.copilot`; account sync is turned off for the run.
 
+When it starts, the loop runs `<tool> --version` and refuses to start, before it claims anything, if the tool is
+older than the oldest version it supports (step 1 of [Start an agent loop](#start-an-agent-loop)) or if it can't
+read a version in what the tool printed. `claude update` or `copilot update` brings the tool up to date.
+
 Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
-signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, no agent tool, or a
+signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, no agent tool or one too old, or a
 `UPHEAP_TOKEN` the server refuses), 1 anything else.
 
 ### Machines without a browser
@@ -316,7 +320,8 @@ has expired or isn't one the server knows.
 
 To have an agent work your items:
 
-1. Install `upheap` (above) and Claude Code (`claude`) or GitHub Copilot CLI (`copilot`), signed in.
+1. Install `upheap` (above) and Claude Code (`claude`, 2.1.326 or newer) or GitHub Copilot CLI (`copilot`, 1.0.112
+   or newer), signed in.
 2. Sign in to your server: `upheap auth login --server https://<your server>`.
 3. Make or pick a heap: `upheap heap add "Website"`, then `upheap heap use website`.
 4. Write its context: where the repository is, and how work is done and reviewed there. `upheap heap edit

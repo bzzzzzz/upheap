@@ -814,12 +814,12 @@ impl StandIn {
 }
 
 impl AgentTools for StandIn {
-    fn check(&self, tool: Tool) -> Result<(), ToolError> {
-        if self.installed {
+    fn check(&self, tool: Tool) -> Pin<Box<dyn Future<Output = Result<(), ToolError>> + Send + '_>> {
+        Box::pin(std::future::ready(if self.installed {
             Ok(())
         } else {
             Err(ToolError::NotInstalled { tool })
-        }
+        }))
     }
 
     fn settled(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {

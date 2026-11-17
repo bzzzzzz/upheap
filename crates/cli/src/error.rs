@@ -268,6 +268,11 @@ impl CliError {
                     Tool::Copilot => "GitHub Copilot CLI",
                 }
             )),
+            (Self::Tool(ToolError::TooOld { tool, .. }), _) => Some(format!("update it with `{tool} update`")),
+            (Self::Tool(ToolError::UnreadableVersion { tool, .. }), _) => Some(format!(
+                "check that `{tool} --version` prints its version, such as `{}`, and update {tool} if it doesn't",
+                tool.min_version()
+            )),
             (Self::Tool(ToolError::NoDirectory { .. }), _) => {
                 Some("check that `--root` names a directory you can write to".to_owned())
             }
@@ -490,6 +495,44 @@ mod tests {
         expect_that!(
             closed.to_message(),
             contains(eq("hint: reopen it first with `upheap item reopen k3x9a`"))
+        );
+    }
+
+    #[gtest]
+    fn a_tool_too_old_says_both_versions_and_how_to_update() {
+        let error = CliError::Tool(ToolError::TooOld {
+            tool: Tool::Claude,
+            found: crate::agent::Version(2, 1, 300),
+            needed: crate::agent::Version(2, 1, 326),
+        });
+
+        expect_that!(error.exit_code(), eq(6));
+        expect_that!(
+            error.to_message(),
+            elements_are![
+                ends_with("claude is version 2.1.300, and work run needs 2.1.326 or newer"),
+                eq("hint: update it with `claude update`"),
+            ]
+        );
+    }
+
+    #[gtest]
+    fn a_tool_version_that_cannot_be_read_says_what_was_run_and_printed() {
+        let error = CliError::Tool(ToolError::UnreadableVersion {
+            tool: Tool::Copilot,
+            program: "/usr/local/bin/copilot".into(),
+            printed: "a wrapper".to_owned(),
+        });
+
+        expect_that!(error.exit_code(), eq(6));
+        expect_that!(
+            error.to_message(),
+            elements_are![
+                ends_with("couldn't read copilot's version: `/usr/local/bin/copilot --version` printed \"a wrapper\""),
+                eq(
+                    "hint: check that `copilot --version` prints its version, such as `1.0.112`, and update copilot if it doesn't"
+                ),
+            ]
         );
     }
 
