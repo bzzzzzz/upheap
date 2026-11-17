@@ -1,6 +1,7 @@
 //! The upheap server: one binary serving the API and the web app on one port.
 //!
-//! `upheap-server` runs the server. `upheap-server openapi` prints the OpenAPI document and exits.
+//! `upheap-server` runs the server. `upheap-server --version` (or `-V`) prints `upheap-server <version>` and exits.
+//! `upheap-server openapi` prints the OpenAPI document and exits.
 //! `upheap-server user reset-link <username or email>` makes a password reset link ([`user_command`]).
 //! `upheap-server mail test <address>` sends a test mail ([`mail_command`]).
 
@@ -30,6 +31,10 @@ static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 async fn main() -> anyhow::Result<ExitCode> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("--version" | "-V") => {
+            println!("upheap-server {}", env!("CARGO_PKG_VERSION"));
+            return Ok(ExitCode::SUCCESS);
+        }
         Some("openapi") => {
             println!("{}", serde_json::to_string_pretty(&api::openapi())?);
             return Ok(ExitCode::SUCCESS);
