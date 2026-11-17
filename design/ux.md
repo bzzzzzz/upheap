@@ -76,6 +76,7 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
    ([decisions.md](decisions.md#24-react-aria-components-rather-than-a-copied-component-library)).
 3. **Motion** for sheet drag, swipe rows and the list's reorder animation.
 4. **lucide-react** for icons.
+5. **CodeMirror 6** for the Markdown editor (see Markdown text).
 
 ### Markdown text
 
@@ -85,11 +86,14 @@ GitHub-flavoured: headings, emphasis, links, code, lists, task lists as disabled
 HTML is never rendered and images are never loaded: an image shows as a link. An in-page anchor (a footnote's) moves
 in place, every other link opens in a new tab, and an unsafe one (`javascript:`) reads as plain text. A line break in
 the text stays one, so plain text written before reads as it did. Long words and addresses break, and code blocks and
-tables scroll sideways inside their box, so the page never does. Writing stays a plain textarea of the Markdown source,
-with no toolbar and no preview. A turn's line, a stuck reason, error messages and a question's short text and choices
-are one line each and stay plain, except that in a question's text and choices a web address (`https://…`) and a
-Markdown link to one (`[the mockup](https://…)`) are links that open a new tab; a link in a choice opens without
-picking it. The rest of the line shows as written.
+tables scroll sideways inside their box, so the page never does. Writing a context (a heap's, an item's, a step's) or a comment is in an editor that keeps the Markdown source as typed
+and styles it as you type: the markers (`#`, `**`, `-`, backticks, link brackets) stay visible and muted, headings are
+semibold, bold is bold, code is mono and link text takes the link colour. It has no toolbar and no preview, and the
+saved text is the plain Markdown. It is CodeMirror 6, loaded only when one of these fields is about to show, so pages
+that only read don't load it. A turn's line, a stuck reason, error messages and a question's short text and choices are
+one line each and stay plain, except that in a question's text and choices a web address (`https://…`) and a Markdown
+link to one (`[the mockup](https://…)`) are links that open a new tab; a link in a choice opens without picking it. The
+rest of the line shows as written.
 
 ## Layout
 
@@ -157,7 +161,7 @@ The **Context** tab holds the Context card. A heap made from a note says "From: 
 name>" above it, linking to the note. It shows the heap's context as Markdown text (see Toolkit), or a muted
 line saying what a context holds when there is none. Anyone who can open Settings sees the tab. A member with
 `edit_context` sees an Edit button (not on an archived heap), which
-turns the card into a form: a textarea that grows with its text, Save and Cancel. A failed save keeps the form and
+turns the card into a form: an editor (see Toolkit) that grows with its text, Save and Cancel. A failed save keeps the form and
 the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
 saved a different context meanwhile, it shows rendered above the kept draft under "Saved meanwhile", and Save again replaces
 it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and

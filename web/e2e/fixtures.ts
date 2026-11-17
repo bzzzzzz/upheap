@@ -133,8 +133,18 @@ export async function pick(page: Page, group: string, option: string): Promise<L
 }
 
 /**
- * Opens the open item's context for editing: Edit (or Add) swaps the text for a textarea in place on a tablet or wide
- * screen, and opens a sheet on a phone. Returns the textarea.
+ * Replaces the text of a Markdown editor. Playwright's `fill` selects the text through the DOM, which CodeMirror's
+ * Android input handling (the phone project's user agent) overrides with its own selection, so the new text would land
+ * after the old; selecting all with the editor's own key first makes both agree.
+ */
+export async function fillEditor(field: Locator, text: string) {
+  await field.press("ControlOrMeta+a");
+  await field.fill(text);
+}
+
+/**
+ * Opens the open item's context for editing: Edit (or Add) swaps the text for the editor in place on a tablet or wide
+ * screen, and opens a sheet on a phone. Returns the editor.
  */
 export async function editContext(page: Page): Promise<Locator> {
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toBeVisible();

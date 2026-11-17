@@ -5,6 +5,7 @@ import type { Item } from "../api/schema";
 import { compactButtonClass } from "./buttons";
 import { useRegisterDraft, type FlushDraft } from "./contextDraft";
 import { itemProblem } from "./itemProblems";
+import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { Markdown } from "./Markdown";
 import { PHONE, useMedia } from "./media";
 import { Sheet } from "./Sheet";
@@ -166,7 +167,6 @@ function ContextForm({
   const [conflict, setConflict] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const field = useRef<HTMLTextAreaElement>(null);
   // What the cleanup and the registered save read, as they outlive the render they were made in.
   const latest = useRef({ text, opened, context, canEdit, onSave, onLeaveFailed, pending: false, settled: false });
   useEffect(() => {
@@ -249,13 +249,6 @@ function ContextForm({
     },
     [],
   );
-  // With the caret at the end of the text.
-  useEffect(() => {
-    const element = field.current;
-    if (!element) return;
-    element.focus();
-    element.setSelectionRange(element.value.length, element.value.length);
-  }, []);
   // An item that can't be edited any more, with nothing typed that isn't saved, has nothing left to hold open.
   const kept = !canEdit && (normal(text) === opened || normal(text) === context);
   useEffect(() => {
@@ -295,13 +288,10 @@ function ContextForm({
     );
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-    } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      saveAndClose();
     }
   };
 
@@ -315,15 +305,15 @@ function ContextForm({
           </div>
         </div>
       )}
-      <textarea
-        ref={field}
+      <LazyMarkdownEditor
         aria-label="Context"
         value={text}
+        onChange={setText}
         readOnly={pending}
-        rows={8}
-        onChange={(event) => setText(event.target.value)}
+        autoFocus
+        onSubmit={saveAndClose}
         onKeyDown={onKeyDown}
-        className="field-sizing-content min-h-40 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-sm outline-none focus:border-accent pointer-coarse:text-base"
+        className="min-h-40 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
       />
       <div className="flex gap-2 max-sm:[&>button]:flex-1">
         <button type="button" disabled={pending} onClick={saveAndClose} className={compactButtonClass.primary}>

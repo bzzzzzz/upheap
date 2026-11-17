@@ -155,7 +155,8 @@
 @media (pointer: coarse) {
   input,
   select,
-  textarea {
+  textarea,
+  .cm-content {
     font-size: max(1rem, 1em);
   }
 }

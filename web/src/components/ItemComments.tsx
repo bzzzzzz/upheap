@@ -1,13 +1,15 @@
 import { useRef, useState } from "react";
-import { Button, Label, TextArea, TextField } from "react-aria-components";
+import { Button } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
 import type { Item } from "../api/schema";
 import { useAddComment } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
-import { fieldClass, focusClass } from "./ItemQuestions";
+import { focusClass } from "./ItemQuestions";
+import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { Markdown } from "./Markdown";
+import type { MarkdownEditorHandle } from "./MarkdownEditor";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /**
@@ -25,7 +27,7 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
   const add = useAddComment(heapRef, item.key);
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState("");
-  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const fieldRef = useRef<MarkdownEditorHandle>(null);
   const focusAfterRender = useFocusAfterRender();
   const comments = item.comments ?? [];
   // A refusal refetches the item, which may no longer offer `comment` (the heap was archived meanwhile): the form
@@ -77,18 +79,18 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
             send();
           }}
         >
-          <TextField
+          <LazyMarkdownEditor
+            ref={fieldRef}
+            aria-label="Add a comment"
+            placeholder="Add a comment"
             value={draft}
             onChange={(value) => {
               setDraft(value);
               // Without the offer the error is what keeps the form, so it stays until the pane closes.
               if (add.isError && item.allowed_actions.includes("comment")) add.reset();
             }}
-            className="flex flex-col gap-1.5"
-          >
-            <Label className="sr-only">Add a comment</Label>
-            <TextArea ref={fieldRef} placeholder="Add a comment" rows={2} className={fieldClass} />
-          </TextField>
+            className="min-h-14 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
+          />
           {add.isError && (
             <p role="alert" className="text-sm text-overdue-ink">
               {itemProblem(add.error)}

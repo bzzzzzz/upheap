@@ -1,6 +1,6 @@
 // Comments on an item (ux.md, The item §3): the thread under the context, and the field that adds to it. Added here as
 // a person would, through the item's own field. Server build only.
-import { expect, isPhone, itemPane, openItem, test } from "./fixtures";
+import { expect, fillEditor, isPhone, itemPane, openItem, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -23,9 +23,9 @@ test("a comment is added from the item's field and reads under Comments with its
   const field = comments.getByLabel("Add a comment");
   const send = comments.getByRole("button", { name: "Comment", exact: true });
   await expect(send).toBeDisabled();
-  await field.fill("   ");
+  await fillEditor(field, "   ");
   await expect(send).toBeDisabled();
-  await field.fill("Use the internal CA\nfor staging.");
+  await fillEditor(field, "Use the internal CA\nfor staging.");
   await expect(send).toBeEnabled();
   // Rounded: layout can land a 44 px control a hair short, such as 43.99997.
   if (isPhone(page)) {
@@ -42,12 +42,13 @@ test("a comment is added from the item's field and reads under Comments with its
   await expect(first).toContainText("Use the internal CA");
   await expect(first).toContainText("for staging.");
   await expect(first.locator("br")).toHaveCount(1);
-  await expect(field).toHaveValue("");
+  // Empty: the placeholder is all the field holds.
+  await expect(field).toHaveText("Add a comment");
   await expect(field).toBeFocused();
   await expect(comments.getByRole("status")).toHaveText("Comment added");
 
   // A second one follows the first, and the item's own fields are untouched.
-  await field.fill("Installed it in staging.");
+  await fillEditor(field, "Installed it in staging.");
   await send.click();
   await expect(comments.getByRole("heading", { name: "Comments 2", exact: true })).toBeVisible();
   await expect(comments.getByRole("listitem").last()).toContainText("Installed it in staging.");
