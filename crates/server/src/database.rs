@@ -1,5 +1,6 @@
 //! Connecting to the database at startup, retried with backoff: a database that scales to zero (Neon) can take
-//! longer to wake than one try's timeout, and an instance that exits on the first timeout fails its deploy.
+//! longer to wake than one try's timeout, and an instance that exits on the first timeout fails its deploy. See
+//! "Startup and shutdown" in design/architecture.md.
 
 use std::future::Future;
 use std::time::Duration;
@@ -35,7 +36,7 @@ pub async fn connect(
 
 async fn retry<T, E, F, Fut>(mut attempt: F, deadline: Duration, backoff: Backoff) -> Result<T, E>
 where
-    E: std::fmt::Display,
+    E: std::error::Error + Send + Sync + 'static,
     F: FnMut() -> Fut,
     Fut: Future<Output = Result<T, E>>,
 {
@@ -46,14 +47,14 @@ where
         match attempt().await {
             Ok(value) => {
                 if tries > 1 {
-                    tracing::info!(tries, "connected to the database");
+                    tracing::info!(try_number = tries, "connected to the database");
                 }
                 return Ok(value);
             }
             Err(error) if started.elapsed() + delay < deadline => {
                 tracing::warn!(
                     try_number = tries,
-                    error = %error,
+                    error = format!("{:#}", anyhow::Error::new(error)),
                     retry_in_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
                     "can't connect to the database yet",
                 );
@@ -99,7 +100,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn gives_up_with_the_last_error_after_the_deadline() -> anyhow::Result<()> {
+    async fn gives_up_after_the_deadline() -> anyhow::Result<()> {
         let root = tempfile::tempdir()?;
         let url = format!("sqlite://{}?mode=rwc", root.path().join("never/heap.db").display());
         let started = std::time::Instant::now();
@@ -111,22 +112,33 @@ mod tests {
         Ok(())
     }
 
+    #[derive(Debug, PartialEq)]
+    struct Refused(usize);
+
+    impl std::fmt::Display for Refused {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "refused on try {}", self.0)
+        }
+    }
+
+    impl std::error::Error for Refused {}
+
     #[tokio::test(start_paused = true)]
     async fn backs_off_doubling_up_to_the_cap_and_stops_at_the_deadline() -> anyhow::Result<()> {
         let started = Instant::now();
         let mut tried_at = Vec::new();
 
-        let result: std::result::Result<(), String> = retry(
+        let result: std::result::Result<(), Refused> = retry(
             || {
                 tried_at.push(started.elapsed());
-                std::future::ready(Err("refused".to_owned()))
+                std::future::ready(Err(Refused(tried_at.len())))
             },
             Duration::from_secs(30),
             Backoff::STARTUP,
         )
         .await;
 
-        assert_that!(result, err(eq("refused")));
+        assert_that!(result, err(eq(&Refused(6))));
         let secs: Vec<u64> = tried_at.iter().map(Duration::as_secs).collect();
         assert_that!(secs, elements_are![eq(&0), eq(&1), eq(&3), eq(&7), eq(&15), eq(&23)]);
         Ok(())

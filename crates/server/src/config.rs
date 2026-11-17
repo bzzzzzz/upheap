@@ -16,8 +16,8 @@ pub struct Config {
     /// `DATABASE_MAX_CONNECTIONS`, default `5`: the most database connections this server keeps open. Small, because
     /// on Cloud Run several instances may share one database's connection limit.
     pub database_max_connections: u32,
-    /// `DATABASE_CONNECT_DEADLINE_SECS`, default `55`: how long startup keeps retrying the database before it gives
-    /// up. Just under the ~60 s the Cloud Run startup probe allows, so a slow-waking Neon database still makes it.
+    /// `DATABASE_CONNECT_DEADLINE_SECS`, default `45`: how long startup keeps new tries at the database coming before
+    /// it gives up. A last try and the migrations still fit in the ~60 s the Cloud Run startup probe allows.
     pub database_connect_deadline: Duration,
     /// `BASE_URL`, required: the public URL users open, for example `https://heap.example.com`.
     /// Session cookies are `Secure` unless it starts with `http://`.
@@ -71,7 +71,7 @@ impl Config {
                 .context("DATABASE_MAX_CONNECTIONS must be a whole number, at least 1")?,
         };
         let database_connect_deadline = match lookup("DATABASE_CONNECT_DEADLINE_SECS") {
-            None => Duration::from_secs(55),
+            None => Duration::from_secs(45),
             Some(raw) => Duration::from_secs(
                 raw.parse()
                     .context("DATABASE_CONNECT_DEADLINE_SECS must be a whole number of seconds")?,
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn sets_the_connect_deadline() -> anyhow::Result<()> {
         let base = [("DATABASE_URL", "sqlite://x.db"), ("BASE_URL", "https://x")];
-        assert_eq!(config(&base)?.database_connect_deadline, Duration::from_secs(55));
+        assert_eq!(config(&base)?.database_connect_deadline, Duration::from_secs(45));
         let config = config(&[base[0], base[1], ("DATABASE_CONNECT_DEADLINE_SECS", "0")])?;
         assert_eq!(config.database_connect_deadline, Duration::ZERO);
         Ok(())
