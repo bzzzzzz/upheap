@@ -42,10 +42,11 @@ export function useCloseItem(list: NavigateOptions, itemKey: string | undefined)
 }
 
 /**
- * Keeps the list at `listPath` where it is when a Back leaves the item open over it. On its way back the router scrolls
- * to the top, and the browser to where the list was when the item opened, so the window goes back to its place once
- * both are done, before the next paint. The place is taken as the router starts the move, before either has scrolled.
- * The returned function keeps the place now, for a Back the app makes itself.
+ * Keeps the list at `listPath` where it is when a move leaves the item open over it for the list, or for another item
+ * over the same list, as the browser's Back and Forward between two items do. On a Back or Forward the router scrolls
+ * to the top, and the browser to where the list was when that entry was left, so the window goes back to its place
+ * once both are done, before the next paint. The place is taken as the router starts the move, before either has
+ * scrolled. The returned function keeps the place now, for a Back the app makes itself.
  *
  * On a phone the item covers the list, and the browser's Back returns the list to where it was when the item opened.
  */
@@ -60,16 +61,20 @@ function useKeepPlaceOnBack(listPath: string, itemOpen: boolean) {
   }, [itemOpen]);
 
   useEffect(() => {
+    const itemPath = `${listPath}/items/`;
+    const overList = (pathname: string) => pathname === listPath || pathname.startsWith(itemPath);
     const unsubscribeLoad = router.subscribe("onBeforeLoad", (event) => {
-      const toList = event.toLocation.pathname === listPath && event.fromLocation?.pathname !== listPath;
-      if (open.current && toList && keep.current === undefined && !window.matchMedia(PHONE).matches) {
+      const from = event.fromLocation?.pathname;
+      const to = event.toLocation.pathname;
+      const stays = from !== undefined && from.startsWith(itemPath) && to !== from && overList(to);
+      if (open.current && stays && keep.current === undefined && !window.matchMedia(PHONE).matches) {
         keep.current = windowPlace();
       }
     });
     const unsubscribeRendered = router.subscribe("onRendered", (event) => {
       const kept = keep.current;
       keep.current = undefined;
-      if (kept && event.toLocation.pathname === listPath) {
+      if (kept && overList(event.toLocation.pathname)) {
         window.requestAnimationFrame(() => window.scrollTo(kept.x, kept.y));
       }
     });
