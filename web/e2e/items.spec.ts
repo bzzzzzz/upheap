@@ -1260,6 +1260,56 @@ test("the browser's Back from an item leaves the list where it was scrolled besi
   await expect.poll(scrollY).toBe(opened - 100);
 });
 
+test("the browser's Back and Forward between two items over the list leave it where it was scrolled", async ({
+  page,
+  heapPath,
+}) => {
+  const post = async (data: object) => {
+    const response = await page.request.post(`/api/v1${heapPath}/items`, {
+      headers: { "x-csrf-protection": "1" },
+      data,
+    });
+    expect(response.status()).toBe(201);
+    return (await response.json()) as { id: string };
+  };
+  for (let i = 1; i <= 40; i++) {
+    await post({ title: `Item ${String(i).padStart(2, "0")}`, need: "expected" });
+  }
+  // A note at the bottom of the list, and a task made from it at the top, whose From link opens the note.
+  const note = await post({ title: "The note far down", kind: "note", need: "idea" });
+  await post({ title: "Made from the note", kind: "task", need: "critical", origin: { item_id: note.id, age: "new" } });
+  await page.goto(heapPath);
+  const scrollY = () => page.evaluate(() => window.scrollY);
+  const title = itemPane(page).getByLabel("Title", { exact: true });
+
+  await openItem(page, "Made from the note");
+  await itemPane(page)
+    .getByRole("link", { name: /The note far down/ })
+    .click();
+  await expect(title).toHaveValue("The note far down");
+  await expect.poll(scrollY).toBeGreaterThan(200);
+  const opened = await scrollY();
+
+  // Scrolled while the second item is open, Back to the first leaves the list where it is now beside it; on a phone,
+  // where the item covers the list, the browser puts it back where it was when the first item was left.
+  await page.evaluate(() => window.scrollBy(0, -100));
+  await expect.poll(scrollY).toBe(opened - 100);
+  await page.goBack();
+  await expect(title).toHaveValue("Made from the note");
+  if (isPhone(page)) {
+    await expect.poll(scrollY).toBe(opened);
+    return;
+  }
+  await expect.poll(scrollY).toBe(opened - 100);
+
+  // Scrolled again, Forward to the second item does the same.
+  await page.evaluate(() => window.scrollBy(0, -50));
+  await expect.poll(scrollY).toBe(opened - 150);
+  await page.goForward();
+  await expect(title).toHaveValue("The note far down");
+  await expect.poll(scrollY).toBe(opened - 150);
+});
+
 test("a link in the item to another in its heap brings that row into view, selected; another heap's starts at the top", async ({
   page,
   heapPath,
