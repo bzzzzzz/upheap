@@ -1868,8 +1868,7 @@ async fn with_several_instructions_every_run_is_told_them_all_in_order_without_t
     expect_that!(
         starts[0].brief,
         contains_substring(
-            "it wins. The rules above still hold.\n\nUse the implement skill for code changes.\n\n\
-             On this machine, run the e2e tests too.\n\n# The heap:"
+            "Use the implement skill for code changes.\n\nOn this machine, run the e2e tests too.\n\n# The heap:"
         )
     );
     Ok(())

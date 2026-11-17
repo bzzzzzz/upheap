@@ -57,8 +57,9 @@ impl KnownGoal {
 /// What a brief is made of.
 pub(super) struct BriefParts<'a> {
     pub goal: KnownGoal,
-    /// What the person running the loop wrote for every run of theirs, from `work run --instructions`.
-    pub runner_instructions: Option<&'a str>,
+    /// What the person running the loop wrote for every run of theirs, from `work run --instructions`: one text per
+    /// file, in the order given.
+    pub runner_instructions: &'a [String],
     pub heap_name: &'a str,
     /// The heap as `team/heap`.
     pub heap_handle: &'a str,
@@ -81,12 +82,17 @@ pub(super) fn build_brief(parts: &BriefParts<'_>) -> String {
         .map(str::trim)
         .filter(|context| !context.is_empty())
         .unwrap_or("This heap has no context.");
-    let runner = parts
+    let runner: Vec<&str> = parts
         .runner_instructions
-        .map(str::trim)
+        .iter()
+        .map(|text| text.trim())
         .filter(|text| !text.is_empty())
-        .map(|text| format!("{RUNNER_INTRO}\n\n{text}\n\n"))
-        .unwrap_or_default();
+        .collect();
+    let runner = if runner.is_empty() {
+        String::new()
+    } else {
+        format!("{RUNNER_INTRO}\n\n{}\n\n", runner.join("\n\n"))
+    };
     let mut brief = format!(
         "{common}\n\n{goal}\n\n{runner}# The heap: {name} ({handle})\n\n{context}\n\n# The item\n\n{item}\n\n# This run\n\nGoal: {phrase}.\n",
         common = COMMON.trim_end(),
@@ -136,7 +142,7 @@ mod tests {
     fn parts(goal: KnownGoal) -> BriefParts<'static> {
         BriefParts {
             goal,
-            runner_instructions: None,
+            runner_instructions: &[],
             heap_name: "Work",
             heap_handle: "ada/work",
             heap_context: Some("Our infra lives in the ops repo.\n"),
@@ -167,7 +173,8 @@ mod tests {
     #[gtest]
     fn the_runners_instructions_come_after_upheaps_and_before_the_heap() {
         let mut with = parts(KnownGoal::Done);
-        with.runner_instructions = Some("\nFor code changes, use the implement skill.\n\n");
+        let texts = ["\nFor code changes, use the implement skill.\n\n".to_owned()];
+        with.runner_instructions = &texts;
 
         let brief = build_brief(&with);
 
@@ -185,9 +192,30 @@ mod tests {
     }
 
     #[gtest]
+    fn several_runner_instructions_are_joined_in_order_trimmed_and_without_the_blank_ones() {
+        let mut with = parts(KnownGoal::Done);
+        let texts = [
+            "\nUse the implement skill.\n".to_owned(),
+            " \n".to_owned(),
+            "Run the e2e tests too.\n\n".to_owned(),
+        ];
+        with.runner_instructions = &texts;
+
+        let brief = build_brief(&with);
+
+        expect_that!(
+            brief,
+            contains_substring(
+                "hold.\n\nUse the implement skill.\n\nRun the e2e tests too.\n\n# The heap: Work (ada/work)\n"
+            )
+        );
+    }
+
+    #[gtest]
     fn without_runner_instructions_or_with_blank_ones_the_brief_has_no_part_for_them() {
         let mut blank = parts(KnownGoal::Done);
-        blank.runner_instructions = Some(" \n");
+        let texts = [" \n".to_owned(), String::new()];
+        blank.runner_instructions = &texts;
 
         for parts in [parts(KnownGoal::Done), blank] {
             expect_that!(

@@ -348,19 +348,14 @@ enum Driven {
     Stopped,
 }
 
-/// The text of the files `--instructions` names, in the order given: each trimmed, the blank ones left out, joined by
-/// a blank line. `None` when there is no text. Read before the first claim, so a file that can't be read fails before
-/// any item is taken.
-async fn read_instructions(paths: Vec<PathBuf>) -> Result<Option<String>, CliError> {
+/// The text of each file `--instructions` names, in the order given. Read before the first claim, so a file that
+/// can't be read fails before any item is taken.
+async fn read_instructions(paths: Vec<PathBuf>) -> Result<Vec<String>, CliError> {
     let mut texts = Vec::with_capacity(paths.len());
     for path in paths {
-        let text = read_instructions_file(path).await?;
-        let text = text.trim();
-        if !text.is_empty() {
-            texts.push(text.to_owned());
-        }
+        texts.push(read_instructions_file(path).await?);
     }
-    Ok((!texts.is_empty()).then(|| texts.join("\n\n")))
+    Ok(texts)
 }
 
 /// The text of one file `--instructions` names.
@@ -427,8 +422,8 @@ struct Shared<'a> {
     workers: u8,
     /// Where each item's directory is kept; `None` when runs start in this directory.
     root: Option<PathBuf>,
-    /// The runner's own instructions, for every run's brief.
-    instructions: Option<String>,
+    /// The runner's own instructions, one text per file, for every run's brief.
+    instructions: Vec<String>,
     /// The runner's extra allow rules, which each run's tool is started with.
     allow: AllowRules,
     tools: Box<dyn AgentTools>,
@@ -704,7 +699,7 @@ impl Shared<'_> {
         };
         let brief = build_brief(&BriefParts {
             goal,
-            runner_instructions: self.instructions.as_deref(),
+            runner_instructions: &self.instructions,
             heap_name: &run.item.heap.name,
             heap_handle: &handle.to_string(),
             heap_context: heap.context.as_deref(),
