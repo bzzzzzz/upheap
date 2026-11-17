@@ -27,11 +27,16 @@ const USD_PER_NANO_AIU: f64 = 1e-11;
 /// (`own_directory`), both may use any tool and the web. The person's own `allow` rules come right after, each as one
 /// `--allow-tool=<rule>` argument, so a rule that starts with `-` or holds a space isn't split, and the flag's
 /// several values can't swallow what follows.
-pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String]) -> Vec<String> {
+///
+/// A `model` goes in as `--model <model>`, as given, after the four leading flags.
+pub(super) fn arguments(access: Access, own_directory: bool, allow: &[String], model: Option<&str>) -> Vec<String> {
     let mut arguments: Vec<String> = ["--output-format", "json", "--no-ask-user", "--sync-session=off"]
         .into_iter()
         .map(str::to_owned)
         .collect();
+    if let Some(model) = model {
+        arguments.extend(["--model".to_owned(), model.to_owned()]);
+    }
     arguments.push("--allow-tool=shell(upheap:*)".to_owned());
     arguments.push(
         match access {
@@ -85,6 +90,9 @@ struct Stream {
     /// The session's running usage in nano AI units, from the last `session.usage_checkpoint` line; `None` before
     /// one, or when it held no number.
     nano_aiu: Option<f64>,
+    /// The model of the last `session.usage_checkpoint` line (`data.accountingSnapshot.currentModel`); `None` before
+    /// one, or when it named none.
+    model: Option<String>,
 }
 
 impl Output for Stream {
@@ -99,10 +107,13 @@ impl Output for Stream {
             return;
         };
         if event.get("type").and_then(Value::as_str) == Some("session.usage_checkpoint") {
-            self.nano_aiu = event
-                .get("data")
-                .and_then(|data| data.get("totalNanoAiu"))
-                .and_then(Value::as_f64);
+            let data = event.get("data");
+            self.nano_aiu = data.and_then(|data| data.get("totalNanoAiu")).and_then(Value::as_f64);
+            self.model = data
+                .and_then(|data| data.get("accountingSnapshot"))
+                .and_then(|snapshot| snapshot.get("currentModel"))
+                .and_then(Value::as_str)
+                .map(str::to_owned);
         }
     }
 
@@ -111,7 +122,10 @@ impl Output for Stream {
     }
 
     fn report(&self, exit: Exit, stderr: &str) -> ToolReport {
-        read_report(exit, self.nano_aiu, stderr)
+        ToolReport {
+            model: self.model.clone(),
+            ..read_report(exit, self.nano_aiu, stderr)
+        }
     }
 }
 
@@ -123,7 +137,7 @@ pub(super) async fn run(
     stops: StopTracker,
     silence_limit: Duration,
 ) -> Result<ToolReport, ToolError> {
-    let arguments = arguments(start.access, start.dir.is_some(), &start.allow);
+    let arguments = arguments(start.access, start.dir.is_some(), &start.allow, start.model.as_deref());
     process::run(
         program,
         arguments,
@@ -149,7 +163,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_preparing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Prepare, false, &[]),
+            arguments(Access::Prepare, false, &[], None),
             eq(&strings(&[
                 "--output-format",
                 "json",
@@ -166,7 +180,7 @@ mod tests {
     #[gtest]
     fn the_arguments_for_doing_are_exactly_these() {
         expect_that!(
-            arguments(Access::Do, false, &[]),
+            arguments(Access::Do, false, &[], None),
             eq(&strings(&[
                 "--output-format",
                 "json",
@@ -183,12 +197,12 @@ mod tests {
     #[gtest]
     fn in_its_own_directory_either_access_may_use_any_tool_and_the_deny_is_still_last() {
         for access in [Access::Prepare, Access::Do] {
-            let mut expected = arguments(access, false, &[]);
+            let mut expected = arguments(access, false, &[], None);
             let denies = expected.split_off(expected.len() - LOCAL_WRITES_DENIED.len());
             expected.extend(strings(&["--allow-all-tools", "--allow-all-urls"]));
             expected.extend(denies);
 
-            expect_that!(arguments(access, true, &[]), eq(&expected));
+            expect_that!(arguments(access, true, &[], None), eq(&expected));
         }
     }
 
@@ -196,13 +210,40 @@ mod tests {
     fn the_persons_rules_follow_one_argument_each_before_the_deny() {
         let allow = ["shell(gh pr)".to_owned(), "-x".to_owned()];
         for access in [Access::Prepare, Access::Do] {
-            let mut expected = arguments(access, true, &[]);
+            let mut expected = arguments(access, true, &[], None);
             let denies = expected.split_off(expected.len() - LOCAL_WRITES_DENIED.len());
             expected.extend(strings(&["--allow-tool=shell(gh pr)", "--allow-tool=-x"]));
             expected.extend(denies);
 
-            expect_that!(arguments(access, true, &allow), eq(&expected));
+            expect_that!(arguments(access, true, &allow, None), eq(&expected));
         }
+    }
+
+    #[gtest]
+    fn a_model_goes_in_as_two_arguments_after_the_four_leading_flags() {
+        for access in [Access::Prepare, Access::Do] {
+            let mut expected = arguments(access, false, &[], None);
+            expected.splice(4..4, strings(&["--model", "opus"]));
+
+            expect_that!(arguments(access, false, &[], Some("opus")), eq(&expected));
+        }
+    }
+
+    #[gtest]
+    fn the_last_checkpoints_current_model_is_reported_and_one_without_it_leaves_none() {
+        let mut stream = Stream::default();
+        stream.take(
+            br#"{"type":"session.usage_checkpoint","data":{"totalNanoAiu":1,"accountingSnapshot":{"currentModel":"auto"}}}"#,
+        );
+        stream.take(
+            br#"{"type":"session.usage_checkpoint","data":{"totalNanoAiu":2,"accountingSnapshot":{"currentModel":"mai-code-1.1-flash"}}}"#,
+        );
+
+        expect_that!(stream.report(Exit::Code(0), "").model, some(eq("mai-code-1.1-flash")));
+
+        stream.take(br#"{"type":"session.usage_checkpoint","data":{"totalNanoAiu":3}}"#);
+
+        expect_that!(stream.report(Exit::Code(0), "").model, none());
     }
 
     #[gtest]

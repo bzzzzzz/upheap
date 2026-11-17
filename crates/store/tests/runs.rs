@@ -211,6 +211,25 @@ async fn the_tool_times_round_trip() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn the_agent_tool_and_model_round_trip_and_a_later_value_replaces_them() -> Result<()> {
+    // Arrange
+    let world = world().await?;
+    let (_, _, run) = run_on_new_item(&world, "k3x9a", 5_000).await?;
+
+    // Act
+    store::runs::set_run_tool_and_model(&world.db, run.id, Some("claude"), Some("opus")).await?;
+    store::runs::set_run_tool_and_model(&world.db, run.id, None, Some("claude-opus-5-5")).await?;
+    store::runs::set_run_tool_and_model(&world.db, run.id, None, None).await?;
+    let found = store::runs::find_run(&world.db, run.id).await?.context("run")?;
+
+    // Assert
+    expect_that!(found.tool.as_deref(), some(eq("claude")));
+    expect_that!(found.model.as_deref(), some(eq("claude-opus-5-5")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn touching_a_run_never_moves_it_back() -> Result<()> {
     // Arrange
     let world = world().await?;

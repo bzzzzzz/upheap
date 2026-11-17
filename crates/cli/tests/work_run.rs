@@ -2684,6 +2684,99 @@ async fn a_tool_that_cannot_start_sends_no_tool_times() -> Result<()> {
     expect_that!(item["runs"][0]["end"], eq("failed"));
     expect_that!(item["runs"][0]["tool_started_at"], eq(&Value::Null));
     expect_that!(item["runs"][0]["tool_ended_at"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["tool"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["model"], eq(&Value::Null));
+    Ok(())
+}
+
+/// The first run of `note`, as the item's page returns it.
+async fn first_run(server: &TestServer, ada: &TestUser, note: &str) -> Result<Value> {
+    let item = server
+        .send(ada, "GET", &format!("/teams/ada/heaps/personal/items/{note}"), None)
+        .await?;
+    Ok(item["runs"][0].clone())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_with_a_model_hands_it_to_the_tool_and_records_the_tool_and_the_model() -> Result<()> {
+    // Arrange
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli
+        .run_work(&["work", "run", "--tool", "claude", "--once", "--model", "opus"], &tool)
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(tool.starts()[0].model.as_deref(), some(eq("opus")));
+    let run = first_run(&server, &ada, &note).await?;
+    expect_that!(run["tool"], eq("claude"));
+    expect_that!(run["model"], eq("opus"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_model_the_tool_reports_wins_over_the_one_given() -> Result<()> {
+    // Arrange
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    let tool = StandIn::new(|_start| async {
+        Ok(ToolReport {
+            model: Some("claude-opus-5-5".to_owned()),
+            ..ToolReport::default()
+        })
+    });
+
+    // Act
+    let outcome = cli
+        .run_work(&["work", "run", "--tool", "claude", "--once", "--model", "opus"], &tool)
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    let run = first_run(&server, &ada, &note).await?;
+    expect_that!(run["tool"], eq("claude"));
+    expect_that!(run["model"], eq("claude-opus-5-5"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn without_a_model_given_or_reported_the_run_records_its_tool_alone() -> Result<()> {
+    // Arrange
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(tool.starts()[0].model, none());
+    let run = first_run(&server, &ada, &note).await?;
+    expect_that!(run["tool"], eq("claude"));
+    expect_that!(run["model"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_empty_model_is_refused_before_any_request() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, _note) = with_prepared_note().await?;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli
+        .run_work(&["work", "run", "--tool", "claude", "--once", "--model", ""], &tool)
+        .await;
+
+    // Assert
+    expect_that!(outcome.exited(2), eq(true));
+    expect_that!(tool.starts().len(), eq(0));
     Ok(())
 }
 

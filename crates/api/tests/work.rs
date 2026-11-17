@@ -2656,6 +2656,58 @@ async fn finish_records_the_tools_times_once_and_the_item_read_returns_them() ->
 
 #[gtest]
 #[tokio::test]
+async fn finish_records_the_tool_and_the_model_cut_and_a_blank_tool_is_none() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+
+    // Act
+    let finished = w
+        .finish(
+            &run,
+            json!({ "failure": "The tool crashed", "tool": "  ", "model": "m".repeat(150) }),
+        )
+        .await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(finished.status, eq(StatusCode::OK));
+    expect_that!(item["runs"][0]["tool"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["model"], eq(&json!("m".repeat(100))));
+
+    // Act: a second finish with a tool replaces what was there, and without them leaves them.
+    w.finish(&run, json!({ "tool": "claude", "model": "claude-opus-5-5" }))
+        .await?;
+    w.finish(&run, json!({})).await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(item["runs"][0]["tool"], eq(&json!("claude")));
+    expect_that!(item["runs"][0]["model"], eq(&json!("claude-opus-5-5")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn finish_without_a_tool_or_model_leaves_them_null() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+
+    // Act
+    w.finish(&run, json!({ "failure": "The tool crashed" })).await?;
+    let item = w.get(&key).await?;
+
+    // Assert
+    expect_that!(item["runs"][0]["tool"], eq(&Value::Null));
+    expect_that!(item["runs"][0]["model"], eq(&Value::Null));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn finish_without_tool_times_leaves_them_null_and_an_end_before_the_start_is_refused() -> Result<()> {
     // Arrange
     let w = world().await?;
