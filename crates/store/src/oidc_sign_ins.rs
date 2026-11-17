@@ -107,7 +107,9 @@ pub async fn set_oidc_sign_in_verified(
     let groups = identity
         .groups
         .as_ref()
-        .map(|groups| serde_json::to_string(groups).unwrap_or_else(|_| "[]".to_owned()));
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|e| StoreError::corrupt(TABLE, state_hash, format!("groups can't be written: {e}")))?;
     let result = oidc_sign_ins::Entity::update_many()
         .col_expr(Column::Subject, identity.subject.as_str().into())
         .col_expr(Column::Email, identity.email.as_str().into())

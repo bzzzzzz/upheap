@@ -325,10 +325,9 @@ impl Services {
         let team = store::teams::lock_team(&txn, found.id)
             .await?
             .ok_or(MakeAdminError::NoSuchTeam)?;
-        let members = store::teams::list_memberships(&txn, team.id).await?;
-        let member = members
-            .iter()
-            .find(|m| m.user_id == user.id)
+        // Read after the lock: see `lock_team_for`.
+        let member = store::teams::find_membership(&txn, team.id, user.id)
+            .await?
             .ok_or(MakeAdminError::NotAMember)?;
         if member.role == Role::Admin {
             return Ok(OperatorAdmin {
@@ -338,7 +337,9 @@ impl Services {
             });
         }
 
-        store::teams::update_role(&txn, team.id, user.id, Role::Admin).await?;
+        if !store::teams::update_role(&txn, team.id, user.id, Role::Admin).await? {
+            return Err(MakeAdminError::NotAMember);
+        }
         let entry = self.team_audit_entry(
             Principal {
                 user_id: user.id,

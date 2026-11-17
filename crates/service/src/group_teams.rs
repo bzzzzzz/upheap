@@ -133,13 +133,19 @@ impl Services {
             return Ok(());
         };
         let principal = Principal { user_id, run: None };
-        for (team_id, mapped) in self.settings.group_teams.iter() {
-            // The lock first, then the read: see `lock_team_for`.
+        // Every team is locked, in ID order, before anything is read. On MySQL the first plain read of a transaction
+        // fixes the snapshot that later plain reads see (see `lock_team_for`), so a membership read between two locks
+        // would miss what committed while the next lock waited. The IDs were resolved at startup and teams are never
+        // deleted, so a team the lock doesn't find is a broken database.
+        for (team_id, _) in self.settings.group_teams.iter() {
             if store::teams::lock_team(txn, team_id).await?.is_none() {
-                continue;
+                return Err(
+                    StoreError::corrupt("teams", &team_id.to_string(), "a group-managed team is missing").into(),
+                );
             }
-            let members = store::teams::list_memberships(txn, team_id).await?;
-            let current = members.iter().find(|m| m.user_id == user_id).copied();
+        }
+        for (team_id, mapped) in self.settings.group_teams.iter() {
+            let current = store::teams::find_membership(txn, team_id, user_id).await?;
             let matching: Vec<&String> = groups.iter().filter(|group| mapped.contains(group)).collect();
             match (matching.is_empty(), current) {
                 (false, None) => {

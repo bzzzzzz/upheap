@@ -842,7 +842,7 @@ button would be, with no invite links and no Past links; the ⋯ on the name has
 that action out. Removing a member adds "If their groups still include this team, they come back at their next
 sign-in.", on every Remove, because the page can't tell who signs in through the provider. Members and admins both see
 the line. Its Activity says "Sam joined through the engineering group" and "Sam left: no longer in the engineering or
-sre group", and "made by whoever runs the server" on a role change from the `team make-admin` command. A shared team
+sre group", and "Sam was made an admin by whoever runs the server" on a role change from the `team make-admin` command. A shared team
 with no admin among its members, which a sync can leave, says so to every member above that line: "This team has no
 admin. Whoever runs this Upheap server can make one." The phone shows the same lines in the same places.
 

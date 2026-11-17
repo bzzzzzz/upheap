@@ -411,6 +411,11 @@ fn present_page(
 /// [`describe_action`], with the groups named for the two actions that come from the provider's groups.
 fn describe_phrase(action: AuditAction, about_actor: bool, diff: &Value) -> (Cow<'static, str>, bool) {
     let (phrase, names_entity) = describe_action(action, about_actor);
+    if action == AuditAction::MemberRoleChanged
+        && diff.get(AuditField::MadeBy.code()).and_then(Value::as_str) == Some("operator")
+    {
+        return (Cow::Borrowed("was made an admin by whoever runs the server"), false);
+    }
     let (lead, key) = match action {
         AuditAction::GroupMemberAdded => ("joined through", AuditField::Groups),
         AuditAction::GroupMemberRemoved => ("left: no longer in", AuditField::Groups),
@@ -1389,6 +1394,20 @@ mod tests {
         expect_that!(
             phrase(AuditAction::GroupMemberAdded, json!(["a", "b", "c"])).0,
             eq("joined through the a, b or c group")
+        );
+    }
+
+    #[gtest]
+    fn an_operator_made_admin_reads_as_such_not_as_a_change_of_their_own_role() {
+        let diff = json!({ "role": { "before": "member", "after": "admin" }, "made_by": "operator" });
+
+        expect_that!(
+            describe_phrase(AuditAction::MemberRoleChanged, true, &diff),
+            eq(&(Cow::Borrowed("was made an admin by whoever runs the server"), false))
+        );
+        expect_that!(
+            describe_phrase(AuditAction::MemberRoleChanged, true, &json!({ "role": {} })),
+            eq(&(Cow::Borrowed("changed their own role"), false))
         );
     }
 
