@@ -1,5 +1,5 @@
-//! A user's account history: the password changes, reset links and resets recorded about them, and their own heap priority changes (architecture.md,
-//! Authentication and authorization).
+//! A user's account history: the password changes, reset links and resets recorded about them, and their own heap
+//! priority changes (architecture.md, Authentication and authorization).
 //!
 //! The entries are the audit log's, in the user's personal team where their account entries go. The history is
 //! theirs alone, so there is no way to name another user or team.
