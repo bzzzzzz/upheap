@@ -894,7 +894,7 @@ section is how it maps onto this API.
    command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
    wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
    `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after Upheap's
-   own and before the deny of `upheap auth` that every run gets, so a tool the runner's instructions ask for can be
+   own and before the denies of `upheap auth` and `upheap heap use` that every run gets, so a tool the runner's instructions ask for can be
    allowed for the loop without loosening every session on the machine. With `--instructions` the brief also carries
    the runner's own instructions, between Upheap's and the heap's context: a heap's context is shared by everyone who
    works the heap and says what the work is, and how it is done is for the one who does it, so each
