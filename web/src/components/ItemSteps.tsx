@@ -242,7 +242,11 @@ function StepRow({
               onChange={setContextDraft}
               autoFocus={focusContext}
               placeholder="Background for this step"
-              onFocus={() => setEditingContext(true)}
+              onFocus={() => {
+                // A field open from the start remounts with the last draft; start from what is saved.
+                if (!editingContext) setContextDraft(step.context ?? "");
+                setEditingContext(true);
+              }}
               onKeyDown={(e) => {
                 // Escape does nothing here, so a draft is never lost to a stray key and the item stays open.
                 if (e.key === "Escape") {

@@ -86,14 +86,14 @@ GitHub-flavoured: headings, emphasis, links, code, lists, task lists as disabled
 HTML is never rendered and images are never loaded: an image shows as a link. An in-page anchor (a footnote's) moves
 in place, every other link opens in a new tab, and an unsafe one (`javascript:`) reads as plain text. A line break in
 the text stays one, so plain text written before reads as it did. Long words and addresses break, and code blocks and
-tables scroll sideways inside their box, so the page never does. Writing a context (a heap's, an item's, a step's) or a
-comment is in an editor that keeps the Markdown source as typed and styles it as you type: the markers (`#`, `**`, `-`,
-backticks, link brackets) stay visible and muted, headings are semibold, bold is bold, code is mono and link text takes
-the link colour. It has no toolbar and no preview, and the saved text is the plain Markdown. It is CodeMirror 6, loaded
-only when one of these fields is about to show, so pages that only read don't load it. A turn's line, a stuck reason, error messages and a question's short text and choices
-are one line each and stay plain, except that in a question's text and choices a web address (`https://…`) and a
-Markdown link to one (`[the mockup](https://…)`) are links that open a new tab; a link in a choice opens without
-picking it. The rest of the line shows as written.
+tables scroll sideways inside their box, so the page never does. Writing a context (a heap's, an item's, a step's) or a comment is in an editor that keeps the Markdown source as typed
+and styles it as you type: the markers (`#`, `**`, `-`, backticks, link brackets) stay visible and muted, headings are
+semibold, bold is bold, code is mono and link text takes the link colour. It has no toolbar and no preview, and the
+saved text is the plain Markdown. It is CodeMirror 6, loaded only when one of these fields is about to show, so pages
+that only read don't load it. A turn's line, a stuck reason, error messages and a question's short text and choices are
+one line each and stay plain, except that in a question's text and choices a web address (`https://…`) and a Markdown
+link to one (`[the mockup](https://…)`) are links that open a new tab; a link in a choice opens without picking it. The
+rest of the line shows as written.
 
 ## Layout
 

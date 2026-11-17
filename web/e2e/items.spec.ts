@@ -231,9 +231,17 @@ test("the context reads as Markdown, never runs what is written in it, and Edit 
   await fillEditor(styled, "# Title\n\n**bold**");
   await expect(styled.getByText("bold", { exact: true })).toHaveCSS("font-weight", "600");
   await expect(styled.getByText("Title", { exact: true })).toHaveCSS("font-weight", "600");
-  await expect(styled.getByText("Title", { exact: true })).toHaveCSS("font-size", "15px");
-  await pane.getByRole("button", { name: "Save", exact: true }).click();
+  // The heading is 1.07 times the text around it, whatever size that is on this screen.
+  const sizes = await styled.evaluate((content) => {
+    const size = (node: Element) => parseFloat(getComputedStyle(node).fontSize);
+    const title = [...content.querySelectorAll("span")].find((span) => span.textContent?.includes("Title"));
+    return { text: size(content), title: title ? size(title) : 0 };
+  });
+  expect(sizes.title).toBeCloseTo(sizes.text * 1.07, 1);
+  // ⌘ or Ctrl with Enter saves: the text shows rendered and the form is gone.
+  await styled.press("ControlOrMeta+Enter");
   await expect(context.getByRole("heading", { name: "Title" })).toBeVisible();
+  await expect(styled).toBeHidden();
 
   // Closing the item with a changed draft saves it, so nothing typed is lost.
   await fillEditor(await editContext(page), "Kept on close");

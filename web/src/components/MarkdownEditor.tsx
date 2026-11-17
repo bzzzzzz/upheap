@@ -1,11 +1,12 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { defineLanguageFacet, HighlightStyle, Language, syntaxHighlighting } from "@codemirror/language";
-import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderText } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { GFM, parser } from "@lezer/markdown";
 import {
   useEffect,
+  useLayoutEffect,
   useImperativeHandle,
   useRef,
   type FocusEventHandler,
@@ -20,12 +21,12 @@ export type MarkdownEditorHandle = { focus: () => void };
  * are theme variables, so the theme switch needs no code here.
  */
 const markdownStyle = HighlightStyle.define([
-  { tag: tags.heading1, fontWeight: "600", fontSize: "15px" },
+  { tag: tags.heading1, fontWeight: "600", fontSize: "1.07em" },
   { tag: [tags.heading2, tags.heading3, tags.heading4, tags.heading5, tags.heading6], fontWeight: "600" },
   { tag: tags.strong, fontWeight: "600" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: tags.monospace, fontFamily: "var(--font-mono)", fontSize: "13px" },
+  { tag: tags.monospace, fontFamily: "var(--font-mono)", fontSize: "0.93em" },
   { tag: tags.link, color: "var(--accent-ink)", textDecoration: "underline" },
   { tag: tags.quote, color: "var(--ink-soft)" },
   { tag: [tags.processingInstruction, tags.url, tags.contentSeparator], color: "var(--muted)" },
@@ -159,10 +160,13 @@ export default function MarkdownEditor({
     view.current?.dispatch({ effects: readOnlyCompartment.current.reconfigure(EditorState.readOnly.of(readOnly)) });
   }, [readOnly]);
 
-  useEffect(() => {
+  // A layout effect, so a stale value can't replace the text between a commit and its effect while typing. The
+  // replacement stays out of the undo history: undoing after a comment was sent must not bring the sent text back.
+  useLayoutEffect(() => {
     const editor = view.current;
     if (!editor || editor.state.doc.toString() === value) return;
     editor.dispatch({
+      annotations: Transaction.addToHistory.of(false),
       changes: { from: 0, to: editor.state.doc.length, insert: value },
       selection: EditorSelection.cursor(value.length),
     });
