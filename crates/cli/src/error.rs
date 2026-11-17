@@ -64,7 +64,7 @@ pub enum CliError {
     /// The agent tool `work run` starts isn't there, or wouldn't start.
     #[error(transparent)]
     Tool(#[from] ToolError),
-    /// The file `work run --instructions` names can't be read.
+    /// A file `work run --instructions` names can't be read.
     #[error("couldn't read the instructions at {}", .path.display())]
     NoInstructions {
         path: std::path::PathBuf,
