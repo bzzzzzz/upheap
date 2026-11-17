@@ -295,8 +295,8 @@ Copilot's AI credits, at 100 credits to the dollar. A usage limit is not recogni
 fails. Copilot saves each run as a session in `~/.copilot`; account sync is turned off for the run.
 
 When it starts, the loop runs `<tool> --version` and refuses to start, before it claims anything, if the tool is
-older than the oldest version it supports (Claude Code 2.1.326, GitHub Copilot CLI 1.0.112) or if it can't read a
-version in what the tool printed. `claude update` or `copilot update` brings the tool up to date.
+older than the oldest version it supports (step 1 of [Start an agent loop](#start-an-agent-loop)) or if it can't
+read a version in what the tool printed. `claude update` or `copilot update` brings the tool up to date.
 
 Exit codes: 0 done, 2 bad command line, 3 refused, 4 not
 signed in or not found, 5 server unreachable, 6 local setup broken (no keychain, no agent tool or one too old, or a

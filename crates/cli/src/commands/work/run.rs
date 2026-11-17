@@ -55,10 +55,18 @@ const LIMIT_FALLBACK: Duration = Duration::from_secs(30 * 60);
 /// The longest title a run's line shows, in characters.
 const TITLE_WIDTH: usize = 40;
 
+/// The help of `--tool`, with the oldest version of each tool `work run` starts.
+fn tool_help() -> String {
+    format!(
+        "The agent tool to start on each item: claude {} or newer, or copilot {} or newer",
+        Tool::Claude.min_version(),
+        Tool::Copilot.min_version()
+    )
+}
+
 #[derive(Args, Debug)]
 pub struct RunArgs {
-    /// The agent tool to start on each item: claude 2.1.326 or newer, or copilot 1.0.112 or newer
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, help = tool_help())]
     pub tool: Tool,
     #[command(flatten)]
     pub heaps: HeapsArgs,
@@ -176,7 +184,7 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
     let client = app.client(server.clone())?;
     let token = app.access_token(&client).await?;
     let heaps = resolve_named_heaps(&args.heaps, app, &client, &token).await?;
-    work.tools.check(args.tool)?;
+    work.tools.check(args.tool).await?;
     let root = args.root.as_deref().map(make_root).transpose()?;
     let instructions = match args.instructions {
         Some(path) => Some(read_instructions(path).await?),

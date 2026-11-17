@@ -517,6 +517,26 @@ mod tests {
     }
 
     #[gtest]
+    fn a_tool_version_that_cannot_be_read_says_what_was_run_and_printed() {
+        let error = CliError::Tool(ToolError::UnreadableVersion {
+            tool: Tool::Copilot,
+            program: "/usr/local/bin/copilot".into(),
+            printed: "a wrapper".to_owned(),
+        });
+
+        expect_that!(error.exit_code(), eq(6));
+        expect_that!(
+            error.to_message(),
+            elements_are![
+                ends_with("couldn't read copilot's version: `/usr/local/bin/copilot --version` printed \"a wrapper\""),
+                eq(
+                    "hint: check that `copilot --version` prints its version, such as `1.0.112`, and update copilot if it doesn't"
+                ),
+            ]
+        );
+    }
+
+    #[gtest]
     fn a_stale_edit_in_a_run_says_to_read_the_item_again() {
         let stale = refused(409, "version_conflict");
 
