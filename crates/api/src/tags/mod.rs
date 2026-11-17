@@ -53,7 +53,7 @@ fn to_tag_dto(view: TagView) -> TagDto {
     }
 }
 
-/// The heap's tags and its team's, by name.
+/// The heap's own tags and its team's, each by name.
 #[utoipa::path(get, path = "/teams/{team}/heaps/{heap}/tags", tag = "tags", security(("session" = [])),
     params(HeapParams),
     responses((status = 200, body = TagListDto), (status = 404, body = Problem)))]
@@ -62,6 +62,7 @@ async fn list_tags(State(state): State<AppState>, path: HeapPath) -> Result<Json
     Ok(Json(TagListDto {
         heap: HeapSummaryDto::from(&list.heap),
         tags: list.tags.into_iter().map(to_tag_dto).collect(),
+        team_tags: list.team_tags.into_iter().map(to_tag_dto).collect(),
         allowed_actions: list.allowed_actions.into_iter().map(TagListActionDto::from).collect(),
     }))
 }

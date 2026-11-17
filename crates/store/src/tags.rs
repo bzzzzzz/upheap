@@ -5,7 +5,9 @@
 use domain::tag::{Tag, TagDescription, TagName, TagOwner};
 use domain::{HeapId, TagId, TeamId, Version};
 use sea_orm::sea_query::Query;
-use sea_orm::{ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db, version_to_db};
@@ -25,7 +27,7 @@ pub async fn find_tag(db: &impl ConnectionTrait, id: TagId) -> Result<Option<Tag
     row.map(to_tag).transpose()
 }
 
-/// The heap's tag called `name`, ignoring case.
+/// The heap's tag called `name`, ignoring case, read with a lock, for the check before a write.
 pub async fn find_tag_by_name(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
@@ -34,28 +36,32 @@ pub async fn find_tag_by_name(
     let row = tags::Entity::find()
         .filter(tags::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
         .filter(tags::Column::NameKey.eq(name.to_key()))
+        .lock_shared()
         .one(db)
         .await?;
     row.map(to_tag).transpose()
 }
 
-/// The tags a heap's tag list holds: the heap's own and its team's.
-fn of_heap(heap_id: HeapId) -> Condition {
+/// The tags a heap's tag list holds: the heap's own and its team's. `None` if the heap doesn't exist.
+async fn of_heap(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Option<Condition>, StoreError> {
     let heap = id_to_db(heap_id.as_uuid());
-    let team_of_heap = Query::select()
-        .column(heaps::Column::TeamId)
-        .from(heaps::Entity)
-        .and_where(heaps::Column::Id.eq(heap.as_str()))
-        .to_owned();
-    Condition::any()
-        .add(tags::Column::HeapId.eq(heap.as_str()))
-        .add(tags::Column::TeamId.in_subquery(team_of_heap))
+    let Some(row) = heaps::Entity::find_by_id(heap.as_str()).one(db).await? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        Condition::any()
+            .add(tags::Column::HeapId.eq(heap.as_str()))
+            .add(tags::Column::TeamId.eq(row.team_id)),
+    ))
 }
 
 /// Every tag of `heap_id`: its own and its team's, by name.
 pub async fn list_tags(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Vec<Tag>, StoreError> {
+    let Some(of_heap) = of_heap(db, heap_id).await? else {
+        return Ok(Vec::new());
+    };
     tags::Entity::find()
-        .filter(of_heap(heap_id))
+        .filter(of_heap)
         .order_by_asc(tags::Column::NameKey)
         .order_by_asc(tags::Column::Id)
         .all(db)
@@ -76,8 +82,11 @@ pub async fn list_tags_in_heap(
     if ids.is_empty() {
         return Ok(Vec::new());
     }
+    let Some(of_heap) = of_heap(db, heap_id).await? else {
+        return Ok(Vec::new());
+    };
     tags::Entity::find()
-        .filter(of_heap(heap_id))
+        .filter(of_heap)
         .filter(tags::Column::Id.is_in(ids))
         .order_by_asc(tags::Column::NameKey)
         .order_by_asc(tags::Column::Id)
@@ -88,7 +97,7 @@ pub async fn list_tags_in_heap(
         .collect()
 }
 
-/// The team's tag called `name`, ignoring case.
+/// The team's tag called `name`, ignoring case, read with a lock, for the check before a write.
 pub async fn find_team_tag_by_name(
     db: &impl ConnectionTrait,
     team_id: TeamId,
@@ -97,6 +106,7 @@ pub async fn find_team_tag_by_name(
     let row = tags::Entity::find()
         .filter(tags::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
         .filter(tags::Column::NameKey.eq(name.to_key()))
+        .lock_shared()
         .one(db)
         .await?;
     row.map(to_tag).transpose()
@@ -115,7 +125,8 @@ pub async fn list_team_tags(db: &impl ConnectionTrait, team_id: TeamId) -> Resul
         .collect()
 }
 
-/// Whether any heap of the team, archived ones included, has a tag called `name`, ignoring case.
+/// Whether any heap of the team, archived ones included, has a tag called `name`, ignoring case, read with a
+/// lock, for the check before a write.
 pub async fn has_heap_tag_named_in_team(
     db: &impl ConnectionTrait,
     team_id: TeamId,
@@ -129,6 +140,7 @@ pub async fn has_heap_tag_named_in_team(
     let found = tags::Entity::find()
         .filter(tags::Column::HeapId.in_subquery(heaps_of_team))
         .filter(tags::Column::NameKey.eq(name.to_key()))
+        .lock_shared()
         .one(db)
         .await?;
     Ok(found.is_some())

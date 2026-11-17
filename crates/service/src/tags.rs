@@ -11,11 +11,12 @@ use domain::permission::{
     allowed_team_tag_list_actions,
 };
 use domain::tag::{NewTag, Tag, TagName, TagOwner, TagPatch};
+use domain::team::Membership;
 use domain::{HeapId, TagId, TeamId, Timestamp, Version};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
-use crate::access::{HeapAccess, authorize_heap, authorize_heap_write, authorize_team};
+use crate::access::{HeapAccess, authorize_heap, authorize_team, ensure_active};
 use crate::audit::{describe_new_tag, diff_tags};
 use crate::{Principal, ServiceError, Services};
 
@@ -26,11 +27,12 @@ pub struct TagView {
     pub allowed_actions: Vec<TagAction>,
 }
 
-/// Every tag of a heap, its own and its team's together, by name.
+/// The tags of a heap, by name: its own, and its team's apart.
 #[derive(Debug)]
 pub struct TagList {
     pub heap: Heap,
     pub tags: Vec<TagView>,
+    pub team_tags: Vec<TagView>,
     pub allowed_actions: Vec<TagListAction>,
 }
 
@@ -45,18 +47,23 @@ impl Services {
     pub async fn list_tags(&self, principal: Principal, heap_id: HeapId) -> Result<TagList, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let role = access.membership.role;
-        let tags = store::tags::list_tags(&self.db, heap_id)
+        let (tags, team_tags) = store::tags::list_tags(&self.db, heap_id)
             .await?
             .into_iter()
-            .map(|tag| TagView {
-                tag,
-                allowed_actions: allowed_tag_actions(&access.heap, role),
+            .map(|tag| {
+                // A team's tag is edited on the team's path, even from an archived heap's list.
+                let allowed_actions = match tag.owner {
+                    TagOwner::Heap(_) => allowed_tag_actions(&access.heap, role),
+                    TagOwner::Team(_) => allowed_team_tag_actions(role),
+                };
+                TagView { tag, allowed_actions }
             })
-            .collect();
+            .partition(|view| matches!(view.tag.owner, TagOwner::Heap(_)));
         Ok(TagList {
             allowed_actions: allowed_tag_list_actions(&access.heap, role),
             heap: access.heap,
             tags,
+            team_tags,
         })
     }
 
@@ -183,10 +190,7 @@ impl Services {
         fields: NewTag,
     ) -> Result<TagView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let membership = authorize_team(&txn, principal, team_id, Permission::EditItems).await?;
-        store::teams::lock_team(&txn, team_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let membership = authorize_team_write(&txn, principal, team_id).await?;
         ensure_team_tag_name_free(&txn, team_id, &fields.name, None).await?;
 
         let now = self.now();
@@ -226,10 +230,7 @@ impl Services {
         expected: Version,
     ) -> Result<TagView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let membership = authorize_team(&txn, principal, team_id, Permission::EditItems).await?;
-        store::teams::lock_team(&txn, team_id)
-            .await?
-            .ok_or(ServiceError::NotFound)?;
+        let membership = authorize_team_write(&txn, principal, team_id).await?;
         let current = store::tags::find_tag(&txn, tag_id)
             .await?
             .filter(|tag| tag.owner == TagOwner::Team(team_id))
@@ -304,8 +305,23 @@ impl Services {
     }
 }
 
-/// For a write to a heap's tags: checks the caller may edit, locks the team row, then does what
-/// [`authorize_heap_write`] does.
+/// For a write to a team's tags: locks the team row, then checks the caller may edit.
+///
+/// The lock comes first so the reads after it see what a competing write committed; a non-member gets
+/// [`ServiceError::NotFound`], as for a missing team.
+async fn authorize_team_write(
+    db: &impl ConnectionTrait,
+    principal: Principal,
+    team_id: TeamId,
+) -> Result<Membership, ServiceError> {
+    store::teams::lock_team(db, team_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    authorize_team(db, principal, team_id, Permission::EditItems).await
+}
+
+/// For a write to a heap's tags: checks the caller may edit, locks the team row, then the heap row, and refuses an
+/// archived heap on the row read under the lock.
 ///
 /// The team row comes first so a heap tag and a team tag can't take one name at once; the heap row is locked
 /// after it, as the rest of the code locks a team before what's in it.
@@ -318,7 +334,14 @@ async fn authorize_tag_write(
     store::teams::lock_team(db, access.heap.team_id)
         .await?
         .ok_or(ServiceError::NotFound)?;
-    authorize_heap_write(db, principal, heap_id, Permission::EditItems).await
+    let heap = store::heaps::lock_heap(db, heap_id)
+        .await?
+        .ok_or(ServiceError::NotFound)?;
+    ensure_active(&heap)?;
+    Ok(HeapAccess {
+        heap,
+        membership: access.membership,
+    })
 }
 
 /// Refuses a name another tag of the heap already has, or a tag of the heap's team has. `except` is the tag being

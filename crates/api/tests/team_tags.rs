@@ -82,8 +82,8 @@ impl World {
     }
 }
 
-fn names(list: &Value) -> Vec<&str> {
-    list["tags"]
+fn names<'a>(list: &'a Value, field: &str) -> Vec<&'a str> {
+    list[field]
         .as_array()
         .map(|tags| tags.iter().filter_map(|t| t["name"].as_str()).collect())
         .unwrap_or_default()
@@ -135,9 +135,10 @@ async fn renaming_a_team_tag_shows_at_once_on_the_items_of_every_heap() -> Resul
         expect_that!(item.body["tags"][0]["id"], eq(&json!(tag_id)));
     }
     for list in [&tags_one, &tags_two] {
-        expect_that!(names(&list.body), elements_are![eq(&"documentation")]);
-        expect_that!(list.body["tags"][0]["kind"], eq(&json!("team")));
-        expect_that!(list.body["tags"][0]["heap_id"], eq(&Value::Null));
+        expect_that!(names(&list.body, "tags"), is_empty());
+        expect_that!(names(&list.body, "team_tags"), elements_are![eq(&"documentation")]);
+        expect_that!(list.body["team_tags"][0]["kind"], eq(&json!("team")));
+        expect_that!(list.body["team_tags"][0]["heap_id"], eq(&Value::Null));
     }
     Ok(())
 }
@@ -161,25 +162,19 @@ async fn the_team_lists_its_tags_and_a_heap_lists_its_own_with_the_teams() -> Re
 
     // Assert
     expect_that!(team_list.status, eq(StatusCode::OK));
-    expect_that!(names(&team_list.body), elements_are![eq(&"alpha"), eq(&"Zeta")]);
+    expect_that!(names(&team_list.body, "tags"), elements_are![eq(&"alpha"), eq(&"Zeta")]);
     expect_that!(team_list.body["allowed_actions"], eq(&json!(["create"])));
     expect_that!(team_list.body["tags"][0]["allowed_actions"], eq(&json!(["edit"])));
+    expect_that!(names(&heap_list.body, "tags"), elements_are![eq(&"mid")]);
     expect_that!(
-        names(&heap_list.body),
-        elements_are![eq(&"alpha"), eq(&"mid"), eq(&"Zeta")]
+        names(&heap_list.body, "team_tags"),
+        elements_are![eq(&"alpha"), eq(&"Zeta")]
     );
-    let kinds: Vec<&Value> = heap_list.body["tags"]
-        .as_array()
-        .context("no tags")?
-        .iter()
-        .map(|t| &t["kind"])
-        .collect();
-    expect_that!(
-        kinds,
-        elements_are![eq(&&json!("team")), eq(&&json!("heap")), eq(&&json!("team"))]
-    );
-    expect_that!(heap_list.body["tags"][1]["id"], eq(&json!(own)));
-    expect_that!(heap_list.body["tags"][1]["heap_id"], eq(&json!(w.first)));
+    expect_that!(heap_list.body["tags"][0]["kind"], eq(&json!("heap")));
+    expect_that!(heap_list.body["tags"][0]["id"], eq(&json!(own)));
+    expect_that!(heap_list.body["tags"][0]["heap_id"], eq(&json!(w.first)));
+    expect_that!(heap_list.body["team_tags"][0]["kind"], eq(&json!("team")));
+    expect_that!(heap_list.body["team_tags"][0]["allowed_actions"], eq(&json!(["edit"])));
     Ok(())
 }
 
@@ -453,5 +448,19 @@ async fn making_and_renaming_a_team_tag_write_team_level_audit_entries() -> Resu
         ]
     );
     expect_that!(team_log.status, eq(StatusCode::OK));
+    let labelled: Vec<(&Value, &Value)> = team_log.body["entries"]
+        .as_array()
+        .context("no entries")?
+        .iter()
+        .filter(|e| e["action"] == json!("tag_updated") || e["action"] == json!("tag_created"))
+        .map(|e| (&e["action"], &e["entity"]["label"]))
+        .collect();
+    expect_that!(
+        labelled,
+        unordered_elements_are![
+            eq(&(&json!("tag_created"), &json!("guides"))),
+            eq(&(&json!("tag_updated"), &json!("guides")))
+        ]
+    );
     Ok(())
 }

@@ -50,6 +50,10 @@ pub enum TagKindDto {
     Heap,
     /// A team's tag, which every heap of the team has.
     Team,
+    /// An owner this client doesn't know: one the server added later. Only read, never sent, so it isn't in the
+    /// API's schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -71,8 +75,11 @@ pub struct TagDto {
 #[schema(as = TagList)]
 pub struct TagListDto {
     pub heap: HeapSummaryDto,
-    /// By name.
+    /// The heap's own tags, by name.
     pub tags: Vec<TagDto>,
+    /// The heap's team's tags, by name. Every heap of the team has them too.
+    #[serde(default)]
+    pub team_tags: Vec<TagDto>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TagListActionDto>,
 }

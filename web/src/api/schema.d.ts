@@ -1271,7 +1271,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The heap's tags and its team's, by name. */
+        /** The heap's own tags and its team's, each by name. */
         get: operations["list_tags"];
         put?: never;
         /** Adds a tag to the heap. */
@@ -3986,8 +3986,10 @@ export interface components {
         TagList: {
             allowed_actions: components["schemas"]["TagListAction"][];
             heap: components["schemas"]["HeapSummary"];
-            /** @description By name. */
+            /** @description The heap's own tags, by name. */
             tags: components["schemas"]["Tag"][];
+            /** @description The heap's team's tags, by name. Every heap of the team has them too. */
+            team_tags?: components["schemas"]["Tag"][];
         };
         /**
          * @description An action the caller can take on a heap's tag list.

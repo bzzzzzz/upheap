@@ -6270,7 +6270,7 @@
         "tags": [
           "tags"
         ],
-        "summary": "The heap's tags and its team's, by name.",
+        "summary": "The heap's own tags and its team's, each by name.",
         "operationId": "list_tags",
         "parameters": [
           {
@@ -13993,7 +13993,14 @@
             "items": {
               "$ref": "#/components/schemas/Tag"
             },
-            "description": "By name."
+            "description": "The heap's own tags, by name."
+          },
+          "team_tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "description": "The heap's team's tags, by name. Every heap of the team has them too."
           }
         }
       },
@@ -14839,7 +14846,7 @@
     },
     {
       "name": "tags",
-      "description": "A heap's tags"
+      "description": "A heap's tags and a team's"
     },
     {
       "name": "teams",

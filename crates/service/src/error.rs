@@ -120,7 +120,7 @@ pub enum ServiceError {
     /// An archived saved view can't be changed.
     #[error("saved view {view_id} is archived")]
     SavedViewArchived { view_id: SavedViewId },
-    #[error("this heap already has a tag called {name:?}")]
+    #[error("a tag called {name:?} already exists here")]
     TagNameTaken { name: String },
     /// The name is a team tag of the heap's team; `name` is the team tag's, as stored.
     #[error("{name:?} is a team tag; use it instead")]

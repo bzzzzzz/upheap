@@ -439,15 +439,15 @@ a fixed time.
 ### Cycle detection and locking
 
 1. Every item, tag, parameter and saved-view write first locks the heap row (`SELECT … FOR UPDATE` on MySQL and
-   Postgres), before touching any other row, so writes in one heap run one after the other and always take locks in
+   Postgres), before touching any other row (a tag write also locks the team row, before it, below), so writes in one heap run one after the other and always take locks in
    the same order. The write checks that the heap isn't archived on the row read under that lock, and archiving
    takes the same lock, so no write lands in a heap archived while it waited. Reads that a rule depends on (the
    blocker chain, a parameter and its options, a saved view, an item and its steps for a step write) are locking
    reads too, because on MySQL a plain read before the lock would fix the transaction's snapshot and hide changes
    that committed while it waited. SQLite has
    one writer at a time, so there the second of two conflicting writes fails instead of waiting; the outcome that
-   matters, no inconsistent state, holds either way. A heap tag write and a team tag write lock the team row first
-   (team row, then heap row), so a heap tag and a team tag can't take one name at once.
+   matters, no inconsistent state, holds either way. A heap tag write locks the team row, then the heap row; a team tag write locks only the team row. So a heap tag
+   and a team tag can't take one name at once.
 2. A move of an item to another heap of its team locks both heaps in heap ID order, as the agent's queue locks
    several, then reads the item with a locking read and checks its version. A run's `became` locks the note's heap and
    the active heaps made from the note the same way, since it defines the tasks in them. Two moves in opposite directions can't

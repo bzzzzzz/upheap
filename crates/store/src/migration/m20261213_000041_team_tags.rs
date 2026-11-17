@@ -55,7 +55,6 @@ DROP TABLE tags;
 ALTER TABLE tags_new RENAME TO tags;
 CREATE UNIQUE INDEX uq_tags_heap_name_key ON tags (heap_id, name_key);
 CREATE UNIQUE INDEX uq_tags_team_name_key ON tags (team_id, name_key);
-PRAGMA foreign_key_check;
 COMMIT;
 PRAGMA foreign_keys = ON;
 "#;
