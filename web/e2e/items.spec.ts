@@ -1210,6 +1210,38 @@ test("the list keeps its place while items open, switch, walk and close over it"
   await expect.poll(scrollY).toBe(reloaded);
 });
 
+test("the browser's Back from an item leaves the list where it was scrolled beside it", async ({ page, heapPath }) => {
+  for (let i = 1; i <= 40; i++) {
+    const created = await page.request.post(`/api/v1${heapPath}/items`, {
+      headers: { "x-csrf-protection": "1" },
+      data: { title: `Item ${String(i).padStart(2, "0")}`, need: "expected" },
+    });
+    expect(created.status()).toBe(201);
+  }
+  await page.goto(heapPath);
+  const scrollY = () => page.evaluate(() => window.scrollY);
+  await row(page, "Item 30")
+    .locator("[data-row-link]")
+    .evaluate((link) => link.scrollIntoView({ block: "center" }));
+  const opened = await scrollY();
+  expect(opened).toBeGreaterThan(200);
+
+  await openItem(page, "Item 30");
+  await expect.poll(scrollY).toBe(opened);
+  await page.evaluate(() => window.scrollBy(0, -100));
+  await expect.poll(scrollY).toBe(opened - 100);
+  await page.goBack();
+  await expect(itemPane(page)).toHaveCount(0);
+  // Beside the item, the list stays where it is now, as ✕ leaves it; on a phone, where the item covers the list, the
+  // list goes back to where it was when the item opened.
+  await expect.poll(scrollY).toBe(isPhone(page) ? opened : opened - 100);
+
+  // Forward opens the item again, and the browser puts the list back where it was when the item was left.
+  await page.goForward();
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Item 30");
+  await expect.poll(scrollY).toBe(opened - 100);
+});
+
 test("a link in the item to another in its heap brings that row into view, selected; another heap's starts at the top", async ({
   page,
   heapPath,
