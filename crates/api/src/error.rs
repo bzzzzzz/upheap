@@ -387,6 +387,10 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("name"),
             ..simple(StatusCode::CONFLICT, "tag_name_taken", Category::Conflict)
         },
+        ServiceError::TeamTagNameTaken { .. } => Classified {
+            field: Some("name"),
+            ..simple(StatusCode::CONFLICT, "tag_name_taken_by_team_tag", Category::Conflict)
+        },
         ServiceError::Parameter(error) => classify_parameter(error, simple),
         ServiceError::ParameterNameTaken { .. } => Classified {
             field: Some("name"),

@@ -1271,7 +1271,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The heap's tags, by name. */
+        /** The heap's tags and its team's, by name. */
         get: operations["list_tags"];
         put?: never;
         /** Adds a tag to the heap. */
@@ -1295,7 +1295,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Renames a tag or changes its description. Send the tag's `version` in `If-Match`. */
+        /**
+         * Renames a heap's tag or changes its description. A team's tag is edited under the team's tags. Send the tag's
+         *     `version` in `If-Match`.
+         */
         patch: operations["update_tag"];
         trace?: never;
     };
@@ -1484,6 +1487,44 @@ export interface paths {
         head?: never;
         /** Makes a member an admin, or an admin a member. Admins only. */
         patch: operations["update_member"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's tags, by name. Every heap of the team has them. */
+        get: operations["list_team_tags"];
+        put?: never;
+        /**
+         * Adds a tag to the team, for all its heaps. The name must be free among the team's tags and the tags of every
+         *     heap of the team.
+         */
+        post: operations["create_team_tag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/tags/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames a team's tag or changes its description, in every heap at once. Send the tag's `version` in `If-Match`. */
+        patch: operations["update_team_tag"];
         trace?: never;
     };
     "/api/v1/users": {
@@ -2138,7 +2179,7 @@ export interface components {
         };
         CreateTagRequest: {
             description?: string | null;
-            /** @description 1 to 50 characters, unique in the heap ignoring case. */
+            /** @description 1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case. */
             name: string;
         };
         /** @description One day, or one week for `90`. */
@@ -3917,10 +3958,14 @@ export interface components {
         Tag: {
             allowed_actions: components["schemas"]["TagAction"][];
             description?: string | null;
-            /** Format: uuid */
-            heap_id: string;
+            /**
+             * Format: uuid
+             * @description The heap that owns the tag; `null` for a team tag.
+             */
+            heap_id?: string | null;
             /** Format: uuid */
             id: string;
+            kind: components["schemas"]["TagKind"];
             name: string;
             /**
              * Format: int32
@@ -3933,6 +3978,11 @@ export interface components {
          * @enum {string}
          */
         TagAction: "edit";
+        /**
+         * @description Who owns a tag.
+         * @enum {string}
+         */
+        TagKind: "heap" | "team";
         TagList: {
             allowed_actions: components["schemas"]["TagListAction"][];
             heap: components["schemas"]["HeapSummary"];
@@ -4025,6 +4075,12 @@ export interface components {
             role: components["schemas"]["Role"];
             /** @description The team's path is `/teams/{slug}`. */
             slug: string;
+        };
+        /** @description A team's tags. */
+        TeamTagList: {
+            allowed_actions: components["schemas"]["TagListAction"][];
+            /** @description By name. */
+            tags: components["schemas"]["Tag"][];
         };
         /** @description An item's open turn: the item has been sent to an agent and not taken back. */
         Turn: {
@@ -4454,6 +4510,7 @@ export type StepProgress = components['schemas']['StepProgress'];
 export type StepState = components['schemas']['StepState'];
 export type Tag = components['schemas']['Tag'];
 export type TagAction = components['schemas']['TagAction'];
+export type TagKind = components['schemas']['TagKind'];
 export type TagList = components['schemas']['TagList'];
 export type TagListAction = components['schemas']['TagListAction'];
 export type TagPatchRequest = components['schemas']['TagPatchRequest'];
@@ -4463,6 +4520,7 @@ export type TeamData = components['schemas']['TeamData'];
 export type TeamMember = components['schemas']['TeamMember'];
 export type TeamPatchRequest = components['schemas']['TeamPatchRequest'];
 export type TeamSummary = components['schemas']['TeamSummary'];
+export type TeamTagList = components['schemas']['TeamTagList'];
 export type Turn = components['schemas']['Turn'];
 export type TurnSource = components['schemas']['TurnSource'];
 export type User = components['schemas']['User'];
@@ -8497,7 +8555,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_name_taken` or `heap_archived` */
+            /** @description `tag_name_taken`, `tag_name_taken_by_team_tag` or `heap_archived` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8560,7 +8618,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_name_taken`, `version_conflict` or `heap_archived` */
+            /** @description `tag_name_taken`, `tag_name_taken_by_team_tag`, `version_conflict` or `heap_archived` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9321,6 +9379,160 @@ export interface operations {
             };
             /** @description `last_admin` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_team_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamTagList"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_team_tag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTagRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_name_taken` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_team_tag: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_name_taken` or `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };

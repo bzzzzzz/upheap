@@ -122,6 +122,9 @@ pub enum ServiceError {
     SavedViewArchived { view_id: SavedViewId },
     #[error("this heap already has a tag called {name:?}")]
     TagNameTaken { name: String },
+    /// The name is a team tag of the heap's team; `name` is the team tag's, as stored.
+    #[error("{name:?} is a team tag; use it instead")]
+    TeamTagNameTaken { name: String },
     #[error(transparent)]
     Parameter(#[from] ParameterError),
     #[error("this heap already has a parameter called {name:?}")]

@@ -1371,7 +1371,7 @@ mod tests {
     fn tag(n: u128, name: &str) -> Tag {
         Tag::new(
             TagId::from_uuid(Uuid::from_u128(n)),
-            crate::HeapId::from_uuid(Uuid::nil()),
+            crate::tag::TagOwner::Heap(crate::HeapId::from_uuid(Uuid::nil())),
             crate::tag::NewTag {
                 name: crate::tag::TagName::parse(name).expect("valid"),
                 description: None,

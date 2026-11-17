@@ -82,13 +82,13 @@ mod tests {
 
     use super::*;
     use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, Weight};
-    use crate::tag::{NewTag, TagName};
+    use crate::tag::{NewTag, TagName, TagOwner};
     use crate::{HeapId, Timestamp};
 
     fn tag(n: u128, name: &str) -> Tag {
         Tag::new(
             TagId::from_uuid(Uuid::from_u128(n)),
-            HeapId::from_uuid(Uuid::nil()),
+            TagOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             NewTag {
                 name: TagName::parse(name).expect("valid"),
                 description: None,

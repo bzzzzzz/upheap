@@ -1,4 +1,4 @@
-//! A heap's tags: listing, creating, renaming and describing them. Tags are never deleted.
+//! A heap's tags and a team's: listing, creating, renaming and describing them. Tags are never deleted.
 
 use domain::ValidationError;
 use domain::permission::{TagAction, TagListAction};
@@ -41,11 +41,24 @@ impl From<TagListAction> for TagListActionDto {
     }
 }
 
+/// Who owns a tag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = TagKind)]
+pub enum TagKindDto {
+    /// One heap's tag.
+    Heap,
+    /// A team's tag, which every heap of the team has.
+    Team,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = Tag)]
 pub struct TagDto {
     pub id: Uuid,
-    pub heap_id: Uuid,
+    pub kind: TagKindDto,
+    /// The heap that owns the tag; `null` for a team tag.
+    pub heap_id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
     /// Send back in `If-Match` when editing.
@@ -64,10 +77,20 @@ pub struct TagListDto {
     pub allowed_actions: Vec<TagListActionDto>,
 }
 
+/// A team's tags.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = TeamTagList)]
+pub struct TeamTagListDto {
+    /// By name.
+    pub tags: Vec<TagDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<TagListActionDto>,
+}
+
 #[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateTagRequest)]
 pub struct CreateTagDto {
-    /// 1 to 50 characters, unique in the heap ignoring case.
+    /// 1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case.
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
