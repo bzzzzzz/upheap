@@ -43,7 +43,8 @@ mod m20261209_000037_run_reached;
 mod m20261210_000038_turn_send;
 mod m20261211_000039_tag_order;
 mod m20261212_000040_run_agent_tool;
-mod m20261213_000041_oidc_sign_in_groups;
+mod m20261213_000041_team_tags;
+mod m20261213_000042_oidc_sign_in_groups;
 
 pub struct Migrator;
 
@@ -91,7 +92,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20261210_000038_turn_send::Migration),
             Box::new(m20261211_000039_tag_order::Migration),
             Box::new(m20261212_000040_run_agent_tool::Migration),
-            Box::new(m20261213_000041_oidc_sign_in_groups::Migration),
+            Box::new(m20261213_000041_team_tags::Migration),
+            Box::new(m20261213_000042_oidc_sign_in_groups::Migration),
         ]
     }
 }

@@ -67,6 +67,8 @@ enum Target {
     /// An open note of the heap, whose ID the body names as the origin of a new heap.
     NoteForHeap,
     Tag,
+    /// A tag of the shared team, with its version for `If-Match`.
+    TeamTag,
     /// A saved view of the shared heap, with its version for `If-Match`.
     SavedView,
     /// A parameter of the shared heap with two options, with its version for `If-Match`.
@@ -935,6 +937,30 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
+            "/teams/{team}/tags",
+            team(ViewTeam),
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/tags",
+            team(EditItems),
+            Target::Nothing,
+            RequestBody::NewTag,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team}/tags/{tag_id}",
+            team(EditItems),
+            Target::TeamTag,
+            RequestBody::RenameTag,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
             "/teams/{team}/heaps/{heap}/views",
             view,
             Target::Heap,
@@ -1396,6 +1422,21 @@ impl World {
         Ok((id, created.body["version"].to_string()))
     }
 
+    /// Creates a tag of the shared team as the admin and returns its ID and version.
+    async fn create_team_tag(&self) -> Result<(String, String)> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/teams/{}/tags", self.team_slug),
+                Some(&self.admin.session),
+                Some(json!({ "name": self.unique_name("team-target") })),
+            )
+            .await?;
+        let id = created.body["id"].as_str().context("team tag has no id")?.to_owned();
+        Ok((id, created.body["version"].to_string()))
+    }
+
     /// Saves a view of the shared heap as the admin and returns its ID and version.
     async fn create_saved_view(&self) -> Result<(String, String)> {
         let created = self
@@ -1796,6 +1837,11 @@ impl World {
             }
             Target::Tag => {
                 let (id, version) = self.create_tag().await?;
+                path = path.replace("{tag_id}", &id);
+                if_match = Some(version);
+            }
+            Target::TeamTag => {
+                let (id, version) = self.create_team_tag().await?;
                 path = path.replace("{tag_id}", &id);
                 if_match = Some(version);
             }

@@ -78,7 +78,8 @@ pub async fn find_heap_by_slug(
 /// Reads the heap and locks its row until the transaction ends, so writes that must see the whole heap at once, such
 /// as the blocking-cycle check, run one at a time per heap.
 ///
-/// Every item and tag write takes this lock before touching any other row. Their audit entries reference the heap,
+/// Every item and heap tag write takes this lock before touching any other row but, for a heap tag write, its
+/// team's (design/architecture.md, Cycle detection and locking). Their audit entries reference the heap,
 /// so a write that locked an item first and the heap second could deadlock with one that went the other way.
 ///
 /// MySQL and Postgres take a row lock (`FOR UPDATE`). SQLite has no row locks and allows one writer at a time

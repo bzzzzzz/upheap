@@ -7,7 +7,7 @@
       "name": "MIT OR Apache-2.0",
       "identifier": "MIT OR Apache-2.0"
     },
-    "version": "0.7.0"
+    "version": "0.8.0"
   },
   "paths": {
     "/api/v1/auth/login": {
@@ -6270,7 +6270,7 @@
         "tags": [
           "tags"
         ],
-        "summary": "The heap's tags, by name.",
+        "summary": "The heap's own tags and its team's, each by name.",
         "operationId": "list_tags",
         "parameters": [
           {
@@ -6385,7 +6385,7 @@
             }
           },
           "409": {
-            "description": "`tag_name_taken` or `heap_archived`",
+            "description": "`tag_name_taken`, `tag_name_taken_by_team_tag` or `heap_archived`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6420,7 +6420,7 @@
         "tags": [
           "tags"
         ],
-        "summary": "Renames a tag or changes its description. Send the tag's `version` in `If-Match`.",
+        "summary": "Renames a heap's tag or changes its description. A team's tag is edited under the team's tags. Send the tag's\n`version` in `If-Match`.",
         "operationId": "update_tag",
         "parameters": [
           {
@@ -6494,7 +6494,7 @@
             }
           },
           "409": {
-            "description": "`tag_name_taken`, `version_conflict` or `heap_archived`",
+            "description": "`tag_name_taken`, `tag_name_taken_by_team_tag`, `version_conflict` or `heap_archived`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7639,6 +7639,245 @@
           },
           "409": {
             "description": "`last_admin`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/tags": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "The team's tags, by name. Every heap of the team has them.",
+        "operationId": "list_team_tags",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamTagList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Adds a tag to the team, for all its heaps. The name must be free among the team's tags and the tags of every\nheap of the team.",
+        "operationId": "create_team_tag",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`tag_name_taken`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/tags/{tag_id}": {
+      "patch": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Renames a team's tag or changes its description, in every heap at once. Send the tag's `version` in `If-Match`.",
+        "operationId": "update_team_tag",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`tag_name_taken` or `version_conflict`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -9501,7 +9740,7 @@
           },
           "name": {
             "type": "string",
-            "description": "1 to 50 characters, unique in the heap ignoring case."
+            "description": "1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case."
           }
         }
       },
@@ -13680,7 +13919,7 @@
         "type": "object",
         "required": [
           "id",
-          "heap_id",
+          "kind",
           "name",
           "version",
           "allowed_actions"
@@ -13699,12 +13938,19 @@
             ]
           },
           "heap_id": {
-            "type": "string",
-            "format": "uuid"
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The heap that owns the tag; `null` for a team tag."
           },
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TagKind"
           },
           "name": {
             "type": "string"
@@ -13724,11 +13970,20 @@
           "edit"
         ]
       },
+      "TagKind": {
+        "type": "string",
+        "description": "Who owns a tag.",
+        "enum": [
+          "heap",
+          "team"
+        ]
+      },
       "TagList": {
         "type": "object",
         "required": [
           "heap",
           "tags",
+          "team_tags",
           "allowed_actions"
         ],
         "properties": {
@@ -13746,7 +14001,14 @@
             "items": {
               "$ref": "#/components/schemas/Tag"
             },
-            "description": "By name."
+            "description": "The heap's own tags, by name."
+          },
+          "team_tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "description": "The heap's team's tags, by name. Every heap of the team has them too."
           }
         }
       },
@@ -13990,6 +14252,29 @@
           "slug": {
             "type": "string",
             "description": "The team's path is `/teams/{slug}`."
+          }
+        }
+      },
+      "TeamTagList": {
+        "type": "object",
+        "description": "A team's tags.",
+        "required": [
+          "tags",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagListAction"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            },
+            "description": "By name."
           }
         }
       },
@@ -14584,7 +14869,7 @@
     },
     {
       "name": "tags",
-      "description": "A heap's tags"
+      "description": "A heap's tags and a team's"
     },
     {
       "name": "teams",

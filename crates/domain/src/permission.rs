@@ -289,6 +289,22 @@ pub fn allowed_tag_list_actions(heap: &Heap, role: Role) -> Vec<TagListAction> {
     vec![TagListAction::Create]
 }
 
+/// What `role` can do with a team's tag. Team tags are written whatever state the team's heaps are in.
+pub fn allowed_team_tag_actions(role: Role) -> Vec<TagAction> {
+    if !Permission::EditItems.is_granted_to(role) {
+        return Vec::new();
+    }
+    vec![TagAction::Edit]
+}
+
+/// What `role` can do with a team's tag list.
+pub fn allowed_team_tag_list_actions(role: Role) -> Vec<TagListAction> {
+    if !Permission::EditItems.is_granted_to(role) {
+        return Vec::new();
+    }
+    vec![TagListAction::Create]
+}
+
 /// Tags and saved views are shared by the team and edited under the same permission as items: the roles table
 /// grants all three to every member. Nothing in an archived heap changes.
 const fn can_edit_heap_content(heap: &Heap, role: Role) -> bool {

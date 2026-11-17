@@ -1,16 +1,17 @@
-//! Tags group similar items within one heap. They can be renamed and described, but never deleted. Taking a
-//! tag off an item is an ordinary item edit.
+//! Tags group similar items. A tag is a heap's or a team's: a heap's tags are its own and its team's together.
+//! They can be renamed and described, but never deleted, and their owner never changes. Taking a tag off an item
+//! is an ordinary item edit.
 
 use std::collections::BTreeSet;
 
 use crate::text::{parse_optional, parse_required};
 use crate::validation::{Field, ValidationError};
-use crate::{HeapId, TagId, Timestamp, Version};
+use crate::{HeapId, TagId, TeamId, Timestamp, Version};
 
 /// Most tags one item can carry. Bounds the request size; real items carry a handful.
 pub const MAX_TAGS_PER_ITEM: usize = 50;
 
-/// A tag name: trimmed, 1 to 50 characters. Unique per heap, ignoring case.
+/// A tag name: trimmed, 1 to 50 characters. Unique among a heap's tags (its own and its team's), ignoring case.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TagName(String);
 
@@ -65,10 +66,17 @@ pub struct TagPatch {
     pub description: Option<Option<TagDescription>>,
 }
 
+/// Who owns a tag: one heap, or a whole team and so all its heaps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TagOwner {
+    Heap(HeapId),
+    Team(TeamId),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tag {
     pub id: TagId,
-    pub heap_id: HeapId,
+    pub owner: TagOwner,
     pub name: TagName,
     pub description: Option<TagDescription>,
     pub created_at: Timestamp,
@@ -76,10 +84,10 @@ pub struct Tag {
 }
 
 impl Tag {
-    pub fn new(id: TagId, heap_id: HeapId, fields: NewTag, now: Timestamp) -> Self {
+    pub fn new(id: TagId, owner: TagOwner, fields: NewTag, now: Timestamp) -> Self {
         Self {
             id,
-            heap_id,
+            owner,
             name: fields.name,
             description: fields.description,
             created_at: now,
@@ -122,7 +130,7 @@ mod tests {
         };
         Tag::new(
             TagId::from_uuid(Uuid::nil()),
-            HeapId::from_uuid(Uuid::nil()),
+            TagOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             fields,
             Timestamp::from_millis(0).expect("in range"),
         )
