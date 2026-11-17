@@ -740,6 +740,33 @@ impl TestApp {
         Ok(())
     }
 
+    /// Removes the heap's name from every audit diff of `entity_id` straight in the database, as entries written before
+    /// the name was recorded are.
+    pub async fn strip_audit_names(&self, entity_id: &str) -> Result<()> {
+        let id: uuid::Uuid = entity_id.parse()?;
+        let sql = format!("SELECT id, diff FROM audit_log WHERE entity_id = '{id}'");
+        let found = self
+            .db
+            .query_all_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?;
+        for row in found {
+            let row_id: String = row.try_get("", "id")?;
+            let diff: String = row.try_get("", "diff")?;
+            let mut diff: Value = serde_json::from_str(&diff)?;
+            if let Some(map) = diff.as_object_mut() {
+                map.remove("name");
+            }
+            self.db
+                .execute_unprepared(&format!(
+                    "UPDATE audit_log SET diff = '{}' WHERE id = '{row_id}'",
+                    diff.to_string().replace('\'', "''")
+                ))
+                .await
+                .context("strip audit names")?;
+        }
+        Ok(())
+    }
+
     /// Archives or unarchives a heap straight in the database, without the version change or audit entry of the
     /// endpoints, so the access-control test can wrap any call in it.
     pub async fn set_heap_archived(&self, heap_id: &str, archived: bool) -> Result<()> {

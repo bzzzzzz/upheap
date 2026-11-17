@@ -181,8 +181,8 @@ export function useAuditLog(scope: AuditScope, entityId?: string) {
 }
 
 /**
- * The signed-in user's password changes and resets, newest first, a page at a time. Keyed under `"audit"` so that
- * `main.tsx` refreshes it after any mutation, a password change included. It loads once mounted, which the History
+ * The signed-in user's account history (password events and their heap priority changes), newest first, a page at a
+ * time. Keyed under `"audit"` so that `main.tsx` refreshes it after any mutation, a password change included. It loads once mounted, which the History
  * disclosure does only when it is opened.
  */
 export function useAccountHistory() {

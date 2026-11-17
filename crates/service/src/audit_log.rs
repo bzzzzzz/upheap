@@ -654,6 +654,8 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::Heap => "Heap",
         AuditField::Key => "Key",
         AuditField::Stage => "Stage",
+        // A heap priority change, the only entry about a user with a name, records the heap's.
+        AuditField::Name if matches!(entity_type, EntityType::User) => "Heap",
         AuditField::Name => "Name",
         AuditField::DisplayName => "Display name",
         AuditField::Description if matches!(entity_type, EntityType::Item) => "Context",

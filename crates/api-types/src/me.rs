@@ -117,19 +117,21 @@ pub enum AccountEventKindDto {
     PasswordResetLinkMade,
     /// A password was set with a reset link.
     PasswordReset,
+    /// The user changed their own priority for a heap.
+    HeapPriorityChanged,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
     Unknown,
 }
 
-/// One password event in the account's history.
+/// One event in the account's history.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = AccountEvent)]
 pub struct AccountEventDto {
     pub id: Uuid,
     pub kind: AccountEventKindDto,
-    /// One sentence worded by the server, without a name: "Password changed. 2 other sign-ins ended."
+    /// One sentence worded by the server: "Password changed. 2 other sign-ins ended."
     pub description: String,
     /// UTC milliseconds.
     pub created_at: i64,

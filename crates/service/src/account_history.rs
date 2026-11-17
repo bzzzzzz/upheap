@@ -1,15 +1,17 @@
-//! A user's account history: the password changes, reset links and resets recorded about them (architecture.md,
-//! Authentication and authorization).
+//! A user's account history: the password changes, reset links and resets recorded about them, and their own heap
+//! priority changes (architecture.md, Authentication and authorization).
 //!
 //! The entries are the audit log's, in the user's personal team where their account entries go. The history is
 //! theirs alone, so there is no way to name another user or team.
 
-use domain::Timestamp;
+use std::collections::{HashMap, HashSet};
+
 use domain::audit::{AuditAction, AuditField};
 use domain::due::describe_time;
+use domain::{HeapId, TeamId, Timestamp};
 use jiff::tz::TimeZone;
 use serde_json::Value;
-use store::audit::AuditScope;
+use store::audit::{AuditEntry, AuditScope};
 use uuid::Uuid;
 
 use crate::audit_log::{AuditCursor, AuditRequest};
@@ -32,11 +34,17 @@ pub enum AccountEventKind {
     PasswordChanged,
     PasswordResetLinkMade,
     PasswordReset,
+    HeapPriorityChanged,
 }
 
 impl AccountEventKind {
     /// Every kind. The actions the history reads are derived from it, so a new kind is read as soon as it's listed.
-    pub const ALL: [Self; 3] = [Self::PasswordChanged, Self::PasswordResetLinkMade, Self::PasswordReset];
+    pub const ALL: [Self; 4] = [
+        Self::PasswordChanged,
+        Self::PasswordResetLinkMade,
+        Self::PasswordReset,
+        Self::HeapPriorityChanged,
+    ];
 
     /// The audit action a kind is recorded as.
     pub const fn action(self) -> AuditAction {
@@ -44,6 +52,7 @@ impl AccountEventKind {
             Self::PasswordChanged => AuditAction::PasswordChanged,
             Self::PasswordResetLinkMade => AuditAction::PasswordResetLinkMade,
             Self::PasswordReset => AuditAction::PasswordReset,
+            Self::HeapPriorityChanged => AuditAction::HeapPriorityChanged,
         }
     }
 
@@ -74,7 +83,8 @@ pub struct AccountEvent {
 }
 
 impl Services {
-    /// The caller's own password changes, reset links made for them and passwords set with one, newest first.
+    /// The caller's own password changes, reset links made for them, passwords set with one and heap priority changes,
+    /// newest first.
     /// `limit` is clamped to 1..=[`crate::audit_log::MAX_AUDIT_PAGE`].
     pub async fn list_account_history(
         &self,
@@ -95,6 +105,7 @@ impl Services {
         let (entries, next) = self
             .read_page(AuditScope::Team(personal_team), &ACCOUNT_ACTIONS, request)
             .await?;
+        let names = self.heap_names_for(principal, &entries).await?;
         let entries = entries
             .into_iter()
             .filter_map(|entry| {
@@ -102,7 +113,7 @@ impl Services {
                 Some(AccountEvent {
                     id: entry.id,
                     kind,
-                    description: describe_account_event(kind, &entry.diff),
+                    description: describe_account_event(kind, &entry.diff, heap_name(&entry.diff, &names)),
                     created_at: entry.created_at,
                     created_label: describe_time(entry.created_at, tz),
                 })
@@ -110,11 +121,54 @@ impl Services {
             .collect();
         Ok(AccountHistoryPage { entries, next })
     }
+
+    /// The current names of the heaps that priority entries without a recorded name point to, by heap ID. Only heaps
+    /// of teams the caller is still in: a heap they left may have been renamed since, and that name isn't theirs to see.
+    async fn heap_names_for(
+        &self,
+        principal: Principal,
+        entries: &[AuditEntry],
+    ) -> Result<HashMap<HeapId, String>, ServiceError> {
+        let ids: Vec<HeapId> = entries
+            .iter()
+            .filter(|entry| entry.action == AuditAction::HeapPriorityChanged)
+            .filter(|entry| recorded_name(&entry.diff).is_none())
+            .filter_map(|entry| diff_heap_id(&entry.diff))
+            .collect();
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let teams: HashSet<TeamId> = store::teams::list_teams_for_user(&self.db, principal.user_id)
+            .await?
+            .into_iter()
+            .map(|(team, _)| team.id)
+            .collect();
+        let heaps = store::heaps::find_heaps(&self.db, &ids).await?;
+        Ok(heaps
+            .into_iter()
+            .filter(|heap| teams.contains(&heap.team_id))
+            .map(|heap| (heap.id, heap.name.as_str().to_owned()))
+            .collect())
+    }
+}
+
+fn recorded_name(diff: &Value) -> Option<&str> {
+    diff.get(AuditField::Name.code()).and_then(Value::as_str)
+}
+
+fn diff_heap_id(diff: &Value) -> Option<HeapId> {
+    let id = diff.get(AuditField::HeapId.code())?.as_str()?;
+    Some(HeapId::from_uuid(id.parse().ok()?))
+}
+
+/// The heap's name for a priority entry: the one recorded with it, else the heap's current name.
+fn heap_name<'a>(diff: &'a Value, current: &'a HashMap<HeapId, String>) -> Option<&'a str> {
+    recorded_name(diff).or_else(|| current.get(&diff_heap_id(diff)?).map(String::as_str))
 }
 
 /// The sentence for an account entry. The count of ended sign-ins comes from the diff; without a readable one the
-/// sentence leaves it out.
-fn describe_account_event(kind: AccountEventKind, diff: &Value) -> String {
+/// sentence leaves it out. A priority change names the heap by `heap_name`, or "a heap" without one.
+fn describe_account_event(kind: AccountEventKind, diff: &Value, heap_name: Option<&str>) -> String {
     let ended = diff.get(AuditField::EndedSignIns.code()).and_then(Value::as_u64);
     match (kind, ended) {
         (AccountEventKind::PasswordChanged, Some(0)) => "Password changed. No other sign-ins were open.".to_owned(),
@@ -127,6 +181,17 @@ fn describe_account_event(kind: AccountEventKind, diff: &Value) -> String {
         (AccountEventKind::PasswordReset, Some(1)) => "Password set with a reset link. 1 sign-in ended.".to_owned(),
         (AccountEventKind::PasswordReset, Some(n)) => format!("Password set with a reset link. {n} sign-ins ended."),
         (AccountEventKind::PasswordReset, None) => "Password set with a reset link.".to_owned(),
+        (AccountEventKind::HeapPriorityChanged, _) => {
+            let heap = heap_name.unwrap_or("a heap");
+            let priority = diff.get(AuditField::Priority.code());
+            let number = |side: &str| priority.and_then(|p| p.get(side)).and_then(Value::as_i64);
+            match (number("before"), number("after")) {
+                (Some(before), Some(after)) => {
+                    format!("You changed your priority for {heap} from {before} to {after}.")
+                }
+                _ => format!("You changed your priority for {heap}."),
+            }
+        }
         (AccountEventKind::PasswordResetLinkMade, _) => {
             match diff.get(AuditField::MadeBy.code()).and_then(Value::as_str) {
                 Some("mail") => "Reset link sent by mail, as asked on the sign-in page.".to_owned(),
@@ -143,7 +208,40 @@ mod tests {
     use super::*;
 
     fn describe(kind: AccountEventKind, diff: Value) -> String {
-        describe_account_event(kind, &diff)
+        describe_account_event(kind, &diff, None)
+    }
+
+    fn describe_heap(diff: Value, name: Option<&str>) -> String {
+        describe_account_event(AccountEventKind::HeapPriorityChanged, &diff, name)
+    }
+
+    #[test]
+    fn a_priority_change_names_the_heap_and_the_numbers() {
+        let diff = json!({ "priority": { "before": 1, "after": 3 } });
+        assert_eq!(
+            describe_heap(diff, Some("Work")),
+            "You changed your priority for Work from 1 to 3."
+        );
+    }
+
+    #[test]
+    fn a_priority_change_without_a_name_says_a_heap() {
+        let diff = json!({ "priority": { "before": 1, "after": 3 } });
+        assert_eq!(
+            describe_heap(diff, None),
+            "You changed your priority for a heap from 1 to 3."
+        );
+    }
+
+    #[test]
+    fn unreadable_priority_numbers_are_left_out() {
+        for diff in [
+            json!({}),
+            json!({ "priority": { "before": 1 } }),
+            json!({ "priority": { "before": "low", "after": 3 } }),
+        ] {
+            assert_eq!(describe_heap(diff, Some("Work")), "You changed your priority for Work.");
+        }
     }
 
     #[test]

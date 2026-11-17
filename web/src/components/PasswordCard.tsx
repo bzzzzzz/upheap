@@ -5,7 +5,6 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiProblem } from "../api/client";
 import { useChangePassword, useOidcProvider } from "../api/queries";
-import { AccountHistoryDisclosure } from "./AccountHistory";
 import { compactButtonClass } from "./buttons";
 import { problemMessage, ProblemText } from "./ProblemText";
 import { useReturnFocus } from "./useConfirmation";
@@ -31,7 +30,7 @@ function endedMessage(ended: number): string {
   return `Password changed. ${ended} other sign-in${ended === 1 ? "" : "s"} ended.`;
 }
 
-/** The card's frame: its title with `action` beside it, then `children`, then the History disclosure. */
+/** The card's frame: its title with `action` beside it, then `children`. */
 function PasswordFrame({ action, children }: { action?: ReactNode; children?: ReactNode }) {
   return (
     <section aria-labelledby="password" className="rounded-[14px] border border-line bg-surface p-5">
@@ -42,7 +41,6 @@ function PasswordFrame({ action, children }: { action?: ReactNode; children?: Re
         {action}
       </div>
       {children}
-      <AccountHistoryDisclosure />
     </section>
   );
 }

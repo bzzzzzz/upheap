@@ -1,5 +1,5 @@
 //! The account history on `GET /me/history`: the caller's password changes, reset links made for them and passwords
-//! set with a link, worded by the server, newest first, and nobody else's.
+//! set with a link, and their own heap priority changes, worded by the server, newest first, and nobody else's.
 
 mod common;
 
@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode};
 use common::{TestApp, TestResponse};
 use domain::Duration;
+use domain::team::Role;
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -276,6 +277,105 @@ async fn the_time_label_is_in_the_requests_time_zone() -> Result<()> {
     expect_that!(
         field(entries(&listed), "created_label"),
         elements_are![eq(&"1 Jan 2027, 13:00")]
+    );
+    Ok(())
+}
+
+async fn user_id(app: &TestApp, session: &str) -> Result<String> {
+    let me = app.send(Method::GET, "/api/v1/me", Some(session), None).await?;
+    Ok(me.body["user"]["id"].as_str().context("no user")?.to_owned())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_priority_change_is_listed_for_the_person_who_made_it_only() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register(EMAIL).await?;
+    let (bob, _) = app.register("bob@example.test").await?;
+    let (team, heap) = app.shared_heap(&ada).await?;
+    app.add_member(&team, &user_id(&app, &bob).await?, Role::Member).await?;
+    app.clock.advance(Duration::from_minutes(1));
+    let ada = change(&app, &ada).await?.session_cookie.context("no cookie")?;
+
+    // Act
+    app.clock.advance(Duration::from_minutes(1));
+    let set = app.set_priority(&ada, &heap, 3).await?;
+    let listed = history(&app, &ada, "").await?;
+    let teammate = history(&app, &bob, "").await?;
+
+    // Assert
+    expect_that!(set.status, eq(StatusCode::OK));
+    expect_that!(
+        field(entries(&listed), "kind"),
+        elements_are![eq(&"heap_priority_changed"), eq(&"password_changed")]
+    );
+    expect_that!(
+        field(entries(&listed), "description")[0],
+        eq("You changed your priority for Shared from 1 to 3.")
+    );
+    expect_that!(entries(&teammate), is_empty());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_entry_without_a_name_reads_the_heaps_current_name() -> Result<()> {
+    // Arrange: an entry written before the name was recorded.
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register(EMAIL).await?;
+    let (_, heap) = app.shared_heap(&ada).await?;
+    app.set_priority(&ada, &heap, 3).await?;
+    app.strip_audit_names(&user_id(&app, &ada).await?).await?;
+    let heap_path = app.heap_url(&heap).await?;
+    let read = app.send(Method::GET, &heap_path, Some(&ada), None).await?;
+
+    // Act
+    let before_rename = history(&app, &ada, "").await?;
+    app.patch(&ada, &heap_path, &read.body["version"], json!({ "name": "Renamed" }))
+        .await?;
+    let after_rename = history(&app, &ada, "").await?;
+
+    // Assert
+    expect_that!(
+        field(entries(&before_rename), "description"),
+        elements_are![eq(&"You changed your priority for Shared from 1 to 3.")]
+    );
+    expect_that!(
+        field(entries(&after_rename), "description"),
+        elements_are![eq(&"You changed your priority for Renamed from 1 to 3.")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_entry_without_a_name_says_a_heap_once_the_person_has_left_its_team() -> Result<()> {
+    // Arrange: Bob's entry was written before the name was recorded; then he is removed and the heap renamed.
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register(EMAIL).await?;
+    let (bob, _) = app.register("bob@example.test").await?;
+    let bob_id = user_id(&app, &bob).await?;
+    let (team, heap) = app.shared_heap(&ada).await?;
+    app.add_member(&team, &bob_id, Role::Member).await?;
+    app.set_priority(&bob, &heap, 3).await?;
+    app.strip_audit_names(&bob_id).await?;
+    let removed = app
+        .send(Method::DELETE, &app.member_url(&team, &bob_id).await?, Some(&ada), None)
+        .await?;
+    anyhow::ensure!(removed.status.is_success(), "remove: {}", removed.body);
+    let heap_path = app.heap_url(&heap).await?;
+    let read = app.send(Method::GET, &heap_path, Some(&ada), None).await?;
+    app.patch(&ada, &heap_path, &read.body["version"], json!({ "name": "Renamed" }))
+        .await?;
+
+    // Act
+    let listed = history(&app, &bob, "").await?;
+
+    // Assert
+    expect_that!(
+        field(entries(&listed), "description"),
+        elements_are![eq(&"You changed your priority for a heap from 1 to 3.")]
     );
     Ok(())
 }

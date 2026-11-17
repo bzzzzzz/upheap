@@ -45,6 +45,22 @@ pub async fn find_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<H
     row.map(to_heap).transpose()
 }
 
+/// The heaps with the given ids; an id with no heap is left out. The order is not defined.
+pub async fn find_heaps(db: &impl ConnectionTrait, ids: &[HeapId]) -> Result<Vec<Heap>, StoreError> {
+    let ids: Vec<String> = ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = heaps::Entity::find()
+            .filter(heaps::Column::Id.is_in(chunk.iter().map(String::as_str)))
+            .all(db)
+            .await?;
+        for row in rows {
+            found.push(to_heap(row)?);
+        }
+    }
+    Ok(found)
+}
+
 /// The heap of `team_id` with `slug`, or `None` if the team has none.
 pub async fn find_heap_by_slug(
     db: &impl ConnectionTrait,
