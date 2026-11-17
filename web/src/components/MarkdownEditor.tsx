@@ -1,9 +1,9 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { defineLanguageFacet, HighlightStyle, Language, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderText } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { GFM, parser } from "@lezer/markdown";
 import {
   useEffect,
   useImperativeHandle,
@@ -17,8 +17,7 @@ export type MarkdownEditorHandle = { focus: () => void };
 
 /**
  * The markers stay visible but muted, and the text they mark is styled as the rendered `Markdown` styles it. Colours
- * are theme variables, so the theme switch needs no code here. No `language-data`: it would pull in a parser for every
- * language a code block can name, and a block only needs to read as code.
+ * are theme variables, so the theme switch needs no code here.
  */
 const markdownStyle = HighlightStyle.define([
   { tag: tags.heading1, fontWeight: "600", fontSize: "15px" },
@@ -31,6 +30,13 @@ const markdownStyle = HighlightStyle.define([
   { tag: tags.quote, color: "var(--ink-soft)" },
   { tag: [tags.processingInstruction, tags.url, tags.contentSeparator], color: "var(--muted)" },
 ]);
+
+/**
+ * GFM straight from the Lezer parser, which carries its own highlight tags. Not `@codemirror/lang-markdown`: it bundles
+ * the HTML, CSS and JavaScript parsers for HTML blocks and code, about two thirds of the chunk, and gives nothing here
+ * but autocompletion and list keys this editor leaves out.
+ */
+const markdownLanguage = new Language(defineLanguageFacet(), parser.configure(GFM), [], "markdown");
 
 const theme = EditorView.theme({
   "&": { fontSize: "14px", color: "var(--ink)", flex: "1 1 auto" },
@@ -120,7 +126,7 @@ export default function MarkdownEditor({
             ...defaultKeymap,
             ...historyKeymap,
           ]),
-          markdown({ base: markdownLanguage }),
+          markdownLanguage,
           syntaxHighlighting(markdownStyle),
           EditorView.lineWrapping,
           // So iOS corrects and capitalises as it does in a textarea.
