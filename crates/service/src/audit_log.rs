@@ -231,7 +231,21 @@ impl Services {
         if let Some(team) = store::teams::find_team(&self.db, team_id).await? {
             names.insert(*team.id.as_uuid(), team.name.as_str());
         }
-        for heap in store::heaps::list_heaps_for_teams(&self.db, &[team_id]).await? {
+        // A priority change sits in the person's personal team but names a heap of any of their teams. Only the
+        // heaps of teams they're in now are named; the rest read as unknown.
+        let teams = if entries
+            .iter()
+            .any(|entry| entry.action == AuditAction::HeapPriorityChanged)
+        {
+            store::teams::list_teams_for_user(&self.db, principal.user_id)
+                .await?
+                .into_iter()
+                .map(|(team, _)| team.id)
+                .collect()
+        } else {
+            vec![team_id]
+        };
+        for heap in store::heaps::list_heaps_for_teams(&self.db, &teams).await? {
             names.insert(*heap.id.as_uuid(), heap.name.as_str());
         }
         self.insert_user_names(&mut names, &entries).await?;
@@ -681,13 +695,12 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::ItemsSwitched => "Items switched",
         AuditField::EndedSignIns => "Other sign-ins ended",
         AuditField::ListView => "What it shows",
-        // These have no label of their own yet.
-        AuditField::EndsAt
-        | AuditField::HeapId
-        | AuditField::MadeBy
-        | AuditField::Priority
-        | AuditField::Slug
-        | AuditField::Username => field.code(),
+        AuditField::Slug => "Link name",
+        AuditField::Username => "Username",
+        AuditField::Priority => "Priority",
+        AuditField::HeapId => "Heap",
+        AuditField::MadeBy => "Made by",
+        AuditField::EndsAt => "Ends",
         // Never shown as one change of their own (see `reading`).
         AuditField::ArchivedAt | AuditField::Parameters => field.code(),
     }
@@ -710,6 +723,8 @@ enum Form {
     Plain,
     /// The label of a coded value, or none for a code no version wrote.
     Coded(fn(&str) -> Option<&'static str>),
+    /// The words for a coded value, or the code as it is when it has none.
+    Worded(fn(&str) -> Option<&'static str>),
     /// A step, named by its title (its number is in the diff for API clients).
     Step,
     /// A question or comment, by its number after a prefix: `q2`, `c3`.
@@ -736,7 +751,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
     let shown = |form| Reading::Shown { form, diffed: false };
     let coded = |label| shown(Form::Coded(label));
     match field {
-        AuditField::ArchivedAt => Reading::Unshown,
+        // `ends_at` is only on an invite link's creation, whose entries show no changes.
+        AuditField::ArchivedAt | AuditField::EndsAt => Reading::Unshown,
         AuditField::Parameters => Reading::PerParameter,
         AuditField::Kind => coded(|code| Kind::from_code(code).map(Kind::label)),
         AuditField::Stage => coded(|code| Stage::from_code(code).map(Stage::label)),
@@ -747,6 +763,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::Source => coded(|code| TurnSource::from_code(code).map(TurnSource::label)),
         AuditField::Why => coded(|code| TakeBackWhy::from_code(code).map(TakeBackWhy::label)),
         AuditField::How => coded(describe_how),
+        AuditField::MadeBy => shown(Form::Worded(describe_made_by)),
         AuditField::QuestionKind => coded(|code| QuestionKind::from_code(code).map(QuestionKind::label)),
         AuditField::Need => coded(|code| Need::from_code(code).map(Need::label)),
         AuditField::Effort | AuditField::Impact => coded(|code| Size::from_code(code).map(Size::label)),
@@ -757,7 +774,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::QuestionChoices => shown(Form::Joined),
         AuditField::Due => shown(Form::Due),
         AuditField::BlockedBy | AuditField::Origin | AuditField::BlockerDone => shown(Form::Named("Unknown item")),
-        AuditField::Heap => shown(Form::Named("Unknown heap")),
+        AuditField::Heap | AuditField::HeapId => shown(Form::Named("Unknown heap")),
         AuditField::Tags | AuditField::TagOrder => shown(Form::Tags),
         AuditField::Options | AuditField::ArchivedOptions => shown(Form::OptionLabels),
         AuditField::ItemsSwitched => shown(Form::ItemCount),
@@ -796,9 +813,6 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         | AuditField::TagsWeight
         | AuditField::EndedSignIns
         | AuditField::AgentsPrepare
-        | AuditField::EndsAt
-        | AuditField::HeapId
-        | AuditField::MadeBy
         | AuditField::Priority
         | AuditField::Slug
         | AuditField::Username => shown(Form::Plain),
@@ -819,6 +833,10 @@ fn describe_value(form: Form, value: &Value, names: &Names, tz: &TimeZone) -> Op
             other => other.to_string(),
         },
         Form::Coded(label) => label(value.as_str()?)?.to_owned(),
+        Form::Worded(words) => {
+            let code = value.as_str()?;
+            words(code).unwrap_or(code).to_owned()
+        }
         Form::Step => value.get("title")?.as_str()?.to_owned(),
         Form::Numbered(prefix) => format!("{prefix}{}", value.as_u64()?),
         Form::Joined => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
@@ -850,6 +868,15 @@ fn describe_recorded_due(value: &Value, tz: &TimeZone) -> Option<String> {
     let at = Timestamp::from_millis(value.get("at")?.as_i64()?)?;
     let firm = value.get("firm")?.as_bool()?;
     Some(describe_due_date(Due { at, firm }, tz))
+}
+
+/// Who made a reset link, as the entry's `made_by` records it (see `password_reset.rs`), in account history's words.
+fn describe_made_by(code: &str) -> Option<&'static str> {
+    match code {
+        "operator" => Some("Whoever runs the server"),
+        "mail" => Some("Mail, asked on the sign-in page"),
+        _ => None,
+    }
 }
 
 /// How a turn came to be reached without a run saying so, as the entry's `how` records it.
@@ -1229,5 +1256,124 @@ mod tests {
 
         expect_that!(changes, len(eq(6)));
         expect_that!(changes, each(field!(AuditChange.text_diff, none())));
+    }
+
+    #[gtest]
+    fn a_new_team_or_heap_and_a_rename_show_the_link_name() {
+        let created = describe_changes(
+            &entry(
+                AuditAction::TeamCreated,
+                EntityType::Team,
+                json!({ "name": "Ops", "slug": "ops" }),
+            ),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+        let renamed = describe_changes(
+            &entry(
+                AuditAction::HeapUpdated,
+                EntityType::Heap,
+                json!({ "slug": { "before": "ops", "after": "infra" } }),
+            ),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(created, contains(eq(&change("slug", "Link name", None, Some("ops")))));
+        expect_that!(
+            renamed,
+            elements_are![eq(&change("slug", "Link name", Some("ops"), Some("infra")))]
+        );
+    }
+
+    #[gtest]
+    fn a_sign_up_shows_the_username() {
+        let changes = describe_changes(
+            &entry(
+                AuditAction::UserRegistered,
+                EntityType::User,
+                json!({ "username": "ada" }),
+            ),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![eq(&change("username", "Username", None, Some("ada")))]
+        );
+    }
+
+    #[gtest]
+    fn a_priority_change_names_the_heap_and_shows_the_priority_before_and_after() {
+        let heap = Uuid::from_u128(20);
+        let mut names = Names::default();
+        names.insert(heap, "Launch");
+        let diff = json!({ "heap_id": heap.to_string(), "priority": { "before": 1, "after": 7 } });
+
+        let named = describe_changes(
+            &entry(AuditAction::HeapPriorityChanged, EntityType::User, diff.clone()),
+            &names,
+            &TimeZone::UTC,
+        );
+        let unknown = describe_changes(
+            &entry(AuditAction::HeapPriorityChanged, EntityType::User, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            named,
+            unordered_elements_are![
+                eq(&change("heap_id", "Heap", None, Some("Launch"))),
+                eq(&change("priority", "Priority", Some("1"), Some("7"))),
+            ]
+        );
+        expect_that!(
+            unknown,
+            contains(eq(&change("heap_id", "Heap", None, Some("Unknown heap"))))
+        );
+    }
+
+    #[gtest]
+    fn a_reset_link_says_who_made_it_in_words() {
+        let made_by = |code: &str| {
+            describe_changes(
+                &entry(
+                    AuditAction::PasswordResetLinkMade,
+                    EntityType::User,
+                    json!({ "made_by": code }),
+                ),
+                &Names::default(),
+                &TimeZone::UTC,
+            )
+        };
+
+        expect_that!(
+            made_by("operator"),
+            elements_are![eq(&change("made_by", "Made by", None, Some("Whoever runs the server")))]
+        );
+        expect_that!(
+            made_by("mail"),
+            elements_are![eq(&change(
+                "made_by",
+                "Made by",
+                None,
+                Some("Mail, asked on the sign-in page")
+            ))]
+        );
+        expect_that!(
+            made_by("robot"),
+            elements_are![eq(&change("made_by", "Made by", None, Some("robot")))]
+        );
+    }
+
+    #[gtest]
+    fn an_end_time_is_labelled_but_never_shown() {
+        expect_that!(describe_field(AuditField::EndsAt, EntityType::InviteLink), eq("Ends"));
+        expect_that!(
+            matches!(reading(AuditField::EndsAt, EntityType::InviteLink), Reading::Unshown),
+            eq(true)
+        );
     }
 }

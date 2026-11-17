@@ -176,3 +176,36 @@ async fn setting_the_same_value_twice_records_one_entry_in_the_personal_team() -
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_priority_change_in_the_personal_log_names_the_heap_of_another_team() -> Result<()> {
+    // Arrange
+    let s = setup().await?;
+    let me = s.app.send(Method::GET, "/api/v1/me", Some(&s.member), None).await?;
+    let username = me.body["user"]["username"].as_str().context("no username")?.to_owned();
+
+    // Act
+    s.app.set_priority(&s.member, &s.heap, 4).await?;
+    let log = s
+        .app
+        .send(
+            Method::GET,
+            &format!("/api/v1/teams/{username}/audit"),
+            Some(&s.member),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(log.status, eq(StatusCode::OK));
+    expect_that!(log.body["entries"][0]["action"], eq(&json!("heap_priority_changed")));
+    expect_that!(
+        log.body["entries"][0]["changes"],
+        eq(&json!([
+            { "field": "heap_id", "label": "Heap", "before": null, "after": "Shared", "text_diff": null },
+            { "field": "priority", "label": "Priority", "before": "1", "after": "4", "text_diff": null },
+        ]))
+    );
+    Ok(())
+}
