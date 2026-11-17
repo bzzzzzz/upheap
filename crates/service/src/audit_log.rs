@@ -668,8 +668,6 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::Heap => "Heap",
         AuditField::Key => "Key",
         AuditField::Stage => "Stage",
-        // A heap priority change, the only entry about a user with a name, records the heap's.
-        AuditField::Name if matches!(entity_type, EntityType::User) => "Heap",
         AuditField::Name => "Name",
         AuditField::DisplayName => "Display name",
         AuditField::Description if matches!(entity_type, EntityType::Item) => "Context",
@@ -755,6 +753,9 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
     match field {
         // `ends_at` is only on an invite link's creation, whose entries show no changes.
         AuditField::ArchivedAt | AuditField::EndsAt => Reading::Unshown,
+        // A heap priority change, the only entry about a user with a name, records the heap's for account history;
+        // its `heap_id` already names the heap here.
+        AuditField::Name if entity_type == EntityType::User => Reading::Unshown,
         AuditField::Parameters => Reading::PerParameter,
         AuditField::Kind => coded(|code| Kind::from_code(code).map(Kind::label)),
         AuditField::Stage => coded(|code| Stage::from_code(code).map(Stage::label)),
@@ -1311,7 +1312,8 @@ mod tests {
         let heap = Uuid::from_u128(20);
         let mut names = Names::default();
         names.insert(heap, "Launch");
-        let diff = json!({ "heap_id": heap.to_string(), "priority": { "before": 1, "after": 7 } });
+        // The heap's name as recorded stays out: `heap_id` names the heap once.
+        let diff = json!({ "heap_id": heap.to_string(), "name": "Launch", "priority": { "before": 1, "after": 7 } });
 
         let named = describe_changes(
             &entry(AuditAction::HeapPriorityChanged, EntityType::User, diff.clone()),
