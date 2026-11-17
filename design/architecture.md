@@ -559,6 +559,23 @@ a fixed time.
      verified name and email on the row for 15 more minutes and sends the browser to the username step, which makes
      the user, personal team, `personal` heap, identity and session in one transaction, also when registration is
      closed. A failure rolls it all back and leaves the row, so the person can try another username.
+   - **Teams from groups.** The operator maps team slugs to provider groups with `UPHEAP_OIDC_GROUP_TEAMS`. The map is
+     read from configuration and resolved to team IDs once at startup (a slug no team has, or a personal team, stops
+     the server); it is in the settings, never stored on a team, so a team is group-managed while the map names it
+     and unmapping it frees it again. Only when the map is not empty does the callback read the groups: from the
+     payload of the ID token after its signature was checked, under the claim `UPHEAP_OIDC_GROUPS_CLAIM`. A list of
+     strings, or one string, is known, and an empty list is known and empty; a missing claim, any other type and
+     Entra ID's overage (the claim named in `_claim_names` and absent) are unknown. Unknown logs one warning and
+     changes nothing; it is not the same as empty, which takes the person out of every mapped team.
+     The sync runs in the transaction that opens the session. For each mapped team in ID order, so two sign-ins
+     never wait on each other in a cycle, it locks the team, reads its memberships, and adds the person as a member
+     when their groups name the team and they aren't in it, or deletes the membership, whatever the role, when they
+     don't and they are. The last-admin rule doesn't apply: the provider has already said the person is out, and
+     the operator makes an admin with a command. Each change has an audit entry (`group_member_added`,
+     `group_member_removed`) with the person as actor and the groups in the diff. A `group_member_removed` is not a
+     `member_removed`, so it doesn't void invite links made before it. A first sign-in has no user yet, so the
+     callback keeps the groups on the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step
+     runs the sync after making the user. Password sign-in, invite registration and reset never sync.
    - **No password:** a provider user has no password row, so password sign-in can't succeed for them and Change
      password isn't offered (`change_password` is left out of `/me`'s allowed actions).
    - An invite page passes `redirect=/invite/<token>` through the round trip, so the person comes back to the invite

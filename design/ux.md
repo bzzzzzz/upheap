@@ -770,7 +770,8 @@ table for screen readers. While another choice loads, the figures stay, dimmed; 
 
 ## Teams and Team
 
-Teams lists the user's teams ("Admin · 4 members · 2 heaps", "Only you · 1 heap" for the personal team) with Open and,
+Teams lists the user's teams ("Admin · 4 members · 2 heaps", "Member · Groups · 12 members · 2 heaps" for a
+group-managed team, "Only you · 1 heap" for the personal team) with Open and,
 for a person in more than one team, All items beside it, which opens `/all?team=<slug>` (All items §7),
 and + Create team, which opens a form with Name and an optional Link name; the server's errors show under the field
 they name. After sign-up, the empty heap offers the next two steps, Add your first item and Create a team; once a
@@ -835,6 +836,16 @@ that began there comes back, shows the signed-in Join step.
 A signed-out link says where it leads
 ("Sign in to open the link to k3x9a") and opens it after sign-in; an expired session returns the same way.
 
+A group-managed team (its members come from the identity provider's groups) takes nobody by hand. Under the Members
+heading one line, "Members come from Acme SSO groups: engineering, sre.", stands where the search and Invite link
+button would be, with no invite links and no Past links; the ⋯ on the name has no Link name, since the server leaves
+that action out. Removing a member adds "If their groups still include this team, they come back at their next
+sign-in.", on every Remove, because the page can't tell who signs in through the provider. Members and admins both see
+the line. Its Activity says "Sam joined through the engineering group" and "Sam left: no longer in the engineering or
+sre group", and "made by whoever runs the server" on a role change from the `team make-admin` command. A shared team
+with no admin among its members, which a sync can leave, says so to every member above that line: "This team has no
+admin. Whoever runs this Upheap server can make one." The phone shows the same lines in the same places.
+
 ## Invite page
 
 `/invite/{token}` is where an invite link leads, outside the app's shell like sign-in and in the same card, and needs
@@ -845,6 +856,8 @@ order, and the page only shows it:
 - **Not an invite link** for any token the server doesn't know, naming no team.
 - **Already a member:** no page; they land in the team (below) with "You're already in Acme.", whatever the
   link's state.
+- **Group-managed team:** "This link no longer works. Acme's members come from its groups." with no form, whatever
+  the link's state: the server says so with `group_managed`, and the link works again if the team is unmapped.
 - **Ended or revoked:** says which, who the link was for and from, and to ask the team for a new one.
 - **Removed:** "This link can't add you back. Ask one of the team's admins."
 - **Signed in:** "Join Acme?", who invited them, and who they're signed in as, with **Join Acme** and "Not you? Sign
