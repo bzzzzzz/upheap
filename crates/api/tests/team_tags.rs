@@ -468,7 +468,8 @@ async fn making_and_renaming_a_team_tag_write_team_level_audit_entries() -> Resu
 #[gtest]
 #[tokio::test]
 async fn tag_writes_of_two_teams_at_once_both_succeed() -> Result<()> {
-    // Arrange: on MySQL, locking name checks would take gap locks here, and the two inserts would deadlock.
+    // Arrange: on MySQL, locking name checks would take gap locks here, and the two inserts would deadlock. On SQLite
+    // the writes run one at a time, so this only proves anything on MySQL.
     let w = world().await?;
     let (other_session, _) = w.app.register("bob@example.test").await?;
     let (other_team, other_heap) = w.app.shared_heap(&other_session).await?;
@@ -495,5 +496,38 @@ async fn tag_writes_of_two_teams_at_once_both_succeed() -> Result<()> {
     expect_that!(theirs?.status, eq(StatusCode::CREATED));
     expect_that!(our_heap_tag?.status, eq(StatusCode::CREATED));
     expect_that!(their_heap_tag?.status, eq(StatusCode::CREATED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heap_tag_write_beside_an_item_write_in_its_heap_both_succeed() -> Result<()> {
+    // Arrange: the item write holds the heap row and checks the team row's key for its audit entry, so a heap tag
+    // write that locked the team row exclusively while waiting for the heap row would deadlock with it on MySQL and
+    // Postgres. On SQLite the writes run one at a time, so this only proves anything on those two.
+    let w = world().await?;
+    let item = w.app.new_item(&w.session, &w.first, json!({ "title": "Task" })).await?;
+    let item_url = w.app.item_url(item["id"].as_str().context("no id")?).await?;
+    let mut version = item["version"].clone();
+
+    for round in 0..5 {
+        // Act
+        let tag_name = format!("tag-{round}");
+        let (edited, tagged) = tokio::join!(
+            w.app.patch(
+                &w.session,
+                &item_url,
+                &version,
+                json!({ "title": format!("Task {round}") })
+            ),
+            w.app.create_tag(&w.session, &w.first, &tag_name),
+        );
+        let edited = edited?;
+
+        // Assert
+        expect_that!(edited.status, eq(StatusCode::OK));
+        expect_that!(tagged?.status, eq(StatusCode::CREATED));
+        version = edited.body["version"].clone();
+    }
     Ok(())
 }

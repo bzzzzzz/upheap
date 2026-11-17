@@ -438,18 +438,20 @@ a fixed time.
 
 ### Cycle detection and locking
 
-1. Every item, heap tag, parameter and saved-view write first locks the heap row (`SELECT … FOR UPDATE` on MySQL
-   and Postgres), before touching any other row, so writes in one heap run one after the other and always take
-   locks in the same order. A tag write is the exception: it locks the team row first, a heap tag write then the
-   heap row and a team tag write nothing more, so a heap tag and a team tag can't take one name at once. It reads
-   nothing in its transaction before that lock, so its plain reads after it see what committed while it waited;
-   locking reads there would take gap locks on MySQL that deadlock tag writes of two teams. The write checks that
-   the heap isn't archived on the row read under that lock, and archiving takes the same lock, so no write lands in
-   a heap archived while it waited. Reads that a rule depends on (the blocker chain, a parameter and its options, a
-   saved view, an item and its steps for a step write) are locking reads too, because on MySQL a plain read before
-   the lock would fix the transaction's snapshot and hide changes that committed while it waited. SQLite has one
-   writer at a time, so there the second of two conflicting writes fails instead of waiting; the outcome that
-   matters, no inconsistent state, holds either way.
+1. Every item, parameter and saved-view write first locks the heap row (`SELECT … FOR UPDATE` on MySQL and
+   Postgres), before touching any other row, so writes in one heap run one after the other and always take locks in
+   the same order. The write checks that the heap isn't archived on the heap row read under that lock, and archiving
+   takes the same lock, so no write lands in a heap archived while it waited. Reads that a rule depends on (the
+   blocker chain, a parameter and its options, a saved view, an item and its steps for a step write) are locking
+   reads too, because on MySQL a plain read before the lock would fix the transaction's snapshot and hide changes
+   that committed while it waited. SQLite has one writer at a time, so there the second of two conflicting writes
+   fails instead of waiting; the outcome that matters, no inconsistent state, holds either way.
+   Tag writes lock the team row first, so a heap tag and a team tag can't take one name at once: a team tag write
+   locks it exclusively and nothing more, a heap tag write takes it shared (`FOR SHARE`) and then locks the heap row
+   as above. Shared, because every write in a heap checks the team row's key when it inserts its audit entry, while
+   holding the heap row; an exclusive team lock waiting for that heap row would deadlock with it. A tag write reads
+   nothing in its transaction before the team lock, so its plain reads after it see what committed while it waited;
+   locking reads there would take gap locks on MySQL that deadlock tag writes of two teams.
 2. A move of an item to another heap of its team locks both heaps in heap ID order, as the agent's queue locks
    several, then reads the item with a locking read and checks its version. A run's `became` locks the note's heap and
    the active heaps made from the note the same way, since it defines the tasks in them. Two moves in opposite directions can't

@@ -1,7 +1,7 @@
 //! Tag use cases: listing, creating and editing a heap's tags and a team's tags. Tags are never deleted.
 //!
-//! A heap's tags are its own and its team's. A heap tag write and a team tag write both lock the team row first
-//! (the heap row after it, for a heap tag), so a heap tag and a team tag can't take one name at once
+//! A heap's tags are its own and its team's. A team tag write locks the team row, and a heap tag write takes a shared
+//! lock on it first (the heap row after it), so a heap tag and a team tag can't take one name at once
 //! (design/architecture.md, Cycle detection and locking).
 
 use domain::audit::{AuditAction, EntityType};
@@ -331,21 +331,24 @@ async fn team_of_heap(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Team
         .team_id)
 }
 
-/// For a write to a heap's tags: locks the team row, checks the caller may edit, then locks the heap row and
-/// refuses an archived heap on the row read under the lock. `team_id` is the heap's, from [`team_of_heap`].
+/// For a write to a heap's tags: takes a shared lock on the team row, checks the caller may edit, then locks the
+/// heap row and refuses an archived heap on the row read under the lock. `team_id` is the heap's, from
+/// [`team_of_heap`].
 ///
-/// The team row comes first so a heap tag and a team tag can't take one name at once; the heap row is locked
-/// after it, as the rest of the code locks a team before what's in it. The heap's team is read before the
-/// transaction, since a heap never changes team: on MySQL a transaction's first plain read fixes its snapshot, so
-/// every plain read in it comes after the lock and sees what a competing write committed. That is why the name
-/// checks need no locking reads, which on MySQL would take gap locks that deadlock tag writes of two teams.
+/// The shared team lock waits for a team tag write of the team, which locks the row exclusively, so a heap tag and a
+/// team tag can't take one name at once. It is shared so it doesn't conflict with the key check every write in the
+/// heap makes on the team row when it inserts its audit entry: that write holds the heap row, and an exclusive team
+/// lock here, waiting for the heap row, would deadlock with it. The heap's team is read before the transaction, since
+/// a heap never changes team: on MySQL a transaction's first plain read fixes its snapshot, so every plain read in it
+/// comes after the lock and sees what a competing write committed. That is why the name checks need no locking
+/// reads, which on MySQL would take gap locks that deadlock tag writes of two teams.
 async fn authorize_tag_write(
     txn: &impl ConnectionTrait,
     principal: Principal,
     heap_id: HeapId,
     team_id: TeamId,
 ) -> Result<HeapAccess, ServiceError> {
-    store::teams::lock_team(txn, team_id)
+    store::teams::lock_team_shared(txn, team_id)
         .await?
         .ok_or(ServiceError::NotFound)?;
     let access = authorize_heap(txn, principal, heap_id, Permission::EditItems).await?;
