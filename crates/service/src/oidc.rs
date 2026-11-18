@@ -11,6 +11,7 @@
 //!
 //! Nothing here logs a token, a code, the client secret, the state or the verifier.
 
+use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use domain::handle::Handle;
@@ -18,8 +19,6 @@ use domain::oidc::{choose_display_name, is_app_path, pending_sign_in_ends_at};
 use domain::text::Name;
 use domain::user::{DisplayName, Email};
 use domain::validation::Field;
-use std::str::FromStr;
-
 use openidconnect::core::{CoreClient, CoreIdToken, CoreResponseType};
 use openidconnect::{
     AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet, EndpointNotSet,
