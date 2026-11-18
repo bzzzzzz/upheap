@@ -86,6 +86,10 @@ pub enum CliError {
     /// A `/work` route answered `404`: an older server without the `/work` routes.
     #[error("This server doesn't run agents.")]
     NoAgents,
+    /// A command that told of its failures itself, such as `item move` with several items, and only has the exit code
+    /// of the first left to give.
+    #[error("some of the items weren't moved")]
+    Reported { exit_code: u8 },
     /// A route of the run `UPHEAP_RUN` names answered `404`: the server doesn't know the run (it is another user's, or
     /// from another server), or the server lacks the `/work` routes.
     #[error("no run {run} on this server, or it doesn't run agents")]
@@ -157,6 +161,7 @@ impl CliError {
             Self::Login(LoginError::Refused { .. }) => 4,
             Self::Login(LoginError::Random(_) | LoginError::NoCode) => 1,
             Self::Output(_) => 1,
+            Self::Reported { exit_code } => *exit_code,
         }
     }
 
@@ -180,6 +185,9 @@ impl CliError {
     /// [`to_message`](Self::to_message) for a command run inside a run (`UPHEAP_RUN` is set), whose hints are about
     /// what an agent does next.
     pub fn to_message_in(&self, in_run: bool) -> Vec<String> {
+        if matches!(self, Self::Reported { .. }) {
+            return Vec::new();
+        }
         let mut lines = vec![format!("error: {}", self.with_causes())];
         if let Some(problem) = self.problem()
             && problem.status >= 500
@@ -342,7 +350,7 @@ impl CliError {
     }
 
     /// The message followed by each cause the message doesn't already say, as `a: b: c`.
-    fn with_causes(&self) -> String {
+    pub(crate) fn with_causes(&self) -> String {
         let mut text = self.to_string();
         let mut cause = self.source();
         while let Some(err) = cause {

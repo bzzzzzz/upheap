@@ -1,8 +1,13 @@
-//! `upheap item move <item> <heap>`: move an item to another heap of its team.
+//! `upheap item move <item>... <heap>`: move one or several items to another heap of their team.
 //!
 //! The server owns every rule: which heaps are allowed, the key, and what tags and values come along. The CLI only
 //! notices an item that is in the heap already, which it has in hand from the read that gives it the version, and then
 //! makes no write; and it words what the server dropped by comparing the item before and after.
+//!
+//! One item is read and moved as always, and its failure is the command's. Several items go through the same read and
+//! the same single move one after the other, not through the batch endpoint, so each is refused for the reasons and in
+//! the words a single move is. A refusal is told and the rest carry on; the command then exits with the code its first
+//! failure would have given alone.
 
 use std::collections::HashSet;
 
@@ -11,9 +16,12 @@ use api_types::heaps::HeapDto;
 use api_types::items::ItemMoveDto;
 use api_types::me::MeDto;
 use clap::Args;
+use serde_json::{Value, json};
+use uuid::Uuid;
 
 use super::common::locate_item;
 use crate::client::ApiClient;
+use crate::client::Fetched;
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs};
@@ -23,10 +31,12 @@ use crate::{App, CliError};
 
 #[derive(Args, Debug)]
 pub struct MoveArgs {
-    /// The item: its key, team/heap/key, or a link to it
-    #[arg(value_name = "ITEM")]
-    pub item: String,
-    /// The heap to move it to: team/heap, or a heap slug only one of your teams has. It must be in the item's team
+    /// The items: each a key, team/heap/key, or a link to it. With several, each moves on its own and the command
+    /// says which didn't; `--quiet` prints the new keys of those that did, and `--json` an array with, for each item,
+    /// the moved item or `{"item": "<as given>", "error": {...}}`
+    #[arg(value_name = "ITEM", num_args = 1.., required = true)]
+    pub items: Vec<String>,
+    /// The heap to move them to: team/heap, or a heap slug only one of your teams has. It must be in the items' team
     #[arg(value_name = "HEAP")]
     pub to: String,
     #[command(flatten)]
@@ -35,50 +45,181 @@ pub struct MoveArgs {
     pub shared: SharedArgs,
 }
 
-/// Moves the item to the heap, or says it is there already.
+/// What a move of one item came to.
+enum Moved {
+    /// The item was in the heap already.
+    Already(Fetched<ItemDto>, String),
+    Moved {
+        before: ItemDto,
+        after: Fetched<ItemDto>,
+        target: String,
+    },
+}
+
+impl Moved {
+    /// The item's key now.
+    fn key(&self) -> &str {
+        match self {
+            Self::Already(item, _) => &item.value.key,
+            Self::Moved { after, .. } => &after.value.key,
+        }
+    }
+
+    /// The item as the server gave it, which `--json` prints.
+    fn body(&self) -> &str {
+        match self {
+            Self::Already(item, _) => &item.body,
+            Self::Moved { after, .. } => &after.body,
+        }
+    }
+
+    /// What the human output says, line by line.
+    fn lines(&self) -> Vec<String> {
+        match self {
+            Self::Already(item, target) => vec![format!("{} is already in {target}.", item.value.key)],
+            Self::Moved { before, after, target } => moved_lines(before, &after.value, target),
+        }
+    }
+}
+
+/// What the items share: the connection, and the target once it is known.
+struct Session {
+    client: ApiClient,
+    token: String,
+    target: Option<HeapHandle>,
+    target_id: Option<Uuid>,
+}
+
+/// Moves the items to the heap, or says they are there already.
 pub async fn run(args: MoveArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
-    let name = ItemName::parse(&args.item)?;
-    let at = locate_item(&args.item, name, args.heap.name.as_deref(), app)?;
-    let target_name = HeapName::parse(&args.to)?;
-    let client = app.client(app.server(&args.shared)?)?;
-    let token = app.access_token(&client).await?;
-    let heap = at.heap.resolve(&client, &token).await?;
-    let target = resolve_target(target_name, &heap, &client, &token).await?;
-    let api = HeapApi {
-        client: &client,
-        token: &token,
-        heap: &heap,
-    };
-    let item = api.get_item(&args.item, &at.key).await?;
-    if target == heap {
+    let mut session = None;
+    if let [item] = args.items.as_slice() {
+        let moved = move_one(&args, item, app, &mut session).await?;
         match out.mode() {
-            Mode::Json => out.json(&item.body)?,
-            Mode::Quiet => out.line(&item.value.key)?,
-            Mode::Human => out.line(&format!("{} is already in {target}.", item.value.key))?,
+            Mode::Json => out.json(moved.body())?,
+            Mode::Quiet => out.line(moved.key())?,
+            Mode::Human => {
+                for line in moved.lines() {
+                    out.line(&line)?;
+                }
+            }
         }
         return Ok(());
     }
-    // The body names the heap by ID, which its path doesn't give.
-    let target_api = HeapApi {
-        client: &client,
-        token: &token,
-        heap: &target,
-    };
-    let target_heap = target_api.get::<HeapDto>(&[], NO_QUERY).await?;
-    let body = ItemMoveDto {
-        heap_id: target_heap.value.id,
-    };
-    let moved = api.post_item_action(&at.key, "move", item.value.version, &body).await?;
-    match out.mode() {
-        Mode::Json => out.json(&moved.body)?,
-        Mode::Quiet => out.line(&moved.value.key)?,
-        Mode::Human => {
-            for line in moved_lines(&item.value, &moved.value, &target.to_string()) {
-                out.line(&line)?;
+    let mut results = Vec::new();
+    for item in &args.items {
+        results.push(move_one(&args, item, app, &mut session).await);
+    }
+    let mut moved_count = 0;
+    let mut json_items = Vec::new();
+    for (item, result) in args.items.iter().zip(&results) {
+        match result {
+            Ok(moved) => {
+                moved_count += 1;
+                match out.mode() {
+                    Mode::Json => {
+                        json_items.push(serde_json::from_str::<Value>(moved.body()).map_err(std::io::Error::other)?)
+                    }
+                    Mode::Quiet => out.line(moved.key())?,
+                    Mode::Human => {
+                        let mut lines = moved.lines().into_iter();
+                        if let Some(first) = lines.next() {
+                            out.line(&first)?;
+                        }
+                        for line in lines {
+                            out.line(&format!("  {line}"))?;
+                        }
+                    }
+                }
             }
+            Err(err) => match out.mode() {
+                Mode::Json => json_items.push(json!({ "item": item, "error": error_json(err) })),
+                Mode::Quiet => {}
+                Mode::Human => out.line(&format!("Not moved {item}: {}", err.with_causes()))?,
+            },
         }
     }
-    Ok(())
+    match out.mode() {
+        Mode::Json => out.json(&Value::Array(json_items).to_string())?,
+        Mode::Quiet => {}
+        Mode::Human => out.line(&format!("Moved {moved_count} of {} items.", args.items.len()))?,
+    }
+    match results.into_iter().find_map(Result::err) {
+        Some(first) => Err(CliError::Reported {
+            exit_code: first.exit_code(),
+        }),
+        None => Ok(()),
+    }
+}
+
+/// The problem the server refused with, or the message when the failure isn't one.
+fn error_json(err: &CliError) -> Value {
+    err.problem_body()
+        .and_then(|body| serde_json::from_str(body).ok())
+        .unwrap_or_else(|| json!({ "message": err.with_causes() }))
+}
+
+/// Moves the item `typed` names to the heap `args` names, or finds it there already.
+async fn move_one(args: &MoveArgs, typed: &str, app: &App, session: &mut Option<Session>) -> Result<Moved, CliError> {
+    let name = ItemName::parse(typed)?;
+    let at = locate_item(typed, name, args.heap.name.as_deref(), app)?;
+    let target_name = HeapName::parse(&args.to)?;
+    if session.is_none() {
+        let client = app.client(app.server(&args.shared)?)?;
+        let token = app.access_token(&client).await?;
+        *session = Some(Session {
+            client,
+            token,
+            target: None,
+            target_id: None,
+        });
+    }
+    let Some(Session {
+        client,
+        token,
+        target,
+        target_id,
+    }) = session
+    else {
+        unreachable!("the session was made above");
+    };
+    let heap = at.heap.resolve(client, token).await?;
+    if target.is_none() {
+        *target = Some(resolve_target(target_name, &heap, client, token).await?);
+    }
+    let Some(target) = target.as_ref() else {
+        unreachable!("the target was resolved above");
+    };
+    let api = HeapApi {
+        client,
+        token,
+        heap: &heap,
+    };
+    let item = api.get_item(typed, &at.key).await?;
+    if *target == heap {
+        return Ok(Moved::Already(item, target.to_string()));
+    }
+    // The body names the heap by ID, which its path doesn't give.
+    let heap_id = match *target_id {
+        Some(id) => id,
+        None => {
+            let target_api = HeapApi {
+                client,
+                token,
+                heap: target,
+            };
+            let id = target_api.get::<HeapDto>(&[], NO_QUERY).await?.value.id;
+            *target_id = Some(id);
+            id
+        }
+    };
+    let body = ItemMoveDto { heap_id };
+    let after = api.post_item_action(&at.key, "move", item.value.version, &body).await?;
+    Ok(Moved::Moved {
+        before: item.value,
+        after,
+        target: target.to_string(),
+    })
 }
 
 /// The heap to move to. A bare slug is looked for in the item's team first, the only team that can be a target; when

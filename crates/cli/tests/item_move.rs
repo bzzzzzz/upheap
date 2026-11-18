@@ -248,3 +248,87 @@ async fn json_prints_the_item_as_the_server_sent_it() -> Result<()> {
     expect_that!(moved.exited(0), eq(true));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn several_items_move_with_one_command() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (first, second) = (key(&items[1])?, key(&items[2])?);
+
+    // Act
+    let moved = cli.run(&["item", "move", first, second, "ada/other"]).await;
+
+    // Assert
+    expect_that!(
+        moved.stdout,
+        eq(&format!(
+            "Moved {first}: Write the migration guide to ada/other.\nMoved {second}: Tidy the wiki to ada/other.\nMoved 2 of 2 items.\n"
+        ))
+    );
+    expect_that!(moved.stderr, eq(""));
+    expect_that!(moved.exited(0), eq(true));
+    expect_that!(
+        server.read_item(&ada, "ada/other", first).await?["id"],
+        eq(&items[0]["id"])
+    );
+    expect_that!(
+        server.read_item(&ada, "ada/other", second).await?["id"],
+        eq(&items[2]["id"])
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_refused_item_is_told_and_the_rest_move() -> Result<()> {
+    // Arrange: the first item is done.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    server.set_state(&ada, HEAP, &items[0], "done").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (closed, open) = (key(&items[0])?, key(&items[1])?);
+
+    // Act
+    let moved = cli.run(&["item", "move", closed, open, "ada/other"]).await;
+
+    // Assert
+    let lines: Vec<&str> = moved.stdout.lines().collect();
+    expect_that!(lines.len(), eq(3));
+    expect_that!(lines[0], starts_with(format!("Not moved {closed}: ")));
+    expect_that!(
+        lines[1],
+        eq(&format!("Moved {open}: Write the migration guide to ada/other."))
+    );
+    expect_that!(lines[2], eq("Moved 1 of 2 items."));
+    expect_that!(moved.stderr, eq(""));
+    expect_that!(moved.exited(3), eq(true));
+    expect_that!(
+        server.read_item(&ada, "ada/other", open).await?["id"],
+        eq(&items[1]["id"])
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn quiet_prints_the_keys_of_the_items_that_moved() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (first, second) = (key(&items[0])?, key(&items[1])?);
+
+    // Act
+    let moved = cli.run(&["item", "move", first, second, "ada/other", "-q"]).await;
+
+    // Assert
+    expect_that!(moved.stdout, eq(&format!("{first}\n{second}\n")));
+    expect_that!(moved.exited(0), eq(true));
+    Ok(())
+}
