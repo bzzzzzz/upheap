@@ -40,7 +40,7 @@ async fn the_item_moves_and_the_command_says_so() -> Result<()> {
     // Act
     let moved = cli.run(&["item", "move", key, "ada/other"]).await;
     let there = server.read_item(&ada, "ada/other", key).await?;
-    let gone = cli.run(&["item", "show", key]).await;
+    let old = cli.run(&["item", "show", key, "--json"]).await;
 
     // Assert
     expect_that!(moved.stdout, eq(&format!("Moved {key}: Tidy the wiki to ada/other.\n")));
@@ -48,7 +48,10 @@ async fn the_item_moves_and_the_command_says_so() -> Result<()> {
     expect_that!(moved.exited(0), eq(true));
     expect_that!(there["id"], eq(&items[2]["id"]));
     expect_that!(there["version"], eq(&json!(2)));
-    expect_that!(gone.exited(4), eq(true));
+    // The old handle in the default heap still names the item, now in ada/other.
+    expect_that!(old.exited(0), eq(true));
+    let shown: Value = serde_json::from_str(&old.stdout)?;
+    expect_that!(shown["id"], eq(&items[2]["id"]));
     Ok(())
 }
 
