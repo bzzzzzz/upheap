@@ -102,6 +102,9 @@ What it is not:
    nobody is added or removed.
 10. A team with no admin keeps working for its members. The operator makes one of its members admin with a
     command on the server.
+11. The operator can also let the provider push its changes (SCIM). Then a change to a person's groups at the
+    provider adds them to or takes them out of the group-managed teams at once, and a person the provider
+    deactivates leaves every group-managed team, without waiting for a sign-in. A push never makes an account.
 
 ## Invite links
 

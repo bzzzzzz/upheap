@@ -532,3 +532,22 @@ group never gives the admin role.
 **Consequences.** Code that assumed a shared team always has an admin must not: the Team page says when one is
 missing, and the admin-only actions wait for the operator. Removing the map later leaves the team as it is, with or
 without an admin, so `make-admin` works on any shared team.
+
+## 42. With SCIM set up, the provider's pushes decide a person's groups, at a SCIM endpoint of their own
+
+**Context.** Group-managed teams learn a person's groups from the ID token at sign-in (§41). SCIM lets the provider
+push the same groups whenever they change, so there can be two answers, and the provider needs a URL and a format it
+already speaks.
+
+**Decision.** With a SCIM token set, a person the provider has pushed is synced from the pushed record, at each push
+and at sign-in; the token's groups count only for someone with no pushed record. The endpoints live at `/scim/v2`,
+answer in SCIM's own JSON and errors, and are not part of `openapi.json`. A pushed user is linked to an account by
+`externalId` as the OIDC subject, never by email, and a push never makes an account.
+
+**Instead of.** Applying the token and the pushes each as they come, which makes the outcome depend on timing.
+Putting SCIM under `/api/v1` in Upheap's own shapes, which no provider speaks. Making an account for each pushed
+user, which would need a username Upheap can't ask for.
+
+**Consequences.** The SCIM URL is configured at every provider, so it can't move without breaking their setups. A
+provider whose SCIM can't carry the OIDC subject, as Entra ID's pairwise `sub`, can't be linked until sign-in matches
+on another claim.
