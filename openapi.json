@@ -7385,7 +7385,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Moves several items to one heap, each on its own: every item is moved as `POST …/items/{item}/move` moves one, in\nthe order given, in its own transaction. One that can't move doesn't stop the others and doesn't undo them. Each item\ncarries its own `version`, so there is no `If-Match`. The items may come from any heaps of the team. The response\nlists the items that moved, as the single move answers, and the ones that didn't with the problem the single move\nwould have answered with for each, both in the order of the request. An empty list moves nothing and succeeds.",
+        "summary": "Moves several items to one heap, each on its own: every item is moved as `POST …/items/{item}/move` moves one, in\nthe order given, in its own transaction. One that can't move doesn't stop the others and doesn't undo them. Each item\ncarries its own `version`, so there is no `If-Match`. The items may come from any heaps of the team. The response\nlists the items that moved, as the single move answers, and the ones that didn't with the problem the single move\nwould have answered with for each, both in the order of the request. An empty list moves nothing and succeeds.\nThe target must be a heap of `{team}` the caller can see, or the whole request is refused with `heap_not_in_team`;\nas an item only moves within its team, that keeps the batch to `{team}`.",
         "operationId": "move_items",
         "parameters": [
           {
@@ -7444,6 +7444,16 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`heap_not_in_team`: the target isn't a heap of `{team}` the caller can see, or doesn't exist; nothing moved",
             "content": {
               "application/json": {
                 "schema": {

@@ -305,12 +305,15 @@ async fn move_item(
 /// carries its own `version`, so there is no `If-Match`. The items may come from any heaps of the team. The response
 /// lists the items that moved, as the single move answers, and the ones that didn't with the problem the single move
 /// would have answered with for each, both in the order of the request. An empty list moves nothing and succeeds.
+/// The target must be a heap of `{team}` the caller can see, or the whole request is refused with `heap_not_in_team`;
+/// as an item only moves within its team, that keeps the batch to `{team}`.
 #[utoipa::path(post, path = "/teams/{team}/items/move", tag = "items", security(("session" = [])),
     params(TeamParams, TimeZoneHeader), request_body = ItemsMoveDto,
     responses(
         (status = 200, body = ItemsMovedDto),
         (status = 400, description = "A body that isn't a `heap_id` and a list of items with versions", body = Problem),
         (status = 404, body = Problem),
+        (status = 422, description = "`heap_not_in_team`: the target isn't a heap of `{team}` the caller can see, or doesn't exist; nothing moved", body = Problem),
     ))]
 async fn move_items(
     State(state): State<AppState>,
@@ -319,6 +322,15 @@ async fn move_items(
     ApiJson(body): ApiJson<ItemsMoveDto>,
 ) -> Result<Json<ItemsMovedDto>, ApiError> {
     let heap = HeapId::from_uuid(body.heap_id);
+    let not_in_team = || ServiceError::HeapNotInTeam { heap_id: heap };
+    let target = match state.services.load_heap(path.principal, heap).await {
+        Ok(view) => view.heap,
+        Err(ServiceError::NotFound) => return Err(not_in_team().into()),
+        Err(err) => return Err(err.into()),
+    };
+    if target.team_id != path.team_id {
+        return Err(not_in_team().into());
+    }
     let mut moved = Vec::new();
     let mut not_moved = Vec::new();
     for item in body.items {

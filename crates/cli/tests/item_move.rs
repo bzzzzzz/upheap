@@ -297,15 +297,20 @@ async fn a_refused_item_is_told_and_the_rest_move() -> Result<()> {
     let moved = cli.run(&["item", "move", closed, open, "ada/other"]).await;
 
     // Assert
-    let lines: Vec<&str> = moved.stdout.lines().collect();
-    expect_that!(lines.len(), eq(3));
-    expect_that!(lines[0], starts_with(format!("Not moved {closed}: ")));
     expect_that!(
-        lines[1],
-        eq(&format!("Moved {open}: Write the migration guide to ada/other."))
+        moved.stdout,
+        eq(&format!(
+            "Moved {open}: Write the migration guide to ada/other.\nMoved 1 of 2 items.\n"
+        ))
     );
-    expect_that!(lines[2], eq("Moved 1 of 2 items."));
-    expect_that!(moved.stderr, eq(""));
+    expect_that!(moved.stderr, starts_with(format!("Not moved {closed}: ")));
+    expect_that!(moved.stderr, contains_substring("(item_closed)"));
+    expect_that!(
+        moved.stderr,
+        contains_substring(format!(
+            "  hint: reopen it first with `upheap item reopen ada/personal/{closed}`"
+        ))
+    );
     expect_that!(moved.exited(3), eq(true));
     expect_that!(
         server.read_item(&ada, "ada/other", open).await?["id"],
@@ -330,5 +335,51 @@ async fn quiet_prints_the_keys_of_the_items_that_moved() -> Result<()> {
     // Assert
     expect_that!(moved.stdout, eq(&format!("{first}\n{second}\n")));
     expect_that!(moved.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn json_with_several_items_prints_the_servers_answer() -> Result<()> {
+    // Arrange: the first item is done.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    server.set_state(&ada, HEAP, &items[0], "done").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (closed, open) = (key(&items[0])?, key(&items[1])?);
+
+    // Act
+    let moved = cli.run(&["item", "move", closed, open, "ada/other", "--json"]).await;
+
+    // Assert
+    let body: Value = serde_json::from_str(&moved.stdout)?;
+    expect_that!(body["moved"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(body["moved"][0], eq(&server.read_item(&ada, "ada/other", open).await?));
+    expect_that!(body["not_moved"][0]["id"], eq(&items[0]["id"]));
+    expect_that!(body["not_moved"][0]["problem"]["code"], eq("item_closed"));
+    expect_that!(moved.stderr, eq(""));
+    expect_that!(moved.exited(3), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_unreadable_item_fails_the_command_before_anything_moves() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let first = key(&items[0])?;
+
+    // Act
+    let moved = cli.run(&["item", "move", first, "zzzzz", "ada/other"]).await;
+
+    // Assert
+    expect_that!(moved.stdout, eq(""));
+    expect_that!(moved.stderr, contains_substring("no item `zzzzz`"));
+    expect_that!(moved.exited(4), eq(true));
+    expect_that!(server.read_item(&ada, HEAP, first).await?["version"], eq(&json!(1)));
     Ok(())
 }

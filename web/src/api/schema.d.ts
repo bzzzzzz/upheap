@@ -1453,6 +1453,8 @@ export interface paths {
          *     carries its own `version`, so there is no `If-Match`. The items may come from any heaps of the team. The response
          *     lists the items that moved, as the single move answers, and the ones that didn't with the problem the single move
          *     would have answered with for each, both in the order of the request. An empty list moves nothing and succeeds.
+         *     The target must be a heap of `{team}` the caller can see, or the whole request is refused with `heap_not_in_team`;
+         *     as an item only moves within its team, that keeps the batch to `{team}`.
          */
         post: operations["move_items"];
         delete?: never;
@@ -9337,6 +9339,15 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_not_in_team`: the target isn't a heap of `{team}` the caller can see, or doesn't exist; nothing moved */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

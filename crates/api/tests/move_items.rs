@@ -227,10 +227,37 @@ async fn items_from_two_heaps_move_to_a_third() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_target_in_another_team_moves_nothing() -> Result<()> {
-    // Arrange
+async fn a_target_in_another_team_of_the_caller_moves_nothing() -> Result<()> {
+    // Arrange: Ada is a member of a second team, and has a heap there.
     let w = world().await?;
-    let (_, grace_heap) = w.app.register("grace@example.test").await?;
+    let team = w
+        .app
+        .send_with(
+            Method::POST,
+            "/api/v1/teams",
+            Some(&w.session),
+            Some(json!({ "name": "Shared" })),
+            &[CSRF],
+        )
+        .await?;
+    anyhow::ensure!(team.status == StatusCode::CREATED, "create team failed: {}", team.body);
+    let slug = team.body["slug"].as_str().unwrap_or_default();
+    let other = w
+        .app
+        .send_with(
+            Method::POST,
+            &format!("/api/v1/teams/{slug}/heaps"),
+            Some(&w.session),
+            Some(json!({ "name": "Work" })),
+            &[CSRF],
+        )
+        .await?;
+    anyhow::ensure!(
+        other.status == StatusCode::CREATED,
+        "create heap failed: {}",
+        other.body
+    );
+    let grace_heap = id(&other.body);
 
     // Act
     let moved = move_items(
@@ -246,13 +273,8 @@ async fn a_target_in_another_team_moves_nothing() -> Result<()> {
     .await?;
 
     // Assert
-    expect_that!(moved.status, eq(StatusCode::OK));
-    expect_that!(moved.body["moved"], eq(&json!([])));
-    let not_moved = moved.body["not_moved"].as_array().cloned().unwrap_or_default();
-    expect_that!(not_moved.len(), eq(3));
-    for entry in &not_moved {
-        expect_that!(entry["problem"]["code"], eq(&json!("heap_not_in_team")));
-    }
+    expect_that!(moved.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(moved.body["code"], eq(&json!("heap_not_in_team")));
     expect_that!(ranked_ids(&w.app, &w.session, &w.from).await?.len(), eq(3));
     Ok(())
 }

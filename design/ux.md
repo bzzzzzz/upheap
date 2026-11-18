@@ -345,7 +345,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     that isn't. On a tablet or wide screen it is a button in the toolbar after Filters; on a phone it is a text button
     at the end of the top bar, with no item open. Select mode is a history entry, so Back leaves it, as do Done, ✕,
     Escape and a move that took every item; changing a filter or the sort doesn't. Entering it closes an open item
-    and starts with nothing selected.
+    for good, so leaving lands on the list, and starts with nothing selected.
     In select mode a row's first slot holds a checkbox, Done and the robot are hidden, swipes are off, and the row is
     a checkbox: a click or tap or Space toggles it, Shift-click selects every row between the last one toggled and
     this one, and Shift+↑ and Shift+↓ move to the next row and select it. `x`, `s` and `a` do nothing. Tags and

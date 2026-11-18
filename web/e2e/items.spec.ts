@@ -894,6 +894,30 @@ test("several items are selected in the list and moved to another heap at once",
   await expect(page.getByRole("link", { name: /^Pull the weeds/ })).toBeVisible();
 });
 
+test("selecting from an open item leaves on the list, not on the item, after a move", async ({ page }) => {
+  test.skip(
+    page.viewportSize()?.width !== 1280,
+    "Select shows beside an open item only where the pane sits beside the list.",
+  );
+  await addHeaps(page, ["Garden"]);
+  for (const title of ["Water the plants", "Pull the weeds"]) await addItem(page, title);
+  const picked = (title: string) => page.getByRole("checkbox", { name: new RegExp(`^${title}`) });
+  const listUrl = /\/teams\/[^/]+\/heaps\/personal$/;
+  await openItem(page, "Water the plants");
+
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await picked("Water the plants").click();
+  await picked("Pull the weeds").click();
+  await page.getByRole("button", { name: "Move to…" }).click();
+  const picker = page.getByRole("dialog", { name: "Move to", exact: true });
+  await picker.getByRole("menuitem", { name: "Garden" }).click();
+  await picker.getByRole("button", { name: "Move 2", exact: true }).click();
+
+  await expect(page.getByRole("status").filter({ hasText: "Moved 2 items to Garden." })).toBeVisible();
+  await expect(page).toHaveURL(listUrl);
+  await expect(itemPane(page)).toHaveCount(0);
+});
+
 test("a task is worked through its steps from the item", async ({ page }) => {
   await addItem(page, "Rotate the certs");
   await openItem(page, "Rotate the certs");

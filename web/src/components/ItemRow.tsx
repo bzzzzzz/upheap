@@ -386,7 +386,7 @@ export function ComingRow({
               params={{ ...heapRef, item: item.key }}
               search={true}
               replace={itemOpen}
-              state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+              state={(prev) => ({ ...prev, selecting: undefined, closesBack: itemOpen ? prev.closesBack : true })}
               resetScroll={false}
               onKeyDown={onKeyDown}
               {...{ [ROW_LINK]: item.key }}
