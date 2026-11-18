@@ -92,6 +92,8 @@ pub struct TeamDto {
     pub heaps: Vec<HeapDto>,
     /// The provider groups whose members the team has, as the operator configured them; `null` for a team that
     /// isn't group-managed. Such a team takes no hand-added members, invite links or new slug.
+    // Defaults so this client reads a server older than group-managed teams, which has none.
+    #[serde(default)]
     pub managed_by_groups: Option<Vec<String>>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TeamActionDto>,
