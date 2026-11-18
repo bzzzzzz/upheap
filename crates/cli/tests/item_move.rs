@@ -340,6 +340,87 @@ async fn quiet_prints_the_keys_of_the_items_that_moved() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn quiet_still_tells_a_refusal_on_stderr() -> Result<()> {
+    // Arrange: the first item is done.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    server.set_state(&ada, HEAP, &items[0], "done").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (closed, open) = (key(&items[0])?, key(&items[1])?);
+
+    // Act
+    let moved = cli.run(&["item", "move", closed, open, "ada/other", "-q"]).await;
+
+    // Assert
+    expect_that!(moved.stdout, eq(&format!("{open}\n")));
+    expect_that!(moved.stderr, starts_with(format!("Not moved {closed}: ")));
+    expect_that!(moved.exited(3), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_named_twice_moves_once_and_is_refused_once() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let first = key(&items[0])?;
+
+    // Act
+    let moved = cli.run(&["item", "move", first, first, "ada/other"]).await;
+
+    // Assert
+    expect_that!(moved.stdout, starts_with(format!("Moved {first}: ")));
+    expect_that!(moved.stdout, ends_with("Moved 1 of 2 items.\n"));
+    expect_that!(moved.stderr, starts_with(format!("Not moved {first}: ")));
+    expect_that!(moved.exited(0), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_already_in_the_heap_is_sent_and_said_to_be_there() -> Result<()> {
+    // Arrange: the second item is in ada/other already.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    add_heap(&server, &ada, "Other").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let (first, second) = (key(&items[0])?, key(&items[1])?);
+    cli.run(&["item", "move", second, "ada/other"]).await;
+
+    // Act
+    let moved = cli
+        .run(&[
+            "item",
+            "move",
+            first,
+            &format!("ada/other/{second}"),
+            "ada/other",
+            "--json",
+        ])
+        .await;
+    let human = cli
+        .run(&["item", "move", &format!("ada/other/{second}"), first, "ada/other"])
+        .await;
+
+    // Assert
+    let body: Value = serde_json::from_str(&moved.stdout)?;
+    expect_that!(body["moved"].as_array().map(Vec::len), some(eq(2)));
+    expect_that!(moved.exited(0), eq(true));
+    expect_that!(
+        human.stdout,
+        eq(&format!(
+            "{second} is already in ada/other.\n{first} is already in ada/other.\nMoved 2 of 2 items.\n"
+        ))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn json_with_several_items_prints_the_servers_answer() -> Result<()> {
     // Arrange: the first item is done.
     let server = TestServer::start().await?;

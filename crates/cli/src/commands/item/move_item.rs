@@ -1,8 +1,8 @@
 //! `upheap item move <item>... <heap>`: move one or several items to another heap of their team.
 //!
-//! The server owns every rule: which heaps are allowed, the key, and what tags and values come along. The CLI only
-//! notices an item that is in the heap already, which it has in hand from the read that gives it the version, and then
-//! makes no write; and it words what the server dropped by comparing the item before and after.
+//! The server owns every rule: which heaps are allowed, the key, and what tags and values come along. With one item,
+//! the CLI notices an item that is in the heap already, which it has in hand from the read that gives it the version,
+//! and then makes no write; and it words what the server dropped by comparing the item before and after.
 //!
 //! One item is read and moved with its own request, and its failure is the command's. Several are all read first, so
 //! one that can't be read fails the command before anything moves, and then go in one request to the batch endpoint.
@@ -123,16 +123,9 @@ async fn target_id(target: &HeapHandle, client: &ApiClient, token: &str) -> Resu
     Ok(api.get::<HeapDto>(&[], NO_QUERY).await?.value.id)
 }
 
-/// An item of the command, in the order it was given.
-enum Entry {
-    /// In the target heap already.
-    Already(Fetched<ItemDto>),
-    /// Sent to the server, with the item as it was read and the heap it was in.
-    Sent { before: ItemDto, heap: HeapHandle },
-}
-
 /// Moves several items with one request. Everything that doesn't depend on an item is settled first, and every item
-/// is read before any moves, so a failure of either fails the command with nothing moved.
+/// is read before any moves, so a failure of either fails the command with nothing moved. Every item is sent, one in
+/// the target heap already too, which the server answers as moved and unchanged, so `--json` lists them all.
 async fn move_several(args: &MoveArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let target_name = HeapName::parse(&args.to)?;
     let mut located = Vec::new();
@@ -153,8 +146,8 @@ async fn move_several(args: &MoveArgs, app: &App, out: &mut Output) -> Result<()
     let target = resolve_target(target_name, first_heap, client, token).await?;
     let heap_id = target_id(&target, client, token).await?;
 
-    let mut entries = Vec::new();
-    let mut versions = Vec::new();
+    // Each item as it was read, with the heap it was in, in the order given.
+    let mut sent = Vec::new();
     for (typed, key, heap) in places {
         let item = HeapApi {
             client,
@@ -163,83 +156,75 @@ async fn move_several(args: &MoveArgs, app: &App, out: &mut Output) -> Result<()
         }
         .get_item(typed, &key)
         .await?;
-        if heap == target {
-            entries.push(Entry::Already(item));
-        } else {
-            versions.push(ItemVersionDto {
-                id: item.value.id,
-                version: item.value.version,
-            });
-            entries.push(Entry::Sent {
-                before: item.value,
-                heap,
-            });
-        }
+        sent.push((item.value, heap));
     }
-
     let body = ItemsMoveDto {
         heap_id,
-        items: versions,
+        items: sent
+            .iter()
+            .map(|(item, _)| ItemVersionDto {
+                id: item.id,
+                version: item.version,
+            })
+            .collect(),
     };
     let answer = client
         .post::<ItemsMovedDto>(&["teams", target.team.as_str(), "items", "move"], &body, token)
         .await?;
-    let in_run = app.env.run.is_some();
-    let target_text = target.to_string();
-    let json = out.mode() == Mode::Json;
-    if json {
+    if out.mode() == Mode::Json {
         out.json(&answer.body)?;
     }
+
+    let in_run = app.env.run.is_some();
+    let target_text = target.to_string();
     let mut first_failure = None;
     let mut moved_count = 0;
-    for entry in &entries {
-        let (key, lines) = match entry {
-            Entry::Already(item) => {
-                moved_count += 1;
-                (
-                    item.value.key.clone(),
-                    vec![format!("{} is already in {target_text}.", item.value.key)],
-                )
-            }
-            Entry::Sent { before, heap } => {
-                if let Some(after) = answer.value.moved.iter().find(|after| after.id == before.id) {
-                    moved_count += 1;
-                    (after.key.clone(), moved_lines(before, after, &target_text))
-                } else if let Some(refused) = answer.value.not_moved.iter().find(|refused| refused.id == before.id) {
-                    let err = refusal(refused, heap, &before.key)?;
-                    first_failure.get_or_insert(err.exit_code());
-                    if !json && out.mode() == Mode::Human {
-                        let mut message = err.to_message_in(in_run).into_iter();
-                        if let Some(first) = message.next() {
-                            let first = first.strip_prefix("error: ").unwrap_or(&first);
-                            out.note(&format!("Not moved {}: {first}", before.key))?;
-                        }
-                        for line in message {
-                            out.note(&format!("  {line}"))?;
-                        }
+    // The server answers both lists in the order of the request, so each item takes the next answer for its ID: an
+    // item named twice is moved once and refused once, as it was.
+    let mut moved = answer.value.moved.iter().peekable();
+    let mut not_moved = answer.value.not_moved.iter().peekable();
+    for (before, heap) in &sent {
+        if let Some(after) = moved.next_if(|after| after.id == before.id) {
+            moved_count += 1;
+            // A move changes the item, so one the server left as it was is in the heap already, whichever handle
+            // named it.
+            let lines = if after.version == before.version {
+                vec![format!("{} is already in {target_text}.", after.key)]
+            } else {
+                moved_lines(before, after, &target_text)
+            };
+            match out.mode() {
+                Mode::Json => {}
+                Mode::Quiet => out.line(&after.key)?,
+                Mode::Human => {
+                    let mut lines = lines.into_iter();
+                    if let Some(first) = lines.next() {
+                        out.line(&first)?;
                     }
-                    continue;
-                } else {
-                    continue;
+                    for line in lines {
+                        out.line(&format!("  {line}"))?;
+                    }
                 }
             }
-        };
-        match out.mode() {
-            Mode::Json => {}
-            Mode::Quiet => out.line(&key)?,
-            Mode::Human => {
-                let mut lines = lines.into_iter();
-                if let Some(first) = lines.next() {
-                    out.line(&first)?;
+        } else if let Some(refused) = not_moved.next_if(|refused| refused.id == before.id) {
+            let err = refusal(refused, heap, &before.key)?;
+            first_failure.get_or_insert(err.exit_code());
+            // Told on stderr in every mode but JSON, whose body on stdout already holds it, as a single move's
+            // refusal is told.
+            if out.mode() != Mode::Json {
+                let mut message = err.to_message_in(in_run).into_iter();
+                if let Some(first) = message.next() {
+                    let first = first.strip_prefix("error: ").unwrap_or(&first);
+                    out.note(&format!("Not moved {}: {first}", before.key))?;
                 }
-                for line in lines {
-                    out.line(&format!("  {line}"))?;
+                for line in message {
+                    out.note(&format!("  {line}"))?;
                 }
             }
         }
     }
     if out.mode() == Mode::Human {
-        out.line(&format!("Moved {moved_count} of {} items.", entries.len()))?;
+        out.line(&format!("Moved {moved_count} of {} items.", sent.len()))?;
     }
     match first_failure {
         Some(exit_code) => Err(CliError::Reported { exit_code }),

@@ -293,3 +293,30 @@ async fn an_empty_list_succeeds_with_nothing() -> Result<()> {
     expect_that!(moved.body, eq(&json!({ "moved": [], "not_moved": [] })));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_target_the_caller_cant_see_is_not_in_the_team() -> Result<()> {
+    // Arrange: a heap ID nobody has.
+    let w = world().await?;
+    let unknown = uuid::Uuid::new_v4().to_string();
+
+    // Act
+    let moved = move_items(
+        &w.app,
+        &w.session,
+        &w.from,
+        &unknown,
+        &w.items
+            .iter()
+            .map(|i| (i["id"].as_str().unwrap_or_default(), &i["version"]))
+            .collect::<Vec<_>>(),
+    )
+    .await?;
+
+    // Assert
+    expect_that!(moved.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(moved.body["code"], eq(&json!("heap_not_in_team")));
+    expect_that!(ranked_ids(&w.app, &w.session, &w.from).await?.len(), eq(3));
+    Ok(())
+}
