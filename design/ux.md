@@ -436,7 +436,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     **Ask a question** ends the section, after the fold, as a quiet text button with a plus, on an open item in an
     unarchived heap for a member (no button for a viewer, a closed item or an archived heap); with no questions the
     section is only its heading and the button, and on a phone the button spans the width. It opens a form in place,
-    at every width, with the focus in its first field: **Kind** (Question or Request), a one-line **Question** field
+    at every width, with the focus in the Question field: **Kind** (Question or Request), a one-line **Question** field
     ("What to do" for a request) of 1 to 300 characters with a counter from 250, **Details, optional** as Markdown
     text up to 20,000 characters with a counter from 19,000, and for a question **Answer**: In words, Pick one or
     Pick any. Pick one and Pick any show choice fields, two to begin with, with **Add a choice** up to ten, a ×

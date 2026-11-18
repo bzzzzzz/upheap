@@ -27,17 +27,24 @@ type Kind = "question" | "request";
 type Answer = "words" | "one" | "any";
 type Choice = { id: number; text: string };
 
-/** The "Ask a question" button, and the form it opens in place. `ask` is the section's mutation, which it keeps. */
+/**
+ * The "Ask a question" button, and the form it opens in place. `ask` is the section's mutation, and `open` the
+ * section's state, so the section stays while the form is open.
+ */
 export function AskQuestion({
   item,
   canAsk,
   ask,
+  open,
+  onOpenChange,
 }: {
   item: Item;
   canAsk: boolean;
   ask: ReturnType<typeof useAskQuestion>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
   const [message, setMessage] = useState("");
   const buttonRef = useRef<HTMLButtonElement>(null);
   const textRef = useRef<HTMLInputElement>(null);
@@ -46,7 +53,8 @@ export function AskQuestion({
   const close = () => {
     ask.reset();
     setOpen(false);
-    focusAfterRender(() => buttonRef.current);
+    // Without the offer (the item was closed meanwhile) there is no button: the item takes the focus.
+    focusAfterRender(() => buttonRef.current ?? document.querySelector<HTMLElement>("[data-item-pane]"));
   };
 
   return (
@@ -57,7 +65,6 @@ export function AskQuestion({
       {open ? (
         <AskForm
           item={item}
-          canAsk={canAsk}
           ask={ask}
           textRef={textRef}
           onCancel={close}
@@ -100,14 +107,12 @@ function Counter({ length, max }: { length: number; max: number }) {
  */
 function AskForm({
   item,
-  canAsk,
   ask,
   textRef,
   onCancel,
   onAsked,
 }: {
   item: Item;
-  canAsk: boolean;
   ask: ReturnType<typeof useAskQuestion>;
   /** The text field's, for the caller to focus it when the form opens. */
   textRef: RefObject<HTMLInputElement | null>;
@@ -129,16 +134,17 @@ function AskForm({
   const steps = (item.steps ?? []).filter((candidate) => candidate.state !== "dropped");
   const picking = kind === "question" && answer !== "words";
   const trimmedText = text.trim();
+  // Counted in characters, as the server counts them, not in UTF-16 units.
+  const textLength = [...trimmedText].length;
+  const detailsLength = [...details].length;
   const named = choices.map((choice) => choice.text.trim()).filter((choice) => choice !== "");
   const duplicates = new Set(named.map((choice) => choice.toLowerCase())).size < named.length;
   const choicesValid = !picking || (named.length >= CHOICES_MIN && named.length <= CHOICES_MAX && !duplicates);
-  const valid =
-    trimmedText.length >= 1 && trimmedText.length <= TEXT_MAX && details.length <= DETAILS_MAX && choicesValid;
+  const valid = textLength >= 1 && textLength <= TEXT_MAX && detailsLength <= DETAILS_MAX && choicesValid;
   const untouched = text.trim() === "" && details.trim() === "" && choices.every((choice) => choice.text.trim() === "");
 
   const edited = () => {
-    // Without the offer the error is what keeps the form, so it stays until the form is closed.
-    if (ask.isError && canAsk) ask.reset();
+    if (ask.isError) ask.reset();
   };
 
   const send = () => {
@@ -225,7 +231,7 @@ function AskForm({
       >
         <Label className={labelClass}>{kind === "question" ? "Question" : "What to do"}</Label>
         <Input ref={textRef} className={inputClass} />
-        {text.length > TEXT_COUNTER_FROM && <Counter length={text.length} max={TEXT_MAX} />}
+        {textLength >= TEXT_COUNTER_FROM && <Counter length={textLength} max={TEXT_MAX} />}
       </TextField>
 
       <div className="flex flex-col gap-1">
@@ -239,7 +245,7 @@ function AskForm({
           }}
           className="min-h-14 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
         />
-        {details.length > DETAILS_COUNTER_FROM && <Counter length={details.length} max={DETAILS_MAX} />}
+        {detailsLength >= DETAILS_COUNTER_FROM && <Counter length={detailsLength} max={DETAILS_MAX} />}
       </div>
 
       {kind === "question" && (
@@ -303,8 +309,12 @@ function AskForm({
                 <Button
                   aria-label={`Remove choice ${index + 1}`}
                   onPress={() => {
+                    // The focus goes to the choice that takes its place, else the one before it.
+                    const next = choices[index + 1] ?? choices[index - 1];
                     setChoices((current) => current.filter((c) => c.id !== choice.id));
                     edited();
+                    if (next)
+                      focusAfterRender(() => document.querySelector<HTMLInputElement>(`[data-choice="${next.id}"]`));
                   }}
                   className={`${compactButtonClass.icon} ${focusClass}`}
                 >

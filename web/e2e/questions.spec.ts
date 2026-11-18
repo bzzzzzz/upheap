@@ -543,7 +543,7 @@ test("someone else's reply meanwhile takes the row away with a note", async ({ p
   await expect(itemPane(page).getByText("meanwhile.")).toHaveCount(0);
 });
 
-test("the section is absent without open questions, and closing the item withdraws them, as Questions reads", async ({
+test("without questions the section is only Ask a question, and closing the item withdraws them, as Questions reads", async ({
   page,
   heapPath,
 }) => {

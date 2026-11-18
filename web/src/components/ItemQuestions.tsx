@@ -344,16 +344,17 @@ export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: 
 
 /**
  * The Questions section (ux.md, The item): the open questions with their reply controls in the outlined box, then
- * what {@link AnsweredQuestions} folds. Shown when the item has any question, or the server offers `ask_question`, in which case it ends with {@link AskQuestion}. A row is shown with controls when the
- * server offers `reply` on the question, otherwise (an archived heap) as text. After a reply the row leaves and joins
- * the fold.
+ * what {@link AnsweredQuestions} folds, then {@link AskQuestion}. Shown when the item has any question, or the server
+ * offers `ask_question`, or the Ask form is open. A row is shown with controls when the server offers `reply` on the
+ * question, otherwise (an archived heap) as text. After a reply the row leaves and joins the fold.
  */
 export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
   const ask = useAskQuestion(heapRef, item.key);
   const canAsk = item.allowed_actions.includes("ask_question");
-  // A refusal refetches the item, which may no longer offer `ask_question` (it was closed meanwhile): the section
-  // and the form stay while the error does, so the typed draft and the reason don't vanish together.
-  if ((item.questions ?? []).length === 0 && !canAsk && !ask.isError) return null;
+  // Kept here, not in the form: an open form keeps the section, so a refetch that takes `ask_question` away (the
+  // item was closed meanwhile) doesn't take the typed draft with it.
+  const [asking, setAsking] = useState(false);
+  if ((item.questions ?? []).length === 0 && !canAsk && !asking) return null;
   return (
     <section aria-label="Questions" className="flex flex-col gap-2 border-t border-line pt-3">
       <h3 className="text-xs font-semibold text-muted">Questions</h3>
@@ -390,7 +391,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
           </p>
         ))}
       <AnsweredQuestions heapRef={heapRef} item={item} />
-      <AskQuestion item={item} canAsk={canAsk} ask={ask} />
+      <AskQuestion item={item} canAsk={canAsk} ask={ask} open={asking} onOpenChange={setAsking} />
     </section>
   );
 }
