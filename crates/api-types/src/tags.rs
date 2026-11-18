@@ -42,11 +42,13 @@ impl From<TagListAction> for TagListActionDto {
 }
 
 /// Who owns a tag.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = TagKind)]
 pub enum TagKindDto {
     /// One heap's tag.
+    // The default, for a server older than team tags, which has only these.
+    #[default]
     Heap,
     /// A team's tag, which every heap of the team has.
     Team,
@@ -60,6 +62,9 @@ pub enum TagKindDto {
 #[schema(as = Tag)]
 pub struct TagDto {
     pub id: Uuid,
+    // Defaults so this client reads a server older than team tags, which leaves it out.
+    #[serde(default)]
+    #[schema(required = true)]
     pub kind: TagKindDto,
     /// The heap that owns the tag; `null` for a team tag.
     pub heap_id: Option<Uuid>,
@@ -78,6 +83,9 @@ pub struct TagListDto {
     /// The heap's own tags, by name.
     pub tags: Vec<TagDto>,
     /// The heap's team's tags, by name. Every heap of the team has them too.
+    // Defaults so this client reads a server older than team tags, which leaves it out.
+    #[serde(default)]
+    #[schema(required = true)]
     pub team_tags: Vec<TagDto>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TagListActionDto>,
@@ -171,5 +179,22 @@ mod tests {
         };
 
         verify_that!(serde_json::to_string(&tag)?, eq(r#"{"name":"Ops"}"#))
+    }
+
+    #[gtest]
+    fn a_tag_list_from_a_server_before_team_tags_has_heap_tags_only() -> googletest::Result<()> {
+        let body = r#"{
+            "heap": {"id": "00000000-0000-0000-0000-000000000001", "team_id": "00000000-0000-0000-0000-000000000002",
+                     "slug": "ops", "name": "Ops", "archived": false},
+            "tags": [{"id": "00000000-0000-0000-0000-000000000003", "heap_id": "00000000-0000-0000-0000-000000000001",
+                      "name": "infra", "description": null, "version": 1, "allowed_actions": []}],
+            "allowed_actions": ["create"]
+        }"#;
+
+        let list: TagListDto = serde_json::from_str(body)?;
+
+        expect_that!(list.tags, elements_are![field!(TagDto.kind, eq(&TagKindDto::Heap))]);
+        expect_that!(list.team_tags, is_empty());
+        Ok(())
     }
 }

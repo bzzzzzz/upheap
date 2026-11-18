@@ -91,8 +91,18 @@ pub enum ClientError {
         status: StatusCode,
         location: String,
     },
-    #[error("the server answered {status} with a body the CLI doesn't understand")]
-    Unreadable { status: StatusCode, body: String },
+    /// A response the CLI can't read: a success whose body isn't what the endpoint answers, most often a server of
+    /// another version, or a failure that isn't a problem, such as a proxy's page. `source` says what doesn't fit,
+    /// when the body was read as the endpoint's answer.
+    #[error("the server answered {status} to {path} with a body the CLI doesn't understand")]
+    Unreadable {
+        status: StatusCode,
+        /// The request's path, such as `/api/v1/me`, without its query.
+        path: String,
+        body: String,
+        #[source]
+        source: Option<serde_json::Error>,
+    },
 }
 
 impl ApiClient {
@@ -303,16 +313,26 @@ impl ApiClient {
         if !status.is_success() {
             return Err(self.read_failure(response).await);
         }
+        let path = response.url().path().to_owned();
         let body = self.read_body(response).await?;
         match serde_json::from_str(&body) {
             Ok(value) => Ok(Fetched { value, body }),
-            Err(_) => Err(ClientError::Unreadable { status, body }),
+            Err(source) => {
+                tracing::debug!(%status, path, body, "unreadable response");
+                Err(ClientError::Unreadable {
+                    status,
+                    path,
+                    body,
+                    source: Some(source),
+                })
+            }
         }
     }
 
     /// The error a failed response stands for: an OAuth refusal, a problem, or neither.
     async fn read_failure(&self, response: Response) -> ClientError {
         let status = response.status();
+        let path = response.url().path().to_owned();
         let body = match self.read_body(response).await {
             Ok(body) => body,
             Err(err) => return err,
@@ -326,7 +346,13 @@ impl ApiClient {
         if let Ok(refusal) = serde_json::from_str::<OAuthErrorDto>(&body) {
             return ClientError::OAuthRefused { status, refusal };
         }
-        ClientError::Unreadable { status, body }
+        tracing::debug!(%status, path, body, "unreadable failure");
+        ClientError::Unreadable {
+            status,
+            path,
+            body,
+            source: None,
+        }
     }
 
     /// The body as text. A connection that breaks or times out halfway is the server being out of reach, like one
