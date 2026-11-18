@@ -26,6 +26,8 @@ pub struct TeamView {
     pub role: Role,
     /// Everyone in the team, the caller included.
     pub member_count: u32,
+    /// Whether the team's members come from provider groups.
+    pub group_managed: bool,
     /// By name, archived ones included.
     pub heaps: Vec<HeapOverview>,
 }
@@ -67,6 +69,7 @@ impl Services {
                     .collect();
                 TeamView {
                     member_count: member_counts.get(&team.id).copied().unwrap_or(0),
+                    group_managed: self.settings.group_teams.get(team.id).is_some(),
                     team,
                     role,
                     heaps,

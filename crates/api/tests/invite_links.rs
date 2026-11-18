@@ -594,6 +594,7 @@ async fn anyone_holding_a_link_sees_the_team_and_maker_names_and_nothing_else() 
             "created_by_name": "Ana",
             "state": "working",
             "viewer": null,
+            "group_managed": false,
             "allowed_actions": ["create_account"]
         }))
     );

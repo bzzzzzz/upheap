@@ -59,6 +59,8 @@ pub struct InvitationView {
     pub created_by: User,
     /// The caller's standing in the team; `None` when the caller isn't signed in.
     pub viewer: Option<InviteViewer>,
+    /// Whether the team's members come from provider groups, so the link no longer admits anyone.
+    pub group_managed: bool,
     pub allowed_actions: Vec<InvitationAction>,
 }
 
@@ -102,6 +104,7 @@ impl Services {
                 )
             })?;
         let now = self.now();
+        let group_managed = self.settings.group_teams.get(team.id).is_some();
         let (viewer, allowed_actions) = match principal {
             Some(principal) => {
                 let (viewer, removed_at) = load_viewer(&self.db, &link, principal).await?;
@@ -118,7 +121,9 @@ impl Services {
             team,
             created_by,
             viewer,
-            allowed_actions,
+            group_managed,
+            // A group-managed team takes nobody through a link, so none is offered.
+            allowed_actions: if group_managed { Vec::new() } else { allowed_actions },
         })
     }
 
@@ -142,15 +147,16 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (team, members, link) = lock_link_team(&txn, team_id, link_id).await?;
         if members.iter().any(|m| m.user_id == principal.user_id) {
-            let detail = load_team_detail(&txn, principal, team, self.now()).await?;
+            let detail = load_team_detail(&txn, &self.settings.group_teams, principal, team, self.now()).await?;
             return Ok((detail, MemberAdded::AlreadyMember));
         }
+        self.ensure_not_group_managed(team_id)?;
 
         let now = self.now();
         let removed_at = last_removed_at(&txn, team_id, principal.user_id).await?;
         link.check_join(now, removed_at)?;
         self.admit_through_link(&txn, principal, &link, now).await?;
-        let detail = load_team_detail(&txn, principal, team, self.now()).await?;
+        let detail = load_team_detail(&txn, &self.settings.group_teams, principal, team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(%team_id, invite_link_id = %link.id, user_id = %principal.user_id, "joined through invite link");
@@ -185,6 +191,7 @@ impl Services {
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (team, _, link) = lock_link_team(&txn, team_id, link_id).await?;
+        self.ensure_not_group_managed(team_id)?;
         // A new user has never been removed from any team. Before the user is made, so that an ended link wins over
         // a taken username.
         link.check_join(now, None)?;
@@ -194,7 +201,7 @@ impl Services {
             run: None,
         };
         self.admit_through_link(&txn, principal, &link, now).await?;
-        let detail = load_team_detail(&txn, principal, team, self.now()).await?;
+        let detail = load_team_detail(&txn, &self.settings.group_teams, principal, team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
@@ -216,6 +223,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let locked = lock_team_for(&txn, principal, team_id, Permission::ManageTeam).await?;
         locked.team.ensure_shared()?;
+        self.ensure_not_group_managed(team_id)?;
 
         let now = self.now();
         let link = InviteLink {

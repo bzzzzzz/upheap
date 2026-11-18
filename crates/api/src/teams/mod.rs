@@ -55,6 +55,7 @@ pub(crate) fn to_team_dto(detail: TeamDetail) -> TeamDto {
         role: detail.role.into(),
         members: detail.members.into_iter().map(to_member_dto).collect(),
         heaps: detail.heaps.into_iter().map(to_heap_dto).collect(),
+        managed_by_groups: detail.managed_by_groups,
         allowed_actions: detail.allowed_actions.into_iter().map(TeamActionDto::from).collect(),
     }
 }

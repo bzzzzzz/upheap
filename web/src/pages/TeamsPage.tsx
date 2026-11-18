@@ -55,11 +55,11 @@ export function TeamsPage() {
   );
 }
 
-/** "Admin · 4 members · 2 heaps", or for a personal team "Only you · 1 heap". */
+/** "Admin · 4 members · 2 heaps", "Member · Groups · 12 members · 2 heaps", or for a personal team "Only you · 1 heap". */
 function TeamRow({ team, label, several }: { team: Me["teams"][number]; label: string; several: boolean }) {
   const who = team.personal
     ? "Only you"
-    : `${team.role === "admin" ? "Admin" : "Member"} · ${plural(team.member_count, "member")}`;
+    : `${team.role === "admin" ? "Admin" : "Member"}${team.group_managed ? " · Groups" : ""} · ${plural(team.member_count, "member")}`;
   return (
     <li className="flex items-center gap-3 px-2 py-2.5 max-sm:min-h-13 max-sm:py-1">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">

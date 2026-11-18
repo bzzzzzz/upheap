@@ -110,6 +110,10 @@ function Opened({
     <AuthCard>
       {viewer?.status === "member" && viewer.team_slug ? (
         <AlreadyIn slug={viewer.team_slug} land={land} />
+      ) : invitation.group_managed ? (
+        <Notice moveFocus={moveFocus} heading="This link no longer works.">
+          <p className="text-sm text-ink-soft">{team}'s members come from its groups.</p>
+        </Notice>
       ) : state !== "working" ? (
         <Notice
           moveFocus={moveFocus}

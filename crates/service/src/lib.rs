@@ -14,6 +14,7 @@ mod clock;
 pub mod comments;
 mod error;
 mod figures;
+pub mod group_teams;
 pub mod handles;
 pub mod heaps;
 pub mod items;
@@ -69,16 +70,19 @@ pub struct Settings {
     pub sign_in_limit: SignInLimit,
     /// The OpenID Connect provider people may sign in through, if the operator set one.
     pub oidc: Option<oidc::OidcSettings>,
+    /// The teams whose members come from the provider's groups. Empty when none is mapped.
+    pub group_teams: group_teams::GroupTeams,
 }
 
 impl Default for Settings {
-    /// Registration closed, 30-day sessions, the default sign-in limit and no provider.
+    /// Registration closed, 30-day sessions, the default sign-in limit, no provider and no group-managed team.
     fn default() -> Self {
         Self {
             allow_registration: false,
             session_ttl: Duration::from_days(30),
             sign_in_limit: SignInLimit::DEFAULT,
             oidc: None,
+            group_teams: group_teams::GroupTeams::default(),
         }
     }
 }

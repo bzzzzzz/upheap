@@ -104,6 +104,8 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | `UPHEAP_OIDC_CLIENT_SECRET` | none | The client secret the provider gave Upheap |
 | `UPHEAP_OIDC_LABEL` | none | What the sign-in button calls the provider: "Sign in with Acme SSO" |
 | `UPHEAP_OIDC_SCOPES` | `openid email profile` | Space-separated scopes to ask for; `openid` is always asked |
+| `UPHEAP_OIDC_GROUP_TEAMS` | none | A JSON object from team slug to the list of provider groups whose members the team has: `{"ops": ["engineering", "sre"]}`. Needs the provider. See [Teams from groups](#teams-from-groups) |
+| `UPHEAP_OIDC_GROUPS_CLAIM` | `groups` | The ID token claim that lists a person's groups. Only read when `UPHEAP_OIDC_GROUP_TEAMS` is set |
 
 ### Signing in through a provider
 
@@ -120,6 +122,32 @@ refused. A first sign-in asks for a username and makes the account, also when `A
 person whose email already belongs to a local account is refused, not linked. People who sign in through the provider
 have no password in Upheap. The server doesn't contact the provider at startup, so a provider that is down never
 stops the server or local sign-in. Start with one setting missing and the server stops, naming it.
+
+#### Teams from groups
+
+The provider's groups can say who is in a team. Make the teams first (people make them in the app), then map each
+team's slug to the groups whose members it has:
+
+```sh
+UPHEAP_OIDC_GROUP_TEAMS='{"ops": ["engineering", "sre"], "support": ["helpdesk"]}'
+```
+
+At each sign-in through the provider, the person joins the mapped teams their groups name, as members, and leaves
+those their groups no longer name, whatever their role. Group names match exactly, capitals included. Groups give
+membership only: admins are still made in the app. A mapped team takes no members added by hand and has no invite
+links, and its link name can't change; it can still be renamed, and an admin can still remove a member (who comes back
+at their next sign-in if their groups still name the team).
+
+At the provider, send the person's groups in the ID token, under the claim `groups` or the one named by
+`UPHEAP_OIDC_GROUPS_CLAIM`. For most providers that means a `groups` scope or a groups claim on the client: add the
+scope to `UPHEAP_OIDC_SCOPES` where the provider needs it. A token that doesn't say, because the claim is missing or
+isn't a list of strings, changes no membership and is logged as a warning. So does Microsoft Entra ID's overage, which
+leaves the groups out of the token for a person in too many of them. An empty list is an answer: it takes the person out
+of every mapped team. People who sign in with a password never change teams this way.
+
+The server stops at startup, naming the setting or the slug, when the map is set without a provider, isn't a JSON
+object of non-empty lists of strings, names a slug no team has, or names a personal team. If a sync takes a team's last
+admin out, the team shows that it has no admin; see [Making a team admin](#making-a-team-admin).
 
 ### Setting up mail
 
@@ -168,6 +196,22 @@ It prints the link, `{BASE_URL}/reset/…`, alone on stdout, and on stderr whom 
 once, for 60 minutes). A newer link for the same user cancels the earlier one. It runs no migrations and starts no
 server, so run it once the server of the same version has started. Exit codes: `0` made, `2` wrong arguments, `3` no
 such user, `5` the database can't be reached, `1` anything else, a database a version behind included.
+
+### Making a team admin
+
+A team whose groups took out its last admin has nobody who can make another. Whoever runs the server makes a member an
+admin with a command, which takes the same environment variables as the server (at least `DATABASE_URL`):
+
+```sh
+upheap-server team make-admin ops sam          # the team's link name, a username
+docker compose exec upheap upheap-server team make-admin ops sam
+```
+
+It prints `@sam is now an admin of Ops.`, or says they already are. The person must be a member of the team. The
+change is in the team's Activity, marked as made by whoever runs the server. It runs no migrations and starts no
+server, so run it once the server of the same version has started. Exit codes: `0` done, `2` wrong arguments, `3` no
+such team, no such user or not a member (the message says which), `5` the database can't be reached, `1` anything
+else, a database a version behind included.
 
 ## The CLI
 

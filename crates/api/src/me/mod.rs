@@ -62,6 +62,7 @@ fn to_me_dto(me: MeView) -> MeDto {
         personal: view.team.is_personal(),
         role: view.role.into(),
         member_count: view.member_count,
+        group_managed: view.group_managed,
         heaps: view.heaps.iter().map(to_heap_overview_dto).collect(),
     };
     MeDto {

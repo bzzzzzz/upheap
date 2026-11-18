@@ -12,6 +12,7 @@ import {
   useFindUsers,
   useLeaveTeam,
   useMe,
+  useOidcProvider,
   useRemoveMember,
   useSetMemberRole,
   useTeam,
@@ -414,7 +415,11 @@ function removeQuestion(member: TeamMember, team: Team): string {
   const heaps = team.heaps.filter((heap) => heap.archived_at === null).map((heap) => heap.name);
   const access =
     heaps.length === 0 ? "" : ` They lose access to ${heaps.length > 3 ? `its ${heaps.length} heaps` : listOf(heaps)}.`;
-  return `Remove ${member.display_name} from ${team.name}?${access} Their items stay.`;
+  // Their groups decide who is in the team, and the server can't say who signs in through the provider.
+  const back = team.managed_by_groups
+    ? " If their groups still include this team, they come back at their next sign-in."
+    : "";
+  return `Remove ${member.display_name} from ${team.name}?${access} Their items stay.${back}`;
 }
 
 /** "Give up your admin role in Acme? …": the question before an admin makes themselves a member. */
@@ -427,6 +432,7 @@ type Asking = { kind: "remove" | "demote"; member: TeamMember };
 
 function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
   const { data: me } = useMe();
+  const { data: provider } = useOidcProvider();
   const remove = useRemoveMember(team.slug);
   const setRole = useSetMemberRole(team.slug);
   const makingLink = useMakeInviteLink(team.slug);
@@ -493,6 +499,16 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
       <h2 ref={heading} tabIndex={-1} id="team-members" className={sectionTitleClass}>
         Members · {team.members.length}
       </h2>
+      {!team.personal && !team.members.some((member) => member.role === "admin") && (
+        <p className="text-[13px] text-muted max-sm:text-sm">
+          This team has no admin. Whoever runs this Upheap server can make one.
+        </p>
+      )}
+      {team.managed_by_groups && provider && (
+        <p className="text-[13px] text-muted max-sm:text-sm">
+          Members come from {provider.label} groups: {team.managed_by_groups.join(", ")}.
+        </p>
+      )}
       {(canAddMember || canInvite) && (
         <div className={phone ? "flex flex-col gap-2.5" : "flex items-start gap-2"}>
           {canAddMember && (
@@ -504,7 +520,7 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
         </div>
       )}
       <ProblemText error={makingLink.error} className="text-overdue-ink" />
-      <InviteLinks team={team} making={makingLink} phone={phone} />
+      {!team.managed_by_groups && <InviteLinks team={team} making={makingLink} phone={phone} />}
       <ul className={cardClass}>
         {team.members.map((member) => {
           const you = member.user_id === me?.user.id;

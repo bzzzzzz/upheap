@@ -8,10 +8,12 @@ use std::process::ExitCode;
 
 use domain::Timestamp;
 use service::ServiceError;
+use service::group_teams::GroupTeams;
 use service::password_reset::ResetLinkMade;
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 
 use crate::config::Config;
+use crate::terminal::for_terminal;
 
 const USAGE: &str = "usage: upheap-server user reset-link <username or email>";
 
@@ -71,7 +73,7 @@ pub async fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(EXIT_DATABASE_UNREACHABLE);
         }
     }
-    let services = crate::build_services(&config, db);
+    let services = crate::build_services(&config, GroupTeams::default(), db);
     let login = login.trim();
     match services.create_password_reset_link(login).await {
         Ok(made) => match write_link(&mut std::io::stdout(), &mut std::io::stderr(), &made, &config.base_url) {
@@ -117,14 +119,6 @@ fn write_link(
 /// `HH:MM` in UTC.
 fn end_time(at: Timestamp) -> String {
     at.to_jiff().strftime("%H:%M").to_string()
-}
-
-/// `text` with every control character shown as U+FFFD, since a name comes from another person and an escape sequence
-/// in it would run in the operator's terminal.
-fn for_terminal(text: &str) -> String {
-    text.chars()
-        .map(|c| if c.is_control() { '\u{FFFD}' } else { c })
-        .collect()
 }
 
 #[cfg(test)]
@@ -243,10 +237,5 @@ mod tests {
         expect_that!(unknown, err(matches_pattern!(ServiceError::NotFound)));
         expect_that!(with_at, err(matches_pattern!(ServiceError::NotFound)));
         Ok(())
-    }
-
-    #[gtest]
-    fn control_characters_in_a_name_are_shown_as_replacement_characters() {
-        expect_that!(for_terminal("a\u{1b}[2Jb\nc"), eq("a\u{FFFD}[2Jb\u{FFFD}c"));
     }
 }
