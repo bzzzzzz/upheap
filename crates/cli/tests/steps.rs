@@ -1,4 +1,4 @@
-//! `upheap step add | tick | drop | edit | move` and the Steps section of `upheap item show`.
+//! `upheap step add | tick | drop | reopen | edit | move` and the Steps section of `upheap item show`.
 
 mod common;
 
@@ -188,6 +188,60 @@ async fn step_drop_drops_a_step_and_is_not_repeated() -> Result<()> {
     expect_that!(dropped.stdout, eq(&format!("Dropped {name}: Email ops.\n")));
     expect_that!(again.stdout, eq(&format!("{name} is already dropped.\n")));
     expect_that!(again.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn step_reopen_puts_a_ticked_or_dropped_step_back_to_open() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    add_step(&server, &ada, &task, "Run in staging").await?;
+    add_step(&server, &ada, &task, "Email ops").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let ticked = format!("{task}.1");
+    let dropped = format!("{task}.2");
+    cli.run(&["step", "tick", &ticked]).await;
+    cli.run(&["step", "drop", &dropped]).await;
+
+    // Act
+    let from_ticked = cli.run(&["step", "reopen", &ticked]).await;
+    let from_dropped = cli.run(&["step", "reopen", &dropped, "--json"]).await;
+
+    // Assert
+    expect_that!(from_ticked.stdout, eq(&format!("Reopened {ticked}: Run in staging.\n")));
+    expect_that!(from_ticked.exited(0), eq(true));
+    expect_that!(from_dropped.exited(0), eq(true));
+    let body: Value = serde_json::from_str(&from_dropped.stdout)?;
+    expect_that!(body["steps"][1]["state"], eq("open"));
+    let item = server.read_item(&ada, HEAP, &task).await?;
+    expect_that!(item["steps"][0]["state"], eq("open"));
+    expect_that!(item["steps"][1]["state"], eq("open"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn step_reopen_of_an_open_step_says_so_and_writes_nothing() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    add_step(&server, &ada, &task, "Run in staging").await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let name = format!("{task}.1");
+    let version = server.read_item(&ada, HEAP, &task).await?["steps"][0]["version"].clone();
+
+    // Act
+    let again = cli.run(&["step", "reopen", &name]).await;
+    let quiet = cli.run(&["step", "reopen", &name, "--quiet"]).await;
+
+    // Assert
+    expect_that!(again.stdout, eq(&format!("{name} is already open.\n")));
+    expect_that!(again.exited(0), eq(true));
+    expect_that!((quiet.stdout.as_str(), quiet.exited(0)), eq(("", true)));
+    expect_that!(
+        server.read_item(&ada, HEAP, &task).await?["steps"][0]["version"],
+        eq(&version)
+    );
     Ok(())
 }
 

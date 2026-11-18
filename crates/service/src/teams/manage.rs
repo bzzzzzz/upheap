@@ -153,8 +153,9 @@ impl Services {
     }
 
     /// Changes the team's name or slug if it is still at version `expected`. A patch that changes nothing succeeds
-    /// without an audit entry. A new slug fails with [`domain::team::TeamError::PersonalTeam`] on a personal team,
-    /// and with [`ServiceError::HandleTaken`] when it is taken.
+    /// without an audit entry, so sending a personal team's stored name back is allowed. A new name or slug fails
+    /// with [`domain::team::TeamError::PersonalTeam`] on a personal team, and a slug that is taken with
+    /// [`ServiceError::HandleTaken`].
     pub async fn update_team(
         &self,
         principal: Principal,
@@ -176,8 +177,8 @@ impl Services {
         if name.is_none() && slug.is_none() {
             return load_team_detail(&txn, &self.settings.group_teams, principal, current, self.now()).await;
         }
+        current.ensure_shared()?;
         if slug.is_some() {
-            current.ensure_shared()?;
             self.ensure_not_group_managed(team_id)?;
         }
 
