@@ -85,7 +85,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   item's, and an item write never bumps a step's, so an agent ticking steps never makes an open edit of the item
   conflict. A step has a `number`, given when it is added (one past the highest the item has had) and never changed
   or reused, which is its name (`k3x9a.3`), and a `position` for its place in the order, kept apart so reordering
-  later never renames a step. Steps are never deleted: a dropped one stays. A task has at most 100, which is the size
+  never renames a step. A move (an `after` in the step's patch) writes the item's positions afresh from 0 and bumps
+  only the moved step's version; the steps it displaced keep theirs, as when an added step shifts them. Steps are never deleted: a dropped one stays. A task has at most 100, which is the size
   assumption that lets an item response carry all of its steps: only a single-item response does, and the ranked
   and closed lists carry `steps: null` and just the progress, counted in one grouped query per chunk without
   loading the steps. Progress is ticked of open plus ticked, so dropped steps don't count. A step write takes the

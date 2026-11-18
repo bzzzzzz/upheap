@@ -100,6 +100,9 @@ pub struct StepPatch {
     pub title: Option<Title>,
     pub context: Option<Option<Context>>,
     pub state: Option<StepState>,
+    /// Where the step goes in its item's order: `Some(None)` first, `Some(Some(n))` right after step `n`. Applied
+    /// with [`reorder_steps`], not by [`Step::apply_patch`], since it moves other steps' places too.
+    pub after: Option<Option<StepNumber>>,
 }
 
 /// Where a new step goes: its number, and its position, which the steps after it make room for.
@@ -116,7 +119,7 @@ pub enum StepError {
     NeedsTask { item_id: ItemId },
     #[error("item {item_id} already has {max} steps, the most a task can have")]
     TooMany { item_id: ItemId, max: usize },
-    #[error("the item has no step {number} to put the new step after")]
+    #[error("the item has no step {number} to put the step after")]
     AfterNotFound { number: StepNumber },
 }
 
@@ -189,6 +192,54 @@ pub fn place_step(item: &Item, steps: &[Step], after: Option<StepNumber>) -> Res
             .map_or(0, |last| last.saturating_add(1)),
     };
     Ok(StepPlacement { number, position })
+}
+
+/// The places to write to put step `moving` first (`after` is `None`) or right after step `after`, among `steps` in
+/// their order. Each is a step's ID and its new position; only the steps whose position changes are listed, and the
+/// positions are consecutive from 0, which also closes gaps. `None` when the order stays as it is.
+///
+/// Fails with [`StepError::AfterNotFound`] when `after` isn't a step of the others, which is the case for the step
+/// itself. The caller has found `moving` among `steps`.
+pub fn reorder_steps(
+    steps: &[Step],
+    moving: StepNumber,
+    after: Option<StepNumber>,
+) -> Result<Option<Vec<(StepId, u32)>>, StepError> {
+    let mut order: Vec<&Step> = steps.iter().filter(|step| step.number != moving).collect();
+    let index = match after {
+        None => 0,
+        Some(after) => match order.iter().position(|step| step.number == after) {
+            Some(index) => index + 1,
+            None => return Err(StepError::AfterNotFound { number: after }),
+        },
+    };
+    let Some(step) = steps.iter().find(|step| step.number == moving) else {
+        return Ok(None);
+    };
+    order.insert(index, step);
+    if order
+        .iter()
+        .map(|step| step.number)
+        .eq(steps.iter().map(|step| step.number))
+    {
+        return Ok(None);
+    }
+    Ok(Some(
+        (0..)
+            .zip(order)
+            .filter(|(position, step)| step.position != *position)
+            .map(|(position, step)| (step.id, position))
+            .collect(),
+    ))
+}
+
+/// The number of the step right before step `number` among `steps` in their order, or 0 when it is first.
+pub fn step_before(steps: &[Step], number: StepNumber) -> u32 {
+    steps
+        .iter()
+        .take_while(|step| step.number != number)
+        .last()
+        .map_or(0, |step| step.number.get())
 }
 
 /// How far a task's steps have got.
@@ -372,6 +423,122 @@ mod tests {
         );
     }
 
+    fn numbers(steps: &[Step]) -> Vec<u32> {
+        steps.iter().map(|step| step.number.get()).collect()
+    }
+
+    /// `steps` with `moves` written to their positions, in the new order.
+    fn after_moves(steps: &[Step], moves: &[(StepId, u32)]) -> Vec<u32> {
+        let mut moved = steps.to_vec();
+        for step in &mut moved {
+            if let Some((_, position)) = moves.iter().find(|(id, _)| *id == step.id) {
+                step.position = *position;
+            }
+        }
+        moved.sort_by_key(|step| (step.position, step.number));
+        numbers(&moved)
+    }
+
+    fn four_steps() -> Vec<Step> {
+        vec![
+            sample_step(1, 0, StepState::Open),
+            sample_step(2, 1, StepState::Dropped),
+            sample_step(3, 2, StepState::Ticked),
+            sample_step(4, 3, StepState::Open),
+        ]
+    }
+
+    #[gtest]
+    fn a_step_moved_first_goes_before_every_other() {
+        let steps = four_steps();
+
+        let moves = reorder_steps(&steps, number(3), None).expect("moved").expect("changed");
+
+        expect_that!(after_moves(&steps, &moves), eq(&vec![3, 1, 2, 4]));
+        expect_that!(moves.len(), eq(3));
+    }
+
+    #[gtest]
+    fn a_step_moved_after_a_later_step_goes_right_behind_it() {
+        let steps = four_steps();
+
+        let moves = reorder_steps(&steps, number(1), Some(number(3)))
+            .expect("moved")
+            .expect("changed");
+
+        expect_that!(after_moves(&steps, &moves), eq(&vec![2, 3, 1, 4]));
+    }
+
+    #[gtest]
+    fn a_step_moved_after_an_earlier_step_goes_right_behind_it() {
+        let steps = four_steps();
+
+        let moves = reorder_steps(&steps, number(4), Some(number(1)))
+            .expect("moved")
+            .expect("changed");
+
+        expect_that!(after_moves(&steps, &moves), eq(&vec![1, 4, 2, 3]));
+    }
+
+    #[gtest]
+    fn a_step_can_move_after_a_dropped_one() {
+        let steps = four_steps();
+
+        let moves = reorder_steps(&steps, number(4), Some(number(2)))
+            .expect("moved")
+            .expect("changed");
+
+        expect_that!(after_moves(&steps, &moves), eq(&vec![1, 2, 4, 3]));
+    }
+
+    #[gtest]
+    fn moving_closes_gaps_in_the_positions() {
+        let steps = [
+            sample_step(1, 0, StepState::Open),
+            sample_step(2, 5, StepState::Open),
+            sample_step(3, 9, StepState::Open),
+        ];
+
+        let moves = reorder_steps(&steps, number(3), None).expect("moved").expect("changed");
+
+        expect_that!(moves, eq(&vec![(steps[2].id, 0), (steps[0].id, 1), (steps[1].id, 2)]));
+    }
+
+    #[gtest]
+    fn a_move_that_leaves_the_order_changes_nothing() {
+        let steps = [
+            sample_step(1, 0, StepState::Open),
+            sample_step(2, 4, StepState::Open),
+            sample_step(3, 9, StepState::Open),
+        ];
+
+        expect_that!(reorder_steps(&steps, number(1), None), ok(none()));
+        expect_that!(reorder_steps(&steps, number(2), Some(number(1))), ok(none()));
+        expect_that!(reorder_steps(&steps, number(3), Some(number(2))), ok(none()));
+    }
+
+    #[gtest]
+    fn moving_after_a_step_the_item_does_not_have_or_itself_is_refused() {
+        let steps = four_steps();
+
+        expect_that!(
+            reorder_steps(&steps, number(1), Some(number(9))),
+            err(eq(&StepError::AfterNotFound { number: number(9) }))
+        );
+        expect_that!(
+            reorder_steps(&steps, number(2), Some(number(2))),
+            err(eq(&StepError::AfterNotFound { number: number(2) }))
+        );
+    }
+
+    #[gtest]
+    fn the_step_before_is_named_by_its_number_or_zero_when_first() {
+        let steps = four_steps();
+
+        expect_that!(step_before(&steps, number(1)), eq(0));
+        expect_that!(step_before(&steps, number(3)), eq(2));
+    }
+
     #[gtest]
     fn a_patch_that_changes_nothing_gives_none() {
         let step = sample_step(1, 0, StepState::Open);
@@ -382,6 +549,7 @@ mod tests {
                 title: Some(Title::parse("Run in staging").expect("valid")),
                 context: Some(None),
                 state: Some(StepState::Open),
+                after: None,
             }),
             none()
         );

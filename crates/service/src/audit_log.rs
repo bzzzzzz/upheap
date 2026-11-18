@@ -679,6 +679,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::StepTitle => "Step title",
         AuditField::StepContext => "Step context",
         AuditField::StepState => "Step state",
+        AuditField::StepPlace => "Step place",
         AuditField::Question => "Question",
         AuditField::QuestionKind | AuditField::Kind => "Kind",
         AuditField::QuestionText => "Question text",
@@ -764,6 +765,8 @@ enum Form {
     Coded(fn(&str) -> Option<&'static str>),
     /// The words for a coded value, or the code as it is when it has none.
     Worded(fn(&str) -> Option<&'static str>),
+    /// A step's place: the number of the step it follows, or 0 for first.
+    Place,
     /// A step, named by its title (its number is in the diff for API clients).
     Step,
     /// A question or comment, by its number after a prefix: `q2`, `c3`.
@@ -812,6 +815,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::Need => coded(|code| Need::from_code(code).map(Need::label)),
         AuditField::Effort | AuditField::Impact => coded(|code| Size::from_code(code).map(Size::label)),
         AuditField::Role => coded(|code| Role::from_code(code).map(Role::label)),
+        AuditField::StepPlace => shown(Form::Place),
         AuditField::Step => shown(Form::Step),
         AuditField::Question => shown(Form::Numbered('q')),
         AuditField::Comment => shown(Form::Numbered('c')),
@@ -881,6 +885,10 @@ fn describe_value(form: Form, value: &Value, names: &Names, tz: &TimeZone) -> Op
             let code = value.as_str()?;
             words(code).unwrap_or(code).to_owned()
         }
+        Form::Place => match value.as_u64()? {
+            0 => "first".to_owned(),
+            number => format!("after step {number}"),
+        },
         Form::Step => value.get("title")?.as_str()?.to_owned(),
         Form::Numbered(prefix) => format!("{prefix}{}", value.as_u64()?),
         Form::Joined => join(value.as_array()?.iter().filter_map(Value::as_str).map(str::to_owned))?,
@@ -1209,6 +1217,28 @@ mod tests {
         expect_that!(
             describe_action(AuditAction::StepUpdated, false),
             eq(("changed a step of", true))
+        );
+    }
+
+    #[gtest]
+    fn a_moved_step_shows_the_step_it_now_follows() {
+        let diff = json!({
+            "step": { "number": 3, "title": "Run in prod" },
+            "step_place": { "before": 2, "after": 0 },
+        });
+
+        let changes = describe_changes(
+            &entry(AuditAction::StepUpdated, EntityType::Item, diff),
+            &Names::default(),
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![
+                eq(&change("step", "Step", None, Some("Run in prod"))),
+                eq(&change("step_place", "Step place", Some("after step 2"), Some("first"))),
+            ]
         );
     }
 

@@ -45,6 +45,25 @@ pub async fn shift_positions_after(
     Ok(())
 }
 
+/// Sets the position of step `id`, leaving its version: like [`shift_positions_after`], it moves a step that
+/// another step's move displaced, and nothing about the step itself changed.
+pub async fn set_position(
+    db: &impl ConnectionTrait,
+    item_id: ItemId,
+    id: StepId,
+    position: u32,
+) -> Result<(), StoreError> {
+    item_steps::Entity::update_many()
+        .col_expr(
+            item_steps::Column::Position,
+            Expr::value(position_to_db(position, item_id)?),
+        )
+        .filter(item_steps::Column::Id.eq(id_to_db(id.as_uuid())))
+        .exec(db)
+        .await?;
+    Ok(())
+}
+
 /// The steps of `item_id` in position order.
 pub async fn list_steps(db: &impl ConnectionTrait, item_id: ItemId) -> Result<Vec<Step>, StoreError> {
     read_steps(db, item_id, false).await

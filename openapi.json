@@ -13882,6 +13882,15 @@
         "type": "object",
         "description": "A partial edit of a step. Leave a field out to keep it; send `null` to clear the context.",
         "properties": {
+          "after": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Where the step goes in the task's order: the number of the step it goes right after, or `null` for first.\nLeft out, it stays where it is.",
+            "minimum": 1
+          },
           "context": {
             "type": [
               "string",

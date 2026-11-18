@@ -20,7 +20,7 @@ Doing the work
    default branch.
 3. Work through the steps in order. Tick each as it is finished (`upheap step tick <key>.<n>`), add a step when a
    new part turns up that the task isn't complete without (work that can wait is a new item, see the rules), drop
-   one that isn't needed (`upheap step drop`). Steps already ticked are done: an earlier
+   one that isn't needed (`upheap step drop`), move one that is in the wrong place (`upheap step move`). Steps already ticked are done: an earlier
    run did them. Carry on from there. A step that turns out not finished goes back to open
    (`upheap step reopen`).
 4. As you go, add a comment (`upheap comment add <key>`) with what the next reader needs: where the work is

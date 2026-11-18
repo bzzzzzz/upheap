@@ -6,7 +6,9 @@
 
 use domain::audit::AuditAction;
 use domain::permission::Permission;
-use domain::step::{NewStep, Step, StepNumber, StepPatch, check_steps_editable, place_step};
+use domain::step::{
+    NewStep, Step, StepNumber, StepPatch, check_steps_editable, place_step, reorder_steps, step_before,
+};
 use domain::{ItemId, StepId, Version};
 use store::{StoreError, TransactionTrait};
 
@@ -96,7 +98,12 @@ impl Services {
     /// [`ServiceError::NotFound`] when the item has no such step, and with
     /// [`ItemError::Closed`](domain::item::ItemError::Closed) on a closed item.
     ///
-    /// A patch that changes nothing succeeds and returns the item unchanged, without an audit entry.
+    /// A patch with `after` also moves the step in the item's order, and fails with
+    /// [`StepError::AfterNotFound`](domain::step::StepError::AfterNotFound) when `after` isn't another step of the
+    /// item. Its number never changes.
+    ///
+    /// A patch that changes nothing, a place that leaves the order as it is included, succeeds and returns the item
+    /// unchanged, without an audit entry.
     pub async fn update_step(
         &self,
         principal: Principal,
@@ -130,7 +137,20 @@ impl Services {
         }
 
         let now = self.now();
-        let Some(edited) = current.apply_patch(&patch) else {
+        // The moved step's own position goes through its write below, which bumps its version; the places of the
+        // steps it displaced are written without bumping theirs, as `add_step` shifts them.
+        let reordered = match patch.after {
+            Some(after) => reorder_steps(&steps, number, after)?,
+            None => None,
+        };
+        let mut edited = current.apply_patch(&patch);
+        if let Some(moves) = &reordered {
+            let moved = edited.get_or_insert_with(|| current.clone());
+            if let Some((_, position)) = moves.iter().find(|(id, _)| *id == current.id) {
+                moved.position = *position;
+            }
+        }
+        let Some(edited) = edited else {
             let children = ItemChildren {
                 steps,
                 questions: store::questions::list_questions_locking(&txn, item.id).await?,
@@ -150,12 +170,19 @@ impl Services {
                 expected,
                 current: expected.next(),
             })?;
+        for (id, position) in reordered.iter().flatten().filter(|(id, _)| *id != current.id) {
+            store::steps::set_position(&txn, item.id, *id, *position).await?;
+        }
+        let places = match patch.after {
+            Some(after) if reordered.is_some() => (step_before(&steps, number), after.map_or(0, StepNumber::get)),
+            _ => (0, 0),
+        };
         let entry = self.item_audit_entry(
             &access.heap,
             principal,
             AuditAction::StepUpdated,
             &item,
-            diff_steps(current, &saved),
+            diff_steps(current, &saved, places),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
