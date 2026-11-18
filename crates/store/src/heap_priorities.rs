@@ -39,6 +39,39 @@ pub async fn list_heap_priorities(
         .collect()
 }
 
+/// Gives `to` every priority set for `from`, one row per person, written at `now`. People with no row for `from`
+/// keep none for `to`, so they read the default there too. `to` must have no rows yet: it is a heap just made.
+///
+/// Reads all of `from`'s rows at once: one per person who ever set a priority for it, bounded by the people its team
+/// has had, so a few hundred at most.
+pub async fn copy_heap_priorities(
+    db: &impl ConnectionTrait,
+    from: HeapId,
+    to: HeapId,
+    now: Timestamp,
+) -> Result<(), StoreError> {
+    // Well under the bind-parameter limits of SQLite and MySQL at 4 columns a row.
+    const CHUNK: usize = 1000;
+    let rows: Vec<heap_priorities::ActiveModel> = heap_priorities::Entity::find()
+        .filter(Column::HeapId.eq(id_to_db(from.as_uuid())))
+        .all(db)
+        .await?
+        .into_iter()
+        .map(|row| heap_priorities::ActiveModel {
+            user_id: Set(row.user_id),
+            heap_id: Set(id_to_db(to.as_uuid())),
+            priority: Set(row.priority),
+            updated_at: Set(now.as_millis()),
+        })
+        .collect();
+    for chunk in rows.chunks(CHUNK) {
+        heap_priorities::Entity::insert_many(chunk.iter().cloned())
+            .exec_without_returning(db)
+            .await?;
+    }
+    Ok(())
+}
+
 /// Sets `user_id`'s priority for `heap_id`, replacing the one stored. Last write wins.
 pub async fn upsert_heap_priority(
     db: &impl ConnectionTrait,
