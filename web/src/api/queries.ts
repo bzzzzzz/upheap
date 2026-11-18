@@ -417,6 +417,41 @@ export function useMoveItem(heap: HeapRef) {
 }
 
 /**
+ * Moves several items of `heap`, or of any heap of its team, to another heap in one request. Each carries the newest
+ * version known, as `useMoveItem` sends it, and moves on its own: the answer lists the items that moved and those that
+ * didn't, with the problem for each. Nothing navigates, as the list stays where it is.
+ */
+export function useMoveItems(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    scope: { id: "item-edits" },
+    mutationFn: async ({ items, to }: { items: Item[]; to: HeapRef & { id: string } }) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/items/move", {
+          params: { path: { team: heap.team } },
+          body: {
+            heap_id: to.id,
+            items: items.map((item) => ({
+              id: item.id,
+              version: Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0),
+            })),
+          },
+        }),
+      ),
+    onSettled: (_response, _error, { to }) => {
+      invalidateOpenCounts(queryClient);
+      for (const queryKey of [rankedKey(heap), rankedKey(to), closedKey(heap), closedKey(to)]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
+      void queryClient.invalidateQueries({ queryKey: ["item"] });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void queryClient.invalidateQueries({ queryKey: decisionsKey });
+    },
+  });
+}
+
+/**
  * Makes the note `key` a step of an open task of the same heap. The server closes the note as became; its answer is
  * written into the cache. Settling waits for the lists and items to be fetched again, so a caller reading the cache
  * after a refusal sees what the server has now.

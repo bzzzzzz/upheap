@@ -854,6 +854,46 @@ test("an item is moved to another heap of its team from ⋯, after a confirm ste
   await expect(page.getByRole("status").filter({ hasText: "Moved to Garden." })).toBeVisible();
 });
 
+test("several items are selected in the list and moved to another heap at once", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  for (const title of ["Water the plants", "Pull the weeds", "Rotate the certs"]) await addItem(page, title);
+  const select = page.getByRole("button", { name: "Select", exact: true });
+  const picked = (title: string) => page.getByRole("checkbox", { name: new RegExp(`^${title}`) });
+
+  // Back leaves select mode, and Select goes into it again with nothing selected.
+  await select.click();
+  await expect(picked("Water the plants")).toBeVisible();
+  await page.goBack();
+  await expect(select).toBeVisible();
+  await select.click();
+  await expect(page.getByRole("status").filter({ hasText: "0 selected" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Move to…" })).toBeDisabled();
+
+  await picked("Water the plants").click();
+  await picked("Pull the weeds").click();
+  await expect(picked("Water the plants")).toBeChecked();
+  await expect(picked("Rotate the certs")).not.toBeChecked();
+  await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Move to…" }).click();
+  const picker = page.getByRole("dialog", { name: "Move to", exact: true });
+  await picker.getByRole("menuitem", { name: "Garden" }).click();
+  await expect(picker.getByRole("heading", { name: "Move 2 items to Garden?" })).toBeVisible();
+  await expect(picker).toContainText("Tags they don't have there are dropped.");
+  await picker.getByRole("button", { name: "Move 2", exact: true }).click();
+
+  // The moved rows are gone, the list is out of select mode, and the toast leads to the heap they went to.
+  const toast = page.getByRole("status").filter({ hasText: "Moved 2 items to Garden." });
+  await expect(toast).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Rotate the certs/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Water the plants/ })).toHaveCount(0);
+  await expect(select).toBeVisible();
+  await toast.getByRole("button", { name: "Open Garden" }).click();
+  await expect(page).toHaveURL(/\/teams\/[^/]+\/heaps\/garden$/);
+  await expect(page.getByRole("link", { name: /^Water the plants/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Pull the weeds/ })).toBeVisible();
+});
+
 test("a task is worked through its steps from the item", async ({ page }) => {
   await addItem(page, "Rotate the certs");
   await openItem(page, "Rotate the certs");

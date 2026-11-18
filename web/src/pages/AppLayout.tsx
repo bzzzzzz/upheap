@@ -44,6 +44,7 @@ import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { teamName, titleTeam } from "../components/teamName";
 import { ToastProvider, useToast } from "../components/UndoToast";
+import { useSelectMode } from "../components/useSelectMode";
 
 export function AppLayout() {
   const { data: me } = useMe();
@@ -377,7 +378,25 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
           </button>
         )}
       </HeapSwitcher>
+      <PhoneSelect heapRef={heapRef} />
     </header>
+  );
+}
+
+/** Select, at the end of the phone's top bar, on a heap's list with no item open (ux.md, The list §19). */
+function PhoneSelect({ heapRef }: { heapRef: HeapRef | undefined }) {
+  const onList = useMatch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false }) !== undefined;
+  const { item } = useParams({ strict: false });
+  const { canSelect, selecting, enter } = useSelectMode(heapRef);
+  if (!onList || item !== undefined || selecting || !canSelect) return null;
+  return (
+    <button
+      type="button"
+      onClick={enter}
+      className="ml-auto min-h-11 shrink-0 rounded-lg px-3 text-base font-medium text-accent-ink outline-none focus-visible:outline-2 focus-visible:outline-accent"
+    >
+      Select
+    </button>
   );
 }
 

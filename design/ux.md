@@ -293,7 +293,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    Hidden, a dot on a changed one; shown blocked items in their own group or mixed in; Reminders to come, Hidden or
    Shown, point 16), then Narrow down (tags, need,
    effort, impact, parameters, agent state, going to), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
-   on a phone. The toolbar is search, Sort by and Filters; on a phone it's search and an icon Filters button, and the
+   on a phone. The toolbar is search, Sort by, Filters and Select (point 19); on a phone it's search and an icon Filters button, with Select in the top bar, and the
    sheet, "Filters & sort", starts with the sort and ends with "Show 6 items". The Filters button counts the filters
    and changed settings, amber while any are on; on a phone, where the sort is out of sight in the sheet, it counts a
    sort other than Priority too ("Filters and sort, 1 on"). The list updates live behind the panel.
@@ -340,6 +340,30 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 18. Sort by offers Priority, Due soonest, Most needed, Smallest effort and Largest impact, then each custom parameter
     that has an order. Most needed lists Critical first, then Expected, Nice to have and Idea; items of the same
     need keep priority order.
+19. **Selecting and moving several items** works on a heap's own list only: not on All items, not on Closed, and the
+    reminders to come aren't selectable. **Select** shows when the heap isn't archived and its team has another heap
+    that isn't. On a tablet or wide screen it is a button in the toolbar after Filters; on a phone it is a text button
+    at the end of the top bar, with no item open. Select mode is a history entry, so Back leaves it, as do Done, ✕,
+    Escape and a move that took every item; changing a filter or the sort doesn't. Entering it closes an open item
+    and starts with nothing selected.
+    In select mode a row's first slot holds a checkbox, Done and the robot are hidden, swipes are off, and the row is
+    a checkbox: a click or tap or Space toggles it, Shift-click selects every row between the last one toggled and
+    this one, and Shift+↑ and Shift+↓ move to the next row and select it. `x`, `s` and `a` do nothing. Tags and
+    parameters in a row still filter the list. On a tablet or wide screen a bar takes the toolbar's place: a box that
+    selects or clears every row shown (mixed while some are), "3 selected · Select all 14", **Move to…** (off while
+    nothing is selected) and **Done**; the chips of the filters stay. On a phone a bar over the top bar has ✕, "3
+    selected" and Select all (Clear all when all are), and a bar over the tabs has Move to… across its width. The
+    count is announced. Only rows the list shows stay selected: a row a filter or the search hides is dropped from the
+    selection and doesn't come back when the filter is taken off.
+    Move to… opens the item's Move picker (The item §6) for the selection. Picking a heap asks first, "Move 3 items to
+    Marketing?" and "Tags they don't have there are dropped.", with Cancel and "Move 3". When every item moves, the
+    picker closes, select mode ends and the list stays where it is, with the moved rows gone; the toast says "Moved 3
+    items to Marketing." (and "2 got new keys." when some keys changed) and offers **Open Marketing**. There is no
+    Undo. Each item moves on its own, so when some are refused (changed by someone else meanwhile, closed, the heap
+    archived) the picker shows "Moved 2 of 3 items to Marketing." (or "None of the 3 items moved."), then "Not
+    moved:" and a line for each, "Title — reason", with **Close**; Close keeps select mode with only the refused
+    rows selected, so Move can be tried again. A request that fails as a whole shows its error above the buttons, and
+    nothing moved.
 
 ## The item
 
