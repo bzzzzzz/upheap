@@ -62,13 +62,13 @@ The tables and columns are in the migrations. These are the conventions they fol
   `arrives_at.unwrap_or(created_at)` as the item's age, so `arrives_at` has a second use: an item made from another
   with `age: keep` gets the origin's arrival (or its creation) there, and so counts its age from the note's creation.
   It is still `NULL` for every other item, and the API shows it only for reminders.
-- **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run
-  that added it, with `created_run_id` set beside it then. `made_in_split` marks the first kind: only those are what
-  the note became, so a follow-up a run adds doesn't count toward `nothing_made`, the run's reached check or the
-  Became list. All three are set when the item is made and never changed, and stay when either item later moves to
-  another heap or team, as a blocker's link does; a reader sees the other end only where they may view its heap. An index on `origin_id` serves the lookup of what a note became, which the
-  item and the closed list show as `became`, each with the heap it is in now: a handful of items per note, and at
-  most one page of closed items, read in one query.
+- **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run that
+  added it, with `created_run_id` set beside it then. `made_in_split` marks the first kind: only those are what the note
+  became, so a follow-up a run adds doesn't count toward `nothing_made`, the run's reached check or the Became list. All
+  three are set when the item is made and never changed, and stay when either item later moves to another heap or team,
+  as a blocker's link does; a reader sees the other end only where they may view its heap. An index on `origin_id`
+  serves the lookup of what a note became, which the item and the closed list show as `became`, each with the heap it is
+  in now: a handful of items per note, and at most one page of closed items, read in one query.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -454,19 +454,20 @@ a fixed time.
    holding the heap row; an exclusive team lock waiting for that heap row would deadlock with it. A tag write reads
    nothing in its transaction before the team lock, so its plain reads after it see what committed while it waited;
    locking reads there would take gap locks on MySQL that deadlock tag writes of two teams.
-2. A move of an item to another heap, in any team the caller may edit items in, locks both heaps in heap ID order, as the agent's queue locks
-   several, then reads the item with a locking read and checks its version. A run's `became` locks the note's heap and
-   the active heaps made from the note the same way, since it defines the tasks in them. Two moves in opposite directions can't
-   wait for each other, and the second of two moves of one item finds it changed. The item's own blocker is part of
-   its old heap's state, so the moved item stays blocked with nobody picked. The items that waited for it keep it as
-   their blocker, now in another heap, so they wait for the person (§3), and a move back makes it hold
-   them again; the move writes nothing to them. A blocker in another team than the item it blocks is never named, to
-   anyone: the item has no `blocked_by` and its `blocker_gone` says it moved, with no heap, whatever the blocker's
-   state there (`gone_blockers`); Waiting for me shows it as a row of its own kind, `blocker_left_team`, with no blocker
-   (a new kind, so released clients skip it, as the API adds rather than changes). A note that heaps were made from,
-   archived ones included, stays in its team, since a run's `became` defines the tasks in those heaps. Since an item's heap can change, a write that finds the
-   heap through a read before the lock (a step, a question, a turn, a run) reads the item again under the lock and
-   refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
+2. A move of an item to another heap, in any team the caller may edit items in, locks both heaps in heap ID order, as
+   the agent's queue locks several, then reads the item with a locking read and checks its version. A run's `became`
+   locks the note's heap and the active heaps made from the note the same way, since it defines the tasks in them. Two
+   moves in opposite directions can't wait for each other, and the second of two moves of one item finds it changed. The
+   item's own blocker is part of its old heap's state, so the moved item stays blocked with nobody picked. The items
+   that waited for it keep it as their blocker, now in another heap, so they wait for the person (§3), and a move back
+   makes it hold them again; the move writes nothing to them. A blocker in another team than the item it blocks is never
+   named, to anyone: the item has no `blocked_by` and its `blocker_gone` says it moved, with no heap, whatever the
+   blocker's state there (`gone_blockers`); Waiting for me shows it as a row of its own kind, `blocker_left_team`, with
+   no blocker (a new kind, so released clients skip it, as the API adds rather than changes). A note that heaps were
+   made from, archived ones included, stays in its team, since a run's `became` defines the tasks in those heaps. Since
+   an item's heap can change, a write that finds the heap through a read before the lock (a step, a question, a turn, a
+   run) reads the item again under the lock and refuses with `409 version_conflict` when it has left that heap
+   (`find_item_locking_in`).
 3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
    itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
    same heap when it is set, also for an item made blocked (`blocked_by` on create). So is the reason in words

@@ -268,13 +268,13 @@ async fn reopen_item(
 
 /// Moves an item to another heap, of any team the caller may edit items in, with its context, steps, questions, turn
 /// and history. Send the item's `version` in `If-Match`. The item keeps its key unless the new heap has an item with
-/// it, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name,
-/// or a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays
-/// blocked with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and
-/// wait for the caller; when it went to another team it is never named. A turn stays when its person may edit items
-/// in the target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its team. Moving an
-/// item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path
-/// stops working.
+/// it, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name, or
+/// a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked
+/// with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for
+/// the caller; when it went to another team it is never named. A turn stays when its person may edit items in the
+/// target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its
+/// team. Moving an item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so
+/// its old path stops working.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/move", tag = "items", security(("session" = [])),
     params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemMoveDto,
     responses(

@@ -4,13 +4,13 @@ import { Button } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { BlockerGone, WaitingBlocker } from "../api/schema";
-
-/** A gone blocker as a row shows it: no `item` when it moved to another team, which is never named. */
-export type GoneBlocker = Omit<WaitingBlocker, "item"> & { item: WaitingBlocker["item"] | null };
 import { useUnblock } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { useOverListLink } from "./overList";
+
+/** A gone blocker as a row shows it: no `item` when it moved to another team, which is never named. */
+export type GoneBlocker = Omit<WaitingBlocker, "item"> & { item: WaitingBlocker["item"] | null };
 
 const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 
