@@ -45,39 +45,20 @@ pub struct MoveArgs {
     pub shared: SharedArgs,
 }
 
-/// What a move of one item came to.
-enum Moved {
-    /// The item was in the heap already.
-    Already(Fetched<ItemDto>, String),
-    Moved {
-        before: ItemDto,
-        after: Fetched<ItemDto>,
-        target: String,
-    },
+/// What a move of one item came to: the item as it is now, and as it was when it moved, or none when it was in the
+/// heap already.
+struct Moved {
+    item: Fetched<ItemDto>,
+    before: Option<ItemDto>,
+    target: String,
 }
 
 impl Moved {
-    /// The item's key now.
-    fn key(&self) -> &str {
-        match self {
-            Self::Already(item, _) => &item.value.key,
-            Self::Moved { after, .. } => &after.value.key,
-        }
-    }
-
-    /// The item as the server gave it, which `--json` prints.
-    fn body(&self) -> &str {
-        match self {
-            Self::Already(item, _) => &item.body,
-            Self::Moved { after, .. } => &after.body,
-        }
-    }
-
     /// What the human output says, line by line.
     fn lines(&self) -> Vec<String> {
-        match self {
-            Self::Already(item, target) => vec![format!("{} is already in {target}.", item.value.key)],
-            Self::Moved { before, after, target } => moved_lines(before, &after.value, target),
+        match &self.before {
+            None => vec![format!("{} is already in {}.", self.item.value.key, self.target)],
+            Some(before) => moved_lines(before, &self.item.value, &self.target),
         }
     }
 }
@@ -96,8 +77,8 @@ pub async fn run(args: MoveArgs, app: &App, out: &mut Output) -> Result<(), CliE
     if let [item] = args.items.as_slice() {
         let moved = move_one(&args, item, app, &mut session).await?;
         match out.mode() {
-            Mode::Json => out.json(moved.body())?,
-            Mode::Quiet => out.line(moved.key())?,
+            Mode::Json => out.json(&moved.item.body)?,
+            Mode::Quiet => out.line(&moved.item.value.key)?,
             Mode::Human => {
                 for line in moved.lines() {
                     out.line(&line)?;
@@ -118,9 +99,9 @@ pub async fn run(args: MoveArgs, app: &App, out: &mut Output) -> Result<(), CliE
                 moved_count += 1;
                 match out.mode() {
                     Mode::Json => {
-                        json_items.push(serde_json::from_str::<Value>(moved.body()).map_err(std::io::Error::other)?)
+                        json_items.push(serde_json::from_str::<Value>(&moved.item.body).map_err(std::io::Error::other)?)
                     }
-                    Mode::Quiet => out.line(moved.key())?,
+                    Mode::Quiet => out.line(&moved.item.value.key)?,
                     Mode::Human => {
                         let mut lines = moved.lines().into_iter();
                         if let Some(first) = lines.next() {
@@ -197,7 +178,11 @@ async fn move_one(args: &MoveArgs, typed: &str, app: &App, session: &mut Option<
     };
     let item = api.get_item(typed, &at.key).await?;
     if *target == heap {
-        return Ok(Moved::Already(item, target.to_string()));
+        return Ok(Moved {
+            item,
+            before: None,
+            target: target.to_string(),
+        });
     }
     // The body names the heap by ID, which its path doesn't give.
     let heap_id = match *target_id {
@@ -215,9 +200,9 @@ async fn move_one(args: &MoveArgs, typed: &str, app: &App, session: &mut Option<
     };
     let body = ItemMoveDto { heap_id };
     let after = api.post_item_action(&at.key, "move", item.value.version, &body).await?;
-    Ok(Moved::Moved {
-        before: item.value,
-        after,
+    Ok(Moved {
+        item: after,
+        before: Some(item.value),
         target: target.to_string(),
     })
 }
