@@ -777,6 +777,7 @@ export function useUnblock(heap: HeapRef) {
       queryClient.setQueryData(itemKey(heap, saved.key), saved);
       replaceListedItem(queryClient, heap, saved);
       dropWaitingRows(queryClient, saved.id, "blocker_gone");
+      dropWaitingRows(queryClient, saved.id, "blocker_left_team");
     },
     onError: (_error, item) => {
       void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });

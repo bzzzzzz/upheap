@@ -215,7 +215,7 @@ enum ItemCommand {
     Became(commands::item::state::StateArgs),
     /// Make a note a step of an existing task in its heap, and close the note as became
     ToStep(commands::item::to_step::ToStepArgs),
-    /// Move an item to another heap of its team, with its context, steps, questions and history
+    /// Move an item to another heap, of any team you may edit items in, with its context, steps, questions and history
     Move(commands::item::move_item::MoveArgs),
     /// Send an item to an agent: to its next stable state, or on until done with --all-the-way
     Send(commands::item::turn::SendArgs),

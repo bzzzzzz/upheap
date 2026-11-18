@@ -322,16 +322,14 @@ async fn an_entity_of_another_heap_or_team_has_no_history_here_and_members_get_n
     .await?;
 
     // Act
-    let other_item = get(
-        &app,
-        &member,
-        &format!(
-            "{}/audit?entity_id={}",
-            app.heap_url(&heap).await?,
-            elsewhere["id"].as_str().unwrap_or_default()
-        ),
-    )
-    .await?;
+    let elsewhere_url = format!(
+        "{}/audit?entity_id={}",
+        app.heap_url(&heap).await?,
+        elsewhere["id"].as_str().unwrap_or_default()
+    );
+    // An item's history is read from every team the reader is in, so its own person sees it from any of their heaps.
+    let other_item = get(&app, &admin, &elsewhere_url).await?;
+    let own_item = get(&app, &member, &elsewhere_url).await?;
     let other_heap_in_team = get(
         &app,
         &admin,
@@ -361,6 +359,7 @@ async fn an_entity_of_another_heap_or_team_has_no_history_here_and_members_get_n
 
     // Assert
     expect_that!(actions(&other_item), is_empty());
+    expect_that!(actions(&own_item), elements_are![eq(&"item_created")]);
     expect_that!(actions(&other_heap_in_team), is_empty());
     expect_that!(actions(&member_parameter), is_empty());
     expect_that!(actions(&admin_parameter), elements_are![eq(&"parameter_created")]);

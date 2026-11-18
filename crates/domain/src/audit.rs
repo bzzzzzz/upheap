@@ -104,6 +104,8 @@ coded_enum! {
         BlockerDone = "blocker_done",
         Title = "title",
         Heap = "heap",
+        /// The title an item had when it left a team: how that team's log names it afterwards. Never shown as a change.
+        ItemTitle = "item_title",
         Key = "key",
         Kind = "kind",
         Stage = "stage",

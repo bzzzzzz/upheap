@@ -3906,7 +3906,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's\n`version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.\nTags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of\nthe same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The\nitems that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an\nitem to the heap it is in succeeds and changes nothing. The response is the item in its new heap, and its old path\nstill names it.",
+        "summary": "Moves an item to another heap, of any team the caller may edit items in, with its context, steps, questions, turn\nand history. Send the item's `version` in `If-Match`. The item keeps its key unless the new heap has an item with\nit, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name, or\na parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked\nwith nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for\nthe caller; when it went to another team it is never named. A turn stays when its person may edit items in the\ntarget heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its\nteam. Moving an item to the heap it is in succeeds and changes nothing. The response is the item in its new heap; its\nold path still leads to it for whoever may view it there, and answers `404` for anyone else.",
         "operationId": "move_item",
         "parameters": [
           {
@@ -4013,7 +4013,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed` or `heap_archived` (either heap)",
+            "description": "`version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from, archived ones included, to another team)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4023,7 +4023,7 @@
             }
           },
           "422": {
-            "description": "`heap_not_in_team`: the heap isn't another heap of the item's team, or doesn't exist",
+            "description": "`heap_not_in_team`: the heap doesn't exist or isn't in a team you're in",
             "content": {
               "application/json": {
                 "schema": {
@@ -9291,7 +9291,7 @@
               },
               {
                 "$ref": "#/components/schemas/HeapSummary",
-                "description": "The heap of the item's team the blocker is in now, when it was moved away from the item's heap."
+                "description": "The heap of the item's team the blocker is in now, when it was moved away from the item's heap. `null` when it\nwas moved to another team: it is never named then."
               }
             ]
           }
@@ -10840,7 +10840,7 @@
               },
               {
                 "$ref": "#/components/schemas/ItemRef",
-                "description": "The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be closed\nas won't do, or done before closing a blocker as done freed what it blocks, or in another heap of the team\nafter a move: then `blocker_gone` says so."
+                "description": "The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be closed\nas won't do, or done before closing a blocker as done freed what it blocks, or in another heap after a move:\nthen `blocker_gone` says so. `null` when the blocker moved to another team, which is never named; then\n`blocker_gone` says it moved, with no heap."
               }
             ]
           },
@@ -11188,7 +11188,7 @@
           "heap_id": {
             "type": "string",
             "format": "uuid",
-            "description": "The heap to move the item to: another heap of the item's team."
+            "description": "The heap to move the item to: a heap of any team the caller may edit items in."
           }
         },
         "additionalProperties": false
@@ -14656,6 +14656,22 @@
           }
         }
       },
+      "WaitingLeftTeam": {
+        "type": "object",
+        "description": "A blocker that moved to another team and stopped holding the row's item. It is never named, nor is its heap.",
+        "required": [
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemAction"
+            },
+            "description": "What the caller may do about it: `change_state`, to unblock the item, when they may edit items."
+          }
+        }
+      },
       "WaitingRow": {
         "type": "object",
         "description": "One thing that waits.",
@@ -14666,7 +14682,8 @@
           "heap_priority",
           "question",
           "stuck",
-          "blocker"
+          "blocker",
+          "left_team"
         ],
         "properties": {
           "blocker": {
@@ -14694,6 +14711,17 @@
           },
           "kind": {
             "$ref": "#/components/schemas/WaitingRowKind"
+          },
+          "left_team": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WaitingLeftTeam",
+                "description": "The blocker that moved to another team. Set on a `blocker_left_team` row; `null` on the others."
+              }
+            ]
           },
           "question": {
             "oneOf": [
@@ -14732,7 +14760,8 @@
         "enum": [
           "question",
           "stuck",
-          "blocker_gone"
+          "blocker_gone",
+          "blocker_left_team"
         ]
       },
       "WaitingStuck": {

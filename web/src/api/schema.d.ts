@@ -896,13 +896,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's
-         *     `version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.
-         *     Tags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of
-         *     the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The
-         *     items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an
-         *     item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, and its old path
-         *     still names it.
+         * Moves an item to another heap, of any team the caller may edit items in, with its context, steps, questions, turn
+         *     and history. Send the item's `version` in `If-Match`. The item keeps its key unless the new heap has an item with
+         *     it, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name, or
+         *     a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked
+         *     with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for
+         *     the caller; when it went to another team it is never named. A turn stays when its person may edit items in the
+         *     target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its
+         *     team. Moving an item to the heap it is in succeeds and changes nothing. The response is the item in its new heap; its
+         *     old path still leads to it for whoever may view it there, and answers `404` for anyone else.
          */
         post: operations["move_item"];
         delete?: never;
@@ -2808,7 +2810,7 @@ export interface components {
         ItemMoveRequest: {
             /**
              * Format: uuid
-             * @description The heap to move the item to: another heap of the item's team.
+             * @description The heap to move the item to: a heap of any team the caller may edit items in.
              */
             heap_id: string;
         };
@@ -4248,6 +4250,11 @@ export interface components {
             /** @description Whether an agent has the item: always `false` here, as a row's item waits for the caller. */
             with_agent: boolean;
         };
+        /** @description A blocker that moved to another team and stopped holding the row's item. It is never named, nor is its heap. */
+        WaitingLeftTeam: {
+            /** @description What the caller may do about it: `change_state`, to unblock the item, when they may edit items. */
+            allowed_actions: components["schemas"]["ItemAction"][];
+        };
         /** @description One thing that waits. */
         WaitingRow: {
             blocker: null | components["schemas"]["WaitingBlocker"];
@@ -4259,6 +4266,7 @@ export interface components {
             heap_priority: number;
             item: components["schemas"]["WaitingItem"];
             kind: components["schemas"]["WaitingRowKind"];
+            left_team: null | components["schemas"]["WaitingLeftTeam"];
             question: null | components["schemas"]["Question"];
             /**
              * @description The title of the step the question names, so a client needn't load the item's steps. `null` when it names
@@ -4271,7 +4279,7 @@ export interface components {
          * @description What kind of thing waits. More kinds can join.
          * @enum {string}
          */
-        WaitingRowKind: "question" | "stuck" | "blocker_gone";
+        WaitingRowKind: "question" | "stuck" | "blocker_gone" | "blocker_left_team";
         /** @description A turn whose runs keep failing. */
         WaitingStuck: {
             /** @description What the caller may do about it: `retry` and `take_back`, when they may edit items. */
@@ -4563,6 +4571,7 @@ export type Waiting = components['schemas']['Waiting'];
 export type WaitingBlocker = components['schemas']['WaitingBlocker'];
 export type WaitingInHeap = components['schemas']['WaitingInHeap'];
 export type WaitingItem = components['schemas']['WaitingItem'];
+export type WaitingLeftTeam = components['schemas']['WaitingLeftTeam'];
 export type WaitingRow = components['schemas']['WaitingRow'];
 export type WaitingRowKind = components['schemas']['WaitingRowKind'];
 export type WaitingStuck = components['schemas']['WaitingStuck'];
@@ -7108,7 +7117,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `item_closed` or `heap_archived` (either heap) */
+            /** @description `version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from, archived ones included, to another team) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7117,7 +7126,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `heap_not_in_team`: the heap isn't another heap of the item's team, or doesn't exist */
+            /** @description `heap_not_in_team`: the heap doesn't exist or isn't in a team you're in */
             422: {
                 headers: {
                     [name: string]: unknown;

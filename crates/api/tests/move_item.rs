@@ -1,5 +1,5 @@
-//! Moving an item to another heap of its team: what comes along, what is dropped, the key, the blockers, the history
-//! that follows it, and the refusals.
+//! Moving an item to another heap, of its team or another: what comes along, what is dropped, the key, the blockers,
+//! the history that follows it, and the refusals.
 
 mod common;
 
@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode};
 use common::{CSRF, TestApp, TestResponse};
 use domain::Duration;
+use domain::team::Role;
 use googletest::prelude::*;
 use serde_json::{Value, json};
 use service::ScriptedRandom;
@@ -765,15 +766,13 @@ async fn moving_to_the_heap_it_is_in_changes_nothing() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn only_another_heap_of_the_items_team_is_a_target() -> Result<()> {
-    // Arrange: Ada belongs to her personal team and to a shared one, which has a heap.
+async fn a_missing_heap_and_a_heap_of_a_team_the_caller_is_not_in_are_not_found() -> Result<()> {
+    // Arrange
     let w = world().await?;
-    let (_, shared_heap) = w.app.shared_heap(&w.session).await?;
     let (grace, grace_heap) = w.app.register("grace@example.test").await?;
     let url = w.item_url().await?;
 
     // Act
-    let other_team = move_item(&w.app, &w.session, &url, &w.item["version"], &shared_heap).await?;
     let nowhere = move_item(
         &w.app,
         &w.session,
@@ -786,9 +785,10 @@ async fn only_another_heap_of_the_items_team_is_a_target() -> Result<()> {
     let outsider = move_item(&w.app, &grace, &url, &w.item["version"], &grace_heap).await?;
 
     // Assert
-    for refused in [&other_team, &nowhere, &strangers] {
+    for refused in [&nowhere, &strangers] {
         expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
         expect_that!(refused.body["code"], eq(&json!("heap_not_in_team")));
+        expect_that!(refused.body["field"], eq(&json!("heap_id")));
     }
     expect_that!(outsider.status, eq(StatusCode::NOT_FOUND));
     Ok(())
@@ -948,6 +948,59 @@ async fn a_member_of_the_team_may_move_items_between_its_heaps() -> Result<()> {
     Ok(())
 }
 
+/// Ada, an admin of two teams, with a heap in each; Bob, a member of the first only; Grace, a member of the second
+/// only; and an open note of Ada's in the first heap.
+struct Across {
+    app: TestApp,
+    ada: String,
+    bob: String,
+    grace: String,
+    from: String,
+    to: String,
+    item: Value,
+}
+
+async fn across() -> Result<Across> {
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register("ada@example.test").await?;
+    let (bob, _) = app.register("bob@example.test").await?;
+    let (grace, _) = app.register("grace@example.test").await?;
+    let (team_a, from) = app.shared_heap(&ada).await?;
+    let (team_b, to) = app.shared_heap(&ada).await?;
+    app.add_member(&team_a, &user_id(&app, &bob).await?, Role::Member)
+        .await?;
+    app.add_member(&team_b, &user_id(&app, &grace).await?, Role::Member)
+        .await?;
+    let item = app
+        .new_item(&ada, &from, json!({ "title": "Rotate the certs" }))
+        .await?;
+    Ok(Across {
+        app,
+        ada,
+        bob,
+        grace,
+        from,
+        to,
+        item,
+    })
+}
+
+async fn user_id(app: &TestApp, session: &str) -> Result<String> {
+    let me = get(app, session, "/api/v1/me").await?;
+    Ok(me.body["user"]["id"].as_str().context("no user")?.to_owned())
+}
+
+impl Across {
+    async fn item_url(&self) -> Result<String> {
+        self.app.item_url(id(&self.item)).await
+    }
+
+    /// Ada moves the item to the second team's heap.
+    async fn moved(&self) -> Result<TestResponse> {
+        move_current(&self.app, &self.ada, &self.item_url().await?, &self.to).await
+    }
+}
+
 #[gtest]
 #[tokio::test]
 async fn the_old_path_of_a_replaced_key_leads_to_the_moved_item() -> Result<()> {
@@ -972,6 +1025,265 @@ async fn the_old_path_of_a_replaced_key_leads_to_the_moved_item() -> Result<()> 
     expect_that!(id(&old.body), eq(&id(&item)));
     expect_that!(old.body["key"], eq(&json!("m4n5p")));
     expect_that!(old.body["heap_id"], eq(&json!(to)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_moves_to_a_heap_of_another_team_and_each_team_logs_its_side() -> Result<()> {
+    // Arrange
+    let w = across().await?;
+    w.app.clock.advance(Duration::from_millis(1));
+
+    // Act
+    let moved = w.moved().await?;
+    let heaps = w.app.audit_heaps(&id(&w.item)).await?;
+    let entries = w.app.audit_entries(&id(&w.item)).await?;
+
+    // Assert
+    expect_that!(moved.status, eq(StatusCode::OK));
+    expect_that!(moved.body["heap_id"], eq(&json!(w.to)));
+    expect_that!(
+        heaps,
+        elements_are![
+            eq(&("item_created".to_owned(), Some(w.from.clone()))),
+            eq(&("item_moved".to_owned(), Some(w.from.clone()))),
+            eq(&("item_moved".to_owned(), Some(w.to.clone()))),
+        ]
+    );
+    let (left, arrived) = (&entries[1].1, &entries[2].1);
+    expect_that!(
+        left,
+        eq(&json!({ "heap": { "before": w.from, "after": null }, "item_title": "Rotate the certs" }))
+    );
+    expect_that!(left.to_string(), not(contains_substring(w.to.as_str())));
+    expect_that!(arrived, eq(&json!({ "heap": { "before": null, "after": w.to } })));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn history_reads_each_teams_part_by_who_the_reader_is() -> Result<()> {
+    // Arrange
+    let w = across().await?;
+    w.app.clock.advance(Duration::from_millis(1));
+    let moved = w.moved().await?;
+    anyhow::ensure!(moved.status == StatusCode::OK, "move failed: {}", moved.body);
+    let entity = id(&w.item);
+
+    // Act
+    let both = history(&w.app, &w.ada, &w.to, &entity).await?;
+    let new_team = history(&w.app, &w.grace, &w.to, &entity).await?;
+    let old_team = history(&w.app, &w.bob, &w.from, &entity).await?;
+    let old_log = get(&w.app, &w.bob, &format!("{}/audit", w.app.heap_url(&w.from).await?)).await?;
+
+    // Assert
+    expect_that!(
+        actions(&both),
+        elements_are![eq(&"item_moved"), eq(&"item_moved"), eq(&"item_created")]
+    );
+    expect_that!(
+        both["entries"][0]["phrase"],
+        eq(&json!("moved item here from another team"))
+    );
+    expect_that!(both["entries"][1]["phrase"], eq(&json!("moved item to another team")));
+    expect_that!(both["entries"][0]["changes"][0]["before"], eq(&Value::Null));
+    expect_that!(both["entries"][0]["changes"][0]["after"], eq(&json!("Shared")));
+    expect_that!(both["entries"][1]["changes"][0]["after"], eq(&Value::Null));
+    expect_that!(actions(&new_team), elements_are![eq(&"item_moved")]);
+    expect_that!(
+        new_team["entries"][0]["entity"]["label"],
+        eq(&json!("Rotate the certs"))
+    );
+    expect_that!(
+        actions(&old_team),
+        elements_are![eq(&"item_moved"), eq(&"item_created")]
+    );
+    expect_that!(
+        old_team["entries"][0]["entity"]["label"],
+        eq(&json!("Rotate the certs"))
+    );
+    expect_that!(
+        old_team["entries"][0]["phrase"],
+        eq(&json!("moved item to another team"))
+    );
+    expect_that!(
+        old_log.body["entries"][0]["entity"]["label"],
+        eq(&json!("Rotate the certs"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_turn_stays_when_its_person_may_edit_in_the_target_team_and_is_taken_back_otherwise() -> Result<()> {
+    // Arrange: Ada's turn on one item, Bob's, who is not in the second team, on another.
+    let w = across().await?;
+    let bobs = w.app.new_item(&w.ada, &w.from, json!({ "title": "Bob's" })).await?;
+    for (session, item) in [(&w.ada, &w.item), (&w.bob, &bobs)] {
+        let sent = w
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/turn", w.app.item_url(id(item)).await?),
+                Some(session),
+                Some(json!({ "reach": "one" })),
+            )
+            .await?;
+        anyhow::ensure!(sent.status == StatusCode::CREATED, "send failed: {}", sent.body);
+    }
+
+    // Act
+    let adas_moved = w.moved().await?;
+    let bobs_moved = move_current(&w.app, &w.ada, &w.app.item_url(id(&bobs)).await?, &w.to).await?;
+    let log = w.app.audit_entries(&id(&bobs)).await?;
+    let heaps = w.app.audit_heaps(&id(&bobs)).await?;
+
+    // Assert
+    expect_that!(adas_moved.body["turn"].is_object(), eq(true));
+    expect_that!(bobs_moved.status, eq(StatusCode::OK));
+    expect_that!(bobs_moved.body["turn"], eq(&Value::Null));
+    let taken_back = log.iter().position(|(action, _)| action == "turn_taken_back");
+    expect_that!(taken_back, some(anything()));
+    let at = taken_back.unwrap_or_default();
+    expect_that!(log[at].1["why"], eq(&json!("moved")));
+    // Recorded in the heap the turn belonged to, before the item left it.
+    expect_that!(heaps[at].1, eq(&Some(w.from.clone())));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_with_a_heap_made_from_it_stays_in_its_team() -> Result<()> {
+    // Arrange: a heap is made from the note.
+    let w = across().await?;
+    let url = w.app.heap_url(&w.from).await?;
+    let url = url.split("/heaps/").next().context("heap url")?.to_owned();
+    let made = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{url}/heaps"),
+            Some(&w.ada),
+            Some(json!({ "name": "Blog move", "origin_id": w.item["id"] })),
+        )
+        .await?;
+    anyhow::ensure!(made.status == StatusCode::CREATED, "make heap failed: {}", made.body);
+    let same_team = new_heap(&w.app, &w.ada, &w.from, "Second").await?;
+
+    // Act
+    let across = w.moved().await?;
+    let within = move_current(&w.app, &w.ada, &w.item_url().await?, &same_team).await?;
+
+    // Assert
+    expect_that!(across.status, eq(StatusCode::CONFLICT));
+    expect_that!(across.body["code"], eq(&json!("note_has_heaps")));
+    expect_that!(within.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_with_an_archived_heap_made_from_it_stays_in_its_team() -> Result<()> {
+    // Arrange: a heap is made from the note, then archived.
+    let w = across().await?;
+    let url = w.app.heap_url(&w.from).await?;
+    let url = url.split("/heaps/").next().context("heap url")?.to_owned();
+    let made = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{url}/heaps"),
+            Some(&w.ada),
+            Some(json!({ "name": "Blog move", "origin_id": w.item["id"] })),
+        )
+        .await?;
+    anyhow::ensure!(made.status == StatusCode::CREATED, "make heap failed: {}", made.body);
+    w.app
+        .set_heap_archived(made.body["id"].as_str().context("heap id")?, true)
+        .await?;
+
+    // Act
+    let across = w.moved().await?;
+
+    // Assert
+    expect_that!(across.status, eq(StatusCode::CONFLICT));
+    expect_that!(across.body["code"], eq(&json!("note_has_heaps")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_that_waited_for_the_moved_one_never_names_it() -> Result<()> {
+    // Arrange: A waits for the item in the first team.
+    let w = across().await?;
+    let a = w.app.new_item(&w.ada, &w.from, json!({ "title": "A" })).await?;
+    let blocked = edit(
+        &w.app,
+        &w.ada,
+        &a,
+        json!({ "state": "blocked", "blocked_by_item_id": id(&w.item) }),
+    )
+    .await?;
+    anyhow::ensure!(blocked.status == StatusCode::OK, "block A failed: {}", blocked.body);
+    let moved = w.moved().await?;
+    anyhow::ensure!(moved.status == StatusCode::OK, "move failed: {}", moved.body);
+
+    // Act
+    let single = get(&w.app, &w.ada, &w.app.item_url(id(&a)).await?).await?;
+    let list = get(
+        &w.app,
+        &w.bob,
+        &format!("{}/items?blocked=shown", w.app.heap_url(&w.from).await?),
+    )
+    .await?;
+    let waiting = get(&w.app, &w.ada, "/api/v1/me/waiting").await?;
+
+    // Assert
+    let gone = json!({ "how": "moved", "moved_to": null });
+    expect_that!(single.body["blocked_by"], eq(&Value::Null));
+    expect_that!(single.body["blocker_gone"], eq(&gone));
+    expect_that!(single.body["waits_for_you"], eq(&json!(true)));
+    let listed = list.body["blocked"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["item"]["id"] == json!(id(&a))))
+        .with_context(|| format!("A is not listed: {}", list.body))?;
+    expect_that!(listed["item"]["blocked_by"], eq(&Value::Null));
+    expect_that!(listed["item"]["blocker_gone"], eq(&gone));
+    expect_that!(waiting.body["count"], eq(&json!(1)));
+    expect_that!(waiting.body["rows"][0]["kind"], eq(&json!("blocker_left_team")));
+    expect_that!(waiting.body["rows"][0]["blocker"], eq(&Value::Null));
+    expect_that!(
+        waiting.body["rows"][0]["left_team"]["allowed_actions"],
+        eq(&json!(["change_state"]))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_task_made_from_a_note_that_moved_away_shows_only_to_readers_of_its_team() -> Result<()> {
+    // Arrange: a task is split from the note, and the task moves to the second team.
+    let w = across().await?;
+    let task = w
+        .app
+        .new_item(
+            &w.ada,
+            &w.from,
+            json!({ "title": "Task", "kind": "task", "origin": { "item_id": w.item["id"], "age": "keep" } }),
+        )
+        .await?;
+    let moved = move_current(&w.app, &w.ada, &w.app.item_url(id(&task)).await?, &w.to).await?;
+    anyhow::ensure!(moved.status == StatusCode::OK, "move failed: {}", moved.body);
+
+    // Act
+    let url = w.item_url().await?;
+    let by_ada = get(&w.app, &w.ada, &url).await?;
+    let by_bob = get(&w.app, &w.bob, &url).await?;
+
+    // Assert
+    expect_that!(by_ada.body["became"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(by_bob.body["became"].as_array().map(Vec::len), some(eq(0)));
     Ok(())
 }
 
@@ -1022,5 +1334,24 @@ async fn an_item_moved_twice_is_found_by_every_former_path() -> Result<()> {
         expect_that!(id(&found.body), eq(&id(&w.item)));
         expect_that!(found.body["heap_id"], eq(&json!(third)));
     }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_old_path_after_a_move_to_another_team_leads_only_those_in_that_team() -> Result<()> {
+    // Arrange
+    let w = across().await?;
+    let old_url = w.item_url().await?;
+    w.moved().await?;
+
+    // Act
+    let by_ada = get(&w.app, &w.ada, &old_url).await?;
+    let by_bob = get(&w.app, &w.bob, &old_url).await?;
+
+    // Assert
+    expect_that!(by_ada.status, eq(StatusCode::OK));
+    expect_that!(by_ada.body["heap_id"], eq(&json!(w.to)));
+    expect_that!(by_bob.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }

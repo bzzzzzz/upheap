@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ComponentProps } from "react";
 import type { HeapRef } from "../api/client";
 import type { Question, WaitingRow } from "../api/schema";
 import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
-import { BlockerGoneRow, blockerGoneWord } from "../components/BlockerGoneRow";
+import { BlockerGoneRow, blockerGoneWord, type GoneBlocker } from "../components/BlockerGoneRow";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
 import { proposalSummary } from "../components/proposalSummary";
 import { Markdown } from "../components/Markdown";
@@ -19,9 +19,16 @@ const rowKey = (row: WaitingRow) =>
 const rowMark = (row: WaitingRow) =>
   row.kind === "stuck"
     ? "[data-stuck]"
-    : row.kind === "blocker_gone"
+    : row.kind === "blocker_gone" || row.kind === "blocker_left_team"
       ? "[data-blocker-gone]"
       : `[data-question="${row.question?.number}"]`;
+/** The gone blocker a row shows: one that moved to another team has no blocker, only what may be done about it. */
+const goneBlockerOf = (row: WaitingRow): GoneBlocker | null =>
+  row.kind === "blocker_gone" && row.blocker
+    ? row.blocker
+    : row.kind === "blocker_left_team" && row.left_team
+      ? { item: null, gone: { how: "moved", moved_to: null }, allowed_actions: row.left_team.allowed_actions }
+      : null;
 const heapOf = (row: WaitingRow): HeapRef => ({ team: row.heap.team_slug, heap: row.heap.slug });
 
 /**
@@ -46,10 +53,7 @@ export function WaitingPage() {
   // Questions, stuck turns and gone blockers; a kind this client doesn't know is left out. The heading keeps the
   // server's count.
   const rows = (waiting.data?.rows ?? []).filter(
-    (row) =>
-      (row.kind === "question" && row.question) ||
-      (row.kind === "stuck" && row.stuck) ||
-      (row.kind === "blocker_gone" && row.blocker),
+    (row) => (row.kind === "question" && row.question) || (row.kind === "stuck" && row.stuck) || goneBlockerOf(row),
   );
 
   useEffect(() => {
@@ -119,13 +123,14 @@ export function WaitingPage() {
       ) : (
         <>
           <ul ref={list} className="flex flex-col divide-y divide-line">
-            {rows.map((row) =>
-              row.kind === "blocker_gone" && row.blocker ? (
+            {rows.map((row) => {
+              const gone = goneBlockerOf(row);
+              return gone ? (
                 <BlockerGoneRow
                   key={rowKey(row)}
                   heapRef={heapOf(row)}
                   item={row.item}
-                  blocker={row.blocker}
+                  blocker={gone}
                   open
                   line={<RowLine row={row} team={manyTeams ? titleTeam(me, heapOf(row)) : undefined} />}
                   onUnblocked={() => {
@@ -193,8 +198,8 @@ export function WaitingPage() {
                     }}
                   />
                 )
-              ),
-            )}
+              );
+            })}
           </ul>
           {count > rows.length && (
             <p className="text-[13px] text-muted">
@@ -223,13 +228,10 @@ function ProposalRow(props: ComponentProps<typeof QuestionRow>) {
  * <heap> · <team>": which item the row is on, and where.
  */
 function RowLine({ row, team }: { row: WaitingRow; team: string | undefined }) {
+  const gone = goneBlockerOf(row);
   return (
     <p className="text-xs break-words text-muted">
-      {row.kind === "blocker_gone" && row.blocker
-        ? blockerGoneWord(row.blocker.gone)
-        : row.kind === "stuck" || !row.question
-          ? "Stuck"
-          : kindWord(row.question)}
+      {gone ? blockerGoneWord(gone.gone) : row.kind === "stuck" || !row.question ? "Stuck" : kindWord(row.question)}
       {" · "}
       <Link
         to="/teams/$team/heaps/$heap/items/$item"

@@ -120,6 +120,8 @@ coded_enum! {
         Closed = "closed",
         /// The heap was archived.
         HeapArchived = "heap_archived",
+        /// The item moved to a team whose heap its person may not edit items in.
+        Moved = "moved",
         /// Only for withdrawn questions: the turn ended because the item reached its goal.
         GoalMet = "goal_met",
         /// Only for withdrawn questions: the run handed the turn back.
@@ -135,6 +137,7 @@ impl TakeBackWhy {
             Self::Started => "Started",
             Self::Closed => "Closed",
             Self::HeapArchived => "Heap archived",
+            Self::Moved => "Moved to another team",
             Self::GoalMet => "Goal met",
             Self::HandedBack => "Handed back",
         }

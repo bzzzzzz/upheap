@@ -60,7 +60,8 @@ pub enum WaitingSubject {
 /// A gone blocker, as a row shows it.
 #[derive(Debug)]
 pub struct BlockerGoneView {
-    pub blocker: ItemSummary,
+    /// The blocker; `None` when it is in another team, which is never named (the row is `blocker_left_team`).
+    pub blocker: Option<ItemSummary>,
     pub gone: GoneBlocker,
     /// What the caller may do about it: change the state, to unblock it, when they may edit items.
     pub allowed_actions: Vec<ItemAction>,
@@ -89,7 +90,7 @@ pub(crate) struct ViewableHeap {
 enum CandidateSubject {
     Question(domain::question::Question),
     Stuck(Turn),
-    BlockerGone(ItemSummary, GoneBlocker),
+    BlockerGone(Option<ItemSummary>, GoneBlocker),
 }
 
 /// Something that waits, before it is shown: where it ranks and the item it is on.
@@ -268,7 +269,7 @@ impl Services {
             for (blocked, blocker, how) in mine_gone {
                 // An item changed since it was read is taken as the ranking read it, which is later: it waits only if
                 // it is still blocked by the same gone blocker.
-                let still_gone = |item: &Item| item.blocker_gone(&blocker).is_some();
+                let still_gone = |item: &Item| item.blocked_by() == blocked.blocked_by();
                 // A reminder to come has no rank, but it waits all the same, after the ranked rows like its questions.
                 if let Some(item) = to_come_by_id.get(&blocked.id) {
                     if still_gone(item) {
@@ -436,12 +437,13 @@ impl Services {
     }
 }
 
-/// The blocked items of `heap_ids` whose blocker is gone ([`Item::blocker_gone`]), each with its blocker and how it
-/// went, oldest first. Shared by Waiting for me and the agents' queue, which counts what waits.
+/// The blocked items of `heap_ids` whose blocker is gone ([`Item::blocker_gone`]), each with its blocker, none when it
+/// is in another team ([`GoneBlocker::other_team`]), and how it went, oldest first. Shared by Waiting for me and the
+/// agents' queue, which counts what waits.
 pub(crate) async fn list_gone_blockers(
     db: &impl store::ConnectionTrait,
     heap_ids: &[HeapId],
-) -> Result<Vec<(Item, ItemSummary, GoneBlocker)>, ServiceError> {
+) -> Result<Vec<(Item, Option<ItemSummary>, GoneBlocker)>, ServiceError> {
     let blocked = store::items::list_blocked_items_with_blocker(db, heap_ids).await?;
     if blocked.is_empty() {
         return Ok(Vec::new());
@@ -458,7 +460,7 @@ pub(crate) async fn list_gone_blockers(
         .filter_map(|item| {
             let how = gone.remove(&item.id)?;
             let blocker = blockers.get(&item.blocked_by()?)?.clone();
-            Some((item, blocker, how))
+            Some((item, (!how.other_team).then_some(blocker), how))
         })
         .collect())
 }

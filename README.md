@@ -341,7 +341,7 @@ cargo run -p cli -- item add "Rotate staging" --task --from k3x9a --need expecte
 cargo run -p cli -- item became k3x9a                            # the note is closed as became, once items are made from it
 cargo run -p cli -- item to-step n8c2d --task k3x9a              # the note becomes the last step of the task, and closes as became
 cargo run -p cli -- heap add "Blog move" --from n8c2d --context-file context.md   # the note becomes a heap of its own
-cargo run -p cli -- item move k3x9a other-heap                   # to another heap of its team
+cargo run -p cli -- item move k3x9a other-heap                   # to another heap, of any team you edit in
 cargo run -p cli -- item send k3x9a --line "Use the new CA."     # to an agent, to the next stable state; --all-the-way goes on until done
 cargo run -p cli -- item take-back k3x9a                         # the agent's turn ends; what it changed stays
 cargo run -p cli -- step add k3x9a "Run in staging"             # a task's steps; add --after k3x9a.1 to place one

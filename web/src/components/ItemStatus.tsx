@@ -102,6 +102,12 @@ export function StatusLine({
             </Link>
             {reason && <span className="font-normal text-ink break-words">: {reason}</span>}
           </span>
+        ) : item.state === "blocked" && item.blocker_gone ? (
+          // A blocker in another team is never named.
+          <span className="min-w-0 font-medium break-words text-ink">
+            Blocked by an item that moved to another team
+            {reason && <span className="font-normal">: {reason}</span>}
+          </span>
         ) : reason ? (
           <span className="min-w-0 font-medium break-words text-ink">
             Blocked: <span className="font-normal">{reason}</span>
