@@ -1063,6 +1063,15 @@ async fn question_list_with_a_heap_keeps_only_that_heaps_questions() -> Result<(
     let here = cli.run(&["question", "list", "--heap", "ada/personal", "-q"]).await;
     let bare = cli.run(&["question", "list", "--heap", "ops", "-q"]).await;
     let unknown = cli.run(&["question", "list", "--heap", "ada/opps"]).await;
+    cli.run(&[
+        "question",
+        "reply",
+        &format!("ada/ops/{ops_key}.q1"),
+        "--comment",
+        "All",
+    ])
+    .await;
+    let emptied = cli.run(&["question", "list", "--heap", "ada/ops"]).await;
 
     // Assert: the default heap, ada/personal, doesn't narrow the list.
     expect_that!(all.stdout, contains_substring(format!("ada/personal/{task}.q1\n")));
@@ -1071,5 +1080,6 @@ async fn question_list_with_a_heap_keeps_only_that_heaps_questions() -> Result<(
     expect_that!(bare.stdout, eq(&format!("ada/ops/{ops_key}.q1\n")));
     expect_that!(unknown.exited(3), eq(true));
     expect_that!(unknown.stderr, contains_substring("you have no heap `ada/opps`"));
+    expect_that!(emptied.stdout, eq("Nothing waits for you in ada/ops.\n"));
     Ok(())
 }

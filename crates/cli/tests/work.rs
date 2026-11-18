@@ -422,7 +422,7 @@ async fn question_list_counts_a_stuck_turn_it_does_not_list() -> Result<()> {
     expect_that!(
         listed.stdout,
         eq(
-            "No questions wait for you.\nAlso waiting, on the web app's Waiting for me page: 1 (stuck turns, gone blockers).\n"
+            "No questions wait for you.\nAlso waiting, on the web app's Waiting for me page: 1 more, such as stuck turns.\n"
         )
     );
     Ok(())

@@ -67,10 +67,17 @@ pub async fn run_list(args: ListArgs, app: &App, out: &mut Output) -> Result<(),
         }
         return Ok(());
     }
-    if rows.is_empty() && others == 0 {
-        out.line("Nothing waits for you.")?;
-    } else if rows.is_empty() {
-        out.line("No questions wait for you.")?;
+    if rows.is_empty() {
+        let what = if others == 0 {
+            "Nothing waits"
+        } else {
+            "No questions wait"
+        };
+        let place = only
+            .as_ref()
+            .map(|only| format!(" in {}/{}", only.team, only.heap))
+            .unwrap_or_default();
+        out.line(&format!("{what} for you{place}."))?;
     }
     for (row, question) in rows {
         let title = row.item.title.replace('\t', "    ");
@@ -87,7 +94,7 @@ pub async fn run_list(args: ListArgs, app: &App, out: &mut Output) -> Result<(),
     }
     if others > 0 {
         out.line(&format!(
-            "Also waiting, on the web app's Waiting for me page: {others} (stuck turns, gone blockers)."
+            "Also waiting, on the web app's Waiting for me page: {others} more, such as stuck turns."
         ))?;
     }
     let returned = waiting.value.rows.len();
