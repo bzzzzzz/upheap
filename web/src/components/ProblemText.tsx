@@ -9,6 +9,8 @@ const MESSAGES: Record<string, string> = {
   version_conflict: "Someone else changed this. It now shows their version.",
   user_not_found: "That user no longer exists.",
   heap_archived: "This heap is archived, so it can't be changed. Unarchive it first.",
+  item_closed: "A closed item can't be moved.",
+  "heap_not_in_team.heap_id": "That heap isn't in this item's team any more.",
   field_empty: "A name can't be empty.",
   saved_view_archived: "Someone archived this view, so it can't be changed.",
   parameter_name_taken: "This heap already has a parameter with that name.",

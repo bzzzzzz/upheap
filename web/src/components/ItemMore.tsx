@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { Ellipsis } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import {
@@ -16,16 +17,18 @@ import {
 
 import type { HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemState, Stage } from "../api/schema";
-import { useBlockerCandidates, useUpdateItem } from "../api/queries";
+import { useBlockerCandidates, useMe, useMoveItem, useUpdateItem } from "../api/queries";
 import { BlockerSelect } from "./BlockerSelect";
 import { BlockReasonEditor } from "./BlockReasonEditor";
 import { blockerCandidatesFor } from "./blockerCandidates";
 import { compactButtonClass } from "./buttons";
 import { changeLabel, isClosed, NEXT_STATES, STAGE_LABELS } from "./labels";
 import { MenuChoice, MenuEntry, MenuHeading, MenuPopover } from "./Menu";
+import { MoveToHeap } from "./MoveToHeap";
 import { PopoverSheet } from "./PopoverSheet";
 import { isToCome } from "./reminders";
 import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
+import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /** The main state button is filled with the accent, the next action's colour, with dark text for contrast in both themes. */
@@ -41,10 +44,11 @@ type Main = { label: string; state: ItemState } | { label: "Make it a task"; sta
 /**
  * What the item's main button and ⋯ offer (ux.md, The item §6), each only when the server allows it. The main button
  * is the likeliest next state, Make it a task for a reminder that has arrived, or Reopen on a closed item. ⋯ holds the
- * other states, Won't do, Make it a task…, Change blocker…, Add reason… or Change reason…, and
- * the Stage choices; with none of them, as for a reader, there is no ⋯.
+ * other states, Won't do, Make it a task…, Change blocker…, Add reason… or Change reason…, the Stage choices, and
+ * Move to another heap… when the team has another heap to move it to (`canMove`); with none of them, as for a reader,
+ * there is no ⋯.
  */
-function actionsOf(item: Item) {
+function actionsOf(item: Item, canMove: boolean) {
   const allowed = item.allowed_actions;
   const state = item.state;
   const canChange = allowed.includes("change_state");
@@ -71,12 +75,14 @@ function actionsOf(item: Item) {
     changeBlocker: item.state === "blocked" && canChange,
     reasonLabel: item.blocked_reason ? "Change reason…" : "Add reason…",
     stages: item.stage_choices,
+    move: allowed.includes("move") && canMove,
     more:
       others.length > 0 ||
       (canChange && !isClosed(state)) ||
       (allowed.includes("make_task") && !arrivedReminder) ||
       (item.state === "blocked" && canChange) ||
-      item.stage_choices.length > 0,
+      item.stage_choices.length > 0 ||
+      (allowed.includes("move") && canMove),
   };
 }
 
@@ -85,7 +91,8 @@ function actionsOf(item: Item) {
  * bottom of a phone's sheet (ux.md, The item §6). ⋯ is a menu on a wide screen and a tablet, a sheet on a phone; what it
  * opens, Change blocker and the block reason's editor, open under it as a popover, or as a sheet on a phone. Picking
  * a stage saves at once and silently, like every change made in the item. Making a note a task asks first, since a
- * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. A state change
+ * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. Move to another
+ * heap… opens a picker under ⋯ that confirms before it moves, and lands on the item in its new heap. A state change
  * goes through `onState`, which may ask whether to take the item back from its agent first.
  */
 export function ItemActions({
@@ -107,11 +114,17 @@ export function ItemActions({
   const focusAfterRender = useFocusAfterRender();
   const [confirming, setConfirming] = useState(false);
   const [changing, setChanging] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [editingReason, setEditingReason] = useState(false);
   // Awaitable, and apart from `save`, so the editor says its own failure and the pane doesn't say it twice.
   const saveReason = useUpdateItem(heapRef);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
-  const actions = actionsOf(item);
+  const move = useMoveItem(heapRef);
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { data: me } = useMe();
+  const team = me?.teams.find((t) => t.slug === heapRef.team);
+  const actions = actionsOf(item, team?.heaps.some((heap) => !heap.archived && heap.slug !== heapRef.heap) ?? false);
   const bar = variant === "bar";
   // Done or Won't do picked from ⋯ closes the item, and a closed item has no ⋯: focus, given back to ⋯ as its menu
   // closed, goes to the main button (Reopen) instead of falling to the page.
@@ -128,6 +141,27 @@ export function ItemActions({
   const closeChanging = () => {
     setChanging(false);
     focusAfterRender(() => moreRef.current);
+  };
+  const closeMoving = () => {
+    setMoving(false);
+    focusAfterRender(() => moreRef.current);
+  };
+  const moveTo = async (to: HeapRef & { id: string }, name: string) => {
+    try {
+      const saved = await move.mutateAsync({ item, to });
+      await navigate({
+        to: "/teams/$team/heaps/$heap/items/$item",
+        params: { team: to.team, heap: to.heap, item: saved.key },
+        replace: true,
+      });
+      // This component belongs to the old heap, whose toast the provider puts away: the toast is the new heap's.
+      toast(
+        { message: `Moved to ${name}.${saved.key !== item.key ? ` Its key is now ${saved.key}.` : ""}` },
+        { heap: to },
+      );
+    } catch {
+      // The mutation holds the error, and the picker shows it.
+    }
   };
   const closeEditingReason = () => {
     setEditingReason(false);
@@ -146,6 +180,10 @@ export function ItemActions({
     editReason: () => {
       saveReason.reset();
       setEditingReason(true);
+    },
+    move: () => {
+      move.reset();
+      setMoving(true);
     },
   };
 
@@ -235,6 +273,13 @@ export function ItemActions({
               )}
             </MenuSection>
           )}
+          {actions.move && (
+            <MenuSection aria-label="Move">
+              <MenuEntry id="move" onAction={openers.move}>
+                Move to another heap…
+              </MenuEntry>
+            </MenuSection>
+          )}
         </Menu>
       </MenuPopover>
     </MenuTrigger>
@@ -285,6 +330,26 @@ export function ItemActions({
           />
         </PopoverSheet>
       )}
+      {actions.move && team && me && (
+        <PopoverSheet
+          title="Move to"
+          triggerRef={moreRef}
+          isOpen={moving}
+          onClose={() => !move.isPending && closeMoving()}
+          placement="bottom end"
+          size="narrow"
+        >
+          <MoveToHeap
+            me={me}
+            team={team}
+            heapRef={heapRef}
+            pending={move.isPending}
+            error={move.error}
+            onMove={(to, name) => void moveTo(to, name)}
+            onReset={move.reset}
+          />
+        </PopoverSheet>
+      )}
       {/* Not tied to the item being blocked: a failed save refetches it, and the editor stays to say why. */}
       <PopoverSheet
         title="Why it's blocked"
@@ -324,7 +389,7 @@ function MoreSheet({
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   onState: (state: ItemState) => void;
   onWontDo: () => void;
-  openers: { makeTask: () => void; changeBlocker: () => void; editReason: () => void };
+  openers: { makeTask: () => void; changeBlocker: () => void; editReason: () => void; move: () => void };
   onStage: (keys: Selection) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -397,6 +462,11 @@ function MoreSheet({
               <p className="px-3 pb-1 text-[13px] text-muted">Defined needs a task</p>
             )}
           </>
+        )}
+        {actions.move && (
+          <button type="button" onClick={then(openers.move)} className={sheetRowClass}>
+            Move to another heap…
+          </button>
         )}
       </Sheet>
     </>

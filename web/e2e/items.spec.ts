@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
   addDialog,
+  addHeaps,
   addItem,
   changeState,
   closeField,
@@ -834,6 +835,23 @@ test("a note is made a task and its stage is set from the item", async ({ page }
 
   await closeItem(page);
   await expect(page.getByRole("link", { name: /^Rotate the certs\s?, task, with context$/ })).toBeVisible();
+});
+
+test("an item is moved to another heap of its team from ⋯, after a confirm step", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  await addItem(page, "Water the plants");
+  await openItem(page, "Water the plants");
+
+  await moreEntry(page, await openMore(page), "Move to another heap…").click();
+  const picker = page.getByRole("dialog", { name: "Move to", exact: true });
+  await picker.getByRole("menuitem", { name: "Garden" }).click();
+  await expect(picker.getByRole("heading", { name: "Move to Garden?" })).toBeVisible();
+  await expect(picker).toContainText("Tags it doesn't have there are dropped.");
+  await picker.getByRole("button", { name: "Move", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/teams\/[^/]+\/heaps\/garden\/items\/[^/]+$/);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
+  await expect(page.getByRole("status").filter({ hasText: "Moved to Garden." })).toBeVisible();
 });
 
 test("a task is worked through its steps from the item", async ({ page }) => {

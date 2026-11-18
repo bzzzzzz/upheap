@@ -374,8 +374,15 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
    there whenever it holds something, and holds, each only when the server allows it and in this order: the other state
    changes, Won't do, Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked
-   item, and the Stage choices. With none of them, as for a reader's item, an archived heap's or a closed item, there
+   item, the Stage choices, and last, in a section of its own, Move to another heap…, when the team has another heap
+   that isn't archived. With none of them, as for a reader's item, an archived heap's or a closed item, there
    is no ⋯.
+   Move to another heap… opens "Move to" under ⋯ (a sheet on a phone): the item's own team's heaps that aren't
+   archived, the item's own marked "(here)" and disabled, with a search field from 8 heaps and no New heap. A pick
+   asks first, "Move to <Heap>?" and "Tags it doesn't have there are dropped.", with Cancel and Move; it can't be
+   closed while it saves. The item then opens in its new heap with the address replaced, so Back doesn't return to the
+   old one, also from All items, and a toast says "Moved to <Heap>." and, when the new heap already had its key, the
+   key it got. There's no Undo, as the tags can't come back. A refusal shows in the picker, above the buttons.
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
    a popover (a sheet on a phone) and saves on a pick. Make it a task asks first, naming the item, since a task can't
    go back to a note (or to a reminder). A reminder has an exact Date in place of Due (point 16), which can be moved,

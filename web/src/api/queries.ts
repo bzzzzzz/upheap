@@ -357,6 +357,32 @@ export function useUpdateItem(heap: HeapRef) {
 }
 
 /**
+ * Moves an item to another heap of its team, `to`. It runs in the item edits' scope and sends the newest version it
+ * knows of, as `useUpdateItem` does. The saved item is written under its new heap's key (it may have a new key there),
+ * and both heaps and the open counts are fetched again, whatever the outcome.
+ */
+export function useMoveItem(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    scope: { id: "item-edits" },
+    mutationFn: async ({ item, to }: { item: Item; to: HeapRef & { id: string } }) => {
+      const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
+      return unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/move", {
+          params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${version}"` } },
+          body: { heap_id: to.id },
+        }),
+      );
+    },
+    onSuccess: (saved, { to }) => queryClient.setQueryData(itemKey({ team: to.team, heap: to.heap }, saved.key), saved),
+    onSettled: (_saved, _error, { to }) => {
+      invalidateOpenCounts(queryClient);
+      return Promise.all([invalidateHeap(queryClient, heap), invalidateHeap(queryClient, to)]);
+    },
+  });
+}
+
+/**
  * The scope that makes one item's step writes run one at a time (ux.md, The item): a tick followed quickly by a title
  * edit doesn't conflict with itself, as each waits for the one before and sends the newest version it left behind.
  */
