@@ -111,8 +111,8 @@ at sign-in:
   team's groups one at a time doesn't empty it, and pushing people before their groups doesn't empty any team.
 - The write that makes a team pushed for the first time syncs every pushed person for that team. The write that
   makes a team stop being pushed (deleting one of its matching groups, or renaming it or changing its `externalId`
-  away from the map) syncs the people it touched for that team with their groups as known: they are in none of its
-  groups any more, so they leave it, and from then on it follows the token.
+  away from the map) syncs the people it touched for that team with their remaining groups as known, so those in none
+  of its groups leave it, and from then on it follows the token.
 - An inactive person's groups, and those of a person whose last record was deleted, are known and empty in every
   mapped team, pushed or not: they leave every group-managed team.
 - A user with no `externalId`, or one no identity has, changes no team. The server logs the second at `info`.

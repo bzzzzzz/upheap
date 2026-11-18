@@ -163,7 +163,8 @@ give the provider:
 Each user's `externalId` must be the person's OpenID Connect subject, the `sub` of their ID token: that is how a pushed
 user is matched to an account, never by email or user name. A pushed person with no account yet gets their teams when
 they first sign in; a push never makes an account. A pushed group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its
-`displayName` or its `externalId`, so the same map works whether the token carries names or IDs. Members join and leave
+`displayName` or its `externalId`, so the same map works whether the token carries names or IDs. List each group once, in the form the
+provider pushes it: a team follows the pushes only once every group it lists has been pushed. Members join and leave
 the mapped teams as the push arrives, with the same entries in the team's activity as at sign-in. Each mapped team is decided on
 its own. A team is pushed once the provider has pushed every one of its groups. For a pushed team, a pushed person's
 membership follows the groups the provider says, at each push and at sign-in instead of the ID token. A team with a group

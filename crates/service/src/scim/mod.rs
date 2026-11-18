@@ -521,9 +521,9 @@ impl Services {
     // Applying a change.
 
     /// After a group's members or names changed: syncs the teams of the people of the users `touched`, for every team
-    /// that was pushed before the write or is after it. A team the write stopped being pushed for (its last matching
-    /// group was deleted or renamed away) is synced with the people's groups as known: they are in none of its groups
-    /// any more, so they leave it, and it follows the token from then on. A team the write made pushed for the first
+    /// that was pushed before the write or is after it. A team the write stopped being pushed for (one of its groups
+    /// was deleted or renamed away) is synced with the people's remaining groups as known, so those in none of its
+    /// groups leave it, and it follows the token from then on. A team the write made pushed for the first
     /// time is synced for every person the provider pushed, and for that team only.
     async fn after_group_write(
         &self,
