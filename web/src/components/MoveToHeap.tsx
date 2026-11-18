@@ -6,7 +6,7 @@ import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { compactButtonClass } from "./buttons";
 import { currentRowClass, LONG_LIST, rowClass, SectionTitle } from "./HeapSwitcher";
-import { ProblemText } from "./ProblemText";
+import { itemProblem } from "./itemProblems";
 import { teamName } from "./teamName";
 
 type MoveTeam = Me["teams"][number];
@@ -47,7 +47,11 @@ export function MoveToHeap({
       <div className="flex flex-col gap-3">
         <h3 className="text-base font-semibold break-words">Move to {picked.name}?</h3>
         <p className="text-sm text-ink-soft">Tags it doesn't have there are dropped.</p>
-        <ProblemText error={error} />
+        {error && (
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(error)}
+          </p>
+        )}
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"

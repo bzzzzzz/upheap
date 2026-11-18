@@ -359,7 +359,9 @@ export function useUpdateItem(heap: HeapRef) {
 /**
  * Moves an item to another heap of its team, `to`. It runs in the item edits' scope and sends the newest version it
  * knows of, as `useUpdateItem` does. The saved item is written under its new heap's key (it may have a new key there),
- * and both heaps and the open counts are fetched again, whatever the outcome.
+ * and both heaps and the open counts are fetched again, whatever the outcome. Nothing waits for those fetches, so the
+ * app can go to the item's new address at once; after a move the old address isn't fetched again, as its pane is
+ * still open until then and would say the item doesn't exist.
  */
 export function useMoveItem(heap: HeapRef) {
   const queryClient = useQueryClient();
@@ -374,10 +376,18 @@ export function useMoveItem(heap: HeapRef) {
         }),
       );
     },
-    onSuccess: (saved, { to }) => queryClient.setQueryData(itemKey({ team: to.team, heap: to.heap }, saved.key), saved),
-    onSettled: (_saved, _error, { to }) => {
+    onSuccess: (saved, { to }) => queryClient.setQueryData(itemKey(to, saved.key), saved),
+    onSettled: (saved, _error, { item, to }) => {
       invalidateOpenCounts(queryClient);
-      return Promise.all([invalidateHeap(queryClient, heap), invalidateHeap(queryClient, to)]);
+      const gone = itemKey(heap, item.key);
+      const isGone = (key: readonly unknown[]) => saved !== undefined && gone.every((part, i) => key[i] === part);
+      for (const queryKey of [rankedKey(heap), rankedKey(to), closedKey(heap), closedKey(to)]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
+      void queryClient.invalidateQueries({ queryKey: ["item"], predicate: (query) => !isGone(query.queryKey) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void queryClient.invalidateQueries({ queryKey: decisionsKey });
     },
   });
 }

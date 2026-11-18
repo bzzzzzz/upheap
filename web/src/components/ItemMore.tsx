@@ -50,6 +50,7 @@ type Main = { label: string; state: ItemState } | { label: "Make it a task"; sta
  */
 function actionsOf(item: Item, canMove: boolean) {
   const allowed = item.allowed_actions;
+  const move = allowed.includes("move") && canMove;
   const state = item.state;
   const canChange = allowed.includes("change_state");
   const arrivedReminder = item.kind === "reminder" && !isToCome(item) && allowed.includes("make_task");
@@ -75,14 +76,14 @@ function actionsOf(item: Item, canMove: boolean) {
     changeBlocker: item.state === "blocked" && canChange,
     reasonLabel: item.blocked_reason ? "Change reason…" : "Add reason…",
     stages: item.stage_choices,
-    move: allowed.includes("move") && canMove,
+    move,
     more:
       others.length > 0 ||
       (canChange && !isClosed(state)) ||
       (allowed.includes("make_task") && !arrivedReminder) ||
       (item.state === "blocked" && canChange) ||
       item.stage_choices.length > 0 ||
-      (allowed.includes("move") && canMove),
+      move,
   };
 }
 
