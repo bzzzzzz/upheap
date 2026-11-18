@@ -3,9 +3,9 @@ import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from "re
 import { Button, Checkbox, CheckboxGroup, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
-import type { Item, Question, QuestionReplyRequest, WaitingBlocker, WaitingStuck } from "../api/schema";
+import type { Item, Question, QuestionReplyRequest, WaitingStuck } from "../api/schema";
 import { useReplyToQuestion } from "../api/queries";
-import { BlockerGoneRow, blockerGoneWord } from "./BlockerGoneRow";
+import { BlockerGoneRow, blockerGoneWord, type GoneBlocker } from "./BlockerGoneRow";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { GOAL_LABELS, isClosed } from "./labels";
@@ -152,11 +152,11 @@ function stuckOf(item: Item): WaitingStuck | null {
 }
 
 /** The gone-blocker row an item shows in Waits for you, or none while its blocker holds it (or it has none). */
-function blockerGoneOf(item: Item): WaitingBlocker | null {
+function blockerGoneOf(item: Item): GoneBlocker | null {
   // A blocker in another team is never named: the item has a gone blocker and no blocker item.
   if (item.state !== "blocked" || !item.blocker_gone) return null;
   return {
-    item: item.blocked_by,
+    item: item.blocked_by ?? null,
     gone: item.blocker_gone,
     allowed_actions: item.allowed_actions.filter((action) => action === "change_state"),
   };

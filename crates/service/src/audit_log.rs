@@ -176,9 +176,16 @@ impl Services {
             }
             missing.retain(|item| names.get(*item.as_uuid()).is_none());
         }
-        // An item that is in no heap of the team left it, and the team's log names it by the title it had then.
-        for (item, title) in store::audit::list_left_item_titles(&self.db, access.heap.team_id, &missing).await? {
-            names.insert(*item.as_uuid(), &title);
+        // An item that is in no heap of a team left it, and that team's log names it by the title it had then. A page
+        // spanning teams may name an item that left any of them.
+        for team in &entry_teams {
+            if missing.is_empty() {
+                break;
+            }
+            for (item, title) in store::audit::list_left_item_titles(&self.db, *team, &missing).await? {
+                names.insert(*item.as_uuid(), &title);
+            }
+            missing.retain(|item| names.get(*item.as_uuid()).is_none());
         }
         let views: Vec<SavedViewId> = collect_entity_ids(&entries, EntityType::SavedView)
             .map(SavedViewId::from_uuid)

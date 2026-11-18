@@ -11,7 +11,8 @@ use api_types::common::{ItemActionDto, ItemRefDto};
 use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
 use api_types::waiting::{
-    WaitingBlockerDto, WaitingDto, WaitingItemDto, WaitingRowDto, WaitingRowKindDto, WaitingStuckDto,
+    WaitingBlockerDto, WaitingDto, WaitingItemDto, WaitingLeftTeamDto, WaitingRowDto, WaitingRowKindDto,
+    WaitingStuckDto,
 };
 use axum::Json;
 use axum::extract::State;
@@ -112,10 +113,11 @@ async fn update_me(
 
 fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> WaitingRowDto {
     let item = row.item;
-    let (kind, question, stuck, blocker) = match row.subject {
+    let (kind, question, stuck, blocker, left_team) = match row.subject {
         WaitingSubject::Question(question) => (
             WaitingRowKindDto::Question,
             Some(to_question_dto(*question, as_of, tz)),
+            None,
             None,
             None,
         ),
@@ -129,17 +131,31 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
                 allowed_actions: stuck.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
             }),
             None,
-        ),
-        WaitingSubject::BlockerGone(gone) => (
-            WaitingRowKindDto::BlockerGone,
             None,
-            None,
-            Some(WaitingBlockerDto {
-                item: gone.blocker.map(ItemRefDto::from),
-                gone: to_blocker_gone_dto(gone.gone),
-                allowed_actions: gone.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
-            }),
         ),
+        // A blocker in another team is never named, so the row has no blocker, only what the caller may do.
+        WaitingSubject::BlockerGone(gone) => match gone.blocker {
+            Some(blocker) => (
+                WaitingRowKindDto::BlockerGone,
+                None,
+                None,
+                Some(WaitingBlockerDto {
+                    item: ItemRefDto::from(blocker),
+                    gone: to_blocker_gone_dto(gone.gone),
+                    allowed_actions: gone.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+                }),
+                None,
+            ),
+            None => (
+                WaitingRowKindDto::BlockerLeftTeam,
+                None,
+                None,
+                None,
+                Some(WaitingLeftTeamDto {
+                    allowed_actions: gone.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
+                }),
+            ),
+        },
     };
     WaitingRowDto {
         kind,
@@ -158,6 +174,7 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
         question,
         stuck,
         blocker,
+        left_team,
         step_title: row.step_title.map(|title| title.as_str().to_owned()),
     }
 }

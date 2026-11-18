@@ -31,8 +31,10 @@ pub enum WaitingRowKindDto {
     /// An item whose agent turn is stuck: 3 runs in a row failed.
     Stuck,
     /// A blocked item whose blocker was closed as won't do (or done, before closing as done freed what it blocks), or
-    /// moved to another heap.
+    /// moved to another heap of the row's team.
     BlockerGone,
+    /// A blocked item whose blocker moved to a heap of another team, which is never named. Else as `blocker_gone`.
+    BlockerLeftTeam,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -66,6 +68,10 @@ pub struct WaitingRowDto {
     #[serde(default)]
     #[schema(required = true)]
     pub blocker: Option<WaitingBlockerDto>,
+    /// The blocker that moved to another team. Set on a `blocker_left_team` row; `null` on the others.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub left_team: Option<WaitingLeftTeamDto>,
     /// The title of the step the question names, so a client needn't load the item's steps. `null` when it names
     /// none, or one that no longer exists, and on the other rows.
     pub step_title: Option<String>,
@@ -90,10 +96,18 @@ pub struct WaitingStuckDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = WaitingBlocker)]
 pub struct WaitingBlockerDto {
-    /// The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. `null`
-    /// when it moved to another team, which is never named.
-    pub item: Option<ItemRefDto>,
+    /// The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap.
+    pub item: ItemRefDto,
     pub gone: BlockerGoneDto,
+    /// What the caller may do about it: `change_state`, to unblock the item, when they may edit items.
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<ItemActionDto>,
+}
+
+/// A blocker that moved to another team and stopped holding the row's item. It is never named, nor is its heap.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = WaitingLeftTeam)]
+pub struct WaitingLeftTeamDto {
     /// What the caller may do about it: `change_state`, to unblock the item, when they may edit items.
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ItemActionDto>,

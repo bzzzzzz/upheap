@@ -350,7 +350,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         },
         ServiceError::MoveTargetNotFound { .. } => Classified {
             field: Some("heap_id"),
-            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "heap_not_found", Category::Caller)
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "heap_not_in_team", Category::Caller)
         },
         ServiceError::NoteHasHeaps { .. } => simple(StatusCode::CONFLICT, "note_has_heaps", Category::Conflict),
         ServiceError::TagNotInHeap { .. } => Classified {

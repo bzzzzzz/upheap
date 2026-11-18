@@ -272,18 +272,18 @@ async fn reopen_item(
 /// or a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays
 /// blocked with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and
 /// wait for the caller; when it went to another team it is never named. A turn stays when its person may edit items
-/// in the target heap, and is taken back otherwise. A note that heaps were made from can't leave its team. Moving an
+/// in the target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its team. Moving an
 /// item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path
 /// stops working.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/move", tag = "items", security(("session" = [])),
     params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemMoveDto,
     responses(
         (status = 200, body = ItemDto),
-        (status = 403, description = "From inside a run: `run_forbidden`; or the caller may not edit items in the target heap", body = Problem),
+        (status = 403, description = "From inside a run: `run_forbidden`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from to another team)", body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from, archived ones included, to another team)", body = Problem),
         (status = 400, description = "A body that isn't a `heap_id`", body = Problem),
-        (status = 422, description = "`heap_not_found`: the heap doesn't exist, or is in a team the caller isn't in", body = Problem),
+        (status = 422, description = "`heap_not_in_team`: the heap doesn't exist or isn't in a team you're in", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn move_item(

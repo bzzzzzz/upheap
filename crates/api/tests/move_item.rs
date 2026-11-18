@@ -785,7 +785,7 @@ async fn a_missing_heap_and_a_heap_of_a_team_the_caller_is_not_in_are_not_found(
     // Assert
     for refused in [&nowhere, &strangers] {
         expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
-        expect_that!(refused.body["code"], eq(&json!("heap_not_found")));
+        expect_that!(refused.body["code"], eq(&json!("heap_not_in_team")));
         expect_that!(refused.body["field"], eq(&json!("heap_id")));
     }
     expect_that!(outsider.status, eq(StatusCode::NOT_FOUND));
@@ -1155,6 +1155,36 @@ async fn a_note_with_a_heap_made_from_it_stays_in_its_team() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_note_with_an_archived_heap_made_from_it_stays_in_its_team() -> Result<()> {
+    // Arrange: a heap is made from the note, then archived.
+    let w = across().await?;
+    let url = w.app.heap_url(&w.from).await?;
+    let url = url.split("/heaps/").next().context("heap url")?.to_owned();
+    let made = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{url}/heaps"),
+            Some(&w.ada),
+            Some(json!({ "name": "Blog move", "origin_id": w.item["id"] })),
+        )
+        .await?;
+    anyhow::ensure!(made.status == StatusCode::CREATED, "make heap failed: {}", made.body);
+    w.app
+        .set_heap_archived(made.body["id"].as_str().context("heap id")?, true)
+        .await?;
+
+    // Act
+    let across = w.moved().await?;
+
+    // Assert
+    expect_that!(across.status, eq(StatusCode::CONFLICT));
+    expect_that!(across.body["code"], eq(&json!("note_has_heaps")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn an_item_that_waited_for_the_moved_one_never_names_it() -> Result<()> {
     // Arrange: A waits for the item in the first team.
     let w = across().await?;
@@ -1191,9 +1221,13 @@ async fn an_item_that_waited_for_the_moved_one_never_names_it() -> Result<()> {
         .with_context(|| format!("A is not listed: {}", list.body))?;
     expect_that!(listed["item"]["blocked_by"], eq(&Value::Null));
     expect_that!(listed["item"]["blocker_gone"], eq(&gone));
-    expect_that!(waiting.body["rows"][0]["kind"], eq(&json!("blocker_gone")));
-    expect_that!(waiting.body["rows"][0]["blocker"]["item"], eq(&Value::Null));
-    expect_that!(waiting.body["rows"][0]["blocker"]["gone"], eq(&gone));
+    expect_that!(waiting.body["count"], eq(&json!(1)));
+    expect_that!(waiting.body["rows"][0]["kind"], eq(&json!("blocker_left_team")));
+    expect_that!(waiting.body["rows"][0]["blocker"], eq(&Value::Null));
+    expect_that!(
+        waiting.body["rows"][0]["left_team"]["allowed_actions"],
+        eq(&json!(["change_state"]))
+    );
     Ok(())
 }
 

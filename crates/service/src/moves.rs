@@ -28,15 +28,16 @@ impl Services {
     ///
     /// A move within the team records one `item_moved` entry, in the target heap. A move to another team records two,
     /// each in the team's own log and none copied: in the source heap that the item left, with its title so that log
-    /// keeps naming it, and in the target heap that it came from another team, with nothing of the source team's. The item's open turn stays when its person may edit items in the target heap, and is
-    /// taken back, in the source heap's log, otherwise.
+    /// keeps naming it, and in the target heap that it came from another team, with nothing of the source team's.
+    /// The item's open turn stays when its person may edit items in the target heap, and is taken back, in the source
+    /// heap's log, otherwise.
     ///
     /// Moving an item to the heap it is in changes nothing: it succeeds, after the version check, without an entry.
     ///
     /// Fails with [`ServiceError::MoveTargetNotFound`] when `to_heap` is missing or in a team the caller isn't in,
-    /// with [`ServiceError::Forbidden`] when they may not edit items in it, with [`ServiceError::HeapArchived`] when
-    /// either heap is archived, with [`ItemError::Closed`] for a closed item, and with
-    /// [`ServiceError::NoteHasHeaps`] for a note that heaps were made from, moved to another team. A run may not
+    /// with [`ServiceError::HeapArchived`] when either heap is archived, with [`ItemError::Closed`] for a closed item,
+    /// and with [`ServiceError::NoteHasHeaps`] for a note that heaps were made from, archived ones included, moved to
+    /// another team. A run may not
     /// move items.
     pub async fn move_item(
         &self,
@@ -100,10 +101,7 @@ impl Services {
         let across_teams = target.team_id != source.team_id;
         if across_teams
             && item.kind == Kind::Note
-            && store::heaps::list_heaps_made_from(&txn, &[item_id])
-                .await?
-                .iter()
-                .any(|heap| !heap.is_archived())
+            && !store::heaps::list_heaps_made_from(&txn, &[item_id]).await?.is_empty()
         {
             return Err(ServiceError::NoteHasHeaps { item_id });
         }
@@ -177,7 +175,7 @@ impl Services {
     }
 
     /// Takes back the item's open turn, with its entry in `source`, the heap the turn belonged to, unless its person
-    /// may edit items in `target`'s team. A turn the prepare setting opened has no person, so it goes too.
+    /// may edit items in `target`'s team. A turn whose opener can't be traced goes too.
     async fn take_back_unfit_turn(
         &self,
         txn: &store::DatabaseTransaction,

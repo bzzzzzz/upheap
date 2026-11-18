@@ -570,8 +570,8 @@ entries and nothing else: the item answers `404` there, and its log names the it
 Links that cross the teams stay stored and are shown only to a reader who can view the other end: an item that
 waited for the moved one keeps it as its blocker and waits for the person (§35), shown only as moved out of the
 team; an origin, a Became item or step stays linked. The item's own blocker is dropped, as within a team. A turn
-stays when its person may edit items in the target heap, and is taken back otherwise. A note that open heaps were
-made from moves only within its team, since a run's `became` defines the tasks in those heaps.
+stays when its person may edit items in the target heap, and is taken back otherwise. A note that heaps were made from,
+archived ones included, moves only within its team, since a run's `became` defines the tasks in those heaps.
 
 **Instead of.** Copying the history into the new team, which hands the new team what the old one wrote, comments
 and edits included, and names that team's tags and people. Moving the history with the item, which takes from the

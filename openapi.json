@@ -3906,7 +3906,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Moves an item to another heap, of any team the caller may edit items in, with its context, steps, questions, turn\nand history. Send the item's `version` in `If-Match`. The item keeps its key unless the new heap has an item with\nit, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name,\nor a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays\nblocked with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and\nwait for the caller; when it went to another team it is never named. A turn stays when its person may edit items\nin the target heap, and is taken back otherwise. A note that heaps were made from can't leave its team. Moving an\nitem to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path\nstops working.",
+        "summary": "Moves an item to another heap, of any team the caller may edit items in, with its context, steps, questions, turn\nand history. Send the item's `version` in `If-Match`. The item keeps its key unless the new heap has an item with\nit, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name,\nor a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays\nblocked with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and\nwait for the caller; when it went to another team it is never named. A turn stays when its person may edit items\nin the target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its team. Moving an\nitem to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path\nstops working.",
         "operationId": "move_item",
         "parameters": [
           {
@@ -3993,7 +3993,7 @@
             }
           },
           "403": {
-            "description": "From inside a run: `run_forbidden`; or the caller may not edit items in the target heap",
+            "description": "From inside a run: `run_forbidden`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4013,7 +4013,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from to another team)",
+            "description": "`version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from, archived ones included, to another team)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4023,7 +4023,7 @@
             }
           },
           "422": {
-            "description": "`heap_not_found`: the heap doesn't exist, or is in a team the caller isn't in",
+            "description": "`heap_not_in_team`: the heap doesn't exist or isn't in a team you're in",
             "content": {
               "application/json": {
                 "schema": {
@@ -14554,6 +14554,7 @@
         "type": "object",
         "description": "A blocker that stopped holding the row's item, which stays blocked until the caller moves it on.",
         "required": [
+          "item",
           "gone",
           "allowed_actions"
         ],
@@ -14569,15 +14570,8 @@
             "$ref": "#/components/schemas/BlockerGone"
           },
           "item": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ItemRef",
-                "description": "The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. `null`\nwhen it moved to another team, which is never named."
-              }
-            ]
+            "$ref": "#/components/schemas/ItemRef",
+            "description": "The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap."
           }
         }
       },
@@ -14662,6 +14656,22 @@
           }
         }
       },
+      "WaitingLeftTeam": {
+        "type": "object",
+        "description": "A blocker that moved to another team and stopped holding the row's item. It is never named, nor is its heap.",
+        "required": [
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemAction"
+            },
+            "description": "What the caller may do about it: `change_state`, to unblock the item, when they may edit items."
+          }
+        }
+      },
       "WaitingRow": {
         "type": "object",
         "description": "One thing that waits.",
@@ -14672,7 +14682,8 @@
           "heap_priority",
           "question",
           "stuck",
-          "blocker"
+          "blocker",
+          "left_team"
         ],
         "properties": {
           "blocker": {
@@ -14700,6 +14711,17 @@
           },
           "kind": {
             "$ref": "#/components/schemas/WaitingRowKind"
+          },
+          "left_team": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WaitingLeftTeam",
+                "description": "The blocker that moved to another team. Set on a `blocker_left_team` row; `null` on the others."
+              }
+            ]
           },
           "question": {
             "oneOf": [
@@ -14738,7 +14760,8 @@
         "enum": [
           "question",
           "stuck",
-          "blocker_gone"
+          "blocker_gone",
+          "blocker_left_team"
         ]
       },
       "WaitingStuck": {

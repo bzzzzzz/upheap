@@ -902,7 +902,7 @@ export interface paths {
          *     or a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays
          *     blocked with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and
          *     wait for the caller; when it went to another team it is never named. A turn stays when its person may edit items
-         *     in the target heap, and is taken back otherwise. A note that heaps were made from can't leave its team. Moving an
+         *     in the target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its team. Moving an
          *     item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path
          *     stops working.
          */
@@ -4217,7 +4217,8 @@ export interface components {
             /** @description What the caller may do about it: `change_state`, to unblock the item, when they may edit items. */
             allowed_actions: components["schemas"]["ItemAction"][];
             gone: components["schemas"]["BlockerGone"];
-            item?: null | components["schemas"]["ItemRef"];
+            /** @description The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. */
+            item: components["schemas"]["ItemRef"];
         };
         /** @description The items waiting for the person in one heap. */
         WaitingInHeap: {
@@ -4249,6 +4250,11 @@ export interface components {
             /** @description Whether an agent has the item: always `false` here, as a row's item waits for the caller. */
             with_agent: boolean;
         };
+        /** @description A blocker that moved to another team and stopped holding the row's item. It is never named, nor is its heap. */
+        WaitingLeftTeam: {
+            /** @description What the caller may do about it: `change_state`, to unblock the item, when they may edit items. */
+            allowed_actions: components["schemas"]["ItemAction"][];
+        };
         /** @description One thing that waits. */
         WaitingRow: {
             blocker: null | components["schemas"]["WaitingBlocker"];
@@ -4260,6 +4266,7 @@ export interface components {
             heap_priority: number;
             item: components["schemas"]["WaitingItem"];
             kind: components["schemas"]["WaitingRowKind"];
+            left_team: null | components["schemas"]["WaitingLeftTeam"];
             question: null | components["schemas"]["Question"];
             /**
              * @description The title of the step the question names, so a client needn't load the item's steps. `null` when it names
@@ -4272,7 +4279,7 @@ export interface components {
          * @description What kind of thing waits. More kinds can join.
          * @enum {string}
          */
-        WaitingRowKind: "question" | "stuck" | "blocker_gone";
+        WaitingRowKind: "question" | "stuck" | "blocker_gone" | "blocker_left_team";
         /** @description A turn whose runs keep failing. */
         WaitingStuck: {
             /** @description What the caller may do about it: `retry` and `take_back`, when they may edit items. */
@@ -4564,6 +4571,7 @@ export type Waiting = components['schemas']['Waiting'];
 export type WaitingBlocker = components['schemas']['WaitingBlocker'];
 export type WaitingInHeap = components['schemas']['WaitingInHeap'];
 export type WaitingItem = components['schemas']['WaitingItem'];
+export type WaitingLeftTeam = components['schemas']['WaitingLeftTeam'];
 export type WaitingRow = components['schemas']['WaitingRow'];
 export type WaitingRowKind = components['schemas']['WaitingRowKind'];
 export type WaitingStuck = components['schemas']['WaitingStuck'];
@@ -7092,7 +7100,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description From inside a run: `run_forbidden`; or the caller may not edit items in the target heap */
+            /** @description From inside a run: `run_forbidden` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7109,7 +7117,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from to another team) */
+            /** @description `version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from, archived ones included, to another team) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7118,7 +7126,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `heap_not_found`: the heap doesn't exist, or is in a team the caller isn't in */
+            /** @description `heap_not_in_team`: the heap doesn't exist or isn't in a team you're in */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -462,8 +462,9 @@ a fixed time.
    their blocker, now in another heap, so they wait for the person (§3), and a move back makes it hold
    them again; the move writes nothing to them. A blocker in another team than the item it blocks is never named, to
    anyone: the item has no `blocked_by` and its `blocker_gone` says it moved, with no heap, whatever the blocker's
-   state there (`gone_blockers`). A note that heaps were made from stays in its team, since a run's `became` defines
-   the tasks in those heaps. Since an item's heap can change, a write that finds the
+   state there (`gone_blockers`); Waiting for me shows it as a row of its own kind, `blocker_left_team`, with no blocker
+   (a new kind, so released clients skip it, as the API adds rather than changes). A note that heaps were made from,
+   archived ones included, stays in its team, since a run's `became` defines the tasks in those heaps. Since an item's heap can change, a write that finds the
    heap through a read before the lock (a step, a question, a turn, a run) reads the item again under the lock and
    refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
 3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item

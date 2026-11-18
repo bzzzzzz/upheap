@@ -60,7 +60,7 @@ pub enum WaitingSubject {
 /// A gone blocker, as a row shows it.
 #[derive(Debug)]
 pub struct BlockerGoneView {
-    /// The blocker; `None` when it is in another team, which is never named.
+    /// The blocker; `None` when it is in another team, which is never named (the row is `blocker_left_team`).
     pub blocker: Option<ItemSummary>,
     pub gone: GoneBlocker,
     /// What the caller may do about it: change the state, to unblock it, when they may edit items.
@@ -438,7 +438,8 @@ impl Services {
 }
 
 /// The blocked items of `heap_ids` whose blocker is gone ([`Item::blocker_gone`]), each with its blocker, none when it
-/// is in another team ([`GoneBlocker::other_team`]), and how it went, oldest first. Shared by Waiting for me and the agents' queue, which counts what waits.
+/// is in another team ([`GoneBlocker::other_team`]), and how it went, oldest first. Shared by Waiting for me and the
+/// agents' queue, which counts what waits.
 pub(crate) async fn list_gone_blockers(
     db: &impl store::ConnectionTrait,
     heap_ids: &[HeapId],
