@@ -45,8 +45,9 @@ impl Services {
         })
     }
 
-    /// The item with `key` in the heap `heap` of the team `team`. Fails with [`ServiceError::NotFound`] unless the
-    /// caller is a member.
+    /// The item with `key` in the heap `heap` of the team `team`. An item that has the handle now wins; otherwise
+    /// the item that held it last before a move is the one (architecture.md, Handles). Fails with
+    /// [`ServiceError::NotFound`] unless the caller is a member.
     pub async fn resolve_item(
         &self,
         principal: Principal,
@@ -55,7 +56,10 @@ impl Services {
         key: ItemKey,
     ) -> Result<ItemId, ServiceError> {
         let heap = self.resolve_heap(principal, team, heap).await?;
-        store::items::find_item_id_by_key(&self.db, heap.heap_id, key)
+        if let Some(item_id) = store::items::find_item_id_by_key(&self.db, heap.heap_id, key).await? {
+            return Ok(item_id);
+        }
+        store::items::find_item_id_by_former_key(&self.db, heap.heap_id, key)
             .await?
             .ok_or(ServiceError::NotFound)
     }
