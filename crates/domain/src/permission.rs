@@ -395,7 +395,7 @@ const fn can_configure(heap: &Heap, role: Role) -> bool {
 /// An action a client may offer on a team.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TeamAction {
-    /// Change the team's name.
+    /// Change the team's name. Not offered on a personal team, which is always shown by its owner's name.
     Rename,
     /// Change the team's slug. Not offered on a personal team.
     ChangeSlug,
@@ -422,9 +422,9 @@ pub fn allowed_team_actions(
     };
     let mut actions = Vec::new();
     let shared = !team.is_personal();
-    if Permission::ManageTeam.is_granted_to(role) {
+    if shared && Permission::ManageTeam.is_granted_to(role) {
         actions.push(TeamAction::Rename);
-        if shared && !group_managed {
+        if !group_managed {
             actions.extend([
                 TeamAction::ChangeSlug,
                 TeamAction::AddMember,
@@ -734,13 +734,13 @@ mod tests {
     }
 
     #[gtest]
-    fn a_personal_team_offers_no_member_changes() {
+    fn a_personal_team_offers_no_rename_or_member_changes() {
         let owner = member(10, Role::Admin);
         let personal = team(Some(owner.user_id));
 
         expect_that!(
             allowed_team_actions(&personal, &[owner], owner.user_id, false),
-            elements_are![eq(&TeamAction::Rename), eq(&TeamAction::CreateHeap)]
+            elements_are![eq(&TeamAction::CreateHeap)]
         );
     }
 
