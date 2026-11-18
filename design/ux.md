@@ -398,13 +398,18 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 10. The item says when it was created and by whom ("Added by Sam 4 days ago"), on the line of History's toggle.
 11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
     heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a
-    checkbox that ticks and unticks it, the title edited in place (Enter or leaving the field saves, Escape or a
-    blank title puts it back), a chevron that shows its context (closed to begin with; see below) and ⋯ with Drop, or Restore on a dropped step. A dropped step is struck through and muted, with a
+    grip before the checkbox (editors only; on a wide screen it shows when the row is hovered or has focus, on a phone
+    it is always there, 44 px), a checkbox that ticks and unticks it, the title edited in place (Enter or leaving the field saves, Escape or a
+    blank title puts it back), a chevron that shows its context (closed to begin with; see below) and ⋯ with Move up and Move down (absent on the first and last step), then Drop, or Restore on a dropped step.
+    Only the grip drags a step: the row follows the pointer, a 2 px accent line shows where it will land, every place
+    can be reached, the list scrolls when the pointer nears the edge of the pane, and Escape puts the row back. After a
+    move from the menu focus stays on that step's ⋯, and a screen reader hears "Moved to place 2 of 5". A dropped step is struck through and muted, with a
     dash in place of its checkbox, and stays in the list. "Add a step" opens a one-line field in place: Enter adds
     the step and keeps the field for the next, leaving it with text adds the step and closes it, Escape closes it
-    without adding and puts the focus back on the button. Nothing is optimistic: a change shows once the server has
-    it, and one that fails is said under the section. A closed item, an archived heap or a missing `edit` leaves the
-    steps and the count to read, with no checkbox to change, no ⋯ and no Add. A step's context opens rendered as
+    without adding and puts the focus back on the button. Nothing is optimistic but a move: a change shows once the server has
+    it, and one that fails is said under the section; a moved step shows in its new place at once, and goes back if the
+    server refuses. A closed item, an archived heap or a missing `edit`
+    leaves the steps and the count to read, with no grip, no checkbox to change, no ⋯ and no Add. A step's context opens rendered as
     Markdown text (see Toolkit), for everyone, and the chevron shows only when there is one, or the step can be edited.
     An editor sees a small Edit button under the text ("Edit step context"), which swaps it for the field with the
     source, focused, the caret at the end; leaving the field saves a change and goes back to the rendered text once the save has landed;
