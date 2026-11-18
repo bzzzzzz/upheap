@@ -235,10 +235,11 @@ pub fn reorder_steps(
 
 /// The number of the step right before step `number` among `steps` in their order, or 0 when it is first.
 pub fn step_before(steps: &[Step], number: StepNumber) -> u32 {
-    let index = steps.iter().position(|step| step.number == number).unwrap_or(0);
-    index
-        .checked_sub(1)
-        .map_or(0, |before| steps.get(before).map_or(0, |step| step.number.get()))
+    steps
+        .iter()
+        .take_while(|step| step.number != number)
+        .last()
+        .map_or(0, |step| step.number.get())
 }
 
 /// How far a task's steps have got.

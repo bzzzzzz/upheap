@@ -144,10 +144,11 @@ impl Services {
             None => None,
         };
         let mut edited = current.apply_patch(&patch);
-        if let Some(moves) = &reordered
-            && let Some((_, position)) = moves.iter().find(|(id, _)| *id == current.id)
-        {
-            edited.get_or_insert_with(|| current.clone()).position = *position;
+        if let Some(moves) = &reordered {
+            let moved = edited.get_or_insert_with(|| current.clone());
+            if let Some((_, position)) = moves.iter().find(|(id, _)| *id == current.id) {
+                moved.position = *position;
+            }
         }
         let Some(edited) = edited else {
             let children = ItemChildren {

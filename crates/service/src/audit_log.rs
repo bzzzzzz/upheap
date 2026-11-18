@@ -679,7 +679,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::StepTitle => "Step title",
         AuditField::StepContext => "Step context",
         AuditField::StepState => "Step state",
-        AuditField::StepPlace => "Place",
+        AuditField::StepPlace => "Step place",
         AuditField::Question => "Question",
         AuditField::QuestionKind | AuditField::Kind => "Kind",
         AuditField::QuestionText => "Question text",
@@ -1237,7 +1237,7 @@ mod tests {
             changes,
             elements_are![
                 eq(&change("step", "Step", None, Some("Run in prod"))),
-                eq(&change("step_place", "Place", Some("after step 2"), Some("first"))),
+                eq(&change("step_place", "Step place", Some("after step 2"), Some("first"))),
             ]
         );
     }

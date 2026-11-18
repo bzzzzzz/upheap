@@ -60,8 +60,10 @@ pub async fn run(args: MoveArgs, app: &App, out: &mut Output) -> Result<(), CliE
         Mode::Json => out.json(&moved.body)?,
         Mode::Quiet => out.line(&step_name(&moved.value, step))?,
         Mode::Human => {
-            let label = step_name(&moved.value, step);
+            let now = find_step(&moved.value, name.number).unwrap_or(step);
+            let label = step_name(&moved.value, now);
             match after {
+                _ if now.version == step.version => out.line(&format!("No change to {label}: it is there already."))?,
                 Some(after) => out.line(&format!("Moved {label} after {}.{after}.", moved.value.key))?,
                 None => out.line(&format!("Moved {label} to the top."))?,
             }
