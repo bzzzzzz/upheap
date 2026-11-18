@@ -1,5 +1,4 @@
-//! SCIM 2.0 provisioning endpoints, served at `/scim/v2` when the operator set a token (architecture.md,
-//! Authentication and authorization).
+//! SCIM 2.0 provisioning endpoints, served at `/scim/v2` when the operator set a token.
 //!
 //! The RFCs, not Upheap, are this contract: providers are the only clients, so the endpoints are outside `/api/v1`
 //! and `openapi.json`, speak `application/scim+json` and refuse in SCIM's error format ([`error::ScimFailure`]).

@@ -617,9 +617,22 @@ async fn a_group_matches_by_its_external_id_and_unmapped_groups_and_unlinked_peo
 #[gtest]
 #[tokio::test]
 async fn deactivating_a_linked_person_ends_their_teams_and_sign_ins_and_refuses_new_ones() -> Result<()> {
-    // Arrange: Sam is in Ops through a pushed group, with a session, a CLI sign-in and a personal token.
+    // Arrange: Sam has a password, and is in Ops through a pushed group, with a session, a CLI sign-in and a
+    // personal token.
     let h = harness().await?;
-    let session = first_sign_in(&h, sam()).await?;
+    first_sign_in(&h, sam()).await?;
+    let link = h.app.make_reset_link("sam").await?;
+    let set_password = h
+        .app
+        .send(
+            Method::POST,
+            &format!("/api/v1/password-resets/{link}"),
+            None,
+            Some(json!({ "password": "sam has a long password" })),
+        )
+        .await?;
+    assert_eq!(set_password.status, StatusCode::OK, "{}", set_password.body);
+    let session = set_password.session_cookie.context("no session")?;
     let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
     push_group(&h, "engineering", &[&scim_sam]).await?;
     let secret = h.app.make_personal_token(&session, "ci", None).await?.body["secret"]
@@ -694,10 +707,11 @@ async fn deactivating_a_linked_person_ends_their_teams_and_sign_ins_and_refuses_
             Method::POST,
             "/api/v1/auth/login",
             None,
-            Some(json!({ "login": "sam", "password": "another long password" })),
+            Some(json!({ "login": "sam", "password": "sam has a long password" })),
         )
         .await?;
-    expect_that!(password_sign_in.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(password_sign_in.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(password_sign_in.body["code"], eq(&json!("account_deactivated")));
 
     // Reactivated, the provider sign-in works and the groups come back.
     patch(
@@ -790,5 +804,101 @@ async fn deactivating_a_person_with_no_linked_account_changes_nothing_in_upheap(
     let ana = me(&h.app, &h.ana).await?;
     expect_that!(ana.status, eq(StatusCode::OK));
     expect_that!(in_ops(&ana), eq(true));
+    Ok(())
+}
+
+fn engineering_claims() -> Claims {
+    Claims::verified("subject-sam", "sam@example.test", "Sam Doe").with_claim("groups", json!(["engineering"]))
+}
+
+#[gtest]
+#[tokio::test]
+async fn groups_are_left_alone_until_a_mapped_group_has_been_pushed() -> Result<()> {
+    // Arrange: Sam is in Ops through the token's groups.
+    let h = harness().await?;
+    let session = first_sign_in(&h, engineering_claims()).await?;
+    assert!(in_ops(&me(&h.app, &session).await?));
+    let blair = h.plain.register_as("blair@example.test", "Blair").await?.0;
+
+    // Act: Sam is pushed with no groups, an unmapped group is pushed, and Sam signs in again.
+    let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+    let after_user = in_ops(&me(&h.app, &session).await?);
+    push_group(&h, "unrelated", &[&scim_sam]).await?;
+    let after_unmapped = in_ops(&me(&h.app, &session).await?);
+    let (again, _) = sign_in(&h, engineering_claims()).await?;
+    let session = again.session_cookie.context("no session")?;
+    let after_sign_in = in_ops(&me(&h.app, &session).await?);
+    // The mapped group is then pushed without Sam.
+    let other = push_user(&h, "other@example.test", Some("subject-other"), true).await?;
+    push_group(&h, "engineering", &[&other]).await?;
+    let after_mapped = in_ops(&me(&h.app, &session).await?);
+
+    // Assert
+    expect_that!(after_user, eq(true));
+    expect_that!(after_unmapped, eq(true));
+    expect_that!(after_sign_in, eq(true));
+    expect_that!(after_mapped, eq(false));
+    expect_that!(me(&h.app, &blair).await?.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_are() -> Result<()> {
+    // Arrange: two records for Sam, one inactive, the active one in a mapped group.
+    let h = harness().await?;
+    let first = push_user(&h, "sam@example.test", Some("subject-sam"), false).await?;
+    let second = push_user(&h, "sam2@example.test", Some("subject-sam"), true).await?;
+    push_group(&h, "engineering", &[&second]).await?;
+
+    // Act: Sam signs in with a token that lists no groups.
+    let session = first_sign_in(&h, sam()).await?;
+    let signed_in = in_ops(&me(&h.app, &session).await?);
+    // The inactive record is written again: Sam is still active through the other.
+    patch(
+        &h,
+        &format!("/scim/v2/Users/{first}"),
+        json!([{ "op": "replace", "value": { "active": false } }]),
+    )
+    .await?;
+    let still_in = in_ops(&me(&h.app, &session).await?);
+    // The active one is deactivated too.
+    patch(
+        &h,
+        &format!("/scim/v2/Users/{second}"),
+        json!([{ "op": "replace", "value": { "active": false } }]),
+    )
+    .await?;
+    let ended = me(&h.app, &session).await?;
+    let (refused, _) = sign_in(&h, sam()).await?;
+
+    // Assert
+    expect_that!(signed_in, eq(true));
+    expect_that!(still_in, eq(true));
+    expect_that!(ended.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(refused.status, eq(StatusCode::FORBIDDEN));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn deleting_one_of_two_records_keeps_the_person_and_deleting_the_last_ends_them() -> Result<()> {
+    // Arrange
+    let h = harness().await?;
+    let first = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+    let second = push_user(&h, "sam2@example.test", Some("subject-sam"), true).await?;
+    push_group(&h, "engineering", &[&first]).await?;
+    let session = first_sign_in(&h, sam()).await?;
+    assert!(in_ops(&me(&h.app, &session).await?));
+
+    // Act
+    scim(&h, Method::DELETE, &format!("/scim/v2/Users/{second}"), None).await?;
+    let after_one = me(&h.app, &session).await?;
+    scim(&h, Method::DELETE, &format!("/scim/v2/Users/{first}"), None).await?;
+    let after_both = me(&h.app, &session).await?;
+
+    // Assert
+    expect_that!(in_ops(&after_one), eq(true));
+    expect_that!(after_both.status, eq(StatusCode::UNAUTHORIZED));
     Ok(())
 }

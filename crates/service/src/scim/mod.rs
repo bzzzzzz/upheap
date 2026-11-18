@@ -1,11 +1,15 @@
 //! SCIM 2.0 provisioning: the identity provider pushes its users, groups and deactivations, and the group-managed
-//! teams follow at once (architecture.md, Authentication and authorization).
+//! teams follow at once.
 //!
 //! The pushes are stored as the provider sent them ([`store::scim`]). Each write runs in one transaction that locks
-//! the mapped teams first, writes the SCIM rows, then runs the group-teams sync for every touched person who is
-//! linked: a SCIM user is linked to an account when `user_identities` has the configured issuer and the SCIM user's
-//! `externalId`. Nothing stores the link. A linked person who is left inactive, or deleted, also loses every session
-//! and token, and [`Services::open_session`] refuses them until the provider turns them back on.
+//! the mapped teams first, then the SCIM row being written, writes the SCIM rows, then runs the group-teams sync for
+//! every touched person who is linked: a SCIM user is linked to an account when `user_identities` has the configured
+//! issuer and the SCIM user's `externalId`, the person's subject. Nothing stores the link.
+//!
+//! Records may share an `externalId`, so a person's state is read from all of them at once ([`ScimPerson`]): inactive
+//! only when every record is, else in the groups of the active ones. A linked person who is left inactive, or whose
+//! last record is deleted, also loses every session and token, and [`Services::open_session`] refuses an inactive
+//! person until the provider turns them back on.
 //!
 //! Resources are JSON as in RFC 7643, built and read here; the HTTP side is in `api`.
 
@@ -340,7 +344,8 @@ impl Services {
         store::scim::insert_user(&txn, &user)
             .await
             .map_err(|e| taken_on_duplicate(e, "userName is taken"))?;
-        self.after_user_writes(&txn, std::slice::from_ref(&user), now).await?;
+        let subjects = user.external_id.iter().cloned().collect();
+        self.apply_to_linked(&txn, subjects, false, true, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_user_id = %user.id, active = user.active, "SCIM user created");
         self.render_user(&user)
@@ -373,7 +378,7 @@ impl Services {
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
-        let current = store::scim::find_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
+        let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
         let input = change(&current)?;
         let user = ScimUser {
             id,
@@ -387,7 +392,12 @@ impl Services {
         store::scim::update_user(&txn, &user)
             .await
             .map_err(|e| taken_on_duplicate(e, "userName is taken"))?;
-        self.after_user_writes(&txn, std::slice::from_ref(&user), now).await?;
+        // The person the record was linked to before, if the write moved it to another.
+        let subjects = [user.external_id.clone(), current.external_id]
+            .into_iter()
+            .flatten()
+            .collect();
+        self.apply_to_linked(&txn, subjects, false, true, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_user_id = %user.id, active = user.active, "SCIM user changed");
         self.render_user(&user)
@@ -398,15 +408,12 @@ impl Services {
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
-        let current = store::scim::find_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
+        let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
         store::scim::delete_user_memberships(&txn, id).await?;
         store::scim::delete_user(&txn, id).await?;
-        // Deleted is inactive: no groups and no sign-ins.
-        let gone = ScimUser {
-            active: false,
-            ..current
-        };
-        self.after_user_writes(&txn, &[gone], now).await?;
+        // A person left with no record is inactive: no groups and no sign-ins.
+        let subjects = current.external_id.into_iter().collect();
+        self.apply_to_linked(&txn, subjects, true, true, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_user_id = %id, "SCIM user deleted");
         Ok(())
@@ -428,11 +435,12 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
         check_members_exist(&txn, &input.members).await?;
+        let mapped_before = self.mapped_group_stored(&txn).await?;
         store::scim::insert_group(&txn, &group)
             .await
             .map_err(|e| taken_on_duplicate(e, "displayName is taken"))?;
         store::scim::replace_group_members(&txn, group.id, &input.members).await?;
-        self.after_group_write(&txn, &input.members, now).await?;
+        self.after_group_write(&txn, &input.members, mapped_before, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_group_id = %group.id, members = input.members.len(), "SCIM group created");
         self.render_group(&group, &input.members)
@@ -466,8 +474,9 @@ impl Services {
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
-        let current = store::scim::find_group(&txn, id).await?.ok_or(ScimError::NotFound)?;
+        let current = store::scim::lock_group(&txn, id).await?.ok_or(ScimError::NotFound)?;
         let before = store::scim::list_group_members(&txn, id).await?;
+        let mapped_before = self.mapped_group_stored(&txn).await?;
         let input = change(&current, &before)?;
         check_members_exist(&txn, &input.members).await?;
         let group = ScimGroup {
@@ -483,7 +492,7 @@ impl Services {
             .map_err(|e| taken_on_duplicate(e, "displayName is taken"))?;
         store::scim::replace_group_members(&txn, id, &input.members).await?;
         let touched: BTreeSet<Uuid> = before.union(&input.members).copied().collect();
-        self.after_group_write(&txn, &touched, now).await?;
+        self.after_group_write(&txn, &touched, mapped_before, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_group_id = %id, members = input.members.len(), "SCIM group changed");
         self.render_group(&group, &input.members)
@@ -494,11 +503,12 @@ impl Services {
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
-        store::scim::find_group(&txn, id).await?.ok_or(ScimError::NotFound)?;
+        store::scim::lock_group(&txn, id).await?.ok_or(ScimError::NotFound)?;
         let members = store::scim::list_group_members(&txn, id).await?;
+        let mapped_before = self.mapped_group_stored(&txn).await?;
         store::scim::delete_group_members(&txn, id).await?;
         store::scim::delete_group(&txn, id).await?;
-        self.after_group_write(&txn, &members, now).await?;
+        self.after_group_write(&txn, &members, mapped_before, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_group_id = %id, "SCIM group deleted");
         Ok(())
@@ -506,53 +516,58 @@ impl Services {
 
     // Applying a change.
 
-    /// After users were written: ends the sign-ins of each linked one left inactive, and syncs each linked one's
-    /// teams. A user that was deleted is passed as inactive.
-    async fn after_user_writes(
-        &self,
-        txn: &impl ConnectionTrait,
-        users: &[ScimUser],
-        now: Timestamp,
-    ) -> Result<(), ScimError> {
-        self.apply_to_linked(txn, users, true, now).await
-    }
-
-    /// After a group's members or names changed: syncs the teams of the users `touched`.
+    /// After a group's members or names changed: syncs the teams of the people of the users `touched`. When the write
+    /// made the first mapped group stored, or removed the last, it changes what everyone's groups are
+    /// ([`Services::scim_person`]), so it syncs every person the provider pushed.
     async fn after_group_write(
         &self,
         txn: &impl ConnectionTrait,
         touched: &BTreeSet<Uuid>,
+        mapped_before: bool,
         now: Timestamp,
     ) -> Result<(), ScimError> {
-        let mut users = Vec::new();
-        for id in touched {
-            users.extend(store::scim::find_user(txn, *id).await?);
+        let mut subjects = BTreeSet::new();
+        if mapped_before != self.mapped_group_stored(txn).await? {
+            subjects = store::scim::list_external_ids(txn).await?;
         }
-        self.apply_to_linked(txn, &users, false, now).await
+        for id in touched {
+            subjects.extend(
+                store::scim::find_user(txn, *id)
+                    .await?
+                    .and_then(|user| user.external_id),
+            );
+        }
+        self.apply_to_linked(txn, subjects, false, false, now).await
     }
 
-    /// For each of `users` who is linked to an account: ends their sign-ins when `end_sign_ins` and they are
-    /// inactive, and syncs their teams from their SCIM groups. Logs once how many aren't linked, and changes nothing
-    /// for them.
+    /// For each person among `subjects` who is linked to an account: ends their sign-ins when `end_sign_ins` and they
+    /// are inactive, and syncs their teams from their SCIM state. A person left with no record is inactive when
+    /// `deleted`, else unchanged. Logs once how many aren't linked, and changes nothing for them.
     async fn apply_to_linked(
         &self,
         txn: &impl ConnectionTrait,
-        users: &[ScimUser],
+        subjects: BTreeSet<String>,
+        deleted: bool,
         end_sign_ins: bool,
         now: Timestamp,
     ) -> Result<(), ScimError> {
         let mut unlinked = 0_u32;
-        for user in users {
-            let Some(user_id) = self.linked_user(txn, user).await? else {
+        for subject in &subjects {
+            let Some(user_id) = self.linked_user(txn, subject).await? else {
                 unlinked += 1;
                 continue;
             };
-            if end_sign_ins && !user.active {
-                self.end_sign_ins(txn, user_id, now).await?;
+            let person = match self.scim_person(txn, subject).await? {
+                Some(person) => person,
+                None if deleted => ScimPerson::inactive(),
+                None => continue,
+            };
+            if end_sign_ins && !person.active {
+                let ended_sign_ins = self.end_sign_ins(txn, user_id, None, now).await?;
+                tracing::info!(%user_id, ended_sign_ins, "ended the sign-ins of a person the provider deactivated");
             }
             if !self.settings.group_teams.is_empty() {
-                let groups = self.scim_groups_of(txn, user).await?;
-                self.sync_group_teams(txn, user_id, &groups, now).await?;
+                self.sync_group_teams(txn, user_id, &person.groups, now).await?;
             }
         }
         if unlinked > 0 {
@@ -564,53 +579,69 @@ impl Services {
         Ok(())
     }
 
-    /// The account the SCIM user is linked to: the one whose identity at the configured provider has the user's
-    /// `externalId` as its subject.
-    async fn linked_user(&self, db: &impl ConnectionTrait, user: &ScimUser) -> Result<Option<UserId>, ServiceError> {
-        let (Some(oidc), Some(external_id)) = (&self.settings.oidc, &user.external_id) else {
+    /// The account whose identity at the configured provider has `subject`.
+    async fn linked_user(&self, db: &impl ConnectionTrait, subject: &str) -> Result<Option<UserId>, ServiceError> {
+        let Some(oidc) = &self.settings.oidc else {
             return Ok(None);
         };
-        Ok(store::identities::find_identity_user(db, oidc.issuer(), external_id).await?)
+        Ok(store::identities::find_identity_user(db, oidc.issuer(), subject).await?)
     }
 
-    /// The groups of a SCIM user: known, and empty when inactive, else the display name and the external ID of every
-    /// group they are in.
-    async fn scim_groups_of(&self, db: &impl ConnectionTrait, user: &ScimUser) -> Result<Groups, ServiceError> {
+    /// Whether a stored SCIM group matches the configured map: its display name or external ID is one of the groups of
+    /// a mapped team.
+    async fn mapped_group_stored(&self, db: &impl ConnectionTrait) -> Result<bool, ServiceError> {
+        let mapped: BTreeSet<String> = self
+            .settings
+            .group_teams
+            .iter()
+            .flat_map(|(_, groups)| groups.iter().cloned())
+            .collect();
+        if mapped.is_empty() {
+            return Ok(false);
+        }
+        Ok(store::scim::any_group_named(db, &mapped).await?)
+    }
+
+    /// What the pushes say about the person who is `subject` at the provider, from every record with that
+    /// `externalId`, or `None` when there is no record.
+    ///
+    /// The person is inactive only when every record is; then their groups are known and empty. Otherwise their
+    /// groups are the display name and external ID of every group the active records are in, which are not known
+    /// while no stored group matches the configured map: the pushes haven't said anything about the mapped teams yet,
+    /// so nobody leaves one.
+    async fn scim_person(&self, db: &impl ConnectionTrait, subject: &str) -> Result<Option<ScimPerson>, ServiceError> {
+        let records = store::scim::list_users_by_external_id(db, subject).await?;
+        if records.is_empty() {
+            return Ok(None);
+        }
+        let active: Vec<&ScimUser> = records.iter().filter(|record| record.active).collect();
+        if active.is_empty() {
+            return Ok(Some(ScimPerson::inactive()));
+        }
+        if !self.mapped_group_stored(db).await? {
+            return Ok(Some(ScimPerson {
+                active: true,
+                groups: Groups::Unknown("no mapped group was pushed"),
+            }));
+        }
         let mut groups = BTreeSet::new();
-        if user.active {
-            for (display_name, external_id) in store::scim::list_user_group_names(db, user.id).await? {
+        for record in active {
+            for (display_name, external_id) in store::scim::list_user_group_names(db, record.id).await? {
                 groups.insert(display_name);
                 groups.extend(external_id);
             }
         }
-        Ok(Groups::Known(groups))
-    }
-
-    /// Ends every sign-in of the account: its web sessions, its OAuth token families and open authorization codes,
-    /// and its personal tokens.
-    async fn end_sign_ins(
-        &self,
-        txn: &impl ConnectionTrait,
-        user_id: UserId,
-        now: Timestamp,
-    ) -> Result<(), ServiceError> {
-        let live_sessions = store::sessions::count_live_sessions(txn, user_id, now).await?;
-        let live_clients = store::oauth::list_live_token_families(txn, user_id, now).await?.len() as u64;
-        store::oauth::expire_user_auth_codes(txn, user_id, now).await?;
-        store::sessions::delete_user_sessions(txn, user_id).await?;
-        store::oauth::revoke_user_token_families(txn, user_id, now).await?;
-        let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(txn, user_id, now).await?;
-        let ended_sign_ins = live_sessions
-            .saturating_add(live_clients)
-            .saturating_add(revoked_tokens);
-        tracing::info!(%user_id, ended_sign_ins, "ended the sign-ins of a person the provider deactivated");
-        Ok(())
+        Ok(Some(ScimPerson {
+            active: true,
+            groups: Groups::Known(groups),
+        }))
     }
 
     // Sign-in.
 
     /// The groups the provider's pushes give the person who is `subject` at the provider, or `None` when SCIM isn't
-    /// set up, no team is mapped, or no SCIM user has that `externalId`. Read it after locking the mapped teams.
+    /// set up, no team is mapped, no SCIM user has that `externalId`, or the pushes don't say yet (see
+    /// [`Services::scim_person`]): the token's groups are used then. Read it after locking the mapped teams.
     pub(crate) async fn scim_sign_in_groups(
         &self,
         db: &impl ConnectionTrait,
@@ -619,14 +650,15 @@ impl Services {
         if self.settings.scim.is_none() || self.settings.group_teams.is_empty() {
             return Ok(None);
         }
-        let Some(user) = store::scim::find_user_by_external_id(db, subject).await? else {
-            return Ok(None);
-        };
-        self.scim_groups_of(db, &user).await.map(Some)
+        Ok(self
+            .scim_person(db, subject)
+            .await?
+            .map(|person| person.groups)
+            .filter(|groups| matches!(groups, Groups::Known(_))))
     }
 
-    /// Refuses with [`ServiceError::AccountDeactivated`] when SCIM is set up and the person's linked SCIM user is
-    /// inactive.
+    /// Refuses with [`ServiceError::AccountDeactivated`] when SCIM is set up and the person is inactive: they have
+    /// SCIM records and every one is inactive.
     pub(crate) async fn refuse_deactivated(
         &self,
         db: &impl ConnectionTrait,
@@ -638,8 +670,8 @@ impl Services {
         let Some(subject) = store::identities::find_identity_subject(db, oidc.issuer(), user_id).await? else {
             return Ok(());
         };
-        match store::scim::find_user_by_external_id(db, &subject).await? {
-            Some(user) if !user.active => {
+        match self.scim_person(db, &subject).await? {
+            Some(person) if !person.active => {
                 tracing::info!(%user_id, "sign-in refused: the provider deactivated the account");
                 Err(ServiceError::AccountDeactivated)
             }
@@ -704,6 +736,22 @@ impl Services {
             "lastModified": modified.to_string(),
             "location": format!("{}/scim/v2/{collection}/{id}", self.scim()?.base_url),
         }))
+    }
+}
+
+/// What the pushes say about one person, read from all their records.
+struct ScimPerson {
+    active: bool,
+    groups: Groups,
+}
+
+impl ScimPerson {
+    /// Inactive, or left with no record: no sign-ins, and in no group.
+    fn inactive() -> Self {
+        Self {
+            active: false,
+            groups: Groups::Known(BTreeSet::new()),
+        }
     }
 }
 

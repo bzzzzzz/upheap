@@ -1,11 +1,12 @@
-//! What the identity provider pushed over SCIM: its users, its groups and who is in them (architecture.md,
-//! Authentication and authorization). The rows mirror the provider's data, so removing one deletes it.
+//! What the identity provider pushed over SCIM: its users, its groups and who is in them. The rows mirror the
+//! provider's data, so removing one deletes it.
 
 use std::collections::BTreeSet;
 
 use domain::Timestamp;
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect,
 };
 use serde_json::Value;
 use uuid::Uuid;
@@ -136,19 +137,45 @@ pub async fn find_user(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<Sci
         .transpose()
 }
 
-/// The oldest user whose external ID is `external_id`, or `None`.
-pub async fn find_user_by_external_id(
-    db: &impl ConnectionTrait,
-    external_id: &str,
-) -> Result<Option<ScimUser>, StoreError> {
-    scim_users::Entity::find()
-        .filter(scim_users::Column::ExternalId.eq(external_id))
-        .order_by_asc(scim_users::Column::CreatedAt)
-        .order_by_asc(scim_users::Column::Id)
+/// Reads the user and takes a lock on its row until the transaction ends (`FOR UPDATE`), so two writes of one user run
+/// one after the other, and the read sees what the earlier one committed.
+pub async fn lock_user(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<ScimUser>, StoreError> {
+    scim_users::Entity::find_by_id(id_to_db(&id))
+        .lock_exclusive()
         .one(db)
         .await?
         .map(user_from_row)
         .transpose()
+}
+
+/// Every user whose external ID is `external_id`, oldest first.
+pub async fn list_users_by_external_id(
+    db: &impl ConnectionTrait,
+    external_id: &str,
+) -> Result<Vec<ScimUser>, StoreError> {
+    scim_users::Entity::find()
+        .filter(scim_users::Column::ExternalId.eq(external_id))
+        .order_by_asc(scim_users::Column::CreatedAt)
+        .order_by_asc(scim_users::Column::Id)
+        .all(db)
+        .await?
+        .into_iter()
+        .map(user_from_row)
+        .collect()
+}
+
+/// Every external ID some user has.
+pub async fn list_external_ids(db: &impl ConnectionTrait) -> Result<BTreeSet<String>, StoreError> {
+    Ok(scim_users::Entity::find()
+        .select_only()
+        .column(scim_users::Column::ExternalId)
+        .filter(scim_users::Column::ExternalId.is_not_null())
+        .distinct()
+        .into_tuple::<String>()
+        .all(db)
+        .await?
+        .into_iter()
+        .collect())
 }
 
 /// Users in creation order, those whose `field` equals `value` when a filter is given, from `offset`, at most `limit`.
@@ -241,6 +268,36 @@ pub async fn find_group(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<Sc
         .await?
         .map(group_from_row)
         .transpose()
+}
+
+/// Reads the group and takes a lock on its row until the transaction ends (`FOR UPDATE`), as [`lock_user`] does.
+pub async fn lock_group(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<ScimGroup>, StoreError> {
+    scim_groups::Entity::find_by_id(id_to_db(&id))
+        .lock_exclusive()
+        .one(db)
+        .await?
+        .map(group_from_row)
+        .transpose()
+}
+
+/// Whether a stored group has one of `names` as its display name or its external ID.
+pub async fn any_group_named(db: &impl ConnectionTrait, names: &BTreeSet<String>) -> Result<bool, StoreError> {
+    let names: Vec<&String> = names.iter().collect();
+    for chunk in names.chunks(IN_LIST_CHUNK) {
+        let found = scim_groups::Entity::find()
+            .filter(
+                Condition::any()
+                    .add(scim_groups::Column::DisplayName.is_in(chunk.to_vec()))
+                    .add(scim_groups::Column::ExternalId.is_in(chunk.to_vec())),
+            )
+            .limit(1)
+            .all(db)
+            .await?;
+        if !found.is_empty() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Groups in creation order, those whose `field` equals `value` when a filter is given, from `offset`, at most `limit`.

@@ -116,8 +116,9 @@ pub fn read_groups(id_token: &str, claim: &str) -> Groups {
 
 impl Services {
     /// Brings `user_id`'s memberships in the group-managed teams in line with `groups`, in the caller's transaction.
-    /// The teams are locked first ([`Services::lock_group_teams`]). Nothing happens for
-    /// [`Groups::Unknown`], and nothing is read when no team is mapped.
+    /// The caller has locked the teams first ([`Services::lock_group_teams`]) and holds the lock until the
+    /// transaction ends, before it reads anything the sync depends on. Nothing happens for [`Groups::Unknown`], and
+    /// nothing is read when no team is mapped.
     ///
     /// A person in one of the team's groups who isn't a member joins as a member. A member in none of them leaves,
     /// whatever their role, even as the last admin: the team then shows it has no admin. Each change has an audit
@@ -133,7 +134,6 @@ impl Services {
             return Ok(());
         };
         let principal = Principal { user_id, run: None };
-        self.lock_group_teams(txn).await?;
         for (team_id, mapped) in self.settings.group_teams.iter() {
             let current = store::teams::find_membership(txn, team_id, user_id).await?;
             let matching: Vec<&String> = groups.iter().filter(|group| mapped.contains(group)).collect();
@@ -399,6 +399,7 @@ mod tests {
 
         // Act: Alex's groups no longer name Ops.
         let txn = db.begin().await?;
+        mapped.lock_group_teams(&txn).await?;
         mapped
             .sync_group_teams(&txn, alex.user_id, &Groups::Known(BTreeSet::new()), mapped.now())
             .await?;

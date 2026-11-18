@@ -164,8 +164,11 @@ Each user's `externalId` must be the person's OpenID Connect subject, the `sub` 
 user is matched to an account, never by email or user name. A pushed person with no account yet gets their teams when
 they first sign in; a push never makes an account. A pushed group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its
 `displayName` or its `externalId`, so the same map works whether the token carries names or IDs. Members join and leave
-the mapped teams as the push arrives, with the same entries in the team's activity as at sign-in. Once the provider has
-pushed a person, a sign-in syncs their teams from what it pushed instead of from the ID token.
+the mapped teams as the push arrives, with the same entries in the team's activity as at sign-in. Teams are left alone until the
+provider has pushed one of the mapped groups: a person pushed before that keeps the teams their sign-in gave them, and
+once one is pushed, everyone the provider has pushed follows the groups it says. After that, a sign-in syncs a pushed
+person's teams from what the provider pushed instead of from the ID token. If the provider pushes several users with
+one `externalId`, they are one person: deactivated only when all are, and in the groups of the active ones.
 
 When the provider deactivates a person, or deletes them, they leave every mapped team and lose every sign-in at once:
 web sessions, command-line sign-ins and personal tokens end. Their account, personal team and other teams stay. While

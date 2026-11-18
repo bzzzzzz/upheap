@@ -88,8 +88,13 @@ audit log keeps every team change they caused.
 
 A SCIM user is linked to an Upheap user by `user_identities`: the configured issuer and the SCIM user's `externalId`
 as the subject. Nothing stores the link; it is looked up each time, so a person who signs in for the first time is
-linked from then on. Never by email or `userName` (architecture.md, matching is by issuer and subject). When several SCIM users share an
-`externalId`, the oldest is the one a person is linked to.
+linked from then on. Never by email or `userName` (architecture.md, matching is by issuer and subject).
+
+Several SCIM users may share an `externalId` (it isn't unique), and together they are one person: one rule reads their
+state from all the records, for a push, a sign-in and the refusal alike. The person is inactive only when every record
+is inactive; their groups are those of the active records together; they have SCIM records when at least one exists.
+After a user write the person's state is read again from all their records, not taken from the row written, and so is
+the state of the person a record belonged to before a write changed its `externalId`.
 
 ### Applying a change
 
@@ -99,34 +104,42 @@ is linked to an Upheap user, it works out their groups and runs the same sync a 
 (`sync_group_teams`), with the person as the audit entry's actor and `provider_groups` as what made the change, as
 at sign-in:
 
-- An active user's groups are the `displayName` and the `externalId` of every stored group they are in.
-- An inactive or deleted user's groups are known and empty: they leave every group-managed team.
-- A user with no `externalId`, or one no identity has, changes no team. The server logs it once at `info`.
+- An active person's groups are the `displayName` and the `externalId` of every stored group their active records are
+  in, once a stored group matches the configured map (its `displayName` or `externalId` is one of a mapped team's
+  groups). Until then the pushes say nothing about the mapped teams, so the person's groups are unknown and no
+  membership changes: pushing people before their groups doesn't empty the teams. The push that stores the first
+  mapped group, or removes the last, syncs every pushed person.
+- An inactive person's groups, and those of a person whose last record was deleted, are known and empty: they leave
+  every group-managed team.
+- A user with no `externalId`, or one no identity has, changes no team. The server logs the second at `info`.
 
-Lock order: the mapped teams in ID order, as the sync already locks them, then the SCIM rows being written. A group write that touches many members syncs each in the same
-transaction.
+Lock order: the mapped teams in ID order, as the sync already locks them (the caller locks them before it syncs), then
+the SCIM row being written, with a locking read, so two writes of one resource run one after the other. A group write
+that touches many members syncs each in the same transaction.
 
 ### Deactivation
 
-A write that leaves a linked person inactive (`active` false by `POST`, `PUT` or `PATCH`), or deletes them, ends
+A write that leaves a linked person inactive (every record's `active` false, by `POST`, `PUT` or `PATCH`), or deletes
+their last record, ends
 every sign-in of their account in the same transaction: their web sessions are deleted, their OAuth token families
 revoked, their authorization codes expired and their personal tokens revoked. Repeating the write ends nothing more,
 so no before and after are compared. It is logged at `info` with the number of sign-ins ended, and has no audit entry
 beyond the team ones.
 
 The refusal sits where every sign-in, registration and password reset opens a session: while SCIM is set up and the
-person's linked SCIM user is inactive, opening one fails with `account_deactivated` (`403`) and the surrounding
+person is inactive, opening one fails with `account_deactivated` (`403`) and the surrounding
 transaction rolls back, so a password reset then changes nothing. The provider itself normally refuses a deactivated
 person's sign-in, so this is the backstop; a password reset can give a provider-made account a password, which is why
-it is there. Reactivating is `active` true again, and nothing else happens. A deleted user has no record, so Upheap no
-longer refuses them; the provider won't authenticate a person it deleted, and their sessions and tokens ended at the
+it is there. Reactivating is `active` true again, and nothing else happens. A person with no record is
+no longer refused; the provider won't authenticate a person it deleted, and their sessions and tokens ended at the
 delete.
 
 ### Sign-in
 
-With a SCIM token set and a SCIM user linked to the person, a sign-in through the provider syncs from the SCIM
-record instead of the ID token: the provider's pushes are the one source, so a token minted a moment before a push
-can't undo it. A person with no SCIM record syncs from the token's groups as now. The first sign-in (the username
+With a SCIM token set and the person having a SCIM record, a sign-in through the provider syncs from the SCIM
+state instead of the ID token: the provider's pushes are the one source, so a token minted a moment before a push
+can't undo it. A person with no SCIM record, or whose groups the pushes don't say yet (no mapped group stored), syncs
+from the token's groups as now. The first sign-in (the username
 step) does the same once the identity exists, so a person pushed before they ever signed in gets their teams then.
 
 ### What the operator sees
