@@ -1,4 +1,4 @@
-//! `upheap item move`: an item goes to another heap of its team, and the command says what it left behind.
+//! `upheap item move`: an item goes to another heap, of its team or another, and the command says what it left behind.
 
 mod common;
 
@@ -152,7 +152,7 @@ async fn tags_and_values_the_heap_has_no_match_for_are_named() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_heap_of_another_team_is_refused_with_the_servers_message() -> Result<()> {
+async fn an_item_moves_to_a_heap_of_another_team() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
     let (ada, items) = ada_with_items(&server).await?;
@@ -172,17 +172,19 @@ async fn a_heap_of_another_team_is_refused_with_the_servers_message() -> Result<
     let key = key(&items[0])?;
 
     // Act
-    let refused = cli.run(&["item", "move", key, &format!("{slug}/work")]).await;
+    let moved = cli.run(&["item", "move", key, &format!("{slug}/work")]).await;
 
     // Assert
-    expect_that!(refused.exited(3), eq(true));
-    expect_that!(refused.stdout, eq(""));
+    expect_that!(moved.stderr, eq(""));
     expect_that!(
-        refused.stderr,
-        contains_substring("the item can only move to another heap of its team")
+        moved.stdout,
+        starts_with(format!("Moved {key}: Rotate the staging certs to {slug}/work.\n"))
     );
-    expect_that!(refused.stderr, contains_substring("(heap_not_in_team)"));
-    expect_that!(server.read_item(&ada, HEAP, key).await?["version"], eq(&json!(1)));
+    expect_that!(moved.exited(0), eq(true));
+    expect_that!(
+        server.read_item(&ada, &format!("{slug}/work"), key).await?["id"],
+        eq(&items[0]["id"])
+    );
     Ok(())
 }
 

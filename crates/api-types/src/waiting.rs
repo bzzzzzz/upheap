@@ -90,8 +90,9 @@ pub struct WaitingStuckDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = WaitingBlocker)]
 pub struct WaitingBlockerDto {
-    /// The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap.
-    pub item: ItemRefDto,
+    /// The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. `null`
+    /// when it moved to another team, which is never named.
+    pub item: Option<ItemRefDto>,
     pub gone: BlockerGoneDto,
     /// What the caller may do about it: `change_state`, to unblock the item, when they may edit items.
     #[serde(deserialize_with = "crate::common::known_values")]

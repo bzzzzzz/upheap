@@ -13,7 +13,10 @@ const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visi
 
 const isChangedMeanwhile = (error: Error) => error instanceof ApiProblem && error.code === "version_conflict";
 
-/** What happened to the blocker: "closed as won't do", "closed as done", "which became other items" or "moved to <heap>". */
+/**
+ * What happened to the blocker: "closed as won't do", "closed as done", "which became other items", "moved to <heap>" or
+ * "moved to another team", when it went to a team whose heaps it never names.
+ */
 function goneWords(gone: BlockerGone) {
   const heap = gone.moved_to ? gone.moved_to.name : null;
   switch (gone.how) {
@@ -24,7 +27,7 @@ function goneWords(gone: BlockerGone) {
     case "became":
       return heap ? `became other items in ${heap}` : "which became other items";
     case "moved":
-      return heap ? `moved to ${heap}` : "moved to another heap";
+      return heap ? `moved to ${heap}` : "moved to another team";
     default:
       return "gone";
   }
@@ -73,18 +76,22 @@ export function BlockerGoneRow({
   return (
     <li data-item={item.id} data-blocker-gone="" className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
       {line}
-      <p className="text-sm break-words">
-        Waits for “
-        <Link
-          to="/teams/$team/heaps/$heap/items/$item"
-          params={{ ...blockerHeap, item: blocker.item.key }}
-          {...overList(blockerHeap, blocker.item.key)}
-          className="text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          {blocker.item.title}
-        </Link>
-        ”, {goneWords(blocker.gone)}
-      </p>
+      {blocker.item ? (
+        <p className="text-sm break-words">
+          Waits for “
+          <Link
+            to="/teams/$team/heaps/$heap/items/$item"
+            params={{ ...blockerHeap, item: blocker.item.key }}
+            {...overList(blockerHeap, blocker.item.key)}
+            className="text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            {blocker.item.title}
+          </Link>
+          ”, {goneWords(blocker.gone)}
+        </p>
+      ) : (
+        <p className="text-sm break-words">Waits for an item that {goneWords(blocker.gone)}</p>
+      )}
       {(canUnblock || open) && (
         <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
           {canUnblock && (

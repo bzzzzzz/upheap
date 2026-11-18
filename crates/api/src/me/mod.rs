@@ -135,7 +135,7 @@ fn to_waiting_row_dto(row: WaitingRow, as_of: Timestamp, tz: &TimeZone) -> Waiti
             None,
             None,
             Some(WaitingBlockerDto {
-                item: ItemRefDto::from(gone.blocker),
+                item: gone.blocker.map(ItemRefDto::from),
                 gone: to_blocker_gone_dto(gone.gone),
                 allowed_actions: gone.allowed_actions.into_iter().map(ItemActionDto::from).collect(),
             }),

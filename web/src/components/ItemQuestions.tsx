@@ -153,7 +153,8 @@ function stuckOf(item: Item): WaitingStuck | null {
 
 /** The gone-blocker row an item shows in Waits for you, or none while its blocker holds it (or it has none). */
 function blockerGoneOf(item: Item): WaitingBlocker | null {
-  if (item.state !== "blocked" || !item.blocked_by || !item.blocker_gone) return null;
+  // A blocker in another team is never named: the item has a gone blocker and no blocker item.
+  if (item.state !== "blocked" || !item.blocker_gone) return null;
   return {
     item: item.blocked_by,
     gone: item.blocker_gone,

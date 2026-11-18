@@ -700,7 +700,7 @@ mod tests {
 #[serde(deny_unknown_fields)]
 #[schema(as = ItemMoveRequest)]
 pub struct ItemMoveDto {
-    /// The heap to move the item to: another heap of the item's team.
+    /// The heap to move the item to: a heap of any team the caller may edit items in.
     pub heap_id: Uuid,
 }
 

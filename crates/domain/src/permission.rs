@@ -111,7 +111,7 @@ pub fn visible_audit_actions(role: Role) -> Vec<AuditAction> {
 pub enum ItemAction {
     /// Change the title, description, need, effort, impact, due time or tags.
     Edit,
-    /// Move to another heap of the item's team.
+    /// Move to another heap, of any team the caller may edit items in.
     Move,
     /// Move between non-closed states, or close.
     ChangeState,

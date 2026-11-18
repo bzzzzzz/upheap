@@ -54,6 +54,21 @@ pub(crate) fn diff_moved(before: &Item, after: &Item) -> Value {
     Value::Object(changes)
 }
 
+/// The entry in the log of the team an item left for another: the heap it was in, with no target, and the title it had,
+/// which that log names it by afterwards (`item_title` is never shown as a change).
+pub(crate) fn diff_moved_out(before: &Item) -> Value {
+    json!({
+        AuditField::Heap.code(): { "before": before.heap_id.to_string(), "after": null },
+        AuditField::ItemTitle.code(): before.title.as_str(),
+    })
+}
+
+/// The entry in the log of the team an item came to from another: the heap it is in, with no source and nothing else,
+/// as the key, tags, values and blocker it had are the source team's.
+pub(crate) fn diff_moved_in(after: &Item) -> Value {
+    json!({ AuditField::Heap.code(): { "before": null, "after": after.heap_id.to_string() } })
+}
+
 /// The changes freeing an item makes when its blocker is closed as done, in the shape of [`diff_items`], with
 /// `blocker_done` naming the blocker as the reason.
 pub(crate) fn diff_freed(before: &Item, after: &Item, blocker: &Item) -> Value {

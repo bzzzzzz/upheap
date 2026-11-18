@@ -140,8 +140,12 @@ pub struct ItemOrigin {
 #[derive(Clone, Debug)]
 pub struct GoneBlocker {
     pub how: BlockerGone,
-    /// The heap the blocker is in now, when that isn't the blocked item's heap: it was moved away.
+    /// The heap the blocker is in now, when that isn't the blocked item's heap: it was moved away. `None` when it
+    /// went to another team, which is never named.
     pub moved_to: Option<Heap>,
+    /// Whether the blocker is in another team than the blocked item. Then it is shown to nobody: not as the item's
+    /// blocker, and not named in a row (architecture.md, Cycle detection and locking).
+    pub other_team: bool,
 }
 
 /// An open turn with the user who opened it.
@@ -420,8 +424,11 @@ impl Services {
         let make_view = |item: Item| {
             let tags = select_tags(&heap_tags, &item.tags);
             let values = describe_values(&item, &parameters);
-            let blocked_by = item.blocked_by().and_then(|id| blockers.get(&id).cloned());
             let blocker_gone = gone.get(&item.id).cloned();
+            let blocked_by = named_blocker(
+                item.blocked_by().and_then(|id| blockers.get(&id).cloned()),
+                blocker_gone.as_ref(),
+            );
             let created_by = pick_user(&users, item.created_by);
             ItemView {
                 item,
@@ -653,15 +660,21 @@ impl Services {
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         let users = load_item_users(&self.db, &items).await?;
         let item_ids: Vec<ItemId> = items.iter().map(|item| item.id).collect();
+        let viewable = viewable_teams(&self.db, principal.user_id).await?;
         let made_items = store::items::list_items_made_from(&self.db, &item_ids, false).await?;
-        let mut made = made_from_by_origin(&self.db, &made_items).await?;
+        let mut made = made_from_by_origin(&self.db, &viewable, &made_items).await?;
         let mut made_steps = made_steps_by_origin(
             &self.db,
+            &viewable,
             &store::steps::list_steps_made_from(&self.db, &item_ids, false).await?,
         )
         .await?;
-        let mut made_heaps =
-            made_heaps_by_origin(&self.db, store::heaps::list_heaps_made_from(&self.db, &item_ids).await?).await?;
+        let mut made_heaps = made_heaps_by_origin(
+            &self.db,
+            &viewable,
+            store::heaps::list_heaps_made_from(&self.db, &item_ids).await?,
+        )
+        .await?;
         let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
         let role = access.membership.role;
@@ -1330,38 +1343,48 @@ pub(crate) async fn build_item_view(
     let allowance = item_allowance(&item, heap, role, turn.is_some(), stuck, latest.as_ref(), now);
     let tags = load_heap_tags(db, item.heap_id, &item.tags).await?;
     let parameters = store::parameters::list_parameters(db, item.heap_id).await?;
-    let blocked_by = find_blocker(db, &item).await?;
-    let blocker_gone = match &blocked_by {
+    let blocker = find_blocker(db, &item).await?;
+    let blocker_gone = match &blocker {
         Some(blocker) => {
             let blockers = HashMap::from([(blocker.id, blocker.clone())]);
             gone_blockers(db, [&item], &blockers).await?.remove(&item.id)
         }
         None => None,
     };
-    let became = made_from_by_origin(db, &store::items::list_items_made_from(db, &[item.id], locking).await?)
-        .await?
-        .remove(&item.id)
-        .unwrap_or_default();
+    let blocked_by = named_blocker(blocker, blocker_gone.as_ref());
+    let viewable = viewable_teams(db, membership.user_id).await?;
+    let became = made_from_by_origin(
+        db,
+        &viewable,
+        &store::items::list_items_made_from(db, &[item.id], locking).await?,
+    )
+    .await?
+    .remove(&item.id)
+    .unwrap_or_default();
     // Only a note becomes a step.
     let became_steps = if item.kind == Kind::Note {
-        made_steps_by_origin(db, &store::steps::list_steps_made_from(db, &[item.id], locking).await?)
-            .await?
-            .remove(&item.id)
-            .unwrap_or_default()
+        made_steps_by_origin(
+            db,
+            &viewable,
+            &store::steps::list_steps_made_from(db, &[item.id], locking).await?,
+        )
+        .await?
+        .remove(&item.id)
+        .unwrap_or_default()
     } else {
         Vec::new()
     };
     // Only a note becomes a heap.
     let became_heaps = if item.kind == Kind::Note {
-        made_heaps_by_origin(db, store::heaps::list_heaps_made_from(db, &[item.id]).await?)
+        made_heaps_by_origin(db, &viewable, store::heaps::list_heaps_made_from(db, &[item.id]).await?)
             .await?
             .remove(&item.id)
             .unwrap_or_default()
     } else {
         Vec::new()
     };
-    // A step's note was in the task's heap when the step was made, and a move stays in the team, so whoever sees the
-    // task sees the note: no check per step.
+    // A step's note was in the task's heap when the step was made, and either may have moved to another team since, so
+    // the note shows only where the viewer may view its heap.
     let mut step_origins = HashMap::new();
     let mut heaps = HashMap::new();
     for step in &steps {
@@ -1372,6 +1395,9 @@ pub(crate) async fn build_item_view(
             continue;
         };
         let (heap, team) = heap_with_team(db, &mut heaps, note.heap_id).await?;
+        if !viewable.contains(&team.id) {
+            continue;
+        }
         step_origins.insert(step.number, ItemOrigin { item: note, heap, team });
     }
     let (created_by, closed_by) = find_item_users(db, &item).await?;
@@ -1740,38 +1766,65 @@ async fn find_blocker(db: &impl ConnectionTrait, item: &Item) -> Result<Option<I
 }
 
 /// How the blocker of each of `items` whose blocker is gone stopped holding it, by the blocked item's ID, with the
-/// heap a moved blocker is in now. `blockers` holds their blockers by ID ([`blocker_summaries`]). The heaps blockers
-/// moved to are few, as a team has few heaps, and are read once each.
+/// heap a moved blocker is in now. `blockers` holds their blockers by ID ([`blocker_summaries`]). A blocker in
+/// another team than the item it blocks is gone as moved whatever its state, and has no heap here
+/// ([`GoneBlocker::other_team`]); callers show no blocker for it. The heaps blockers moved to are few, as a team has
+/// few heaps, and are read once each.
 pub(crate) async fn gone_blockers<'a>(
     db: &impl ConnectionTrait,
     items: impl IntoIterator<Item = &'a Item>,
     blockers: &HashMap<ItemId, ItemSummary>,
 ) -> Result<HashMap<ItemId, GoneBlocker>, ServiceError> {
-    let gone: Vec<(&Item, &ItemSummary, BlockerGone)> = items
+    let blocked: Vec<(&Item, &ItemSummary)> = items
         .into_iter()
-        .filter_map(|item| {
-            let blocker = blockers.get(&item.blocked_by()?)?;
-            Some((item, blocker, item.blocker_gone(blocker)?))
-        })
+        .filter_map(|item| Some((item, blockers.get(&item.blocked_by()?)?)))
         .collect();
     let mut heaps: HashMap<HeapId, Heap> = HashMap::new();
-    for (item, blocker, _) in &gone {
-        if blocker.heap_id != item.heap_id
-            && !heaps.contains_key(&blocker.heap_id)
-            && let Some(heap) = store::heaps::find_heap(db, blocker.heap_id).await?
-        {
-            heaps.insert(heap.id, heap);
+    for (item, blocker) in blocked.iter().filter(|(item, blocker)| item.heap_id != blocker.heap_id) {
+        for heap_id in [item.heap_id, blocker.heap_id] {
+            if !heaps.contains_key(&heap_id)
+                && let Some(heap) = store::heaps::find_heap(db, heap_id).await?
+            {
+                heaps.insert(heap.id, heap);
+            }
         }
     }
-    Ok(gone
+    Ok(blocked
         .into_iter()
-        .map(|(item, blocker, how)| {
-            let moved_to = (blocker.heap_id != item.heap_id)
-                .then(|| heaps.get(&blocker.heap_id).cloned())
-                .flatten();
-            (item.id, GoneBlocker { how, moved_to })
+        .filter_map(|(item, blocker)| {
+            if blocker.heap_id == item.heap_id {
+                let how = item.blocker_gone(blocker)?;
+                return Some((
+                    item.id,
+                    GoneBlocker {
+                        how,
+                        moved_to: None,
+                        other_team: false,
+                    },
+                ));
+            }
+            let (own, theirs) = (heaps.get(&item.heap_id)?, heaps.get(&blocker.heap_id)?);
+            let gone = if own.team_id == theirs.team_id {
+                GoneBlocker {
+                    how: item.blocker_gone(blocker)?,
+                    moved_to: Some(theirs.clone()),
+                    other_team: false,
+                }
+            } else {
+                GoneBlocker {
+                    how: BlockerGone::Moved,
+                    moved_to: None,
+                    other_team: true,
+                }
+            };
+            Some((item.id, gone))
         })
         .collect())
+}
+
+/// The blocker of `item` as its view names it: none when `gone` says it is in another team.
+fn named_blocker(blocker: Option<ItemSummary>, gone: Option<&GoneBlocker>) -> Option<ItemSummary> {
+    blocker.filter(|_| !gone.is_some_and(|gone| gone.other_team))
 }
 
 /// How many open items each of `heap_ids` has at `now`, in one query: those its list shows by default, before
@@ -1843,11 +1896,22 @@ pub(crate) async fn blocker_summaries(
     Ok(found)
 }
 
+/// The teams `viewer` may view heaps in.
+async fn viewable_teams(db: &impl ConnectionTrait, viewer: UserId) -> Result<HashSet<TeamId>, ServiceError> {
+    Ok(store::teams::list_teams_for_user(db, viewer)
+        .await?
+        .into_iter()
+        .filter(|(_, role)| Permission::ViewHeap.is_granted_to(*role))
+        .map(|(team, _)| team.id)
+        .collect())
+}
+
 /// `made`, the items split from other items, grouped under the item each was made from, in the order given, each with
-/// the heap it is in now and that heap's team. A split stays in one team (moves do), so whoever sees the note sees
-/// them. The heaps are read once each: a page has a handful of them.
+/// the heap it is in now and that heap's team. An item moved to a team not in `viewable` is left out. The heaps are
+/// read once each: a page has a handful of them.
 pub(crate) async fn made_from_by_origin(
     db: &impl ConnectionTrait,
+    viewable: &HashSet<TeamId>,
     made: &[Item],
 ) -> Result<HashMap<ItemId, Vec<MadeItem>>, ServiceError> {
     let mut heaps = HashMap::new();
@@ -1857,6 +1921,9 @@ pub(crate) async fn made_from_by_origin(
             continue;
         };
         let (heap, team) = heap_with_team(db, &mut heaps, item.heap_id).await?;
+        if !viewable.contains(&team.id) {
+            continue;
+        }
         grouped.entry(origin).or_default().push(MadeItem {
             item: ItemSummary::from(item),
             heap,
@@ -1867,9 +1934,10 @@ pub(crate) async fn made_from_by_origin(
 }
 
 /// `made`, the steps made from notes with their tasks, grouped under the note each was made from, in the order given,
-/// each with the heap its task is in now and that heap's team.
+/// each with the heap its task is in now and that heap's team. A task in a team not in `viewable` is left out.
 pub(crate) async fn made_steps_by_origin(
     db: &impl ConnectionTrait,
+    viewable: &HashSet<TeamId>,
     made: &[(Step, ItemSummary)],
 ) -> Result<HashMap<ItemId, Vec<MadeStep>>, ServiceError> {
     let mut heaps = HashMap::new();
@@ -1879,6 +1947,9 @@ pub(crate) async fn made_steps_by_origin(
             continue;
         };
         let (heap, team) = heap_with_team(db, &mut heaps, task.heap_id).await?;
+        if !viewable.contains(&team.id) {
+            continue;
+        }
         grouped.entry(origin).or_default().push(MadeStep {
             number: step.number,
             title: step.title.clone(),
@@ -1892,8 +1963,10 @@ pub(crate) async fn made_steps_by_origin(
 }
 
 /// `made`, heaps made from notes, grouped under the note each was made from, in the order given, each with its team.
+/// A heap of a team not in `viewable` is left out.
 pub(crate) async fn made_heaps_by_origin(
     db: &impl ConnectionTrait,
+    viewable: &HashSet<TeamId>,
     made: Vec<Heap>,
 ) -> Result<HashMap<ItemId, Vec<MadeHeap>>, ServiceError> {
     let mut teams: HashMap<TeamId, Team> = HashMap::new();
@@ -1902,6 +1975,9 @@ pub(crate) async fn made_heaps_by_origin(
         let Some(origin) = heap.origin_id else {
             continue;
         };
+        if !viewable.contains(&heap.team_id) {
+            continue;
+        }
         let team = match teams.entry(heap.team_id) {
             std::collections::hash_map::Entry::Occupied(found) => found.get().clone(),
             std::collections::hash_map::Entry::Vacant(slot) => slot

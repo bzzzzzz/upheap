@@ -3906,7 +3906,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's\n`version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.\nTags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of\nthe same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The\nitems that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an\nitem to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path\nstops working.",
+        "summary": "Moves an item to another heap, of any team the caller may edit items in, with its context, steps, questions, turn\nand history. Send the item's `version` in `If-Match`. The item keeps its key unless the new heap has an item with\nit, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name,\nor a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays\nblocked with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and\nwait for the caller; when it went to another team it is never named. A turn stays when its person may edit items\nin the target heap, and is taken back otherwise. A note that heaps were made from can't leave its team. Moving an\nitem to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path\nstops working.",
         "operationId": "move_item",
         "parameters": [
           {
@@ -3993,7 +3993,7 @@
             }
           },
           "403": {
-            "description": "From inside a run: `run_forbidden`",
+            "description": "From inside a run: `run_forbidden`; or the caller may not edit items in the target heap",
             "content": {
               "application/json": {
                 "schema": {
@@ -4013,7 +4013,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed` or `heap_archived` (either heap)",
+            "description": "`version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from to another team)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4023,7 +4023,7 @@
             }
           },
           "422": {
-            "description": "`heap_not_in_team`: the heap isn't another heap of the item's team, or doesn't exist",
+            "description": "`heap_not_found`: the heap doesn't exist, or is in a team the caller isn't in",
             "content": {
               "application/json": {
                 "schema": {
@@ -9291,7 +9291,7 @@
               },
               {
                 "$ref": "#/components/schemas/HeapSummary",
-                "description": "The heap of the item's team the blocker is in now, when it was moved away from the item's heap."
+                "description": "The heap of the item's team the blocker is in now, when it was moved away from the item's heap. `null` when it\nwas moved to another team: it is never named then."
               }
             ]
           }
@@ -10840,7 +10840,7 @@
               },
               {
                 "$ref": "#/components/schemas/ItemRef",
-                "description": "The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be closed\nas won't do, or done before closing a blocker as done freed what it blocks, or in another heap of the team\nafter a move: then `blocker_gone` says so."
+                "description": "The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be closed\nas won't do, or done before closing a blocker as done freed what it blocks, or in another heap after a move:\nthen `blocker_gone` says so. `null` when the blocker moved to another team, which is never named; then\n`blocker_gone` says it moved, with no heap."
               }
             ]
           },
@@ -11188,7 +11188,7 @@
           "heap_id": {
             "type": "string",
             "format": "uuid",
-            "description": "The heap to move the item to: another heap of the item's team."
+            "description": "The heap to move the item to: a heap of any team the caller may edit items in."
           }
         },
         "additionalProperties": false
@@ -14554,7 +14554,6 @@
         "type": "object",
         "description": "A blocker that stopped holding the row's item, which stays blocked until the caller moves it on.",
         "required": [
-          "item",
           "gone",
           "allowed_actions"
         ],
@@ -14570,8 +14569,15 @@
             "$ref": "#/components/schemas/BlockerGone"
           },
           "item": {
-            "$ref": "#/components/schemas/ItemRef",
-            "description": "The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap."
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ItemRef",
+                "description": "The blocker. Its key is in the heap `gone.moved_to` names when it was moved, else in the row's heap. `null`\nwhen it moved to another team, which is never named."
+              }
+            ]
           }
         }
       },
