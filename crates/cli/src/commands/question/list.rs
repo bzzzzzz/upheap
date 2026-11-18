@@ -1,19 +1,21 @@
 //! `upheap question list`: the questions, requests, reviews and done proposals that wait for the signed-in user,
 //! across their heaps or in one, most important first, each named so that `question reply` takes it as printed.
 //!
-//! One `GET /me/waiting`. Rows that carry no question (stuck turns, gone blockers, kinds this client doesn't know)
-//! are left out. The default heap is not applied: the point is the view across heaps. `--json` prints the server's
-//! body, so `--heap`, which filters it here, doesn't go with it.
+//! One `GET /me/waiting`, and `GET /me` to check the heap `--heap` names, as the server can't filter by heap. Rows
+//! that carry no question (stuck turns, gone blockers, kinds this client doesn't know) are left out, and a footer
+//! counts them, since `question reply` can't act on them and the web app's Waiting for me page can. The default heap
+//! is not applied: the point is the view across heaps. `--json` prints the server's body, so `--heap`, which filters
+//! it here, doesn't go with it.
 
 use api_types::common::QuestionDto;
-use api_types::waiting::{ItemHeapDto, WaitingDto};
+use api_types::me::MeDto;
+use api_types::waiting::{ItemHeapDto, WaitingDto, WaitingRowDto};
 use clap::Args;
 
 use crate::client::NO_QUERY;
 use crate::commands::SharedArgs;
-use crate::commands::heap_api::resolve_heap_handle;
 use crate::commands::item::show::question_kind_text;
-use crate::lookup::HeapName;
+use crate::lookup::{HeapName, resolve_heap};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -33,31 +35,42 @@ pub async fn run_list(args: ListArgs, app: &App, out: &mut Output) -> Result<(),
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
     let only = match &args.heap {
-        Some(typed) => Some(resolve_heap_handle(HeapName::parse(typed)?, &client, &token).await?),
+        Some(typed) => {
+            let name = HeapName::parse(typed)?;
+            // Checked against the caller's heaps even when typed in full: a mistyped heap would list nothing.
+            let me = client.get::<MeDto>(&["me"], NO_QUERY, &token).await?;
+            Some(resolve_heap(name, &me.value)?)
+        }
         None => None,
     };
     let waiting = client.get::<WaitingDto>(&["me", "waiting"], NO_QUERY, &token).await?;
     if out.mode() == Mode::Json {
         return Ok(out.json(&waiting.body)?);
     }
-    let rows: Vec<_> = waiting
+    let in_heap: Vec<&WaitingRowDto> = waiting
         .value
         .rows
         .iter()
-        .filter_map(|row| Some((row, row.question.as_ref()?)))
-        .filter(|(row, _)| {
+        .filter(|row| {
             only.as_ref()
                 .is_none_or(|only| row.heap.team_slug == only.team && row.heap.slug == only.heap)
         })
         .collect();
+    let rows: Vec<_> = in_heap
+        .iter()
+        .filter_map(|row| Some((*row, row.question.as_ref()?)))
+        .collect();
+    let others = in_heap.len() - rows.len();
     if out.mode() == Mode::Quiet {
         for (row, question) in rows {
             out.line(&name(&row.heap, &row.item.key, question))?;
         }
         return Ok(());
     }
-    if rows.is_empty() {
+    if rows.is_empty() && others == 0 {
         out.line("Nothing waits for you.")?;
+    } else if rows.is_empty() {
+        out.line("No questions wait for you.")?;
     }
     for (row, question) in rows {
         let title = row.item.title.replace('\t', "    ");
@@ -71,6 +84,18 @@ pub async fn run_list(args: ListArgs, app: &App, out: &mut Output) -> Result<(),
         }
         out.line(&format!("  {}", question.text.replace('\t', "    ")))?;
         out.line(&format!("  {}", how_to_reply(question)))?;
+    }
+    if others > 0 {
+        out.line(&format!(
+            "Also waiting, on the web app's Waiting for me page: {others} (stuck turns, gone blockers)."
+        ))?;
+    }
+    let returned = waiting.value.rows.len();
+    if usize::try_from(waiting.value.count).is_ok_and(|count| count > returned) {
+        out.line(&format!(
+            "The server sent the first {returned} of {} things that wait; the web app's Waiting for me page has the rest.",
+            waiting.value.count
+        ))?;
     }
     Ok(())
 }

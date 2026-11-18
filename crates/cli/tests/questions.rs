@@ -1048,13 +1048,28 @@ async fn question_list_with_a_heap_keeps_only_that_heaps_questions() -> Result<(
     let cli = cli_in_heap(&server, &ada).await?;
     ask(&cli, &task, "Which CA?", &[], false).await;
 
-    // Act
-    let here = cli.run(&["question", "list", "--heap", "ada/personal", "-q"]).await;
-    let elsewhere = cli.run(&["question", "list", "--heap", "ada/other"]).await;
+    server
+        .send(&ada, "POST", "/teams/ada/heaps", Some(json!({ "name": "Ops" })))
+        .await?;
+    let ops = server
+        .add_item(&ada, "ada/ops", json!({ "title": "Patch the hosts" }))
+        .await?;
+    let ops_key = key(&ops)?.to_owned();
+    cli.run(&["question", "ask", &format!("ada/ops/{ops_key}"), "Which hosts?"])
+        .await;
 
-    // Assert
+    // Act
+    let all = cli.run(&["question", "list", "-q"]).await;
+    let here = cli.run(&["question", "list", "--heap", "ada/personal", "-q"]).await;
+    let bare = cli.run(&["question", "list", "--heap", "ops", "-q"]).await;
+    let unknown = cli.run(&["question", "list", "--heap", "ada/opps"]).await;
+
+    // Assert: the default heap, ada/personal, doesn't narrow the list.
+    expect_that!(all.stdout, contains_substring(format!("ada/personal/{task}.q1\n")));
+    expect_that!(all.stdout, contains_substring(format!("ada/ops/{ops_key}.q1\n")));
     expect_that!(here.stdout, eq(&format!("ada/personal/{task}.q1\n")));
-    expect_that!(elsewhere.stdout, eq("Nothing waits for you.\n"));
-    expect_that!(elsewhere.exited(0), eq(true));
+    expect_that!(bare.stdout, eq(&format!("ada/ops/{ops_key}.q1\n")));
+    expect_that!(unknown.exited(3), eq(true));
+    expect_that!(unknown.stderr, contains_substring("you have no heap `ada/opps`"));
     Ok(())
 }
