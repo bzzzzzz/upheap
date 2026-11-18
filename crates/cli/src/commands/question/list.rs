@@ -20,7 +20,8 @@ use crate::{App, CliError};
 #[derive(Args, Debug)]
 pub struct ListArgs {
     /// Only this heap's: team/heap, or a heap slug only one of your teams has. Without it, all your heaps
-    #[arg(long = "heap", value_name = "HEAP", conflicts_with = "json")]
+    // Its id is in the guide's list of `--heap` flags that apply no default heap.
+    #[arg(id = "only_heap", long = "heap", value_name = "HEAP", conflicts_with = "json")]
     pub heap: Option<String>,
     #[command(flatten)]
     pub shared: SharedArgs,
@@ -68,7 +69,7 @@ pub async fn run_list(args: ListArgs, app: &App, out: &mut Output) -> Result<(),
         if let Some(review) = &question.review {
             out.line(&format!("  {}", review.link))?;
         }
-        out.line(&format!("  {}", question.text.replace('\t', " ")))?;
+        out.line(&format!("  {}", question.text.replace('\t', "    ")))?;
         out.line(&format!("  {}", how_to_reply(question)))?;
     }
     Ok(())
