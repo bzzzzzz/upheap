@@ -9,18 +9,21 @@ import { NEED_HINTS, NEED_LABELS, NEEDS } from "./labels";
  * Picks how much an item is needed. Every item has a need, so once one is picked it can be changed but not cleared:
  * pressing the picked step again keeps it. The hint under the steps says what the picked one means, or what the
  * field asks while nothing is picked. Stacked, two steps a row on a phone, where four don't fit their names; as
- * `chips`, for the phone's Add sheet, one row that scrolls sideways, named but without a label to show.
+ * `chips`, for the phone's Add sheet, one row that scrolls sideways, named but without a label to show. Steps above
+ * `max` are off.
  */
 export function NeedPicker({
   value,
   onChange,
   disabled,
   layout = "stack",
+  max,
 }: {
   value: Need | null;
   onChange: (need: Need) => void;
   disabled?: boolean;
   layout?: FieldLayout | "chips";
+  max?: Need;
 }) {
   const labelId = useId();
   const hintId = useId();
@@ -61,6 +64,7 @@ export function NeedPicker({
           <ToggleButton
             key={need}
             id={need}
+            isDisabled={max !== undefined && NEEDS.indexOf(need) > NEEDS.indexOf(max)}
             aria-describedby={hintId}
             className={`${choiceButtonClass} rounded-lg ${chips ? "" : "px-1"}`}
           >
