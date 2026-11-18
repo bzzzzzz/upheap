@@ -168,6 +168,7 @@ impl Services {
     /// The team is named after the user and takes their username as its slug, and the user is its admin. Its first
     /// heap is `personal`.
     pub async fn register(&self, registration: Registration<'_>) -> Result<SessionGrant, ServiceError> {
+        self.ensure_password_sign_in()?;
         if !self.settings.allow_registration {
             return Err(ServiceError::RegistrationClosed);
         }
@@ -190,6 +191,7 @@ impl Services {
     /// with [`ValidationError::Empty`] before anything is counted, so a form sent before a password manager filled
     /// it doesn't use up an attempt.
     pub async fn sign_in(&self, login: &str, password: &str) -> Result<SessionGrant, ServiceError> {
+        self.ensure_password_sign_in()?;
         let login = login.trim();
         if login.is_empty() {
             return Err(ValidationError::Empty { field: Field::Login }.into());
@@ -396,7 +398,29 @@ impl Services {
         let user_id = store::sessions::find_session_user(&self.db, &token.to_hash(), self.now())
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
+        self.ensure_not_local_user_while_passwords_off(user_id).await?;
         Ok(Principal { user_id, run: None })
+    }
+
+    /// While passwords are off, ends every sign-in of every local user in one transaction: their web sessions,
+    /// OAuth token families and live personal tokens. Passwords stay, so turning passwords back on lets them sign in
+    /// again. Returns how many sessions, families and tokens ended, and 0 when passwords are on. The server runs it
+    /// at startup; a sign-in that slips in later (an older instance still running) is refused by the auth check.
+    pub async fn end_local_sign_ins(&self) -> Result<u64, ServiceError> {
+        if self.settings.password_sign_in {
+            return Ok(0);
+        }
+        let now = self.now();
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let mut ended = 0;
+        for user_id in store::identities::list_users_without_identity(&txn).await? {
+            ended += store::sessions::delete_user_sessions(&txn, user_id).await?;
+            ended += store::oauth::revoke_user_token_families(&txn, user_id, now).await?;
+            ended += store::personal_tokens::revoke_user_personal_tokens(&txn, user_id, now).await?;
+        }
+        txn.commit().await.map_err(StoreError::from)?;
+        tracing::info!(ended, "local sign-ins ended");
+        Ok(ended)
     }
 
     /// Ends the session. Ending an unknown session succeeds.

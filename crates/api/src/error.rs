@@ -192,6 +192,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         // Only the token endpoint refuses grants, in its own format (`oauth::OAuthRefusal`); this is for any other.
         ServiceError::InvalidGrant(_) => simple(StatusCode::BAD_REQUEST, "invalid_grant", Category::Caller),
         ServiceError::RegistrationClosed => simple(StatusCode::FORBIDDEN, "registration_closed", Category::Permission),
+        ServiceError::PasswordSignInOff { .. } => {
+            simple(StatusCode::FORBIDDEN, "password_sign_in_off", Category::Permission)
+        }
         ServiceError::HeapArchived { .. } => simple(StatusCode::CONFLICT, "heap_archived", Category::Conflict),
         ServiceError::VersionConflict { .. } => simple(StatusCode::CONFLICT, "version_conflict", Category::Conflict),
         ServiceError::Item(ItemError::Closed { .. }) => simple(StatusCode::CONFLICT, "item_closed", Category::Conflict),

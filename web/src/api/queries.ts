@@ -405,7 +405,7 @@ export function useAddComment(heap: HeapRef, key: string) {
 }
 
 /**
- * Saves one change to a step of the task `taskKey`: its title, context or state. Each sends the newest version of the
+ * Saves one change to a step of the task `taskKey`: its title, context, state or place. Each sends the newest version of the
  * step it knows of, its own or the one the previous write brought back. A change by someone else still fails with a
  * conflict; either way the heap is invalidated, which fetches the item and the lists again, so the next try has fresh
  * versions and the rows count the steps.

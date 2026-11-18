@@ -74,7 +74,7 @@ async fn password_reset_options(State(state): State<AppState>) -> Json<PasswordR
 #[utoipa::path(post, path = "/password-resets", tag = "auth", request_body = RequestPasswordResetDto,
     responses(
         (status = 202, description = "Accepted; if an account has the address, a link is on its way"),
-        (status = 403, description = "`csrf_header_missing`", body = Problem),
+        (status = 403, description = "`csrf_header_missing`, or `password_sign_in_off`", body = Problem),
         (status = 404, description = "`not_found`: the server has no mail set up", body = Problem),
         (status = 422, description = "`email_invalid` (`field` `email`)", body = Problem),
         (status = 429, description = "`too_many_attempts`, with a `Retry-After` header in seconds", body = Problem),
@@ -119,7 +119,7 @@ async fn open_password_reset(
     params(ResetTokenParams), request_body = SetPasswordRequestDto,
     responses(
         (status = 200, description = "Set; the answer is the account, and it sets the session cookie", body = UserDto),
-        (status = 403, description = "`csrf_header_missing`", body = Problem),
+        (status = 403, description = "`csrf_header_missing`, or `password_sign_in_off`", body = Problem),
         (status = 404, description = "No such link", body = Problem),
         (status = 409, description = "`reset_link_used`, `reset_link_cancelled` or `reset_link_ended`", body = Problem),
         (status = 422, description = "`field_empty`, `password_too_short` or `password_too_long` (`field` `password`). The link keeps working", body = Problem),

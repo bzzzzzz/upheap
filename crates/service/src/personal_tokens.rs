@@ -137,6 +137,7 @@ impl Services {
             TokenState::Revoked => return Err(ServiceError::TokenRevoked),
             TokenState::Expired => return Err(ServiceError::TokenExpired),
         }
+        self.ensure_not_local_user_while_passwords_off(token.user_id).await?;
         // The write is conditional too; skipping the call keeps a busy token from taking the write lock per request.
         let fresh = token
             .last_used_at

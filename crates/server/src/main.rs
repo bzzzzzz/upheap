@@ -67,6 +67,7 @@ fn build_services(config: &Config, group_teams: GroupTeams, db: store::DatabaseC
         Arc::new(SystemClock),
         Settings {
             allow_registration: config.allow_registration,
+            password_sign_in: config.password_sign_in,
             session_ttl: domain::Duration::from_days(i64::from(config.session_ttl_days)),
             sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
             oidc: config.oidc.clone(),
@@ -95,6 +96,10 @@ async fn run(config: Config) -> anyhow::Result<()> {
         .await
         .context("UPHEAP_OIDC_GROUP_TEAMS can't be used")?;
     let services = build_services(&config, group_teams, db);
+    services
+        .end_local_sign_ins()
+        .await
+        .context("can't end local sign-ins")?;
     let cookies = CookieSettings {
         secure: config.cookies_secure(),
         max_age: StdDuration::from_secs(u64::from(config.session_ttl_days) * 24 * 60 * 60),

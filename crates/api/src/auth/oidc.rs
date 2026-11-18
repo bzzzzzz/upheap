@@ -36,7 +36,10 @@ pub(super) fn routes() -> OpenApiRouter<AppState> {
     ))]
 async fn provider(State(state): State<AppState>) -> Result<axum::Json<OidcProviderDto>, ApiError> {
     let label = state.services.oidc_label()?;
-    Ok(axum::Json(OidcProviderDto { label }))
+    Ok(axum::Json(OidcProviderDto {
+        label,
+        password_sign_in: state.services.password_sign_in(),
+    }))
 }
 
 #[derive(Debug, Deserialize, IntoParams)]

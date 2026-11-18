@@ -179,6 +179,7 @@ impl TestServer {
             clock.clone(),
             Settings {
                 allow_registration: true,
+                password_sign_in: true,
                 session_ttl: Duration::from_days(30),
                 sign_in_limit: SignInLimit::DEFAULT,
                 oidc: None,

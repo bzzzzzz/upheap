@@ -95,6 +95,7 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | `BASE_URL` | required | Public URL. Cookies are `Secure` unless it starts with `http://` |
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address |
 | `ALLOW_REGISTRATION` | `true` | Set to `false` to close sign-ups; a team admin's invite link still lets a new person create an account |
+| `UPHEAP_PASSWORD_SIGN_IN` | `true` | Set to `false` to make the provider the only way to sign in. Needs the `UPHEAP_OIDC_*` provider, or the server stops. See [Provider only](#provider-only) |
 | `SESSION_TTL_DAYS` | `30` | How long a sign-in lasts |
 | `LOG_FORMAT` | `json` | `json` or `pretty`; levels via `RUST_LOG` |
 | `MAIL_URL` | unset | Where mail goes: `smtps://user:pass@host:465`, `smtp://user:pass@host:587` (STARTTLS), or for development `file:///dir` or `log:`. Unset means no mail |
@@ -132,6 +133,23 @@ redirect URI, where it sends the person afterwards. With the setting on, the ID 
 the session row until the person signs out or their sessions are ended (a password change or reset); a session that only
 expires keeps its row, and the token with it. A provider without logout (Google, say) and a provider that is down just
 sign the person out of Upheap. The CLI's sign-out is unchanged.
+
+#### Provider only
+
+Set `UPHEAP_PASSWORD_SIGN_IN=false` and the provider is the only way in: the sign-in and invite pages show just its
+button. The server refuses password sign-in, sign-up (also through an invite link, and whatever `ALLOW_REGISTRATION`
+says), asking for a password reset, setting a password with a reset link, and `upheap-server user reset-link`. Joining
+a team by invite link as a provider user keeps working.
+
+At every startup with the setting off, the server ends the sign-ins of every local account (one with no provider
+identity): its web sessions, OAuth sign-ins and personal tokens. A sign-in an older instance still running with
+passwords on makes later is refused on each request. Passwords stay in the database. A person who has a local account
+and signs in through the provider with its email is refused, not linked, and is told to ask whoever runs the server.
+
+If the provider is down nobody can sign in, and people already signed in through it stay signed in. To let local
+accounts in again, set the variable back to `true` (or unset it) and restart. They sign in with their passwords, and
+make tokens again, since their old sign-ins and tokens ended. People who only have the provider have no password and
+wait for it.
 
 #### Teams from groups
 
