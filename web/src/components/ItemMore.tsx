@@ -26,7 +26,6 @@ import { MenuChoice, MenuEntry, MenuHeading, MenuPopover } from "./Menu";
 import { PopoverSheet } from "./PopoverSheet";
 import { isToCome } from "./reminders";
 import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
-import { SplitNoteDialog } from "./SplitNote";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /** The main state button is filled with the accent, the next action's colour, with dark text for contrast in both themes. */
@@ -88,9 +87,9 @@ function actionsOf(item: Item) {
  * bottom of a phone's sheet (ux.md, The item §6). ⋯ is a menu on a wide screen and a tablet, a sheet on a phone; what it
  * opens, Change blocker and the block reason's editor, open under it as a popover, or as a sheet on a phone. Picking
  * a stage saves at once and silently, like every change made in the item. Making a note a task asks first, since a
- * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. Split… opens
- * the dialog that splits a note into tasks, a step or a heap: closing it gives focus back to ⋯, and finishing it to the
- * main button, which is Reopen by then. A state change
+ * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. Split… asks the pane,
+ * through `onSplit`, to open the dialog that splits a note: the pane owns it, so a draft survives the bar and the
+ * inline actions swapping at the phone width, and it gets the two buttons' refs to give focus back. A state change
  * goes through `onState`, which may ask whether to take the item back from its agent first.
  */
 export function ItemActions({
@@ -99,19 +98,22 @@ export function ItemActions({
   variant,
   save,
   onState,
+  onSplit,
+  moreRef,
+  mainRef,
 }: {
   heapRef: HeapRef;
   item: Item;
   variant: "inline" | "bar";
   save: (patch: ItemPatchRequest) => void;
   onState: (state: ItemState) => void;
+  onSplit: () => void;
+  moreRef: React.RefObject<HTMLButtonElement | null>;
+  mainRef: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const moreRef = useRef<HTMLButtonElement>(null);
-  const mainRef = useRef<HTMLButtonElement>(null);
   const asker = useRef<"main" | "more">("more");
   const focusAfterRender = useFocusAfterRender();
   const [confirming, setConfirming] = useState(false);
-  const [splitting, setSplitting] = useState(false);
   const [changing, setChanging] = useState(false);
   const [editingReason, setEditingReason] = useState(false);
   // Awaitable, and apart from `save`, so the editor says its own failure and the pane doesn't say it twice.
@@ -125,19 +127,11 @@ export function ItemActions({
   useEffect(() => {
     if (hadMore.current && !actions.more && document.activeElement === document.body) mainRef.current?.focus();
     hadMore.current = actions.more;
-  }, [actions.more]);
+  }, [actions.more, mainRef]);
 
   const closeConfirm = () => {
     setConfirming(false);
     focusAfterRender(() => (asker.current === "main" ? mainRef.current : moreRef.current));
-  };
-  const closeSplit = () => {
-    setSplitting(false);
-    focusAfterRender(() => moreRef.current);
-  };
-  const doneSplit = () => {
-    setSplitting(false);
-    focusAfterRender(() => mainRef.current);
   };
   const closeChanging = () => {
     setChanging(false);
@@ -156,7 +150,7 @@ export function ItemActions({
       asker.current = "more";
       setConfirming(true);
     },
-    split: () => setSplitting(true),
+    split: onSplit,
     changeBlocker: () => setChanging(true),
     editReason: () => {
       saveReason.reset();
@@ -286,7 +280,6 @@ export function ItemActions({
           closeConfirm();
         }}
       />
-      <SplitNoteDialog heapRef={heapRef} item={item} isOpen={splitting} onClose={closeSplit} onDone={doneSplit} />
       {actions.changeBlocker && (
         <PopoverSheet
           title="Change blocker"

@@ -15,6 +15,7 @@ import { ItemContext } from "./ItemContext";
 import { ItemFieldList } from "./ItemFieldList";
 import { itemProblem } from "./itemProblems";
 import { ItemActions } from "./ItemMore";
+import { SplitNoteDialog } from "./SplitNote";
 import { ItemComments } from "./ItemComments";
 import { ItemBecame } from "./ItemBecame";
 import { ItemQuestions, useItemWaits, WaitsForYou } from "./ItemQuestions";
@@ -345,8 +346,30 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
     if (description !== (item.description ?? null)) await saveDescription.mutateAsync({ item, patch: { description } });
   };
 
+  // Split's dialog lives here, not in ItemActions, which is a different instance on each side of the phone width: a
+  // draft in it survives a resize or a rotation. Closing gives focus to ⋯, or to the main button once ⋯ is gone.
+  const [splitting, setSplitting] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const mainRef = useRef<HTMLButtonElement>(null);
+  const closeSplit = () => {
+    setSplitting(false);
+    focusAfterRender(() => moreRef.current ?? mainRef.current);
+  };
+  const doneSplit = () => {
+    setSplitting(false);
+    focusAfterRender(() => mainRef.current);
+  };
   const actions = (variant: "inline" | "bar") => (
-    <ItemActions heapRef={heapRef} item={item} variant={variant} save={save} onState={changeState} />
+    <ItemActions
+      heapRef={heapRef}
+      item={item}
+      variant={variant}
+      save={save}
+      onState={changeState}
+      onSplit={() => setSplitting(true)}
+      moreRef={moreRef}
+      mainRef={mainRef}
+    />
   );
 
   return (
@@ -416,6 +439,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
       {phone && actions("bar")}
       {phone && confirmAsking}
+      <SplitNoteDialog heapRef={heapRef} item={item} isOpen={splitting} onClose={closeSplit} onDone={doneSplit} />
     </div>
   );
 }

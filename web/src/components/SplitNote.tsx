@@ -27,9 +27,11 @@ import { compactButtonClass } from "./buttons";
 import { choiceButtonClass, ChoiceButtons } from "./ChoiceButtons";
 import { itemProblem } from "./itemProblems";
 import { isClosed } from "./labels";
+import { labelClass } from "./ItemQuestions";
 import { PHONE, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { problemMessage } from "./ProblemText";
+import { inputClass } from "../pages/settingsForm";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useToast } from "./UndoToast";
 
@@ -73,10 +75,6 @@ const NAME_LENGTH = 100;
 
 const isProblem = (error: unknown, code: string) => error instanceof ApiProblem && error.code === code;
 
-const labelClass = "text-xs font-medium text-ink-soft";
-const inputClass =
-  "min-w-0 rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-ink placeholder:text-muted disabled:opacity-50 pointer-coarse:min-h-11";
-
 /**
  * Splits an open note into tasks, a step of an open task of its heap, or a new heap with its first items (ux.md, The
  * item §6). A sheet on a phone, a centred dialog from a tablet up. Items are made one at a time and the note is closed
@@ -115,7 +113,6 @@ function SplitNote({
   const showToast = useToast();
   const focusAfterRender = useFocusAfterRender();
   const team = useTeam(heapRef.team);
-  const candidates = useBlockerCandidates(heapRef);
   const createItem = useCreateItem();
   const createHeap = useCreateHeap(heapRef.team);
   const became = useBecame(heapRef);
@@ -125,6 +122,7 @@ function SplitNote({
   const nextId = useRef(4);
   const titleInputs = useRef(new Map<number, HTMLInputElement>());
   const [outcome, setOutcome] = useState<Outcome>("tasks");
+  const candidates = useBlockerCandidates(heapRef, outcome === "step");
   const [taskRows, setTaskRows] = useState<Row[]>([newRow(1), newRow(2)]);
   const [heapRows, setHeapRows] = useState<Row[]>([newRow(3)]);
   const initialName = item.title.slice(0, NAME_LENGTH);
