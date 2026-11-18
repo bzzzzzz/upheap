@@ -51,6 +51,25 @@ export function signInSearch(href: string): { redirect?: string } {
   return href === "/" ? {} : { redirect: href };
 }
 
+const SIGN_IN_REDIRECT_KEY = "upheap.signInRedirect";
+
+/**
+ * Signing out through the identity provider leaves the app, and the provider sends the person to the sign-in page
+ * with no `redirect`. Keeps `href`, the app path that sign-in would have carried as `redirect`, for that page to
+ * pick up (`takeSignInRedirect`), then goes to the provider's `url`.
+ */
+export function signOutAtProvider(url: string, href: string): void {
+  sessionStorage.setItem(SIGN_IN_REDIRECT_KEY, href);
+  window.location.assign(url);
+}
+
+/** The path `signOutAtProvider` kept, removed as it is read. It is checked like any `redirect` when sign-in uses it. */
+function takeSignInRedirect(): string | undefined {
+  const href = sessionStorage.getItem(SIGN_IN_REDIRECT_KEY);
+  sessionStorage.removeItem(SIGN_IN_REDIRECT_KEY);
+  return href ?? undefined;
+}
+
 /**
  * `href`, the router's address of the page the browser shows, as the browser has it, when the browser does show
  * that page. The router reads each query value as JSON and writes it back, so `state=1e3` comes back as
@@ -149,6 +168,12 @@ const loginRoute = createRoute({
     ...(typeof search.sign_in_error === "string" && { sign_in_error: search.sign_in_error }),
     ...(typeof search.login === "string" && { login: search.login }),
   }),
+  // Back from the provider's sign-out, which names no page: the one the person signed out on, if one was kept.
+  beforeLoad: ({ search }) => {
+    if (search.redirect !== undefined) return;
+    const kept = takeSignInRedirect();
+    if (kept !== undefined) throw redirect({ to: "/login", search: { ...search, redirect: kept }, replace: true });
+  },
   component: function LoginRoute() {
     const router = useRouter();
     const { redirect, sign_in_error: refusal, login } = loginRoute.useSearch();
@@ -237,11 +262,19 @@ const authorizeRoute = createRoute({
     const request = toAuthorizationRequest(Object.fromEntries(new URLSearchParams(window.location.search)));
     // Signing out drops the whole cache while this page's queries still watch it, so sign-in is loaded afresh
     // rather than reached in place, as the way back here is.
-    const toSignIn = `${BASE}/login?${new URLSearchParams(signInSearch(pageHref(router.state.location.href))).toString()}`;
+    const href = pageHref(router.state.location.href);
+    const toSignIn = `${BASE}/login?${new URLSearchParams(signInSearch(href)).toString()}`;
     return (
       <AuthorizePage
         request={request}
-        onUseAnotherAccount={() => signOut.mutate(undefined, { onSuccess: () => window.location.replace(toSignIn) })}
+        onUseAnotherAccount={() =>
+          signOut.mutate(undefined, {
+            onSuccess: (signedOut) => {
+              if (signedOut?.provider_logout_url) signOutAtProvider(signedOut.provider_logout_url, href);
+              else window.location.replace(toSignIn);
+            },
+          })
+        }
       />
     );
   },

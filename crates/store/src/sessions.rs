@@ -3,7 +3,8 @@
 //! Sessions are authentication plumbing, not domain data, so ending one deletes its row.
 //!
 //! A session opened through an OpenID Connect provider may keep the raw ID token, which signing out sends back to the
-//! provider as a hint. It can't sign anyone in to Upheap, so it is stored as it is.
+//! provider as a hint. It can't sign anyone in to Upheap, so it is stored as it is. It stays on the row until sign-out
+//! or until the user's sessions are ended; an expired session's row is never swept, and keeps it.
 
 use domain::{Timestamp, UserId};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter};

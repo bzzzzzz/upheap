@@ -730,6 +730,18 @@ impl TestApp {
         Ok(row.try_get("", "n")?)
     }
 
+    /// How many rows of `table` have a non-null `id_token`. Read straight from the database. `table` is spliced into
+    /// the query, so pass a literal.
+    pub async fn count_id_tokens(&self, table: &str) -> Result<i64> {
+        let sql = format!("SELECT COUNT(*) AS n FROM {table} WHERE id_token IS NOT NULL");
+        let row = self
+            .db
+            .query_one_raw(Statement::from_string(self.db.get_database_backend(), sql))
+            .await?
+            .context("no count row")?;
+        Ok(row.try_get("", "n")?)
+    }
+
     /// An item's `arrives_at` as stored, in UTC milliseconds, which the API shows only for reminders. Read straight
     /// from the database.
     pub async fn item_arrives_at(&self, item_id: &str) -> Result<Option<i64>> {

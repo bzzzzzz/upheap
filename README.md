@@ -124,10 +124,11 @@ person whose email already belongs to a local account is refused, not linked. Pe
 have no password in Upheap. The server doesn't contact the provider at startup, so a provider that is down never
 stops the server or local sign-in. Start with one setting missing and the server stops, naming it.
 
-With `UPHEAP_OIDC_PROVIDER_LOGOUT=true`, Sign out on the Account page also ends the person's session at the provider
+With `UPHEAP_OIDC_PROVIDER_LOGOUT=true`, every sign-out in the web app (Account, and "Not you?" on the invite and consent pages) also ends the person's session at the provider
 (OpenID Connect RP-Initiated Logout), so the next person on a shared machine can't sign in as them with one click.
 Register `{BASE_URL}/login` at the provider as a post-logout redirect URI, where it sends the person afterwards. With
-the setting on, the ID token of a provider sign-in is kept with the session, and deleted with it. A provider without
+the setting on, the ID token of a provider sign-in is kept on the session row until the person signs out or their
+sessions are ended (a password change or reset); a session that only expires keeps its row, and the token with it. A provider without
 logout (Google, say) and a provider that is down just sign the person out of Upheap. The CLI's sign-out is unchanged.
 
 #### Teams from groups

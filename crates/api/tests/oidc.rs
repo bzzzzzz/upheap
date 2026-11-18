@@ -661,7 +661,15 @@ async fn signing_out_a_new_person_goes_on_to_the_provider() -> Result<()> {
 async fn with_provider_logout_off_signing_out_stays_with_upheap() -> Result<()> {
     let h = harness().await?;
     h.provider.support_logout();
-    let session = sign_in_as_sam(&h).await?;
+    // The username step keeps no token before it, and the session none after it.
+    let started = begin(&h.app, None).await?;
+    finish(&h, &started, sam()).await?;
+    expect_that!(h.app.count_rows("oidc_sign_ins").await?, eq(1));
+    expect_that!(h.app.count_id_tokens("oidc_sign_ins").await?, eq(0));
+    let registered = register(&h.app, &started.request.state, "sam").await?;
+    let session = registered.session_cookie.context("no session cookie")?;
+    expect_that!(h.app.count_rows("sessions").await?, ge(1));
+    expect_that!(h.app.count_id_tokens("sessions").await?, eq(0));
 
     let out = sign_out(&h.app, &session).await?;
     assert_signed_out_without_provider(&out);
