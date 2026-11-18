@@ -163,8 +163,8 @@ Telling the person how to do it is this session's result for that item.
    - In another agent tool, its own equivalents.
    Nothing fits: do it with care in the ordinary way. Don't stop for that.
 3. **Work through the steps in order.** Tick each as it's finished (`upheap step tick`). Add a step when a new
-   part turns up, and drop one that turns out not to be needed (`upheap step drop`). A task with no steps and
-   more than one part gets steps first.
+   part turns up, and drop one that turns out not to be needed (`upheap step drop`). A step ticked or dropped by
+   mistake goes back to open with `upheap step reopen`. A task with no steps and more than one part gets steps first.
 4. **Record as you go,** as comments on the item (`upheap comment add <key> --file <file>`): what's done, where it
    is (the branch, the pull request, the document, the link), what you decided and why, and what's left. A comment
    adds to the item without touching what the person wrote. Keep the context for what the item is and "Done when";
