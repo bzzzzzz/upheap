@@ -336,8 +336,14 @@ const heapRoute = createRoute({
         heap={{ team, heap }}
         itemKey={item}
         view={view}
-        // The history state stays, so changing the view doesn't leave select mode.
-        onViewChange={(next) => void navigate({ search: parseListSearch(next), replace: true, state: (prev) => prev })}
+        // Select mode stays, so changing the view doesn't leave it; the rest of the history state goes, as before.
+        onViewChange={(next) =>
+          void navigate({
+            search: parseListSearch(next),
+            replace: true,
+            state: (prev) => (prev.selecting ? { selecting: true } : {}),
+          })
+        }
       />
     );
   },
