@@ -344,7 +344,7 @@ fn question_lines(question: &QuestionDto) -> Vec<String> {
 }
 
 /// The kind as the head line reads it; a review also says its round.
-fn question_kind_text(question: &QuestionDto) -> String {
+pub(crate) fn question_kind_text(question: &QuestionDto) -> String {
     match (question.kind, &question.review) {
         (QuestionKindDto::Question, _) => "Question".to_owned(),
         (QuestionKindDto::Request, _) => "Request".to_owned(),

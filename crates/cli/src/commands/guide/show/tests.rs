@@ -121,6 +121,19 @@ fn the_flags_most_commands_share_are_listed_once() {
 }
 
 #[gtest]
+fn a_command_with_a_heap_flag_of_its_own_lists_it_and_is_not_marked() {
+    // Arrange
+    let root = Cli::command();
+
+    // Act
+    let guide = render(&root);
+
+    // Assert
+    expect_that!(guide, contains_substring("  upheap question list: List the questions"));
+    expect_that!(guide, contains_substring("\n      --heap <HEAP>  Only this heap's: "));
+}
+
+#[gtest]
 fn the_instructions_follow_the_commands() {
     // Arrange
     let root = Cli::command();

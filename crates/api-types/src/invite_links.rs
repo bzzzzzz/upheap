@@ -103,6 +103,9 @@ pub struct InvitationDto {
     pub viewer: Option<InviteViewerDto>,
     /// Whether the team's members come from its groups at the sign-in provider. The link then admits nobody, and
     /// `allowed_actions` is empty.
+    // Defaults so this client reads a server older than group-managed teams, which has none.
+    #[serde(default)]
+    #[schema(required = true)]
     pub group_managed: bool,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<InvitationActionDto>,

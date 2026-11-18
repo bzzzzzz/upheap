@@ -318,7 +318,7 @@ async fn a_new_slug_moves_the_team_or_heap_to_a_new_path() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_personal_team_takes_no_members_and_keeps_its_slug() -> Result<()> {
+async fn a_personal_team_takes_no_members_and_keeps_its_slug_and_name() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
     let (ada, _) = app.register_as("ada@example.test", "Ada").await?;
@@ -352,16 +352,24 @@ async fn a_personal_team_takes_no_members_and_keeps_its_slug() -> Result<()> {
             json!({ "name": "Ada's heaps" }),
         )
         .await?;
+    let same_name = app
+        .patch(
+            &ada,
+            "/api/v1/teams/ada",
+            &team.body["version"],
+            json!({ "name": team.body["name"] }),
+        )
+        .await?;
 
     // Assert
     expect_that!(team.body["personal"], eq(&json!(true)));
-    expect_that!(team.body["allowed_actions"], eq(&json!(["rename", "create_heap"])));
-    for refused in [&added, &left, &removed, &removed_outsider, &reslugged] {
+    expect_that!(team.body["allowed_actions"], eq(&json!(["create_heap"])));
+    for refused in [&added, &left, &removed, &removed_outsider, &reslugged, &renamed] {
         expect_that!(refused.status, eq(StatusCode::CONFLICT));
         expect_that!(refused.body["code"], eq(&json!("personal_team")));
     }
-    expect_that!(renamed.status, eq(StatusCode::OK));
-    expect_that!(renamed.body["slug"], eq(&json!("ada")));
+    expect_that!(same_name.status, eq(StatusCode::OK));
+    expect_that!(same_name.body["name"], eq(&team.body["name"]));
     Ok(())
 }
 

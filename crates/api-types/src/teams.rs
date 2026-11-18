@@ -13,6 +13,7 @@ use crate::heaps::HeapDto;
 #[serde(rename_all = "snake_case")]
 #[schema(as = TeamAction)]
 pub enum TeamActionDto {
+    /// Not offered on a personal team, which is shown by its owner's name.
     Rename,
     /// Not offered on a personal team, whose slug is its owner's username.
     ChangeSlug,
@@ -92,6 +93,8 @@ pub struct TeamDto {
     pub heaps: Vec<HeapDto>,
     /// The provider groups whose members the team has, as the operator configured them; `null` for a team that
     /// isn't group-managed. Such a team takes no hand-added members, invite links or new slug.
+    // Defaults so this client reads a server older than group-managed teams, which has none.
+    #[serde(default)]
     pub managed_by_groups: Option<Vec<String>>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<TeamActionDto>,
@@ -139,7 +142,7 @@ pub struct AddMemberDto {
 #[derive(Deserialize, ToSchema)]
 #[schema(as = TeamPatchRequest)]
 pub struct TeamPatchDto {
-    /// 1 to 100 characters.
+    /// 1 to 100 characters. A new name is refused with `personal_team` on a personal team.
     pub name: Option<String>,
     /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Refused with
     /// `personal_team` on a personal team. Links with the old slug stop working.
