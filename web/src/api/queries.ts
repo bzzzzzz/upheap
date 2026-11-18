@@ -17,6 +17,7 @@ import type {
   AddStepRequest,
   AskQuestionRequest,
   ClientSignIn,
+  CreateHeapRequest,
   CreateItemRequest,
   CreateParameterRequest,
   CreateTagRequest,
@@ -25,6 +26,7 @@ import type {
   HeapWeightsPatchRequest,
   Item,
   ItemPatchRequest,
+  ItemToStepRequest,
   OAuthAuthorizationRequest,
   Parameter,
   ParameterList,
@@ -358,6 +360,27 @@ export function useUpdateItem(heap: HeapRef) {
 }
 
 /**
+ * Closes the note `key` as became, once items were made from it. Its answer, the closed note, is written into the
+ * cache, and the lists and open counts catch up.
+ */
+export function useBecame(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (key: string) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/became", {
+          params: { path: { ...heap, item: key } },
+        }),
+      ),
+    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
+    onSettled: () => {
+      invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
+  });
+}
+
+/**
  * Moves an item to another heap of its team, `to`. It runs in the item edits' scope and sends the newest version it
  * knows of, as `useUpdateItem` does. The saved item is written under its new heap's key (it may have a new key there),
  * and both heaps and the open counts are fetched again, whatever the outcome. Nothing waits for those fetches, so the
@@ -391,6 +414,35 @@ export function useMoveItem(heap: HeapRef) {
       void queryClient.invalidateQueries({ queryKey: decisionsKey });
     },
   });
+}
+
+/**
+ * Makes the note `key` a step of an open task of the same heap. The server closes the note as became; its answer is
+ * written into the cache. Settling waits for the lists and items to be fetched again, so a caller reading the cache
+ * after a refusal sees what the server has now.
+ */
+export function useNoteToStep(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ key, body }: { key: string; body: ItemToStepRequest }) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/to-step", {
+          params: { path: { ...heap, item: key } },
+          body,
+        }),
+      ),
+    onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
+    onSettled: () => {
+      invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
+  });
+}
+
+/** Reads an item of `heap` as it is cached now, without fetching it. */
+export function useCachedItem(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return (key: string) => queryClient.getQueryData<Item>(itemKey(heap, key));
 }
 
 /**
@@ -1400,8 +1452,8 @@ export function useHeap(heap: HeapRef) {
 export function useCreateHeap(team: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (name: string) =>
-      unwrap(await api.POST("/api/v1/teams/{team}/heaps", { params: { path: { team } }, body: { name } })),
+    mutationFn: async (body: CreateHeapRequest) =>
+      unwrap(await api.POST("/api/v1/teams/{team}/heaps", { params: { path: { team } }, body })),
     onSettled: () => invalidateTeam(queryClient, team),
   });
 }

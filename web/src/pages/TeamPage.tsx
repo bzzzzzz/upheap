@@ -217,7 +217,7 @@ function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    create.mutate(name, { onSuccess: onClose });
+    create.mutate({ name }, { onSuccess: onClose });
   };
 
   return (

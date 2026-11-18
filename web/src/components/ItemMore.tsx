@@ -44,9 +44,9 @@ type Main = { label: string; state: ItemState } | { label: "Make it a task"; sta
 /**
  * What the item's main button and ⋯ offer (ux.md, The item §6), each only when the server allows it. The main button
  * is the likeliest next state, Make it a task for a reminder that has arrived, or Reopen on a closed item. ⋯ holds the
- * other states, Won't do, Make it a task…, Change blocker…, Add reason… or Change reason…, the Stage choices, and
- * Move to another heap… when the team has another heap to move it to (`canMove`); with none of them, as for a reader,
- * there is no ⋯.
+ * other states, Won't do, Make it a task…, Split… on an open note, Change blocker…, Add reason… or Change reason…, the
+ * Stage choices, and Move to another heap… when the team has another heap to move it to (`canMove`); with none of
+ * them, as for a reader, there is no ⋯.
  */
 function actionsOf(item: Item, canMove: boolean) {
   const allowed = item.allowed_actions;
@@ -73,6 +73,7 @@ function actionsOf(item: Item, canMove: boolean) {
     others,
     wontDo: canChange && !isClosed(state),
     makeTask: allowed.includes("make_task") && !arrivedReminder,
+    split: allowed.includes("became"),
     changeBlocker: item.state === "blocked" && canChange,
     reasonLabel: item.blocked_reason ? "Change reason…" : "Add reason…",
     stages: item.stage_choices,
@@ -81,6 +82,7 @@ function actionsOf(item: Item, canMove: boolean) {
       others.length > 0 ||
       (canChange && !isClosed(state)) ||
       (allowed.includes("make_task") && !arrivedReminder) ||
+      allowed.includes("became") ||
       (item.state === "blocked" && canChange) ||
       item.stage_choices.length > 0 ||
       move,
@@ -92,9 +94,11 @@ function actionsOf(item: Item, canMove: boolean) {
  * bottom of a phone's sheet (ux.md, The item §6). ⋯ is a menu on a wide screen and a tablet, a sheet on a phone; what it
  * opens, Change blocker and the block reason's editor, open under it as a popover, or as a sheet on a phone. Picking
  * a stage saves at once and silently, like every change made in the item. Making a note a task asks first, since a
- * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. Move to another
- * heap… opens a picker under ⋯ that confirms before it moves, and lands on the item in its new heap. A state change
- * goes through `onState`, which may ask whether to take the item back from its agent first.
+ * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. Split… asks the
+ * pane, through `onSplit`, to open the dialog that splits a note: the pane owns it, so a draft survives the bar and
+ * the inline actions swapping at the phone width, and it gets the two buttons' refs to give focus back. Move to
+ * another heap… opens a picker under ⋯ that confirms before it moves, and lands on the item in its new heap. A state
+ * change goes through `onState`, which may ask whether to take the item back from its agent first.
  */
 export function ItemActions({
   heapRef,
@@ -102,15 +106,19 @@ export function ItemActions({
   variant,
   save,
   onState,
+  onSplit,
+  moreRef,
+  mainRef,
 }: {
   heapRef: HeapRef;
   item: Item;
   variant: "inline" | "bar";
   save: (patch: ItemPatchRequest) => void;
   onState: (state: ItemState) => void;
+  onSplit: () => void;
+  moreRef: React.RefObject<HTMLButtonElement | null>;
+  mainRef: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const moreRef = useRef<HTMLButtonElement>(null);
-  const mainRef = useRef<HTMLButtonElement>(null);
   const asker = useRef<"main" | "more">("more");
   const focusAfterRender = useFocusAfterRender();
   const [confirming, setConfirming] = useState(false);
@@ -133,7 +141,7 @@ export function ItemActions({
   useEffect(() => {
     if (hadMore.current && !actions.more && document.activeElement === document.body) mainRef.current?.focus();
     hadMore.current = actions.more;
-  }, [actions.more]);
+  }, [actions.more, mainRef]);
 
   const closeConfirm = () => {
     setConfirming(false);
@@ -177,6 +185,7 @@ export function ItemActions({
       asker.current = "more";
       setConfirming(true);
     },
+    split: onSplit,
     changeBlocker: () => setChanging(true),
     editReason: () => {
       saveReason.reset();
@@ -241,6 +250,11 @@ export function ItemActions({
           {actions.makeTask && (
             <MenuEntry id="make_task" onAction={openers.makeTask}>
               Make it a task…
+            </MenuEntry>
+          )}
+          {actions.split && (
+            <MenuEntry id="split" onAction={openers.split}>
+              Split…
             </MenuEntry>
           )}
           {actions.changeBlocker && (
@@ -390,7 +404,13 @@ function MoreSheet({
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   onState: (state: ItemState) => void;
   onWontDo: () => void;
-  openers: { makeTask: () => void; changeBlocker: () => void; editReason: () => void; move: () => void };
+  openers: {
+    makeTask: () => void;
+    split: () => void;
+    changeBlocker: () => void;
+    editReason: () => void;
+    move: () => void;
+  };
   onStage: (keys: Selection) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -424,6 +444,11 @@ function MoreSheet({
         {actions.makeTask && (
           <button type="button" onClick={then(openers.makeTask)} className={sheetRowClass}>
             Make it a task…
+          </button>
+        )}
+        {actions.split && (
+          <button type="button" onClick={then(openers.split)} className={sheetRowClass}>
+            Split…
           </button>
         )}
         {actions.changeBlocker && (

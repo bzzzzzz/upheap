@@ -373,10 +373,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    for a reminder that has arrived (its state's own choice then moves into ⋯), Reopen for a closed item while it can
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
    there whenever it holds something, and holds, each only when the server allows it and in this order: the other state
-   changes, Won't do, Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked
-   item, the Stage choices, and last, in a section of its own, Move to another heap…, when the team has another heap
-   that isn't archived. With none of them, as for a reader's item, an archived heap's or a closed item, there
-   is no ⋯.
+   changes, Won't do, Make it a task…, Split… on a note, Change blocker… and Add reason… (Change reason… once one is
+   set) on a blocked item, the Stage choices, and last, in a section of its own, Move to another heap…, when the team
+   has another heap that isn't archived. With none of them, as for a reader's item, an archived heap's or a closed
+   item, there is no ⋯.
    Move to another heap… opens "Move to" under ⋯ (a sheet on a phone): the item's own team's heaps that aren't
    archived, the item's own marked "(here)" and disabled, with a search field from 8 heaps and no New heap. A pick
    asks first, "Move to <Heap>?" and "Tags it doesn't have there are dropped.", with Cancel and Move; it can't be
@@ -385,7 +385,16 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    key it got. There's no Undo, as the tags can't come back. A refusal shows in the picker, above the buttons.
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
    a popover (a sheet on a phone) and saves on a pick. Make it a task asks first, naming the item, since a task can't
-   go back to a note (or to a reminder). A reminder has an exact Date in place of Due (point 16), which can be moved,
+   go back to a note (or to a reminder). **Split…** on an open note opens a dialog (a sheet on a phone) with three
+   outcomes: Tasks, A step, and A heap, the last only for someone who may make heaps. Tasks and a heap's first items are
+   rows of title, need and age, with nothing preselected and the needs above the note's need off; age is Keep the
+   note's age or Start new. Into tasks starts with two rows, and Add another adds one. Into a step lists the heap's open
+   tasks with a filter and takes the note's title and context as they are, at the end of the task's steps. Into a heap
+   starts with the note's title as its name and its context, both editable, and first items that are each a task or a
+   note; agents don't prepare what's added. Items are made one at a time and the note is closed last; after a failure
+   what was made stays as a locked "Made" row, the note stays open, and Make the rest carries on. A note closed
+   meanwhile says so and offers only Close. Leaving a draft asks "Discard this split?". The toast says what the note
+   became, with no Undo, as Reopen is the way back, and focus goes to Reopen. A reminder has an exact Date in place of Due (point 16), which can be moved,
    also back into the future, and not cleared; it has no steps and no Send to an agent button. Stage lists as written and with context, and defined on
    a task only (a note says "Defined needs a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,

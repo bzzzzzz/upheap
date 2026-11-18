@@ -575,12 +575,15 @@ function NewHeapForm({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (name.trim() === "") return;
-    create.mutate(name.trim(), {
-      onSuccess: (heap) => {
-        onCreated();
-        void navigate({ to: "/teams/$team/heaps/$heap", params: { team: team.slug, heap: heap.slug } });
+    create.mutate(
+      { name: name.trim() },
+      {
+        onSuccess: (heap) => {
+          onCreated();
+          void navigate({ to: "/teams/$team/heaps/$heap", params: { team: team.slug, heap: heap.slug } });
+        },
       },
-    });
+    );
   };
 
   return (
