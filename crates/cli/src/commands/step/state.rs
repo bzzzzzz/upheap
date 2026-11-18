@@ -1,4 +1,4 @@
-//! `upheap step tick | drop <step>`: move a step to ticked or dropped.
+//! `upheap step tick | drop | reopen <step>`: move a step to ticked, dropped or back to open.
 //!
 //! The server owns the rules. The CLI only notices a step that is already where it's asked to go, which it has in
 //! hand from the read that gives it the step's version, and then makes no write.
@@ -31,6 +31,7 @@ pub struct StepArgs {
 pub enum StepVerb {
     Tick,
     Drop,
+    Reopen,
 }
 
 impl StepVerb {
@@ -38,6 +39,7 @@ impl StepVerb {
         match self {
             Self::Tick => StepStateDto::Ticked,
             Self::Drop => StepStateDto::Dropped,
+            Self::Reopen => StepStateDto::Open,
         }
     }
 
@@ -45,6 +47,7 @@ impl StepVerb {
         match self {
             Self::Tick => "ticked",
             Self::Drop => "dropped",
+            Self::Reopen => "open",
         }
     }
 }
@@ -92,6 +95,7 @@ pub async fn run_verb(verb: StepVerb, args: StepArgs, app: &App, out: &mut Outpu
             let verb_text = match verb {
                 StepVerb::Tick => "Ticked",
                 StepVerb::Drop => "Dropped",
+                StepVerb::Reopen => "Reopened",
             };
             out.line(&format!("{verb_text} {key}: {title}."))?;
         }
