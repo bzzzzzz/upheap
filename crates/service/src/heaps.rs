@@ -137,14 +137,23 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        // A heap made from a note starts with each person's priority for the note's heap. Nobody changed their
+        // priority, so nothing is logged in their personal teams.
+        let priority = match &origin_item {
+            Some(note) => {
+                store::heap_priorities::copy_heap_priorities(&txn, note.heap_id, heap.id, now).await?;
+                load_heap_priority(&txn, principal.user_id, heap.id).await?
+            }
+            None => HeapPriority::DEFAULT,
+        };
         let view = with_origin(
             &txn,
             HeapView {
                 allowed_actions: allowed_heap_actions(&heap, membership.role),
                 heap,
-                // A new heap has no items, and nobody has set a priority for it.
+                // A new heap has no items.
                 open_count: 0,
-                priority: HeapPriority::DEFAULT,
+                priority,
                 origin: None,
             },
         )

@@ -375,7 +375,9 @@ would show. Then each group (pinned, ranked, blocked) is merged across heaps by 
 times the caller's **heap priority** for that heap, highest first, then heap name, then the item's position in its
 heap, the same rule `GET /me/waiting` and the agents' queue order by (the queue also boosts started work, as above). A heap priority is one person's own number
 for one heap, 1 to 10: a `heap_priorities` row per person and heap, 1 when there is none, so teammates in a shared
-heap each order it their own way. Since a heap's group is already in score order and the priority is the same
+heap each order it their own way. A heap made from a note starts with a copy of the note's heap's rows, in the
+transaction that makes it, so it sits where its source did for everyone; the copy isn't a change anyone made, so it
+is not audited. Since a heap's group is already in score order and the priority is the same
 positive factor for all of a heap's items, the merge keeps every heap's own order. A change to it is audited in the
 person's personal team, not the heap's, because the value is private and the heap's log is read by the team. The view takes no tag, parameter or sort, which belong to one heap. An optional `team`, a team's slug, limits the
 list to that team's heaps: they are filtered from the viewable heaps before any is ranked or merged, so the order
