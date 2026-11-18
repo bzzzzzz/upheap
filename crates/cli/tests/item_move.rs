@@ -273,7 +273,7 @@ async fn several_items_move_with_one_command() -> Result<()> {
     expect_that!(moved.exited(0), eq(true));
     expect_that!(
         server.read_item(&ada, "ada/other", first).await?["id"],
-        eq(&items[0]["id"])
+        eq(&items[1]["id"])
     );
     expect_that!(
         server.read_item(&ada, "ada/other", second).await?["id"],
