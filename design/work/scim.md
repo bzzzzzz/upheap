@@ -104,13 +104,13 @@ is linked to an Upheap user, it works out their groups and runs the same sync a 
 (`sync_group_teams`), with the person as the audit entry's actor and `provider_groups` as what made the change, as
 at sign-in:
 
-- Each mapped team is decided on its own. A team is pushed when a stored group matches one of its groups (the
-  group's `displayName` or `externalId` is one of them). An active person's membership in a pushed team follows
+- Each mapped team is decided on its own. A team is pushed when every one of its groups matches a stored group (the
+  group's `displayName` or `externalId` is it). An active person's membership in a pushed team follows
   their groups: the `displayName` and the `externalId` of every stored group their active records are in. A team
-  that isn't pushed is left alone by pushes, so pushing the group of one team never empties another, and pushing
-  people before their groups doesn't empty any team.
+  that isn't pushed is left alone by pushes, so pushing the group of one team never empties another, pushing a
+  team's groups one at a time doesn't empty it, and pushing people before their groups doesn't empty any team.
 - The write that makes a team pushed for the first time syncs every pushed person for that team. The write that
-  makes a team stop being pushed (deleting its last matching group, or renaming it or changing its `externalId`
+  makes a team stop being pushed (deleting one of its matching groups, or renaming it or changing its `externalId`
   away from the map) syncs the people it touched for that team with their groups as known: they are in none of its
   groups any more, so they leave it, and from then on it follows the token.
 - An inactive person's groups, and those of a person whose last record was deleted, are known and empty in every

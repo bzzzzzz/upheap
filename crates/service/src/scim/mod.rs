@@ -602,15 +602,19 @@ impl Services {
         Ok(store::identities::find_identity_user(db, oidc.issuer(), subject).await?)
     }
 
-    /// The mapped teams that are pushed: a stored SCIM group has, as its display name or external ID, one of the
-    /// team's groups. Read it once per write or sign-in, after locking the mapped teams.
+    /// The mapped teams that are pushed: every one of the team's groups is the display name or external ID of a
+    /// stored SCIM group. Until the last of them arrives, the token decides the team, so a team mapped to several
+    /// groups loses no one while they are pushed one at a time. Read it once per write or sign-in, after locking the
+    /// mapped teams.
     pub(crate) async fn pushed_teams(&self, db: &impl ConnectionTrait) -> Result<BTreeSet<TeamId>, ServiceError> {
         let mut pushed = BTreeSet::new();
-        for (team_id, groups) in self.settings.group_teams.iter() {
-            let names: BTreeSet<String> = groups.iter().cloned().collect();
-            if store::scim::any_group_named(db, &names).await? {
-                pushed.insert(team_id);
+        'teams: for (team_id, groups) in self.settings.group_teams.iter() {
+            for group in groups {
+                if !store::scim::any_group_named(db, &BTreeSet::from([group.clone()])).await? {
+                    continue 'teams;
+                }
             }
+            pushed.insert(team_id);
         }
         Ok(pushed)
     }

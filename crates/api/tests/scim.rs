@@ -19,13 +19,13 @@ struct Harness {
     provider: FakeProvider,
     /// The server with no provider and no group-managed team, where Ana sets Ops up.
     plain: TestApp,
-    /// The same server with the provider and SCIM, and Ops managed by the groups `engineering` and `sre`.
+    /// The same server with the provider and SCIM, and the mapped teams (by default Ops, managed by `engineering`).
     app: TestApp,
     ana: String,
 }
 
 async fn harness() -> Result<Harness> {
-    harness_with(&[("ops", &["engineering", "sre"])]).await
+    harness_with(&[("ops", &["engineering"])]).await
 }
 
 /// The harness with one team per slug of `map`, named as the slug is, each managed by the groups it maps to.
@@ -585,7 +585,7 @@ async fn a_group_push_adds_and_removes_a_linked_member_with_audit_entries() -> R
             )),
             eq(&(
                 "group_member_removed",
-                json!({ "role": "member", "groups": ["engineering", "sre"], "by": "provider_groups" })
+                json!({ "role": "member", "groups": ["engineering"], "by": "provider_groups" })
             )),
         ]
     );
@@ -595,8 +595,8 @@ async fn a_group_push_adds_and_removes_a_linked_member_with_audit_entries() -> R
 #[gtest]
 #[tokio::test]
 async fn a_group_matches_by_its_external_id_and_unmapped_groups_and_unlinked_people_change_nothing() -> Result<()> {
-    // Arrange
-    let h = harness().await?;
+    // Arrange: Ops is managed by `engineering` and `sre`.
+    let h = harness_with(&[("ops", &["engineering", "sre"])]).await?;
     let session = first_sign_in(&h, sam()).await?;
     let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
     let stranger = push_user(&h, "stranger@example.test", Some("subject-stranger"), true).await?;
@@ -744,7 +744,7 @@ async fn deleting_a_linked_person_takes_them_out_of_their_teams_and_ends_their_s
     let h = harness().await?;
     let session = first_sign_in(&h, sam()).await?;
     let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
-    push_group(&h, "sre", &[&scim_sam]).await?;
+    push_group(&h, "engineering", &[&scim_sam]).await?;
     assert!(in_ops(&me(&h.app, &session).await?));
     let other = h.plain.register_as("blair@example.test", "Blair").await?.0;
 
@@ -1004,5 +1004,56 @@ async fn deleting_the_last_group_of_a_team_takes_its_members_out_and_the_token_d
     expect_that!(deleted.status, eq(StatusCode::NO_CONTENT));
     expect_that!(after_delete, eq(false));
     expect_that!(after_sign_in, eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_team_of_two_groups_follows_the_token_until_both_are_pushed() -> Result<()> {
+    // Arrange: Ops is managed by `engineering` and `sre`; Alex is in Ops through the token's `sre`.
+    let h = harness_with(&[("ops", &["engineering", "sre"])]).await?;
+    let alex_claims = || claims_in("subject-alex", "alex@example.test", json!(["sre"]));
+    let alex = first_sign_in_as(&h, alex_claims(), "alex").await?;
+    push_user(&h, "alex@example.test", Some("subject-alex"), true).await?;
+    let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+
+    // Act: `engineering` is pushed first, with Sam; Alex signs in again; then `sre` is pushed without Alex.
+    push_group(&h, "engineering", &[&scim_sam]).await?;
+    let after_first = in_team(&me(&h.app, &alex).await?, "ops");
+    let (again, _) = sign_in(&h, alex_claims()).await?;
+    let again = again.session_cookie.context("no session")?;
+    let after_sign_in = in_team(&me(&h.app, &again).await?, "ops");
+    push_group(&h, "sre", &[&scim_sam]).await?;
+    let after_both = in_team(&me(&h.app, &again).await?, "ops");
+
+    // Assert
+    expect_that!(after_first, eq(true));
+    expect_that!(after_sign_in, eq(true));
+    expect_that!(after_both, eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn renaming_a_group_from_one_teams_name_to_anothers_moves_its_members() -> Result<()> {
+    // Arrange: Sam is in Eng through the pushed group `engineering`.
+    let h = two_teams().await?;
+    let session = first_sign_in_as(&h, claims_in("subject-sam", "sam@example.test", json!([])), "sam").await?;
+    let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+    let group = push_group(&h, "engineering", &[&scim_sam]).await?;
+    expect_that!(in_team(&me(&h.app, &session).await?, "eng"), eq(true));
+
+    // Act: Okta's rename, a replace with no path.
+    let body = json!({
+        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        "Operations": [{ "op": "replace", "value": { "displayName": "ops" } }],
+    });
+    let renamed = scim(&h, Method::PATCH, &format!("/scim/v2/Groups/{group}"), Some(body)).await?;
+    let after = me(&h.app, &session).await?;
+
+    // Assert
+    expect_that!(renamed.status, eq(StatusCode::OK));
+    expect_that!(in_team(&after, "eng"), eq(false));
+    expect_that!(in_team(&after, "ops"), eq(true));
     Ok(())
 }

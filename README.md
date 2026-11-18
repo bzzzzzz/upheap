@@ -165,10 +165,10 @@ user is matched to an account, never by email or user name. A pushed person with
 they first sign in; a push never makes an account. A pushed group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its
 `displayName` or its `externalId`, so the same map works whether the token carries names or IDs. Members join and leave
 the mapped teams as the push arrives, with the same entries in the team's activity as at sign-in. Each mapped team is decided on
-its own. A team is pushed once the provider has pushed one of its groups. For a pushed team, a pushed person's
-membership follows the groups the provider says, at each push and at sign-in instead of the ID token. A team none of
-whose groups was pushed is left alone by pushes, and a sign-in syncs it from the ID token as without SCIM. If the
-provider deletes or renames a team's last group, its members leave the team, and it follows the ID token again. If the provider pushes several users with
+its own. A team is pushed once the provider has pushed every one of its groups. For a pushed team, a pushed person's
+membership follows the groups the provider says, at each push and at sign-in instead of the ID token. A team with a group
+not pushed yet is left alone by pushes, and a sign-in syncs it from the ID token as without SCIM. If the
+provider deletes or renames one of a team's groups, that group's members leave the team unless another of its groups holds them, and it follows the ID token again. If the provider pushes several users with
 one `externalId`, they are one person: deactivated only when all are, and in the groups of the active ones.
 
 When the provider deactivates a person, or deletes them, they leave every mapped team and lose every sign-in at once:
