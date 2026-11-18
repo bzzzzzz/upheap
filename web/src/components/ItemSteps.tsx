@@ -27,12 +27,12 @@ import { useOverListLink } from "./overList";
 
 /**
  * A task's steps (ux.md, The item point 11): a checklist, inline at every width, each step saving as it's changed. An
- * editor moves a step by dragging its grip or with Move up and Move down in its ⋯ menu; the move shows at once, from
- * a pending order, until the server has answered. Only the
- * server's `allowed_actions` decide what can be done: ticking, editing, moving and dropping need `edit` on the step, adding
- * needs `add_step` on the item, and the server offers that only for a task, so this renders nothing for a note. A step
- * that is dropped stays in the list, struck through, and can be restored. `item` is a single-item response, the only
- * kind that carries the steps; a list row has `steps: null`, which reads as none.
+ * editor moves a step by dragging its grip or with Move up and Move down in its ⋯ menu; the move shows at once, from a
+ * pending order, until the server has answered. Only the server's `allowed_actions` decide what can be done: ticking,
+ * editing, moving and dropping need `edit` on the step, adding needs `add_step` on the item, and the server offers that
+ * only for a task, so this renders nothing for a note. A step that is dropped stays in the list, struck through, and can
+ * be restored. `item` is a single-item response, the only kind that carries the steps; a list row has `steps: null`,
+ * which reads as none.
  */
 export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const add = useAddStep(heapRef, item.key);
@@ -135,9 +135,9 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
           )}
         </ul>
       )}
-      {/* Keyed by the move, so a second move to the same place is announced again. */}
-      <span key={moved.move} role="status" className="sr-only">
-        {moved.text}
+      <span role="status" className="sr-only">
+        {/* Keyed by the move, so a second move to the same place is announced again. */}
+        <span key={moved.move}>{moved.text}</span>
       </span>
       {canAdd && (
         <AddStep
@@ -249,7 +249,7 @@ function useStepDrag({
     window.addEventListener("keydown", onKeyDown, true);
     let frame = requestAnimationFrame(function scroll() {
       const current = session.current;
-      if (current?.moved) {
+      if (current) {
         const edge =
           current.scroller === document.scrollingElement
             ? { top: 0, bottom: window.innerHeight }
@@ -296,12 +296,14 @@ function useStepDrag({
           scroller,
           moved: false,
         };
-        setLifted(number);
       },
       onPointerMove: (event) => {
         if (session.current?.pointerId !== event.pointerId) return;
         session.current.pointerY = event.clientY;
-        if (Math.abs(event.clientY - session.current.startY) > DRAG_START) session.current.moved = true;
+        if (!session.current.moved && Math.abs(event.clientY - session.current.startY) > DRAG_START) {
+          session.current.moved = true;
+          setLifted(session.current.number);
+        }
         measure();
       },
       onPointerUp: (event) => {
