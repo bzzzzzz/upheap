@@ -136,6 +136,7 @@ impl Services {
                     expected,
                     current: expected.next(),
                 })?;
+        store::items::insert_former_handle(&txn, item_id, from_heap, item.key, now).await?;
         // Recorded in the heap the item is in after the write, so its history reads by entity across the team's heaps.
         // A move to another team also leaves an entry in the heap it left, for that team's log.
         if across_teams {

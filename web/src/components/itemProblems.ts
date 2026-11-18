@@ -15,7 +15,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   steps_need_task: "Only a task has steps. Make it a task first.",
   too_many_steps: "A task has at most 100 steps.",
   step_not_in_item: "That step isn't in this task any more.",
-  too_many_questions: "An item has at most 100 questions.",
+  too_many_questions: "This item has 100 questions, the most it can have.",
   too_many_comments: "An item has at most 200 comments.",
   question_answered: "Someone else replied to this question meanwhile.",
   question_withdrawn: "This question was withdrawn.",
@@ -24,6 +24,8 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   turn_not_stuck: "Someone else changed this meanwhile.",
   nothing_to_redo: "The agent's work changed meanwhile: there's nothing to send back.",
   pick_invalid: "That pick doesn't fit this question. Pick again.",
+  heap_archived: "That heap was archived meanwhile.",
+  heap_not_in_team: "That heap isn't in this item's team any more.",
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };
 

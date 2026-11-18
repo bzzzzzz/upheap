@@ -903,8 +903,8 @@ export interface paths {
          *     with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for
          *     the caller; when it went to another team it is never named. A turn stays when its person may edit items in the
          *     target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its
-         *     team. Moving an item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so
-         *     its old path stops working.
+         *     team. Moving an item to the heap it is in succeeds and changes nothing. The response is the item in its new heap; its
+         *     old path still leads to it for whoever may view it there, and answers `404` for anyone else.
          */
         post: operations["move_item"];
         delete?: never;

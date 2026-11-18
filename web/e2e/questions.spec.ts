@@ -1,9 +1,9 @@
 // Questions on an item (ux.md, The item): "Waits for you" at the top says how many wait, they are answered in the
-// Questions section under the Steps, and read back in its fold, "N answered". Nothing in the web app asks one, so they are seeded through the API, as another member or
-// an agent would. Server build only.
+// Questions section under the Steps, and read back in its fold, "N answered". Most are seeded through the API, as another member or an agent would; the "Ask a question" form on the item asks
+// them from the web app. Server build only.
 import type { Page } from "@playwright/test";
 
-import { changeState, expect, isPhone, itemPane, test } from "./fixtures";
+import { changeState, closeItem, expect, isPhone, itemPane, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -55,6 +55,158 @@ async function questionsOf(page: Page, item: string) {
   expect(response.ok()).toBe(true);
   return (await response.json()).questions;
 }
+
+/** The "Ask a question" button at the foot of Questions. */
+const askButton = (page: Page) => itemPane(page).getByRole("button", { name: "Ask a question", exact: true });
+/** The form it opens. */
+const askForm = (page: Page) => itemPane(page).getByRole("form", { name: "Ask a question", exact: true });
+
+test("a question asked in the web app waits on the item and in Waiting for me, and is answered as usual", async ({
+  page,
+  heapPath,
+}) => {
+  const item = await itemWithQuestions(page, heapPath, "Rotate the certs", []);
+
+  // Without questions the section is its heading and the button.
+  const section = itemPane(page).getByRole("region", { name: "Questions", exact: true });
+  await expect(section).toBeVisible();
+  await expect(askButton(page)).toBeVisible();
+  await askButton(page).click();
+
+  const form = askForm(page);
+  const field = form.getByRole("textbox", { name: "Question", exact: true });
+  await expect(field).toBeFocused();
+  const ask = form.getByRole("button", { name: "Ask", exact: true });
+  const cancel = form.getByRole("button", { name: "Cancel", exact: true });
+  await expect(ask).toBeDisabled();
+  if (isPhone(page)) {
+    expect(Math.round((await ask.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44);
+    expect(Math.round((await cancel.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44);
+  }
+  await form.getByLabel("Details, optional").fill("Internal or public.");
+  await field.fill("Which CA do we use?");
+  await expect(ask).toBeEnabled();
+  await field.press("Enter");
+
+  // The row shows, the item waits, the form is gone and focus is back on the button.
+  await expect(waits(page).getByRole("listitem")).toContainText("Which CA do we use?");
+  await expect(topWaits(page)).toContainText("1 question waits for you");
+  await expect(form).toHaveCount(0);
+  await expect(askButton(page)).toBeFocused();
+  await expect(itemPane(page).getByRole("status").filter({ hasText: "Asked" })).toHaveText(
+    "Asked “Which CA do we use?”.",
+  );
+  const [asked] = await questionsOf(page, item);
+  expect(asked).toMatchObject({
+    kind: "question",
+    text: "Which CA do we use?",
+    details: "Internal or public.",
+    choices: [],
+    state: "open",
+  });
+
+  // It waits in Waiting for me too.
+  await closeItem(page);
+  const entry = page.getByRole("link", { name: /^Waiting( for me)?( \d+)?$/ });
+  await expect(entry).toHaveAccessibleName(/ 1$/);
+  await entry.click();
+  await expect(page.getByRole("heading", { name: "Waiting for me · 1", level: 1 })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("listitem")).toContainText("Which CA do we use?");
+});
+
+test("a choice question and a request are asked with their own fields", async ({ page, heapPath }) => {
+  const item = await itemWithQuestions(page, heapPath, "Rotate the certs", [], true);
+  await askButton(page).click();
+  const form = askForm(page);
+
+  await form.getByRole("textbox", { name: "Question", exact: true }).fill("Which regions?");
+  await form.getByRole("radio", { name: "Pick any" }).click({ force: true });
+  await form.getByLabel("Choice 1", { exact: true }).fill("EU");
+  await form.getByLabel("Choice 2", { exact: true }).fill("US");
+  // Enter adds a field after the one it is in, and doesn't submit.
+  await form.getByLabel("Choice 2", { exact: true }).press("Enter");
+  await expect(form.getByLabel("Choice 3", { exact: true })).toBeFocused();
+  await form.getByLabel("Choice 3", { exact: true }).fill("Asia");
+  await form.getByLabel("About a step").selectOption({ label: "1. Pick the CA" });
+  await form.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(waits(page).getByRole("listitem")).toContainText("Which regions?");
+  await expect(askButton(page)).toBeFocused();
+  const [many] = await questionsOf(page, item);
+  expect(many).toMatchObject({ kind: "question", choices: ["EU", "US", "Asia"], many: true, step: 1 });
+
+  // A request keeps the text typed and has no answer or choices.
+  await askButton(page).click();
+  await form.getByRole("textbox", { name: "Question", exact: true }).fill("Put a token in the vault");
+  await form.getByRole("radio", { name: "Request" }).click({ force: true });
+  await expect(form.getByLabel("What to do")).toHaveValue("Put a token in the vault");
+  await expect(form.getByRole("radiogroup", { name: "Answer" })).toHaveCount(0);
+  await expect(form.getByLabel("Choice 1", { exact: true })).toHaveCount(0);
+  await form.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(waits(page).getByRole("listitem")).toHaveCount(2);
+  const [, request] = await questionsOf(page, item);
+  expect(request).toMatchObject({
+    kind: "request",
+    text: "Put a token in the vault",
+    choices: ["Done", "Can't be done"],
+  });
+});
+
+test("the Ask form keeps its draft: Ask is off until it is valid, Escape keeps a typed draft, and a failed ask says why", async ({
+  page,
+  heapPath,
+}) => {
+  await itemWithQuestions(page, heapPath, "Rotate the certs", []);
+  const form = askForm(page);
+  const ask = form.getByRole("button", { name: "Ask", exact: true });
+
+  // Escape with nothing typed closes the form.
+  await askButton(page).click();
+  await expect(form.getByRole("textbox", { name: "Question", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(form).toHaveCount(0);
+  await expect(askButton(page)).toBeFocused();
+
+  await askButton(page).click();
+  await expect(ask).toBeDisabled();
+  await form.getByRole("textbox", { name: "Question", exact: true }).fill("   ");
+  await expect(ask).toBeDisabled();
+  await form.getByRole("textbox", { name: "Question", exact: true }).fill("Which CA?");
+  await form.getByRole("radio", { name: "Pick one" }).click({ force: true });
+  await form.getByLabel("Choice 1", { exact: true }).fill("Internal");
+  await form.getByLabel("Choice 2", { exact: true }).fill("INTERNAL");
+  await expect(form.getByText("Two choices are the same.")).toBeVisible();
+  await expect(ask).toBeDisabled();
+  await form.getByLabel("Choice 2", { exact: true }).fill("Public");
+  await expect(ask).toBeEnabled();
+
+  // Escape with a draft keeps the form, and the item pane.
+  await page.keyboard.press("Escape");
+  await expect(form).toBeVisible();
+  await expect(form.getByRole("textbox", { name: "Question", exact: true })).toHaveValue("Which CA?");
+  await expect(itemPane(page)).toBeVisible();
+  // So does Escape in the details editor.
+  await form.getByLabel("Details, optional").press("Escape");
+  await expect(form).toBeVisible();
+  await expect(itemPane(page)).toBeVisible();
+
+  await page.route("**/questions", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 409,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ status: 409, code: "too_many_questions", title: "Too many" }),
+        })
+      : route.fallback(),
+  );
+  await ask.click();
+  await expect(form.getByRole("alert")).toHaveText("This item has 100 questions, the most it can have.");
+  await expect(form.getByRole("textbox", { name: "Question", exact: true })).toHaveValue("Which CA?");
+  await expect(form.getByLabel("Choice 2", { exact: true })).toHaveValue("Public");
+
+  await form.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(askButton(page)).toBeFocused();
+});
 
 test("a question without choices is answered with text, and then reads in Questions", async ({ page, heapPath }) => {
   const item = await itemWithQuestions(page, heapPath, "Rotate the certs", [
@@ -391,13 +543,15 @@ test("someone else's reply meanwhile takes the row away with a note", async ({ p
   await expect(itemPane(page).getByText("meanwhile.")).toHaveCount(0);
 });
 
-test("the section is absent without open questions, and closing the item withdraws them, as Questions reads", async ({
+test("without questions the section is only Ask a question, and closing the item withdraws them, as Questions reads", async ({
   page,
   heapPath,
 }) => {
   await itemWithQuestions(page, heapPath, "Plain item", []);
   await expect(waits(page)).toHaveCount(0);
   await expect(answered(page)).toHaveCount(0);
+  // An open item the person may ask on shows the section with only its button.
+  await expect(askButton(page)).toBeVisible();
 
   await itemWithQuestions(page, heapPath, "Rotate the certs", [{ kind: "question", text: "Which CA do we use?" }]);
   await expect(waits(page)).toBeVisible();
@@ -408,6 +562,7 @@ test("the section is absent without open questions, and closing the item withdra
   await changeState(page, "Done", "main");
   await expect(itemPane(page).getByRole("group", { name: "State" }).getByRole("button").first()).toHaveText("Reopen");
   await expect(waits(page)).toHaveCount(0);
+  await expect(askButton(page)).toHaveCount(0);
   const folded = answered(page);
   await expect(folded.locator("summary")).toHaveText("1 closed");
   await folded.locator("summary").click();
@@ -487,4 +642,5 @@ test("in an archived heap a question shows its text and details, with no control
   await expect(section.getByRole("button", { name: /^(Reply|Done|Can't be done)$/ })).toHaveCount(0);
   await expect(section.getByRole("textbox")).toHaveCount(0);
   await expect(section.getByRole("radio")).toHaveCount(0);
+  await expect(askButton(page)).toHaveCount(0);
 });

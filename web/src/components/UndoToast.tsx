@@ -2,6 +2,8 @@ import { useParams, useRouterState } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import type { HeapRef } from "../api/client";
+
 /**
  * A message about a change just made, with a way to take it back, and sometimes the likely next step as `action`.
  * `id` tells one toast from the next.
@@ -14,8 +16,11 @@ export type Toast = {
   error?: boolean;
 };
 
-/** Shows a toast in place of the one on screen, if any. */
-type ShowToast = (toast: Omit<Toast, "id">) => void;
+/**
+ * Shows a toast in place of the one on screen, if any. It belongs to the heap on screen, or to `heap` when given, for
+ * a toast shown as an item arrives in another heap.
+ */
+type ShowToast = (toast: Omit<Toast, "id">, options?: { heap?: HeapRef }) => void;
 
 const ToastContext = createContext<{ show: ShowToast; count: () => number }>({
   show: () => {
@@ -37,9 +42,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   // How many toasts have been shown, for a toast that's only worth showing if none came since.
   const shownCount = useRef(0);
   const show = useCallback<ShowToast>(
-    (toast) => {
+    (toast, options) => {
       shownCount.current += 1;
-      setShown({ toast: { ...toast, id: Date.now() }, owner });
+      const heapOwner = options?.heap && `heap:${options.heap.team}/${options.heap.heap}`;
+      setShown({ toast: { ...toast, id: Date.now() }, owner: heapOwner ?? owner });
     },
     [owner],
   );

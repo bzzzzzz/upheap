@@ -255,7 +255,7 @@ async fn an_item_arrives_with_its_context_steps_questions_comments_and_turn() ->
     let moved = move_item(&w.app, &w.session, &old_url, &before["version"], &w.to).await?;
     let new_url = w.item_url().await?;
     let there = get(&w.app, &w.session, &new_url).await?;
-    let gone = get(&w.app, &w.session, &old_url).await?;
+    let old = get(&w.app, &w.session, &old_url).await?;
     let (source_list, target_list) = (w.list(&w.from).await?, w.list(&w.to).await?);
 
     // Assert
@@ -278,7 +278,9 @@ async fn an_item_arrives_with_its_context_steps_questions_comments_and_turn() ->
     expect_that!(there.body["turn"], eq(&before["turn"]));
     expect_that!(there.body["turn"].is_object(), eq(true));
     expect_that!(there.body["waits_for_you"], eq(&before["waits_for_you"]));
-    expect_that!(gone.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(old.status, eq(StatusCode::OK));
+    expect_that!(id(&old.body), eq(&id(&before)));
+    expect_that!(old.body["heap_id"], eq(&json!(w.to)));
     expect_that!(ranked_ids(&target_list), elements_are![eq(&id(&before))]);
     expect_that!(ranked_ids(&source_list), is_empty());
     Ok(())
@@ -1001,6 +1003,33 @@ impl Across {
 
 #[gtest]
 #[tokio::test]
+async fn the_old_path_of_a_replaced_key_leads_to_the_moved_item() -> Result<()> {
+    // Arrange: as above, the moved item takes m4n5p in the target heap.
+    let random = Arc::new(ScriptedRandom::default());
+    let app = TestApp::start_with_random(random.clone()).await?;
+    let (session, from) = app.register("ada@example.test").await?;
+    let to = new_heap(&app, &session, &from, "Agent work").await?;
+    for key in ["k3x9a", "k3x9a", "m4n5p"] {
+        random.push(bytes_of(key));
+    }
+    let item = app.new_item(&session, &from, json!({ "title": "Mine" })).await?;
+    app.new_item(&session, &to, json!({ "title": "Theirs" })).await?;
+    let url = app.item_url(id(&item)).await?;
+
+    // Act
+    move_item(&app, &session, &url, &item["version"], &to).await?;
+    let old = get(&app, &session, &url).await?;
+
+    // Assert
+    expect_that!(old.status, eq(StatusCode::OK));
+    expect_that!(id(&old.body), eq(&id(&item)));
+    expect_that!(old.body["key"], eq(&json!("m4n5p")));
+    expect_that!(old.body["heap_id"], eq(&json!(to)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn an_item_moves_to_a_heap_of_another_team_and_each_team_logs_its_side() -> Result<()> {
     // Arrange
     let w = across().await?;
@@ -1255,5 +1284,74 @@ async fn a_task_made_from_a_note_that_moved_away_shows_only_to_readers_of_its_te
     // Assert
     expect_that!(by_ada.body["became"].as_array().map(Vec::len), some(eq(1)));
     expect_that!(by_bob.body["became"].as_array().map(Vec::len), some(eq(0)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_key_a_new_item_draws_later_leads_to_the_new_item() -> Result<()> {
+    // Arrange: the moved item had k3x9a in the source heap, and a new item draws it there.
+    let random = Arc::new(ScriptedRandom::default());
+    let app = TestApp::start_with_random(random.clone()).await?;
+    let (session, from) = app.register("ada@example.test").await?;
+    let to = new_heap(&app, &session, &from, "Agent work").await?;
+    for key in ["k3x9a", "k3x9a"] {
+        random.push(bytes_of(key));
+    }
+    let item = app.new_item(&session, &from, json!({ "title": "Mine" })).await?;
+    let url = app.item_url(id(&item)).await?;
+    move_item(&app, &session, &url, &item["version"], &to).await?;
+
+    // Act
+    let newer = app.new_item(&session, &from, json!({ "title": "Newer" })).await?;
+    let old = get(&app, &session, &url).await?;
+
+    // Assert
+    expect_that!(newer["key"], eq(&json!("k3x9a")));
+    expect_that!(old.status, eq(StatusCode::OK));
+    expect_that!(id(&old.body), eq(&id(&newer)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_moved_twice_is_found_by_every_former_path() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let third = new_heap(&w.app, &w.session, &w.from, "Third").await?;
+    let first_url = w.item_url().await?;
+    let moved = w.moved().await?;
+    let second_url = w.app.item_url(id(&w.item)).await?;
+    move_item(&w.app, &w.session, &second_url, &moved.body["version"], &third).await?;
+
+    // Act
+    let from_first = get(&w.app, &w.session, &first_url).await?;
+    let from_second = get(&w.app, &w.session, &second_url).await?;
+
+    // Assert
+    for found in [&from_first, &from_second] {
+        expect_that!(found.status, eq(StatusCode::OK));
+        expect_that!(id(&found.body), eq(&id(&w.item)));
+        expect_that!(found.body["heap_id"], eq(&json!(third)));
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_old_path_after_a_move_to_another_team_leads_only_those_in_that_team() -> Result<()> {
+    // Arrange
+    let w = across().await?;
+    let old_url = w.item_url().await?;
+    w.moved().await?;
+
+    // Act
+    let by_ada = get(&w.app, &w.ada, &old_url).await?;
+    let by_bob = get(&w.app, &w.bob, &old_url).await?;
+
+    // Assert
+    expect_that!(by_ada.status, eq(StatusCode::OK));
+    expect_that!(by_ada.body["heap_id"], eq(&json!(w.to)));
+    expect_that!(by_bob.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }

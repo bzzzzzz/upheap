@@ -99,10 +99,10 @@ rest of the line shows as written.
 
 Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
-| Width                | Navigation                                                                                                                                                                                                                | List                                                     | Item                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                       | Full width, compact rows                                 | Bottom sheet over the list                            |
-| Tablet, 640–1023 px  | An 80 px rail: Waiting, Agents, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                            | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Width                | Navigation                                                                                                                                                                                                                                               | List                                                     | Item                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                                                      | Full width, compact rows                                 | Bottom sheet over the list                            |
+| Tablet, 640–1023 px  | An 80 px rail: Waiting, Agents, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                                              | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
 | Wide, 1024 px and up | Sidebar: Waiting for me, Agents and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
 **More** on a phone holds Closed, Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
@@ -374,8 +374,15 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
    there whenever it holds something, and holds, each only when the server allows it and in this order: the other state
    changes, Won't do, Make it a task…, Change blocker… and Add reason… (Change reason… once one is set) on a blocked
-   item, and the Stage choices. With none of them, as for a reader's item, an archived heap's or a closed item, there
+   item, the Stage choices, and last, in a section of its own, Move to another heap…, when the team has another heap
+   that isn't archived. With none of them, as for a reader's item, an archived heap's or a closed item, there
    is no ⋯.
+   Move to another heap… opens "Move to" under ⋯ (a sheet on a phone): the item's own team's heaps that aren't
+   archived, the item's own marked "(here)" and disabled, with a search field from 8 heaps and no New heap. A pick
+   asks first, "Move to <Heap>?" and "Tags it doesn't have there are dropped.", with Cancel and Move; it can't be
+   closed while it saves. The item then opens in its new heap with the address replaced, so Back doesn't return to the
+   old one, also from All items, and a toast says "Moved to <Heap>." and, when the new heap already had its key, the
+   key it got. There's no Undo, as the tags can't come back. A refusal shows in the picker, above the buttons.
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
    a popover (a sheet on a phone) and saves on a pick. Make it a task asks first, naming the item, since a task can't
    go back to a note (or to a reminder). A reminder has an exact Date in place of Due (point 16), which can be moved,
@@ -422,7 +429,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Unblock; a stuck turn comes next (see Waiting for me, 7), with Retry and Take back. When questions wait, one line says "1 question waits for you" or "N questions wait for you", with
     **Answer ↓** on its right: it scrolls the first open question into view and focuses its first control. The reply
     controls are not here but in Questions (point 13).
-13. **Questions** is a section under the Steps, shown when the item has any question, under the heading "Questions".
+13. **Questions** is a section under the Steps, shown when the item has any question, or is open and the person may ask one (see **Ask a question** below), under the heading "Questions".
     The open questions come first, in the same tinted, outlined box, one row each in number order, separated by a thin
     rule: a quiet line with the kind ("Question", "Request", "Question · pick any", "Review, round N", "Ready to close") and `· step "<title>"` when it
     names one, the short text in semibold, "Details ▸" when it has details (opening them in place), then the reply
@@ -438,6 +445,22 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     row leaves and the section says "Someone else replied to “…” meanwhile." until the next reply. In an archived
     heap a row shows its text and details with no controls. A closed item has no open rows: closing withdrew its open
     questions, which read in the fold as "Withdrawn".
+    **Ask a question** ends the section, after the fold, as a quiet text button with a plus, on an open item in an
+    unarchived heap for a member (no button for a viewer, a closed item or an archived heap); with no questions the
+    section is only its heading and the button, and on a phone the button spans the width. It opens a form in place,
+    at every width, with the focus in the Question field: **Kind** (Question or Request), a one-line **Question** field
+    ("What to do" for a request) of 1 to 300 characters with a counter from 250, **Details, optional** as Markdown
+    text up to 20,000 characters with a counter from 19,000, and for a question **Answer**: In words, Pick one or
+    Pick any. Pick one and Pick any show choice fields, two to begin with, with **Add a choice** up to ten, a ×
+    on each when there are more than two, and Enter in a field adding the next one rather than sending; blank fields
+    are left out, and two choices equal ignoring case say "Two choices are the same." On a task with steps that are
+    not dropped, **About a step** picks one, "No step" to begin with. Switching Kind keeps what was typed. **Ask** is
+    off until the text, the details and the choices fit, and while sending; **Cancel** closes the form and drops the
+    draft. On a phone Ask is over Cancel, each the full width. After asking nothing shows ahead of the server: the row
+    joins the box, Waits for you appears, the form closes, the focus returns to the button, and a polite live region
+    says Asked “<text>”. Escape closes the form while nothing is typed; with a draft it does nothing, and the item
+    stays open. If it fails the form stays with its draft and the reason shows under it (an item closed meanwhile
+    says "The item was closed meanwhile.").
 14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
     withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>` on its line, the comment below it as Markdown text (see Toolkit; with no picks, the comment alone); a review also shows its link and piece under the text, and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
     and all are withdrawn. On an open item each answered question has **Change reply** under its reply (none for a

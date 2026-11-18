@@ -15,6 +15,7 @@ import { api, ApiProblem, ensureOk, unwrap, type AcrossHeapsQuery, type HeapRef,
 import type {
   AddCommentRequest,
   AddStepRequest,
+  AskQuestionRequest,
   ClientSignIn,
   CreateItemRequest,
   CreateParameterRequest,
@@ -357,6 +358,42 @@ export function useUpdateItem(heap: HeapRef) {
 }
 
 /**
+ * Moves an item to another heap of its team, `to`. It runs in the item edits' scope and sends the newest version it
+ * knows of, as `useUpdateItem` does. The saved item is written under its new heap's key (it may have a new key there),
+ * and both heaps and the open counts are fetched again, whatever the outcome. Nothing waits for those fetches, so the
+ * app can go to the item's new address at once; after a move the old address isn't fetched again, as its pane is
+ * still open until then and would say the item doesn't exist.
+ */
+export function useMoveItem(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    scope: { id: "item-edits" },
+    mutationFn: async ({ item, to }: { item: Item; to: HeapRef & { id: string } }) => {
+      const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
+      return unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/move", {
+          params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${version}"` } },
+          body: { heap_id: to.id },
+        }),
+      );
+    },
+    onSuccess: (saved, { to }) => queryClient.setQueryData(itemKey(to, saved.key), saved),
+    onSettled: (saved, _error, { item, to }) => {
+      invalidateOpenCounts(queryClient);
+      const gone = itemKey(heap, item.key);
+      const isGone = (key: readonly unknown[]) => saved !== undefined && gone.every((part, i) => key[i] === part);
+      for (const queryKey of [rankedKey(heap), rankedKey(to), closedKey(heap), closedKey(to)]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
+      void queryClient.invalidateQueries({ queryKey: ["item"], predicate: (query) => !isGone(query.queryKey) });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void queryClient.invalidateQueries({ queryKey: decisionsKey });
+    },
+  });
+}
+
+/**
  * The scope that makes one item's step writes run one at a time (ux.md, The item): a tick followed quickly by a title
  * edit doesn't conflict with itself, as each waits for the one before and sends the newest version it left behind.
  */
@@ -431,6 +468,36 @@ export function useUpdateStep(heap: HeapRef, taskKey: string) {
     },
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     onSettled: () => invalidateHeap(queryClient, heap),
+  });
+}
+
+/**
+ * Asks a question or a request on the item `itemId` (its key). Not optimistic: the item the server returns, with the
+ * question on it and the item waiting, is written into the cache. A failure fetches the item again, since it may have
+ * been closed or its heap archived meanwhile, which takes the offer to ask away. The lists say which items wait for you,
+ * and Waiting for me what does, so they are fetched again.
+ */
+export function useAskQuestion(heap: HeapRef, itemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: AskQuestionRequest) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions", {
+          params: { path: { ...heap, item: itemId } },
+          body,
+        }),
+      ),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
   });
 }
 
