@@ -216,7 +216,7 @@ impl Services {
             tracing::info!("sign-in rejected");
             return Err(ServiceError::InvalidCredentials);
         };
-        let grant = self.open_session(&self.db, user, self.now()).await?;
+        let grant = self.open_session(&self.db, user, self.now(), None).await?;
         // The session exists by now, so failing to clear the count mustn't fail the sign-in; the count then just
         // runs out with its window.
         if let Some(key) = &attempts_key
@@ -367,7 +367,7 @@ impl Services {
         }
         store::oauth::expire_user_auth_codes(&txn, user.id, now).await?;
         store::sessions::delete_user_sessions(&txn, user.id).await?;
-        let session = self.open_session(&txn, user.clone(), now).await?;
+        let session = self.open_session(&txn, user.clone(), now, None).await?;
         store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
         let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(&txn, user.id, now).await?;
         let ended_sign_ins = ended_sign_ins.saturating_add(u32::try_from(revoked_tokens).unwrap_or(u32::MAX));
@@ -407,9 +407,19 @@ impl Services {
     }
 
     /// Ends the session. Ending an unknown session succeeds.
-    pub async fn sign_out(&self, token: &SessionToken) -> Result<(), ServiceError> {
-        store::sessions::delete_session(&self.db, &token.to_hash()).await?;
-        Ok(())
+    ///
+    /// Returns the URL that ends the person's session at the provider too, when provider logout is on, the session
+    /// kept an ID token and the provider names an end session endpoint. The session is gone before the provider is
+    /// asked, and the provider failing only means `None`.
+    pub async fn sign_out(&self, token: &SessionToken) -> Result<Option<String>, ServiceError> {
+        let id_token = store::sessions::delete_session(&self.db, &token.to_hash()).await?;
+        let (Some(oidc), Some(id_token)) = (&self.settings.oidc, id_token) else {
+            return Ok(None);
+        };
+        if !oidc.provider_logout() {
+            return Ok(None);
+        }
+        Ok(crate::oidc::provider_logout_url(oidc, &id_token).await)
     }
 
     /// Makes the account inside the caller's transaction: the user with their personal team and first heap, their
@@ -432,7 +442,7 @@ impl Services {
             )
             .await?;
         store::users::insert_password(txn, made.user.id, &account.password_hash, now).await?;
-        let grant = self.open_session(txn, made.user, now).await?;
+        let grant = self.open_session(txn, made.user, now, None).await?;
         Ok((grant, made.team, made.heap))
     }
 
@@ -441,12 +451,13 @@ impl Services {
         db: &impl store::ConnectionTrait,
         user: User,
         now: Timestamp,
+        id_token: Option<&str>,
     ) -> Result<SessionGrant, ServiceError> {
         let token = SessionToken::generate();
         let expires_at = now
             .checked_add(self.settings.session_ttl)
             .ok_or(ServiceError::Invalid(domain::ValidationError::TimestampOutOfRange))?;
-        store::sessions::insert_session(db, &token.to_hash(), user.id, now, expires_at).await?;
+        store::sessions::insert_session(db, &token.to_hash(), user.id, now, expires_at, id_token).await?;
         Ok(SessionGrant {
             token,
             user,

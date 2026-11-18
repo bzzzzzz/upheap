@@ -188,7 +188,7 @@ impl Services {
         store::users::set_password(&txn, user.id, &new_hash, now).await?;
         store::oauth::expire_user_auth_codes(&txn, user.id, now).await?;
         store::sessions::delete_user_sessions(&txn, user.id).await?;
-        let session = self.open_session(&txn, user.clone(), now).await?;
+        let session = self.open_session(&txn, user.clone(), now, None).await?;
         store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
         let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(&txn, user.id, now).await?;
         let ended_sign_ins = ended_sign_ins.saturating_add(u32::try_from(revoked_tokens).unwrap_or(u32::MAX));

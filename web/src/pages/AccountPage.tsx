@@ -80,7 +80,15 @@ export function AccountPage() {
             <button
               type="button"
               disabled={signOut.isPending}
-              onClick={() => signOut.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })}
+              onClick={() =>
+                signOut.mutate(undefined, {
+                  onSuccess: (signedOut) => {
+                    // The provider ends its session, and sends the person back to /login.
+                    if (signedOut?.provider_logout_url) window.location.assign(signedOut.provider_logout_url);
+                    else void navigate({ to: "/login" });
+                  },
+                })
+              }
               className={compactButtonClass.borderedDanger}
             >
               Sign out

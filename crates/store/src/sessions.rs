@@ -1,6 +1,9 @@
 //! Web sign-in sessions. Only a hash of each session token is stored.
 //!
 //! Sessions are authentication plumbing, not domain data, so ending one deletes its row.
+//!
+//! A session opened through an OpenID Connect provider may keep the raw ID token, which signing out sends back to the
+//! provider as a hint. It can't sign anyone in to Upheap, so it is stored as it is.
 
 use domain::{Timestamp, UserId};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter};
@@ -15,12 +18,14 @@ pub async fn insert_session(
     user_id: UserId,
     created_at: Timestamp,
     expires_at: Timestamp,
+    id_token: Option<&str>,
 ) -> Result<(), StoreError> {
     let row = sessions::ActiveModel {
         token_hash: Set(token_hash.to_owned()),
         user_id: Set(id_to_db(user_id.as_uuid())),
         created_at: Set(created_at.as_millis()),
         expires_at: Set(expires_at.as_millis()),
+        id_token: Set(id_token.map(str::to_owned)),
     };
     sessions::Entity::insert(row).exec_without_returning(db).await?;
     Ok(())
@@ -88,8 +93,12 @@ pub async fn delete_user_sessions(db: &impl ConnectionTrait, user_id: UserId) ->
     Ok(result.rows_affected)
 }
 
-/// Ends a session. Ending a session that doesn't exist succeeds.
-pub async fn delete_session(db: &impl ConnectionTrait, token_hash: &str) -> Result<(), StoreError> {
+/// Ends a session and returns the ID token it kept, if any. Ending a session that doesn't exist succeeds and returns
+/// `None`.
+pub async fn delete_session(db: &impl ConnectionTrait, token_hash: &str) -> Result<Option<String>, StoreError> {
+    let Some(row) = sessions::Entity::find_by_id(token_hash.to_owned()).one(db).await? else {
+        return Ok(None);
+    };
     sessions::Entity::delete_by_id(token_hash.to_owned()).exec(db).await?;
-    Ok(())
+    Ok(row.id_token)
 }
