@@ -540,9 +540,10 @@ push the same groups whenever they change, so there can be two answers, and the 
 already speaks.
 
 **Decision.** With a SCIM token set, a person the provider has pushed is synced from the pushed record, at each push
-and at sign-in; the token's groups count only for someone with no pushed record. The endpoints live at `/scim/v2`,
-answer in SCIM's own JSON and errors, and are not part of `openapi.json`. A pushed user is linked to an account by
-`externalId` as the OIDC subject, never by email, and a push never makes an account.
+and at sign-in; the token's groups count only for someone with no pushed record, and for a team the provider hasn't
+pushed every group of. The endpoints live at `/scim/v2`, answer in SCIM's own JSON and errors, and are not part of
+`openapi.json`. A pushed user is linked to an account by `externalId` as the OIDC subject, never by email, and a push
+never makes an account.
 
 **Instead of.** Applying the token and the pushes each as they come, which makes the outcome depend on timing.
 Putting SCIM under `/api/v1` in Upheap's own shapes, which no provider speaks. Making an account for each pushed
