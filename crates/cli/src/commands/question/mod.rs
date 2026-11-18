@@ -1,6 +1,7 @@
 //! The question commands: their args and flows, and what they share.
 
 pub mod ask;
+pub mod list;
 pub mod reply;
 
 use api_types::common::ItemDto;

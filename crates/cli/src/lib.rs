@@ -237,6 +237,9 @@ enum StepCommand {
 
 #[derive(Subcommand)]
 enum QuestionCommand {
+    /// List the questions, requests, reviews and done proposals that wait for you, across your heaps, most important
+    /// first
+    List(commands::question::list::ListArgs),
     /// Ask a question on an item, to be answered in free text or by picking a choice
     Ask(commands::question::ask::AskArgs),
     /// Ask for something to do on an item; it is replied to with Done or Can't be done
@@ -368,6 +371,7 @@ impl Command {
             Self::Step(StepCommand::Add(args)) => &args.shared,
             Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args)) => &args.shared,
             Self::Step(StepCommand::Edit(args)) => &args.shared,
+            Self::Question(QuestionCommand::List(args)) => &args.shared,
             Self::Question(QuestionCommand::Ask(args)) => &args.shared,
             Self::Question(QuestionCommand::Request(args)) => &args.shared,
             Self::Question(QuestionCommand::Review(args)) => &args.shared,
@@ -530,6 +534,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,
         Command::Step(StepCommand::Drop(args)) => run_step_verb(StepVerb::Drop, args, app, out).await,
         Command::Step(StepCommand::Edit(args)) => commands::step::edit::run(args, app, out).await,
+        Command::Question(QuestionCommand::List(args)) => commands::question::list::run_list(args, app, out).await,
         Command::Question(QuestionCommand::Ask(args)) => commands::question::ask::run_ask(args, app, out).await,
         Command::Question(QuestionCommand::Request(args)) => commands::question::ask::run_request(args, app, out).await,
         Command::Question(QuestionCommand::Review(args)) => commands::question::ask::run_review(args, app, out).await,
