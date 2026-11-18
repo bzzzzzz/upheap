@@ -231,12 +231,17 @@ enum StepCommand {
     Tick(commands::step::state::StepArgs),
     /// Drop a step: it stays, shown as dropped
     Drop(commands::step::state::StepArgs),
+    /// Reopen a ticked or dropped step: put it back to open
+    Reopen(commands::step::state::StepArgs),
     /// Change a step's title or context
     Edit(commands::step::edit::EditArgs),
 }
 
 #[derive(Subcommand)]
 enum QuestionCommand {
+    /// List the questions, requests, reviews and done proposals that wait for you, across your heaps, most important
+    /// first
+    List(commands::question::list::ListArgs),
     /// Ask a question on an item, to be answered in free text or by picking a choice
     Ask(commands::question::ask::AskArgs),
     /// Ask for something to do on an item; it is replied to with Done or Can't be done
@@ -366,8 +371,9 @@ impl Command {
             Self::Item(ItemCommand::Send(args)) => &args.shared,
             Self::Item(ItemCommand::TakeBack(args)) => &args.shared,
             Self::Step(StepCommand::Add(args)) => &args.shared,
-            Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args)) => &args.shared,
+            Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args) | StepCommand::Reopen(args)) => &args.shared,
             Self::Step(StepCommand::Edit(args)) => &args.shared,
+            Self::Question(QuestionCommand::List(args)) => &args.shared,
             Self::Question(QuestionCommand::Ask(args)) => &args.shared,
             Self::Question(QuestionCommand::Request(args)) => &args.shared,
             Self::Question(QuestionCommand::Review(args)) => &args.shared,
@@ -529,7 +535,9 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Step(StepCommand::Add(args)) => commands::step::add::run(args, app, out).await,
         Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,
         Command::Step(StepCommand::Drop(args)) => run_step_verb(StepVerb::Drop, args, app, out).await,
+        Command::Step(StepCommand::Reopen(args)) => run_step_verb(StepVerb::Reopen, args, app, out).await,
         Command::Step(StepCommand::Edit(args)) => commands::step::edit::run(args, app, out).await,
+        Command::Question(QuestionCommand::List(args)) => commands::question::list::run_list(args, app, out).await,
         Command::Question(QuestionCommand::Ask(args)) => commands::question::ask::run_ask(args, app, out).await,
         Command::Question(QuestionCommand::Request(args)) => commands::question::ask::run_request(args, app, out).await,
         Command::Question(QuestionCommand::Review(args)) => commands::question::ask::run_review(args, app, out).await,

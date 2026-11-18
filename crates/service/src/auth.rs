@@ -359,20 +359,13 @@ impl Services {
         {
             return Err(ServiceError::Unauthenticated);
         }
-        let live_sessions = store::sessions::count_live_sessions_except(&txn, user.id, &old_hash, now).await?;
-        let live_clients = store::oauth::list_live_token_families(&txn, user.id, now).await?.len();
-        let ended_sign_ins = u32::try_from(live_sessions.saturating_add(live_clients as u64)).unwrap_or(u32::MAX);
         // Only while the stored hash is the one `current` was verified against. If another change got in first,
         // the password the caller gave is no longer the current one, which is what `WrongPassword` says.
         if !store::users::update_password(&txn, user.id, &stored_hash, &new_hash, now).await? {
             return Err(ServiceError::WrongPassword);
         }
-        store::oauth::expire_user_auth_codes(&txn, user.id, now).await?;
-        store::sessions::delete_user_sessions(&txn, user.id).await?;
+        let ended_sign_ins = self.end_sign_ins(&txn, user.id, Some(&old_hash), now).await?;
         let session = self.open_session(&txn, user.clone(), now).await?;
-        store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
-        let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(&txn, user.id, now).await?;
-        let ended_sign_ins = ended_sign_ins.saturating_add(u32::try_from(revoked_tokens).unwrap_or(u32::MAX));
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
             principal,
@@ -460,12 +453,41 @@ impl Services {
         Ok((grant, made.team, made.heap))
     }
 
+    /// Ends every sign-in of the account in the caller's transaction: its web sessions, its OAuth token families and
+    /// open authorization codes, and its personal tokens. Returns how many sign-ins were live: sessions, OAuth token
+    /// families and personal tokens. The session whose hash is `own_session` is ended too, but isn't counted: it is the
+    /// caller's, who is told a new one is open.
+    pub(crate) async fn end_sign_ins(
+        &self,
+        txn: &impl store::ConnectionTrait,
+        user_id: domain::UserId,
+        own_session: Option<&str>,
+        now: Timestamp,
+    ) -> Result<u32, ServiceError> {
+        let live_sessions = match own_session {
+            Some(hash) => store::sessions::count_live_sessions_except(txn, user_id, hash, now).await?,
+            None => store::sessions::count_live_sessions(txn, user_id, now).await?,
+        };
+        let live_clients = store::oauth::list_live_token_families(txn, user_id, now).await?.len() as u64;
+        store::oauth::expire_user_auth_codes(txn, user_id, now).await?;
+        store::sessions::delete_user_sessions(txn, user_id).await?;
+        store::oauth::revoke_user_token_families(txn, user_id, now).await?;
+        let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(txn, user_id, now).await?;
+        let ended = live_sessions
+            .saturating_add(live_clients)
+            .saturating_add(revoked_tokens);
+        Ok(u32::try_from(ended).unwrap_or(u32::MAX))
+    }
+
+    /// Opens a session for the user, the one place every sign-in, registration and password reset does. Refuses with
+    /// [`ServiceError::AccountDeactivated`] when the provider has deactivated the person (see [`crate::scim`]).
     pub(crate) async fn open_session(
         &self,
         db: &impl store::ConnectionTrait,
         user: User,
         now: Timestamp,
     ) -> Result<SessionGrant, ServiceError> {
+        self.refuse_deactivated(db, user.id).await?;
         let token = SessionToken::generate();
         let expires_at = now
             .checked_add(self.settings.session_ttl)

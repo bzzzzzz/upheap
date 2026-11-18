@@ -13,6 +13,7 @@ use crate::heaps::HeapDto;
 #[serde(rename_all = "snake_case")]
 #[schema(as = TeamAction)]
 pub enum TeamActionDto {
+    /// Not offered on a personal team, which is shown by its owner's name.
     Rename,
     /// Not offered on a personal team, whose slug is its owner's username.
     ChangeSlug,
@@ -141,7 +142,7 @@ pub struct AddMemberDto {
 #[derive(Deserialize, ToSchema)]
 #[schema(as = TeamPatchRequest)]
 pub struct TeamPatchDto {
-    /// 1 to 100 characters.
+    /// 1 to 100 characters. A new name is refused with `personal_team` on a personal team.
     pub name: Option<String>,
     /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Refused with
     /// `personal_team` on a personal team. Links with the old slug stop working.

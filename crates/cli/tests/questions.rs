@@ -920,3 +920,166 @@ async fn item_show_reads_a_review_by_round_and_outcome_and_a_proposal_by_agreeme
     expect_that!(shown.stdout, contains_substring("→ Changes asked \"Redo the corner.\""));
     Ok(())
 }
+
+fn title(item: &Value) -> Result<&str> {
+    item["title"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("an item without a title"))
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_list_shows_each_question_with_how_to_reply_in_the_servers_order() -> Result<()> {
+    // Arrange
+    let (server, ada, items, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(
+        &cli,
+        &task,
+        "Which CA do we use?",
+        &["Internal", "Let's Encrypt"],
+        false,
+    )
+    .await;
+    ask(&cli, &task, "Which names?", &["a.example", "b.example"], true).await;
+    ask(&cli, &task, "Anything else?", &[], false).await;
+    let title = title(&items[0])?;
+
+    // Act
+    let outcome = cli.run(&["question", "list"]).await;
+
+    // Assert
+    let expected = format!(
+        "ada/personal/{task}.q1  Question · {title}\n  Which CA do we use?\n  Pick one: 1 Internal · 2 Let's Encrypt\n\
+         ada/personal/{task}.q2  Question · {title}\n  Which names?\n  Pick any: 1 a.example · 2 b.example\n\
+         ada/personal/{task}.q3  Question · {title}\n  Anything else?\n  Free text: reply with --comment\n"
+    );
+    expect_that!(outcome.stdout, eq(&expected));
+    expect_that!(outcome.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_list_shows_a_reviews_link_and_choices() -> Result<()> {
+    // Arrange
+    let (_server, _ada, cli, task) = task_in_a_done_run().await?;
+    assert!(
+        cli.run(&["question", "review", &task, PR, "Is the install right?"])
+            .await
+            .exited(0)
+    );
+
+    // Act
+    let outcome = cli.run(&["question", "list"]).await;
+
+    // Assert
+    expect_that!(
+        outcome.stdout.as_str(),
+        contains_substring(format!("ada/personal/{task}.q1  Review, round 1 · "))
+    );
+    expect_that!(
+        outcome.stdout.as_str(),
+        contains_substring(format!(
+            "\n  {PR}\n  Is the install right?\n  Pick one: 1 Approved · 2 Changes asked\n"
+        ))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_list_quiet_prints_names_that_question_reply_takes_without_a_heap() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &["Internal", "Let's Encrypt"], false).await;
+    let name = format!("ada/personal/{task}.q1");
+    let no_heap = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let quiet = cli.run(&["question", "list", "-q"]).await;
+    let replied = no_heap.run(&["question", "reply", &name, "--pick", "1"]).await;
+
+    // Assert
+    expect_that!(quiet.stdout, eq(&format!("{name}\n")));
+    expect_that!(replied.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_list_json_prints_the_servers_body() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &[], false).await;
+
+    // Act
+    let outcome = cli.run(&["question", "list", "--json"]).await;
+
+    // Assert
+    let body: Value = serde_json::from_str(&outcome.stdout)?;
+    expect_that!(body["rows"][0]["question"]["number"], eq(1));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_list_says_when_nothing_waits() -> Result<()> {
+    // Arrange
+    let (server, ada, _, _) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let outcome = cli.run(&["question", "list"]).await;
+
+    // Assert
+    expect_that!(outcome.stdout, eq("Nothing waits for you.\n"));
+    expect_that!(outcome.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_list_with_a_heap_keeps_only_that_heaps_questions() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    ask(&cli, &task, "Which CA?", &[], false).await;
+
+    server
+        .send(&ada, "POST", "/teams/ada/heaps", Some(json!({ "name": "Ops" })))
+        .await?;
+    let ops = server
+        .add_item(&ada, "ada/ops", json!({ "title": "Patch the hosts" }))
+        .await?;
+    let ops_key = key(&ops)?.to_owned();
+    cli.run(&["question", "ask", &format!("ada/ops/{ops_key}"), "Which hosts?"])
+        .await;
+
+    // Act
+    let all = cli.run(&["question", "list", "-q"]).await;
+    let here = cli.run(&["question", "list", "--heap", "ada/personal", "-q"]).await;
+    let bare = cli.run(&["question", "list", "--heap", "ops", "-q"]).await;
+    let unknown = cli.run(&["question", "list", "--heap", "ada/opps"]).await;
+    cli.run(&[
+        "question",
+        "reply",
+        &format!("ada/ops/{ops_key}.q1"),
+        "--comment",
+        "All",
+    ])
+    .await;
+    let emptied = cli.run(&["question", "list", "--heap", "ada/ops"]).await;
+
+    // Assert: the default heap, ada/personal, doesn't narrow the list.
+    expect_that!(all.stdout, contains_substring(format!("ada/personal/{task}.q1\n")));
+    expect_that!(all.stdout, contains_substring(format!("ada/ops/{ops_key}.q1\n")));
+    expect_that!(here.stdout, eq(&format!("ada/personal/{task}.q1\n")));
+    expect_that!(bare.stdout, eq(&format!("ada/ops/{ops_key}.q1\n")));
+    expect_that!(unknown.exited(3), eq(true));
+    expect_that!(unknown.stderr, contains_substring("you have no heap `ada/opps`"));
+    expect_that!(emptied.stdout, eq("Nothing waits for you in ada/ops.\n"));
+    Ok(())
+}

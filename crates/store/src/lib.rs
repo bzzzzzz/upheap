@@ -24,6 +24,7 @@ pub mod personal_tokens;
 pub mod questions;
 pub mod runs;
 pub mod saved_views;
+pub mod scim;
 pub mod sessions;
 pub mod sign_in_attempts;
 pub mod steps;

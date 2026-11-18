@@ -405,6 +405,31 @@ async fn three_failed_runs_make_item_show_say_the_turn_is_stuck() -> Result<()> 
 
 #[gtest]
 #[tokio::test]
+async fn question_list_counts_a_stuck_turn_it_does_not_list() -> Result<()> {
+    // Arrange
+    let (_server, _ada, mut cli, _note) = with_prepared_note().await?;
+    for _ in 0..3 {
+        let claimed = cli.run(&["work", "claim", "--quiet"]).await;
+        cli.env.run = Some(claimed.stdout.trim().to_owned());
+        cli.run(&["work", "finish", "--failure", "The tool crashed"]).await;
+        cli.env.run = None;
+    }
+
+    // Act
+    let listed = cli.run(&["question", "list"]).await;
+
+    // Assert
+    expect_that!(
+        listed.stdout,
+        eq(
+            "No questions wait for you.\nAlso waiting, on the web app's Waiting for me page: 1 more, such as stuck turns.\n"
+        )
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_next_item_that_was_started_says_so() -> Result<()> {
     // Arrange: one failed run, so the turn has had a run.
     let (_server, _ada, mut cli, _note) = with_prepared_note().await?;

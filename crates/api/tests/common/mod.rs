@@ -117,6 +117,7 @@ fn test_settings(allow_registration: bool) -> Settings {
         sign_in_limit: SignInLimit::DEFAULT,
         oidc: None,
         group_teams: GroupTeams::default(),
+        scim: None,
     }
 }
 
@@ -182,6 +183,26 @@ impl TestApp {
         Ok(self.with_settings(Settings {
             oidc: Some(oidc),
             group_teams,
+            ..test_settings(false)
+        }))
+    }
+
+    /// [`TestApp::with_oidc_groups`], with the provider's SCIM client let in by `scim_token`.
+    pub async fn with_scim_groups(
+        &self,
+        oidc: service::oidc::OidcSettings,
+        mapping: &[(&str, &[&str])],
+        scim_token: &str,
+    ) -> Result<TestApp> {
+        let configured: Vec<(String, Vec<String>)> = mapping
+            .iter()
+            .map(|(slug, groups)| ((*slug).to_owned(), groups.iter().map(|g| (*g).to_owned()).collect()))
+            .collect();
+        let group_teams = service::group_teams::resolve_group_teams(&self.db, &configured).await?;
+        Ok(self.with_settings(Settings {
+            oidc: Some(oidc),
+            group_teams,
+            scim: Some(service::scim::ScimSettings::new(scim_token, oidc::APP_URL)),
             ..test_settings(false)
         }))
     }

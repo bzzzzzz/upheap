@@ -72,6 +72,7 @@ fn build_services(config: &Config, group_teams: GroupTeams, db: store::DatabaseC
             sign_in_limit: domain::sign_in::SignInLimit::DEFAULT,
             oidc: config.oidc.clone(),
             group_teams,
+            scim: config.scim.clone(),
         },
     );
     match &config.mail {

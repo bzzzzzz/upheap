@@ -45,7 +45,7 @@ const nameFormClasses: NameFormClasses = {
 
 /**
  * A team's heaps and members, by its slug `team` (S-team: WideTeam, PhoneTeam). What each person can change comes from
- * `allowed_actions`, so a personal team shows no member controls and no link name.
+ * `allowed_actions`, so a personal team shows no member controls, no link name and no Rename.
  */
 export function TeamPage({ team: slug }: { team: string }) {
   const team = useTeam(slug);
@@ -134,8 +134,7 @@ function TeamHeader({ team }: { team: Team }) {
             </Button>
             <MenuPopover placement="bottom start">
               <Menu aria-label={`More for ${label}`} className="outline-none" onAction={act}>
-                {/* A team shown as "<name>'s team" whatever it is stored as: renaming it would change nothing. */}
-                {can("rename") && !team.personal ? <MenuEntry id="rename">Rename</MenuEntry> : null}
+                {can("rename") ? <MenuEntry id="rename">Rename</MenuEntry> : null}
                 {can("change_slug") ? <MenuEntry id="slug">Link name</MenuEntry> : null}
                 <MenuEntry id="activity">Activity</MenuEntry>
                 <MenuEntry id="data">Data</MenuEntry>

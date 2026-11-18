@@ -104,7 +104,8 @@ What it is not:
     command on the server.
 11. The operator can also let the provider push its changes (SCIM). Then a change to a person's groups at the
     provider adds them to or takes them out of the group-managed teams at once, and a person the provider
-    deactivates leaves every group-managed team, without waiting for a sign-in. A push never makes an account.
+    deactivates leaves every group-managed team, without waiting for a sign-in, and loses access to Upheap until the
+    provider turns them back on. A push never makes an account.
 
 ## Invite links
 

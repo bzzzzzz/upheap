@@ -116,8 +116,9 @@ pub fn read_groups(id_token: &str, claim: &str) -> Groups {
 
 impl Services {
     /// Brings `user_id`'s memberships in the group-managed teams in line with `groups`, in the caller's transaction.
-    /// Teams are locked in ID order, so two sign-ins never wait for each other in a cycle. Nothing happens for
-    /// [`Groups::Unknown`], and nothing is read when no team is mapped.
+    /// The caller has locked the teams first ([`Services::lock_group_teams`]) and holds the lock until the
+    /// transaction ends, before it reads anything the sync depends on. Only the mapped teams in `teams` are synced, or all
+    /// of them for `None`. Nothing happens for [`Groups::Unknown`], and nothing is read when no team is mapped.
     ///
     /// A person in one of the team's groups who isn't a member joins as a member. A member in none of them leaves,
     /// whatever their role, even as the last admin: the team then shows it has no admin. Each change has an audit
@@ -127,24 +128,17 @@ impl Services {
         txn: &impl ConnectionTrait,
         user_id: UserId,
         groups: &Groups,
+        teams: Option<&BTreeSet<TeamId>>,
         now: Timestamp,
     ) -> Result<(), ServiceError> {
         let Groups::Known(groups) = groups else {
             return Ok(());
         };
         let principal = Principal { user_id, run: None };
-        // Every team is locked, in ID order, before anything is read. On MySQL the first plain read of a transaction
-        // fixes the snapshot that later plain reads see (see `lock_team_for`), so a membership read between two locks
-        // would miss what committed while the next lock waited. The IDs were resolved at startup and teams are never
-        // deleted, so a team the lock doesn't find is a broken database.
-        for (team_id, _) in self.settings.group_teams.iter() {
-            if store::teams::lock_team(txn, team_id).await?.is_none() {
-                return Err(
-                    StoreError::corrupt("teams", &team_id.to_string(), "a group-managed team is missing").into(),
-                );
-            }
-        }
         for (team_id, mapped) in self.settings.group_teams.iter() {
+            if teams.is_some_and(|teams| !teams.contains(&team_id)) {
+                continue;
+            }
             let current = store::teams::find_membership(txn, team_id, user_id).await?;
             let matching: Vec<&String> = groups.iter().filter(|group| mapped.contains(group)).collect();
             match (matching.is_empty(), current) {
@@ -175,6 +169,22 @@ impl Services {
                     tracing::info!(%team_id, %user_id, "left a team: no longer in its provider groups");
                 }
                 _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Locks every group-managed team, in ID order, until the transaction ends. Teams are locked before anything is
+    /// read, so two writers of memberships never wait for each other in a cycle. On MySQL the first plain read of a
+    /// transaction fixes the snapshot that later plain reads see (see `lock_team_for`), so a membership read between
+    /// two locks would miss what committed while the next lock waited. The IDs were resolved at startup and teams are
+    /// never deleted, so a team the lock doesn't find is a broken database.
+    pub(crate) async fn lock_group_teams(&self, txn: &impl ConnectionTrait) -> Result<(), ServiceError> {
+        for (team_id, _) in self.settings.group_teams.iter() {
+            if store::teams::lock_team(txn, team_id).await?.is_none() {
+                return Err(
+                    StoreError::corrupt("teams", &team_id.to_string(), "a group-managed team is missing").into(),
+                );
             }
         }
         Ok(())
@@ -393,8 +403,9 @@ mod tests {
 
         // Act: Alex's groups no longer name Ops.
         let txn = db.begin().await?;
+        mapped.lock_group_teams(&txn).await?;
         mapped
-            .sync_group_teams(&txn, alex.user_id, &Groups::Known(BTreeSet::new()), mapped.now())
+            .sync_group_teams(&txn, alex.user_id, &Groups::Known(BTreeSet::new()), None, mapped.now())
             .await?;
         txn.commit().await?;
 
