@@ -183,6 +183,7 @@ impl TestServer {
                 sign_in_limit: SignInLimit::DEFAULT,
                 oidc: None,
                 group_teams: service::group_teams::GroupTeams::default(),
+                scim: None,
             },
         )
         .with_random(random);

@@ -20,6 +20,9 @@ const FOR_AGENTS: &str = include_str!("agents.txt");
 const SHARED_FLAGS: [&str; 3] = ["json", "quiet", "server"];
 /// The flag of [`crate::commands::HeapArgs`], shown once, with a mark on the commands that take it.
 const HEAP_FLAG: &str = "heap";
+/// The ids of the `--heap` flags that apply no default heap, such as `question list`'s, which narrows a list across
+/// heaps. Its command isn't marked, and lists the flag with its own help.
+const OWN_HEAP_FLAG_IDS: [&str; 1] = ["only_heap"];
 const HEAP_MARK: &str = " [heap]";
 
 #[derive(Args, Debug)]
@@ -57,7 +60,7 @@ pub(crate) fn render(root: &Command) -> String {
         lines.push("Every command that talks to the server takes".to_owned());
         lines.extend(rows(&shared, "  "));
     }
-    if let Some(heap) = verbs.iter().find_map(|verb| flag_of(verb, HEAP_FLAG)) {
+    if let Some(heap) = verbs.iter().find_map(|verb| heap_flag_of(verb)) {
         lines.push(format!("A command marked{HEAP_MARK} works in one heap, and takes"));
         lines.extend(rows(&[heap], "  "));
     }
@@ -71,7 +74,7 @@ pub(crate) fn render(root: &Command) -> String {
                 usage.push(' ');
                 usage.push_str(&label(input));
             }
-            if flag_of(verb, HEAP_FLAG).is_some() {
+            if heap_flag_of(verb).is_some() {
                 usage.push_str(HEAP_MARK);
             }
             lines.push(with_about(&usage, verb));
@@ -112,11 +115,20 @@ fn flag_of<'a>(command: &'a Command, long: &str) -> Option<&'a Arg> {
     command.get_arguments().find(|arg| arg.get_long() == Some(long))
 }
 
+fn heap_flag_of(command: &Command) -> Option<&Arg> {
+    command.get_arguments().find(|arg| is_heap_flag(arg))
+}
+
+fn is_heap_flag(arg: &Arg) -> bool {
+    arg.get_long() == Some(HEAP_FLAG) && !OWN_HEAP_FLAG_IDS.contains(&arg.get_id().as_str())
+}
+
 fn is_shown_once(arg: &Arg) -> bool {
     arg.is_hide_set()
+        || is_heap_flag(arg)
         || arg
             .get_long()
-            .is_some_and(|long| long == HEAP_FLAG || long == "help" || SHARED_FLAGS.contains(&long))
+            .is_some_and(|long| long == "help" || SHARED_FLAGS.contains(&long))
 }
 
 /// One line per argument, its help in a column.

@@ -48,3 +48,17 @@ pub async fn find_identity_user(
     })
     .transpose()
 }
+
+/// The subject `user_id` has at `provider`, or `None` when they have no identity there.
+pub async fn find_identity_subject(
+    db: &impl ConnectionTrait,
+    provider: &str,
+    user_id: UserId,
+) -> Result<Option<String>, StoreError> {
+    let row = user_identities::Entity::find()
+        .filter(user_identities::Column::Provider.eq(provider))
+        .filter(user_identities::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .one(db)
+        .await?;
+    Ok(row.map(|row| row.subject))
+}

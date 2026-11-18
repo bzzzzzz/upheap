@@ -32,6 +32,9 @@ pub enum ServiceError {
     /// A personal token whose time passed.
     #[error("the token has expired")]
     TokenExpired,
+    /// The identity provider turned the person's access off over SCIM, so no sign-in opens a session for them.
+    #[error("the account is deactivated")]
+    AccountDeactivated,
     #[error("email or password is wrong")]
     InvalidCredentials,
     /// The current password given to change the password is not the user's.
