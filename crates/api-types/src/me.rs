@@ -46,6 +46,9 @@ pub struct TeamDto {
     /// Everyone in the team, the caller included.
     pub member_count: u32,
     /// Whether the team's members come from its groups at the sign-in provider.
+    // Defaults so this client reads a server older than group-managed teams, which has none.
+    #[serde(default)]
+    #[schema(required = true)]
     pub group_managed: bool,
     /// By name, archived ones included.
     pub heaps: Vec<HeapOverviewDto>,
@@ -274,4 +277,21 @@ pub struct MeDto {
 pub struct MePatchDto {
     /// 1 to 100 characters.
     pub display_name: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+
+    #[gtest]
+    fn a_team_from_a_server_before_group_managed_teams_is_not_group_managed() -> googletest::Result<()> {
+        let body = r#"{"id": "00000000-0000-0000-0000-000000000001", "slug": "ops", "name": "Ops", "personal": false,
+                       "role": "admin", "member_count": 3, "heaps": []}"#;
+
+        let team: TeamDto = serde_json::from_str(body)?;
+
+        verify_that!(team.group_managed, eq(false))
+    }
 }

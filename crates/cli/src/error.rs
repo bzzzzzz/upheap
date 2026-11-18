@@ -243,10 +243,31 @@ impl CliError {
         }
     }
 
+    /// The client error this error carries, if any.
+    fn client_error(&self) -> Option<&ClientError> {
+        match self {
+            Self::Auth(AuthError::Client(err) | AuthError::Revoke(err))
+            | Self::Client(err)
+            | Self::NoSuchItem { source: err, .. }
+            | Self::ItemRefused { source: err, .. }
+            | Self::EnvTokenRefused { refused: err } => Some(err),
+            _ => None,
+        }
+    }
+
     fn hint(&self, in_run: bool) -> Option<String> {
         let status = self.problem().map(|problem| problem.status);
         if let Some(hint) = self.problem().and_then(run_hint) {
             return Some(hint);
+        }
+        if let Some(ClientError::Unreadable { status, .. }) = self.client_error()
+            && status.is_success()
+        {
+            return Some(format!(
+                "the server may run another version of Upheap than this upheap {}; use the same version for both, \
+                 or run with RUST_LOG=debug to keep the body in upheap.log",
+                env!("CARGO_PKG_VERSION")
+            ));
         }
         match (self, status) {
             (Self::EnvTokenRefused { .. }, _) => Some(
@@ -468,6 +489,45 @@ mod tests {
             }),
             body: String::new(),
         }
+    }
+
+    #[gtest]
+    fn a_success_the_cli_cant_read_names_the_path_and_what_doesnt_fit() {
+        let source = serde_json::from_str::<api_types::me::TeamDto>("{}").err();
+        let error = CliError::Client(ClientError::Unreadable {
+            status: reqwest::StatusCode::OK,
+            path: "/api/v1/me".to_owned(),
+            body: "{}".to_owned(),
+            source,
+        });
+
+        expect_that!(
+            error.to_message(),
+            elements_are![
+                eq(
+                    "error: the server answered 200 OK to /api/v1/me with a body the CLI doesn't understand: \
+                    missing field `id` at line 1 column 2"
+                ),
+                starts_with("hint: the server may run another version of Upheap than this upheap ")
+            ]
+        );
+    }
+
+    #[gtest]
+    fn a_failure_that_isnt_a_problem_gets_no_version_hint() {
+        let error = CliError::Client(ClientError::Unreadable {
+            status: reqwest::StatusCode::BAD_GATEWAY,
+            path: "/api/v1/me".to_owned(),
+            body: "<html>".to_owned(),
+            source: None,
+        });
+
+        expect_that!(
+            error.to_message(),
+            elements_are![eq(
+                "error: the server answered 502 Bad Gateway to /api/v1/me with a body the CLI doesn't understand"
+            )]
+        );
     }
 
     fn refused(status: u16, code: &str) -> CliError {
