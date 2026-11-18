@@ -29,7 +29,7 @@ import { useOverListLink } from "./overList";
  * A task's steps (ux.md, The item point 11): a checklist, inline at every width, each step saving as it's changed. An
  * editor moves a step by dragging its grip or with Move up and Move down in its ⋯ menu; the move shows at once, from
  * a pending order, until the server has answered. Only the
- * server's `allowed_actions` decide what can be done: ticking, editing and dropping need `edit` on the step, adding
+ * server's `allowed_actions` decide what can be done: ticking, editing, moving and dropping need `edit` on the step, adding
  * needs `add_step` on the item, and the server offers that only for a task, so this renders nothing for a note. A step
  * that is dropped stays in the list, struck through, and can be restored. `item` is a single-item response, the only
  * kind that carries the steps; a list row has `steps: null`, which reads as none.
@@ -45,7 +45,7 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   // The order a move has asked for, while the server saves it; the list shows it until the latest move has settled.
   const [pending, setPending] = useState<readonly number[] | null>(null);
   const moves = useRef(0);
-  const [moved, setMoved] = useState("");
+  const [moved, setMoved] = useState({ move: 0, text: "" });
   const steps = pending
     ? (() => {
         const place = (step: Step) => {
@@ -69,7 +69,7 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
     if (!step) return;
     const move = ++moves.current;
     setPending(order);
-    setMoved(`Moved to place ${index + 1} of ${order.length}`);
+    setMoved({ move, text: `Moved to place ${index + 1} of ${order.length}` });
     const settled = () => {
       if (move === moves.current) setPending(null);
     };
@@ -135,8 +135,9 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
           )}
         </ul>
       )}
-      <span role="status" className="sr-only">
-        {moved}
+      {/* Keyed by the move, so a second move to the same place is announced again. */}
+      <span key={moved.move} role="status" className="sr-only">
+        {moved.text}
       </span>
       {canAdd && (
         <AddStep
@@ -172,6 +173,8 @@ type GripProps = {
 /** How near the edge of the scrolling pane the pointer scrolls it, and by how much a frame. */
 const EDGE_ZONE = 48;
 const EDGE_SCROLL = 8;
+/** How far the pointer moves before a press on the grip is a drag, so a click near the pane's edge scrolls nothing. */
+const DRAG_START = 6;
 
 /**
  * Dragging a step by its grip, with pointer events (mouse, touch and pen alike). The dragged row follows the pointer
@@ -205,6 +208,8 @@ function useStepDrag({
     index: number;
     landing: number;
     scroller: Element;
+    /** Whether the pointer has gone past `DRAG_START` from where it went down; until then a press is not a drag. */
+    moved: boolean;
   } | null>(null);
 
   const measure = useCallback(() => {
@@ -244,7 +249,7 @@ function useStepDrag({
     window.addEventListener("keydown", onKeyDown, true);
     let frame = requestAnimationFrame(function scroll() {
       const current = session.current;
-      if (current) {
+      if (current?.moved) {
         const edge =
           current.scroller === document.scrollingElement
             ? { top: 0, bottom: window.innerHeight }
@@ -289,12 +294,14 @@ function useStepDrag({
           index,
           landing: index,
           scroller,
+          moved: false,
         };
         setLifted(number);
       },
       onPointerMove: (event) => {
         if (session.current?.pointerId !== event.pointerId) return;
         session.current.pointerY = event.clientY;
+        if (Math.abs(event.clientY - session.current.startY) > DRAG_START) session.current.moved = true;
         measure();
       },
       onPointerUp: (event) => {
@@ -302,7 +309,7 @@ function useStepDrag({
         if (current?.pointerId !== event.pointerId) return;
         measure();
         end();
-        if (current.landing !== current.index) onDrop(current.number, current.landing);
+        if (current.moved && current.landing !== current.index) onDrop(current.number, current.landing);
       },
       onPointerCancel: (event) => {
         if (session.current?.pointerId === event.pointerId) end();

@@ -1424,7 +1424,8 @@ test("a step is dragged by its grip to a new place, and the server keeps it", as
   const { steps } = await openTaskWithSteps(page, heapPath, ["One", "Two", "Three"]);
   const grips = steps.locator("[data-step-grip]");
   if (test.info().project.name === "phone") {
-    await expect(grips.first()).toBeVisible();
+    // Always shown on a phone, not only on hover.
+    await expect(grips.first()).toHaveCSS("opacity", "1");
     const box = await grips.first().boundingBox();
     expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(44);
   }
