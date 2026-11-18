@@ -104,13 +104,17 @@ is linked to an Upheap user, it works out their groups and runs the same sync a 
 (`sync_group_teams`), with the person as the audit entry's actor and `provider_groups` as what made the change, as
 at sign-in:
 
-- An active person's groups are the `displayName` and the `externalId` of every stored group their active records are
-  in, once a stored group matches the configured map (its `displayName` or `externalId` is one of a mapped team's
-  groups). Until then the pushes say nothing about the mapped teams, so the person's groups are unknown and no
-  membership changes: pushing people before their groups doesn't empty the teams. The push that stores the first
-  mapped group, or removes the last, syncs every pushed person.
-- An inactive person's groups, and those of a person whose last record was deleted, are known and empty: they leave
-  every group-managed team.
+- Each mapped team is decided on its own. A team is pushed when a stored group matches one of its groups (the
+  group's `displayName` or `externalId` is one of them). An active person's membership in a pushed team follows
+  their groups: the `displayName` and the `externalId` of every stored group their active records are in. A team
+  that isn't pushed is left alone by pushes, so pushing the group of one team never empties another, and pushing
+  people before their groups doesn't empty any team.
+- The write that makes a team pushed for the first time syncs every pushed person for that team. The write that
+  makes a team stop being pushed (deleting its last matching group, or renaming it or changing its `externalId`
+  away from the map) syncs the people it touched for that team with their groups as known: they are in none of its
+  groups any more, so they leave it, and from then on it follows the token.
+- An inactive person's groups, and those of a person whose last record was deleted, are known and empty in every
+  mapped team, pushed or not: they leave every group-managed team.
 - A user with no `externalId`, or one no identity has, changes no team. The server logs the second at `info`.
 
 Lock order: the mapped teams in ID order, as the sync already locks them (the caller locks them before it syncs), then
@@ -136,10 +140,10 @@ delete.
 
 ### Sign-in
 
-With a SCIM token set and the person having a SCIM record, a sign-in through the provider syncs from the SCIM
-state instead of the ID token: the provider's pushes are the one source, so a token minted a moment before a push
-can't undo it. A person with no SCIM record, or whose groups the pushes don't say yet (no mapped group stored), syncs
-from the token's groups as now. The first sign-in (the username
+With a SCIM token set and the person having a SCIM record, a sign-in through the provider syncs the pushed teams from
+the SCIM state instead of the ID token: the provider's pushes are the one source, so a token minted a moment before a push
+can't undo it. For a mapped team that is not pushed, and for a person with no SCIM record, the sign-in syncs from the
+token's groups as now. The first sign-in (the username
 step) does the same once the identity exists, so a person pushed before they ever signed in gets their teams then.
 
 ### What the operator sees

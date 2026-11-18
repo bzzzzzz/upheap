@@ -359,16 +359,11 @@ impl Services {
                 .await?
                 .ok_or_else(|| StoreError::corrupt("user_identities", &claims.subject, "no such user"))?;
             let txn = self.db.begin().await.map_err(StoreError::from)?;
-            // The provider's pushes, when it has made any for this person, are the groups instead of the token's. The
-            // teams are locked before they are read, as a push does.
+            // The provider's pushes decide the teams they have pushed, instead of the token's groups. The teams are
+            // locked before they are read, as a push does.
             self.lock_group_teams(&txn).await?;
-            let groups = match self.scim_sign_in_groups(&txn, &claims.subject).await? {
-                Some(pushed) => Some(pushed),
-                None => claims.groups.clone(),
-            };
-            if let Some(groups) = &groups {
-                self.sync_group_teams(&txn, user.id, groups, now).await?;
-            }
+            self.sync_sign_in_groups(&txn, user.id, &claims.subject, claims.groups.clone(), now)
+                .await?;
             let grant = self.open_session(&txn, user, now).await?;
             store::oidc_sign_ins::delete_oidc_sign_in(&txn, state_hash).await?;
             txn.commit().await.map_err(StoreError::from)?;
@@ -438,17 +433,13 @@ impl Services {
             .insert_personal_user(&txn, verified.email, username, verified.display_name, team_name, now)
             .await?;
         store::identities::insert_identity(&txn, made.user.id, oidc.issuer(), &verified.subject, now).await?;
-        // The provider's pushes, when it has made any for this person, are the groups instead of the token's. A
-        // sign-in that didn't know the groups, or came before they were kept, changes no membership.
-        let groups = match self.scim_sign_in_groups(&txn, &verified.subject).await? {
-            Some(pushed) => Some(pushed),
-            None => verified
-                .groups
-                .map(|groups| Groups::Known(groups.into_iter().collect())),
-        };
-        if let Some(groups) = &groups {
-            self.sync_group_teams(&txn, made.user.id, groups, now).await?;
-        }
+        // The provider's pushes decide the teams they have pushed, instead of the token's groups. A sign-in that
+        // didn't know the groups, or came before they were kept, changes no other membership.
+        let token_groups = verified
+            .groups
+            .map(|groups| Groups::Known(groups.into_iter().collect()));
+        self.sync_sign_in_groups(&txn, made.user.id, &verified.subject, token_groups, now)
+            .await?;
         let grant = self.open_session(&txn, made.user, now).await?;
         store::oidc_sign_ins::delete_oidc_sign_in(&txn, &sha256_hex(state)).await?;
         txn.commit().await.map_err(StoreError::from)?;

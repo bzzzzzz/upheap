@@ -540,7 +540,7 @@ push the same groups whenever they change, so there can be two answers, and the 
 already speaks.
 
 **Decision.** With a SCIM token set, a person the provider has pushed is synced from the pushed record, at each push
-and at sign-in; the token's groups count only for someone with no pushed record. The endpoints live at `/scim/v2`,
+and at sign-in; the token's groups count only for someone with no pushed record, and for a team the provider has pushed no group of. The endpoints live at `/scim/v2`,
 answer in SCIM's own JSON and errors, and are not part of `openapi.json`. A pushed user is linked to an account by
 `externalId` as the OIDC subject, never by email, and a push never makes an account.
 

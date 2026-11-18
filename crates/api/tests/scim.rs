@@ -25,21 +25,22 @@ struct Harness {
 }
 
 async fn harness() -> Result<Harness> {
+    harness_with(&[("ops", &["engineering", "sre"])]).await
+}
+
+/// The harness with one team per slug of `map`, named as the slug is, each managed by the groups it maps to.
+async fn harness_with(map: &[(&str, &[&str])]) -> Result<Harness> {
     let provider = FakeProvider::start().await?;
     let plain = TestApp::start().await?;
     let (ana, _) = plain.register_as("ana@example.test", "Ana").await?;
-    let created_team = plain
-        .send(
-            Method::POST,
-            "/api/v1/teams",
-            Some(&ana),
-            Some(json!({ "name": "Ops" })),
-        )
-        .await?;
-    assert_eq!(created_team.status, StatusCode::CREATED, "{}", created_team.body);
-    let app = plain
-        .with_scim_groups(provider.settings()?, &[("ops", &["engineering", "sre"])], TOKEN)
-        .await?;
+    for (slug, _) in map {
+        let name = format!("{}{}", slug[..1].to_uppercase(), &slug[1..]);
+        let created_team = plain
+            .send(Method::POST, "/api/v1/teams", Some(&ana), Some(json!({ "name": name })))
+            .await?;
+        assert_eq!(created_team.status, StatusCode::CREATED, "{}", created_team.body);
+    }
+    let app = plain.with_scim_groups(provider.settings()?, map, TOKEN).await?;
     Ok(Harness {
         provider,
         plain,
@@ -136,6 +137,11 @@ async fn sign_in(h: &Harness, claims: Claims) -> Result<(TestResponse, String)> 
 
 /// Sam's first sign-in through the username step. Returns their session.
 async fn first_sign_in(h: &Harness, claims: Claims) -> Result<String> {
+    first_sign_in_as(h, claims, "sam").await
+}
+
+/// A first sign-in through the username step, registering `username`. Returns their session.
+async fn first_sign_in_as(h: &Harness, claims: Claims, username: &str) -> Result<String> {
     let (_, state) = sign_in(h, claims).await?;
     let registered = h
         .app
@@ -143,7 +149,7 @@ async fn first_sign_in(h: &Harness, claims: Claims) -> Result<String> {
             Method::POST,
             "/api/v1/auth/oidc/register",
             None,
-            Some(json!({ "username": "sam" })),
+            Some(json!({ "username": username })),
             &[CSRF, ("cookie", &format!("upheap_oidc={state}"))],
         )
         .await?;
@@ -155,10 +161,14 @@ async fn me(app: &TestApp, session: &str) -> Result<TestResponse> {
     app.send(Method::GET, "/api/v1/me", Some(session), None).await
 }
 
-fn in_ops(me: &TestResponse) -> bool {
+fn in_team(me: &TestResponse, slug: &str) -> bool {
     me.body["teams"]
         .as_array()
-        .is_some_and(|teams| teams.iter().any(|team| team["slug"] == "ops"))
+        .is_some_and(|teams| teams.iter().any(|team| team["slug"] == slug))
+}
+
+fn in_ops(me: &TestResponse) -> bool {
+    in_team(me, "ops")
 }
 
 fn user_id_of(me: &TestResponse) -> Result<String> {
@@ -900,5 +910,99 @@ async fn deleting_one_of_two_records_keeps_the_person_and_deleting_the_last_ends
     // Assert
     expect_that!(in_ops(&after_one), eq(true));
     expect_that!(after_both.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}
+
+/// Eng is managed by the group `engineering` and Ops by `ops`.
+async fn two_teams() -> Result<Harness> {
+    harness_with(&[("eng", &["engineering"]), ("ops", &["ops"])]).await
+}
+
+fn claims_in(subject: &str, email: &str, groups: Value) -> Claims {
+    Claims::verified(subject, email, subject).with_claim("groups", groups)
+}
+
+#[gtest]
+#[tokio::test]
+async fn pushing_one_mapped_group_leaves_the_teams_of_the_others_to_the_token() -> Result<()> {
+    // Arrange: Sam and Alex signed in with no SCIM records; Alex is in Ops through the token.
+    let h = two_teams().await?;
+    first_sign_in_as(&h, claims_in("subject-sam", "sam@example.test", json!([])), "sam").await?;
+    let alex = first_sign_in_as(
+        &h,
+        claims_in("subject-alex", "alex@example.test", json!(["ops"])),
+        "alex",
+    )
+    .await?;
+    let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+    push_user(&h, "alex@example.test", Some("subject-alex"), true).await?;
+
+    // Act: only `engineering` is pushed, with Sam; then Alex signs in again with the token claiming `ops`.
+    push_group(&h, "engineering", &[&scim_sam]).await?;
+    let after_push = me(&h.app, &alex).await?;
+    let claims = claims_in("subject-alex", "alex@example.test", json!(["ops"]));
+    let (again, _) = sign_in(&h, claims).await?;
+    let after_sign_in = me(&h.app, &again.session_cookie.context("no session")?).await?;
+
+    // Assert
+    expect_that!(in_team(&after_push, "ops"), eq(true));
+    expect_that!(in_team(&after_push, "eng"), eq(false));
+    expect_that!(in_team(&after_sign_in, "ops"), eq(true));
+    let sam = sign_in(&h, claims_in("subject-sam", "sam@example.test", json!([])))
+        .await?
+        .0;
+    let sam = me(&h.app, &sam.session_cookie.context("no session")?).await?;
+    expect_that!(in_team(&sam, "eng"), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn pushing_a_groups_team_without_a_member_takes_them_out_and_sign_ins_follow_the_push() -> Result<()> {
+    // Arrange: Alex is in Ops through the token, and Sam is pushed.
+    let h = two_teams().await?;
+    let alex = first_sign_in_as(
+        &h,
+        claims_in("subject-alex", "alex@example.test", json!(["ops"])),
+        "alex",
+    )
+    .await?;
+    push_user(&h, "alex@example.test", Some("subject-alex"), true).await?;
+    let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+    expect_that!(in_team(&me(&h.app, &alex).await?, "ops"), eq(true));
+
+    // Act: `ops` is pushed without Alex; Alex signs in with a token still claiming `ops`.
+    push_group(&h, "ops", &[&scim_sam]).await?;
+    let after_push = in_team(&me(&h.app, &alex).await?, "ops");
+    let claims = claims_in("subject-alex", "alex@example.test", json!(["ops"]));
+    let (again, _) = sign_in(&h, claims).await?;
+    let after_sign_in = me(&h.app, &again.session_cookie.context("no session")?).await?;
+
+    // Assert
+    expect_that!(after_push, eq(false));
+    expect_that!(in_team(&after_sign_in, "ops"), eq(false));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn deleting_the_last_group_of_a_team_takes_its_members_out_and_the_token_decides_again() -> Result<()> {
+    // Arrange: Sam is in Ops through the pushed group `engineering`.
+    let h = harness().await?;
+    let session = first_sign_in(&h, sam()).await?;
+    let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+    let group = push_group(&h, "engineering", &[&scim_sam]).await?;
+    expect_that!(in_ops(&me(&h.app, &session).await?), eq(true));
+
+    // Act
+    let deleted = scim(&h, Method::DELETE, &format!("/scim/v2/Groups/{group}"), None).await?;
+    let after_delete = in_ops(&me(&h.app, &session).await?);
+    let (again, _) = sign_in(&h, engineering_claims()).await?;
+    let after_sign_in = in_ops(&me(&h.app, &again.session_cookie.context("no session")?).await?);
+
+    // Assert
+    expect_that!(deleted.status, eq(StatusCode::NO_CONTENT));
+    expect_that!(after_delete, eq(false));
+    expect_that!(after_sign_in, eq(true));
     Ok(())
 }

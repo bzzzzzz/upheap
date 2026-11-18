@@ -117,8 +117,8 @@ pub fn read_groups(id_token: &str, claim: &str) -> Groups {
 impl Services {
     /// Brings `user_id`'s memberships in the group-managed teams in line with `groups`, in the caller's transaction.
     /// The caller has locked the teams first ([`Services::lock_group_teams`]) and holds the lock until the
-    /// transaction ends, before it reads anything the sync depends on. Nothing happens for [`Groups::Unknown`], and
-    /// nothing is read when no team is mapped.
+    /// transaction ends, before it reads anything the sync depends on. Only the mapped teams in `teams` are synced, or all
+    /// of them for `None`. Nothing happens for [`Groups::Unknown`], and nothing is read when no team is mapped.
     ///
     /// A person in one of the team's groups who isn't a member joins as a member. A member in none of them leaves,
     /// whatever their role, even as the last admin: the team then shows it has no admin. Each change has an audit
@@ -128,6 +128,7 @@ impl Services {
         txn: &impl ConnectionTrait,
         user_id: UserId,
         groups: &Groups,
+        teams: Option<&BTreeSet<TeamId>>,
         now: Timestamp,
     ) -> Result<(), ServiceError> {
         let Groups::Known(groups) = groups else {
@@ -135,6 +136,9 @@ impl Services {
         };
         let principal = Principal { user_id, run: None };
         for (team_id, mapped) in self.settings.group_teams.iter() {
+            if teams.is_some_and(|teams| !teams.contains(&team_id)) {
+                continue;
+            }
             let current = store::teams::find_membership(txn, team_id, user_id).await?;
             let matching: Vec<&String> = groups.iter().filter(|group| mapped.contains(group)).collect();
             match (matching.is_empty(), current) {
@@ -401,7 +405,7 @@ mod tests {
         let txn = db.begin().await?;
         mapped.lock_group_teams(&txn).await?;
         mapped
-            .sync_group_teams(&txn, alex.user_id, &Groups::Known(BTreeSet::new()), mapped.now())
+            .sync_group_teams(&txn, alex.user_id, &Groups::Known(BTreeSet::new()), None, mapped.now())
             .await?;
         txn.commit().await?;
 
