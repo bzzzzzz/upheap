@@ -1,4 +1,5 @@
-//! A person's priority for a heap (`PUT …/priority`): reading and setting it, who may, and its audit entry.
+//! A person's priority for a heap (`PUT …/priority`): reading and setting it, who may, its audit entry, and
+//! the priorities a heap made from a note starts with.
 
 mod common;
 
@@ -42,6 +43,13 @@ impl Setup {
             .send(Method::GET, &self.app.heap_url(&self.heap).await?, Some(session), None)
             .await?;
         Ok(response.body)
+    }
+
+    /// The priority the user of `session` reads for the heap with `heap_id`.
+    async fn priority_of(&self, session: &str, heap_id: &str) -> Result<Value> {
+        let url = self.app.heap_url(heap_id).await?;
+        let response = self.app.send(Method::GET, &url, Some(session), None).await?;
+        Ok(response.body["priority"].clone())
     }
 
     async fn user_id(&self, session: &str) -> Result<String> {
@@ -207,6 +215,64 @@ async fn a_priority_change_in_the_personal_log_names_the_heap_of_another_team() 
             { "field": "heap_id", "label": "Heap", "before": null, "after": "Shared", "text_diff": null },
             { "field": "priority", "label": "Priority", "before": "1", "after": "4", "text_diff": null },
         ]))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heap_made_from_a_note_starts_with_each_persons_priority_for_the_notes_heap() -> Result<()> {
+    // Arrange: the admin and the member set a priority for the shared heap; a third member never did.
+    let s = setup().await?;
+    let (other, _) = s.app.register("cy@example.test").await?;
+    let other_id = s.user_id(&other).await?;
+    s.app.add_member(&s.team, &other_id, Role::Member).await?;
+    s.app.set_priority(&s.admin, &s.heap, 4).await?;
+    s.app.set_priority(&s.member, &s.heap, 6).await?;
+    let note = s
+        .app
+        .new_item(
+            &s.admin,
+            &s.heap,
+            json!({ "title": "Move the blog", "need": "expected" }),
+        )
+        .await?;
+    let heaps = format!("{}/heaps", s.app.team_url(&s.team).await?);
+
+    // Act
+    let made = s
+        .app
+        .send(
+            Method::POST,
+            &heaps,
+            Some(&s.admin),
+            Some(json!({ "name": "Blog move", "origin_id": note["id"] })),
+        )
+        .await?;
+    let plain = s
+        .app
+        .send(Method::POST, &heaps, Some(&s.admin), Some(json!({ "name": "Plain" })))
+        .await?;
+
+    // Assert: the made heap reads each person's priority for the note's heap, and the plain one the default.
+    expect_that!(made.status, eq(StatusCode::CREATED));
+    expect_that!(made.body["priority"], eq(&json!(4)));
+    let made_id = made.body["id"].as_str().context("no heap id")?;
+    expect_that!(s.priority_of(&s.admin, made_id).await?, eq(&json!(4)));
+    expect_that!(s.priority_of(&s.member, made_id).await?, eq(&json!(6)));
+    expect_that!(s.priority_of(&other, made_id).await?, eq(&json!(1)));
+    expect_that!(plain.status, eq(StatusCode::CREATED));
+    expect_that!(plain.body["priority"], eq(&json!(1)));
+    // The two rows set on the shared heap and their two copies; nobody's personal log has a change.
+    expect_that!(s.app.count_rows("heap_priorities").await?, eq(4));
+    let member_id = s.user_id(&s.member).await?;
+    let changes = s.app.audit_entries(&member_id).await?;
+    expect_that!(
+        changes
+            .iter()
+            .filter(|(action, _)| action == "heap_priority_changed")
+            .count(),
+        eq(1)
     );
     Ok(())
 }
