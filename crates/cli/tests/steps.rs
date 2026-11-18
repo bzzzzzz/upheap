@@ -1,4 +1,4 @@
-//! `upheap step add | tick | drop | edit` and the Steps section of `upheap item show`.
+//! `upheap step add | tick | drop | edit | move` and the Steps section of `upheap item show`.
 
 mod common;
 
@@ -225,6 +225,40 @@ async fn step_edit_changes_the_title_and_clears_the_context() -> Result<()> {
         eq("Nothing to change: give --title, --context-file or --no-context.\n")
     );
     expect_that!(same.stdout, eq(&format!("No change to {name}.\n")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn step_move_puts_a_step_after_another_or_first_and_keeps_its_number() -> Result<()> {
+    // Arrange
+    let (server, ada, _, task) = with_task().await?;
+    for title in ["One", "Two", "Three"] {
+        add_step(&server, &ada, &task, title).await?;
+    }
+    let cli = cli_in_heap(&server, &ada).await?;
+    let three = format!("{task}.3");
+
+    // Act
+    let first = cli.run(&["step", "move", &three, "--first"]).await;
+    let after = cli
+        .run(&["step", "move", &three, "--after", &format!("{task}.1")])
+        .await;
+    let by_number = cli
+        .run(&["step", "move", &format!("{task}.1"), "--after", "3", "--quiet"])
+        .await;
+
+    // Assert
+    expect_that!(first.stdout, eq(&format!("Moved {three} to the top.\n")));
+    expect_that!(after.stdout, eq(&format!("Moved {three} after {task}.1.\n")));
+    expect_that!(by_number.stdout, eq(&format!("{task}.1\n")));
+    expect_that!(by_number.exited(0), eq(true));
+    let read = server.read_item(&ada, HEAP, &task).await?;
+    let numbers: Vec<u64> = read["steps"]
+        .as_array()
+        .map(|steps| steps.iter().filter_map(|step| step["number"].as_u64()).collect())
+        .unwrap_or_default();
+    expect_that!(numbers, elements_are![eq(&3), eq(&1), eq(&2)]);
     Ok(())
 }
 

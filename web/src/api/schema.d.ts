@@ -3936,6 +3936,12 @@ export interface components {
         StepAction: "edit";
         /** @description A partial edit of a step. Leave a field out to keep it; send `null` to clear the context. */
         StepPatch: {
+            /**
+             * Format: int32
+             * @description Where the step goes in the task's order: the number of the step it goes right after, or `null` for first.
+             *     Left out, it stays where it is.
+             */
+            after?: number | null;
             /** @description Markdown; `null` or blank clears it. */
             context?: string | null;
             state?: null | components["schemas"]["StepState"];

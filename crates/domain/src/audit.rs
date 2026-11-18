@@ -82,6 +82,7 @@ coded_enum! {
         StepTitle = "step_title",
         StepContext = "step_context",
         StepState = "step_state",
+        StepPlace = "step_place",
         Question = "question",
         QuestionKind = "question_kind",
         QuestionText = "question_text",

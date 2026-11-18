@@ -233,6 +233,8 @@ enum StepCommand {
     Drop(commands::step::state::StepArgs),
     /// Change a step's title or context
     Edit(commands::step::edit::EditArgs),
+    /// Move a step to another place in its task; it keeps its number
+    Move(commands::step::move_step::MoveArgs),
 }
 
 #[derive(Subcommand)]
@@ -368,6 +370,7 @@ impl Command {
             Self::Step(StepCommand::Add(args)) => &args.shared,
             Self::Step(StepCommand::Tick(args) | StepCommand::Drop(args)) => &args.shared,
             Self::Step(StepCommand::Edit(args)) => &args.shared,
+            Self::Step(StepCommand::Move(args)) => &args.shared,
             Self::Question(QuestionCommand::Ask(args)) => &args.shared,
             Self::Question(QuestionCommand::Request(args)) => &args.shared,
             Self::Question(QuestionCommand::Review(args)) => &args.shared,
@@ -530,6 +533,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Step(StepCommand::Tick(args)) => run_step_verb(StepVerb::Tick, args, app, out).await,
         Command::Step(StepCommand::Drop(args)) => run_step_verb(StepVerb::Drop, args, app, out).await,
         Command::Step(StepCommand::Edit(args)) => commands::step::edit::run(args, app, out).await,
+        Command::Step(StepCommand::Move(args)) => commands::step::move_step::run(args, app, out).await,
         Command::Question(QuestionCommand::Ask(args)) => commands::question::ask::run_ask(args, app, out).await,
         Command::Question(QuestionCommand::Request(args)) => commands::question::ask::run_request(args, app, out).await,
         Command::Question(QuestionCommand::Review(args)) => commands::question::ask::run_review(args, app, out).await,

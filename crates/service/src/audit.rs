@@ -76,9 +76,9 @@ pub(crate) fn describe_new_step(step: &Step) -> Value {
 }
 
 /// Changed fields between two versions of a step, in the shape of [`diff_items`], led by the step's name as it is
-/// after the change.
-pub(crate) fn diff_steps(before: &Step, after: &Step) -> Value {
-    let fields = |step: &Step| {
+/// after the change. `places` is the number of the step it followed before and follows after, 0 for first.
+pub(crate) fn diff_steps(before: &Step, after: &Step, places: (u32, u32)) -> Value {
+    let fields = |step: &Step, place: u32| {
         let mut fields = Map::new();
         fields.insert(AuditField::StepTitle.code().into(), json!(step.title.as_str()));
         fields.insert(
@@ -86,9 +86,10 @@ pub(crate) fn diff_steps(before: &Step, after: &Step) -> Value {
             json!(step.context.as_ref().map(|c| c.as_str())),
         );
         fields.insert(AuditField::StepState.code().into(), json!(step.state.code()));
+        fields.insert(AuditField::StepPlace.code().into(), json!(place));
         fields
     };
-    let Value::Object(mut changes) = diff_fields(fields(before), fields(after)) else {
+    let Value::Object(mut changes) = diff_fields(fields(before, places.0), fields(after, places.1)) else {
         return Value::Null;
     };
     changes.insert(AuditField::Step.code().into(), step_name(after));
