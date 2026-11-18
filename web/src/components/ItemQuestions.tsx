@@ -4,7 +4,8 @@ import { Button, Checkbox, CheckboxGroup, Label, Radio, RadioGroup, TextArea, Te
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Item, Question, QuestionReplyRequest, WaitingBlocker, WaitingStuck } from "../api/schema";
-import { useReplyToQuestion } from "../api/queries";
+import { useAskQuestion, useReplyToQuestion } from "../api/queries";
+import { AskQuestion } from "./AskQuestion";
 import { BlockerGoneRow, blockerGoneWord } from "./BlockerGoneRow";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
@@ -21,9 +22,9 @@ export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[foc
 const detailsButtonClass = `-ml-1 flex min-h-9 items-center gap-1 self-start rounded-lg px-1 text-sm text-ink-soft hover:text-ink ${focusClass} pointer-coarse:min-h-11`;
 export const fieldClass =
   "field-sizing-content min-h-14 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base outline-none focus:border-accent";
-const labelClass = "text-xs font-medium text-ink-soft";
-const pickClass = `group flex min-h-9 items-center gap-2 text-base ${focusClass} pointer-coarse:min-h-11`;
-const pickBoxClass =
+export const labelClass = "text-xs font-medium text-ink-soft";
+export const pickClass = `group flex min-h-9 items-center gap-2 text-base ${focusClass} pointer-coarse:min-h-11`;
+export const pickBoxClass =
   "flex size-5 shrink-0 items-center justify-center border border-line-strong bg-surface group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-accent group-data-[selected]:border-ink group-data-[selected]:bg-ink";
 
 const isClosedMeanwhile = (error: Error) => error instanceof ApiProblem && error.code === "item_closed";
@@ -343,12 +344,17 @@ export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: 
 
 /**
  * The Questions section (ux.md, The item): the open questions with their reply controls in the outlined box, then
- * what {@link AnsweredQuestions} folds. Shown when the item has any question. A row is shown with controls when the
- * server offers `reply` on the question, otherwise (an archived heap) as text. After a reply the row leaves and joins
- * the fold.
+ * what {@link AnsweredQuestions} folds, then {@link AskQuestion}. Shown when the item has any question, or the server
+ * offers `ask_question`, or the Ask form is open. A row is shown with controls when the server offers `reply` on the
+ * question, otherwise (an archived heap) as text. After a reply the row leaves and joins the fold.
  */
 export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
-  if ((item.questions ?? []).length === 0) return null;
+  const ask = useAskQuestion(heapRef, item.key);
+  const canAsk = item.allowed_actions.includes("ask_question");
+  // Kept here, not in the form: an open form keeps the section, so a refetch that takes `ask_question` away (the
+  // item was closed meanwhile) doesn't take the typed draft with it.
+  const [asking, setAsking] = useState(false);
+  if ((item.questions ?? []).length === 0 && !canAsk && !asking) return null;
   return (
     <section aria-label="Questions" className="flex flex-col gap-2 border-t border-line pt-3">
       <h3 className="text-xs font-semibold text-muted">Questions</h3>
@@ -385,6 +391,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
           </p>
         ))}
       <AnsweredQuestions heapRef={heapRef} item={item} />
+      <AskQuestion item={item} canAsk={canAsk} ask={ask} open={asking} onOpenChange={setAsking} />
     </section>
   );
 }

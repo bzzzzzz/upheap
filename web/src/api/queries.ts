@@ -15,6 +15,7 @@ import { api, ApiProblem, ensureOk, unwrap, type AcrossHeapsQuery, type HeapRef,
 import type {
   AddCommentRequest,
   AddStepRequest,
+  AskQuestionRequest,
   ClientSignIn,
   CreateItemRequest,
   CreateParameterRequest,
@@ -431,6 +432,36 @@ export function useUpdateStep(heap: HeapRef, taskKey: string) {
     },
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     onSettled: () => invalidateHeap(queryClient, heap),
+  });
+}
+
+/**
+ * Asks a question or a request on the item `itemId` (its key). Not optimistic: the item the server returns, with the
+ * question on it and the item waiting, is written into the cache. A failure fetches the item again, since it may have
+ * been closed or its heap archived meanwhile, which takes the offer to ask away. The lists say which items wait for you,
+ * and Waiting for me what does, so they are fetched again.
+ */
+export function useAskQuestion(heap: HeapRef, itemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: AskQuestionRequest) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions", {
+          params: { path: { ...heap, item: itemId } },
+          body,
+        }),
+      ),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(itemKey(heap, saved.key), saved);
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: itemKey(heap, itemId) });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
+      void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
+      void queryClient.invalidateQueries({ queryKey: waitingKey });
+    },
   });
 }
 
