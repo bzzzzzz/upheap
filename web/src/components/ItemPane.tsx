@@ -22,6 +22,7 @@ import { ItemRuns } from "./ItemRuns";
 import { ItemSteps } from "./ItemSteps";
 import { StatusLine } from "./ItemStatus";
 import { isClosed } from "./labels";
+import { itemAddress } from "./listView";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { useOverListLink } from "./overList";
 import { Sheet } from "./Sheet";
@@ -80,20 +81,22 @@ export function ItemPane({
     (walk || paneRef.current)?.focus({ preventScroll: true });
   }, [itemKey]);
 
-  // An old handle of a moved item loads the item where it is now; the URL then says where that is.
-  const moved = item.data;
+  // An old handle of a moved item loads the item where it is now; the address then says where that is, on the
+  // page the item is open on: its heap's, or the one `walkLink` builds addresses for.
+  const loaded = item.data;
   useEffect(() => {
-    if (!moved) return;
-    const team = me?.teams.find((t) => t.heaps.some((h) => h.id === moved.heap_id));
-    const heap = team?.heaps.find((h) => h.id === moved.heap_id);
-    if (team && heap && (team.slug !== heapRef.team || heap.slug !== heapRef.heap || moved.key !== itemKey)) {
-      void navigate({
-        to: "/teams/$team/heaps/$heap/items/$item",
-        params: { team: team.slug, heap: heap.slug, item: moved.key },
-        replace: true,
-      });
-    }
-  }, [moved, me, heapRef.team, heapRef.heap, itemKey, navigate]);
+    if (!loaded) return;
+    const team = me?.teams.find((t) => t.heaps.some((h) => h.id === loaded.heap_id));
+    const heap = team?.heaps.find((h) => h.id === loaded.heap_id);
+    if (!team || !heap || (team.slug === heapRef.team && heap.slug === heapRef.heap && loaded.key === itemKey)) return;
+    const now = { team: team.slug, heap: heap.slug };
+    void navigate({
+      ...(walkLink
+        ? walkLink(itemAddress(now, loaded.key))
+        : { to: "/teams/$team/heaps/$heap/items/$item", params: { ...now, item: loaded.key } }),
+      replace: true,
+    });
+  }, [loaded, me, heapRef.team, heapRef.heap, itemKey, walkLink, navigate]);
 
   let body: ReactNode;
   if (item.isPending) {

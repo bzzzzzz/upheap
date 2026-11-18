@@ -6,7 +6,8 @@
 //! Moves made before this are filled in from the audit log. An `item_moved` entry holds the heap the item left, and
 //! its key only when the key changed. Each item's moves are walked from the latest to the earliest, starting from
 //! its current key: the key it left is the entry's `key.before`, or else the key it had after the move, which is the
-//! one the walk is at. An entry whose diff can't be read fails the migration.
+//! one the walk is at. An entry whose diff can't be read fails the migration. Moves are few, since the feature is
+//! new, so every `item_moved` entry is read at once.
 
 use std::collections::BTreeMap;
 
