@@ -1,11 +1,11 @@
-import { Link, type LinkProps } from "@tanstack/react-router";
+import { Link, type LinkProps, useNavigate } from "@tanstack/react-router";
 import { Check, ChevronDown, ChevronUp, Link as LinkIcon, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemState, RankedItem } from "../api/schema";
-import { useItem, useUpdateItem } from "../api/queries";
+import { useItem, useMe, useUpdateItem } from "../api/queries";
 import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
 import { InlineConfirm } from "./InlineConfirm";
@@ -23,6 +23,7 @@ import { ItemRuns } from "./ItemRuns";
 import { ItemSteps } from "./ItemSteps";
 import { StatusLine } from "./ItemStatus";
 import { isClosed } from "./labels";
+import { itemAddress } from "./listView";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { useOverListLink } from "./overList";
 import { Sheet } from "./Sheet";
@@ -65,6 +66,8 @@ export function ItemPane({
   onClose: () => void;
 }) {
   const item = useItem(heapRef, itemKey);
+  const { data: me } = useMe();
+  const navigate = useNavigate();
   const paneRef = useRef<HTMLElement>(null);
   const headingId = useId();
   const drag = useDragToClose(onClose);
@@ -78,6 +81,23 @@ export function ItemPane({
     const walk = label && paneRef.current?.querySelector<HTMLElement>(`[aria-label="${label}"]`);
     (walk || paneRef.current)?.focus({ preventScroll: true });
   }, [itemKey]);
+
+  // An old handle of a moved item loads the item where it is now; the address then says where that is, on the
+  // page the item is open on: its heap's, or the one `walkLink` builds addresses for.
+  const loaded = item.data;
+  useEffect(() => {
+    if (!loaded) return;
+    const team = me?.teams.find((t) => t.heaps.some((h) => h.id === loaded.heap_id));
+    const heap = team?.heaps.find((h) => h.id === loaded.heap_id);
+    if (!team || !heap || (team.slug === heapRef.team && heap.slug === heapRef.heap && loaded.key === itemKey)) return;
+    const now = { team: team.slug, heap: heap.slug };
+    void navigate({
+      ...(walkLink
+        ? walkLink(itemAddress(now, loaded.key))
+        : { to: "/teams/$team/heaps/$heap/items/$item", params: { ...now, item: loaded.key } }),
+      replace: true,
+    });
+  }, [loaded, me, heapRef.team, heapRef.heap, itemKey, walkLink, navigate]);
 
   let body: ReactNode;
   if (item.isPending) {

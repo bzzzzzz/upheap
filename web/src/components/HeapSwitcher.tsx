@@ -40,7 +40,7 @@ export const openItemCount = (me: Me, team?: string) =>
     );
 
 /** From this many unarchived heaps it gets a search field, Recent and folding teams (design/ux.md, Phone details). */
-const LONG_LIST = 8;
+export const LONG_LIST = 8;
 /** How many recent heaps show. */
 const RECENT_SHOWN = 4;
 
@@ -48,13 +48,13 @@ const RECENT_SHOWN = 4;
  * A heap row: 52 px on a phone, 36 px where the pointer is fine on a tablet or wide screen, 44 px where it's coarse.
  * In the popover the rows are denser than a sheet's: smaller text, tighter corners.
  */
-const rowClass = `${sheetRowClass} sm:min-h-9 sm:gap-2.5 sm:rounded-lg sm:px-2.5 sm:text-sm sm:pointer-coarse:min-h-11 data-[focused]:bg-sunken`;
+export const rowClass = `${sheetRowClass} sm:min-h-9 sm:gap-2.5 sm:rounded-lg sm:px-2.5 sm:text-sm sm:pointer-coarse:min-h-11 data-[focused]:bg-sunken`;
 /** Under a team's fold header in the popover, rows start where the header's name does, past its chevron. */
 const indentClass = "sm:pl-7";
 /** A key's name beside what it does. */
 const kbdClass =
   "shrink-0 rounded-[5px] border border-line-strong bg-surface px-1.5 text-[11px] font-normal text-ink-soft";
-const currentRowClass = "bg-accent-soft font-semibold";
+export const currentRowClass = "bg-accent-soft font-semibold";
 /** Recent on a phone: chips in a row that scrolls sideways. */
 const chipClass =
   "max-sm:min-h-11 max-sm:w-auto max-sm:shrink-0 max-sm:rounded-full max-sm:border max-sm:border-line max-sm:bg-surface max-sm:px-4";
@@ -434,7 +434,7 @@ function SwitcherBody({
 /** A section of the list, set apart from the one above; its title is a band a shade off the panel. */
 const sectionClass = "flex flex-col not-first:mt-3";
 
-function SectionTitle({ children, count }: { children: ReactNode; count?: number }) {
+export function SectionTitle({ children, count }: { children: ReactNode; count?: number }) {
   return (
     <Header className="flex items-center px-3 text-xs font-semibold tracking-wide text-ink-soft uppercase max-sm:shrink-0 max-sm:pt-2.5 max-sm:pb-0.5 sm:mb-1 sm:min-h-8 sm:rounded-lg sm:bg-sunken sm:px-2.5 sm:text-[11px]">
       <span className="min-w-0 flex-1 truncate">{children}</span>
