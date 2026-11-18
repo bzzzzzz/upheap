@@ -18,6 +18,7 @@ use crate::common::{
     double_option, never_null, non_null,
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, RemindersModeDto, SortDto, StateModeDto};
+use crate::problem::Problem;
 use crate::turns::{AgentStateDto, GoalDto};
 use crate::waiting::ItemHeapDto;
 
@@ -702,6 +703,48 @@ mod tests {
 pub struct ItemMoveDto {
     /// The heap to move the item to: another heap of the item's team.
     pub heap_id: Uuid,
+}
+
+/// An item to move, with the version the caller last read.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ItemVersion)]
+pub struct ItemVersionDto {
+    /// The item's ID.
+    pub id: Uuid,
+    /// The item's `version` as the caller last read it. A stale one makes that item `version_conflict`.
+    pub version: u32,
+}
+
+/// Several items to move to one heap.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ItemsMoveRequest)]
+pub struct ItemsMoveDto {
+    /// The heap to move the items to: another heap of the items' team.
+    pub heap_id: Uuid,
+    /// The items to move, each with its own version, attempted in this order. They may come from any heaps of the team.
+    pub items: Vec<ItemVersionDto>,
+}
+
+/// An item that didn't move, and why.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ItemNotMoved)]
+pub struct ItemNotMovedDto {
+    /// The item's ID.
+    pub id: Uuid,
+    /// What the single move would have answered with for this item.
+    pub problem: Problem,
+}
+
+/// What a batch move did.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ItemsMoveResponse)]
+pub struct ItemsMovedDto {
+    /// The items that moved, in the order of the request.
+    pub moved: Vec<ItemDto>,
+    /// The items that didn't, in the order of the request.
+    pub not_moved: Vec<ItemNotMovedDto>,
 }
 
 /// The task to make a note a step of.

@@ -2,8 +2,9 @@
 
 use api_types::common::{HeapSummaryDto, ItemDto, ItemRefDto};
 use api_types::items::{
-    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemMoveDto, ItemPatchDto, ItemToStepDto, RankedListDto, RankedQuery,
-    RankingPreviewDto, RankingPreviewItemDto, RankingPreviewRequestDto,
+    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemMoveDto, ItemNotMovedDto, ItemPatchDto, ItemToStepDto,
+    ItemsMoveDto, ItemsMovedDto, RankedListDto, RankedQuery, RankingPreviewDto, RankingPreviewItemDto,
+    RankingPreviewRequestDto,
 };
 use axum::Json;
 use axum::extract::State;
@@ -11,7 +12,7 @@ use axum::http::StatusCode;
 use domain::heap::HeapPolicyPatch;
 use domain::item::{ItemPatch, StateKind};
 use domain::parameter::{ParameterError, Weight};
-use domain::{HeapId, ItemId, ParameterId, TagId, Timestamp, ValidationError};
+use domain::{HeapId, ItemId, ParameterId, TagId, Timestamp, ValidationError, Version};
 use service::ServiceError;
 use service::items::{ClosedCursor, ParameterWeightDraft, WeightsDraft, parse_preview_limit};
 use utoipa_axum::router::OpenApiRouter;
@@ -19,9 +20,9 @@ use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::dto::{IfMatchHeader, to_item_dto, to_ranked_dto};
-use crate::error::Problem;
+use crate::error::{Problem, problem_of};
 use crate::extract::{ApiJson, ApiQuery, ClientTimeZone, IfMatch, TimeZoneHeader};
-use crate::paths::{HeapParams, HeapPath, ItemParams, ItemPath};
+use crate::paths::{HeapParams, HeapPath, ItemParams, ItemPath, TeamParams, TeamPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -32,6 +33,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(get_item, update_item))
         .routes(routes!(reopen_item))
         .routes(routes!(move_item))
+        .routes(routes!(move_items))
         .routes(routes!(became_item))
         .routes(routes!(note_to_step))
 }
@@ -296,6 +298,48 @@ async fn move_item(
         .move_item(path.principal, path.item_id, HeapId::from_uuid(body.heap_id), expected)
         .await?;
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
+}
+
+/// Moves several items to one heap, each on its own: every item is moved as `POST …/items/{item}/move` moves one, in
+/// the order given, in its own transaction. One that can't move doesn't stop the others and doesn't undo them. Each item
+/// carries its own `version`, so there is no `If-Match`. The items may come from any heaps of the team. The response
+/// lists the items that moved, as the single move answers, and the ones that didn't with the problem the single move
+/// would have answered with for each, both in the order of the request. An empty list moves nothing and succeeds.
+#[utoipa::path(post, path = "/teams/{team}/items/move", tag = "items", security(("session" = [])),
+    params(TeamParams, TimeZoneHeader), request_body = ItemsMoveDto,
+    responses(
+        (status = 200, body = ItemsMovedDto),
+        (status = 400, description = "A body that isn't a `heap_id` and a list of items with versions", body = Problem),
+        (status = 404, body = Problem),
+    ))]
+async fn move_items(
+    State(state): State<AppState>,
+    path: TeamPath,
+    ClientTimeZone(tz): ClientTimeZone,
+    ApiJson(body): ApiJson<ItemsMoveDto>,
+) -> Result<Json<ItemsMovedDto>, ApiError> {
+    let heap = HeapId::from_uuid(body.heap_id);
+    let mut moved = Vec::new();
+    let mut not_moved = Vec::new();
+    for item in body.items {
+        let result = state
+            .services
+            .move_item(
+                path.principal,
+                ItemId::from_uuid(item.id),
+                heap,
+                Version::new(item.version),
+            )
+            .await;
+        match result {
+            Ok(view) => moved.push(to_item_dto(view, state.services.now(), &tz)),
+            Err(err) => not_moved.push(ItemNotMovedDto {
+                id: item.id,
+                problem: problem_of(&ApiError::from(err)).1,
+            }),
+        }
+    }
+    Ok(Json(ItemsMovedDto { moved, not_moved }))
 }
 
 /// Closes a note as became, because items were made from it (`POST …/items` with an `origin`). Declarative: it says
