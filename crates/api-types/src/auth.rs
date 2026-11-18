@@ -94,6 +94,13 @@ pub struct SetPasswordRequestDto {
     pub password: String,
 }
 
+/// Where to send the browser to end the person's session at the identity provider too.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SignedOut {
+    /// The provider's end session endpoint, with the ID token hint, the client and where to come back to (`/login`).
+    pub provider_logout_url: String,
+}
+
 /// The OpenID Connect provider people may sign in through on this server.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = OidcProvider)]

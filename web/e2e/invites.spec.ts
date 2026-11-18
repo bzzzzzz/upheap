@@ -305,6 +305,35 @@ test("Not you? Sign out leaves the same page, signed out", async ({ page, browse
   }
 });
 
+test("Not you? Sign out through the provider comes back to the same page, signed out", async ({
+  page,
+  browser,
+  baseURL,
+}, testInfo) => {
+  const acme = await acmeWithLink(page, 1);
+  const sam = await newPerson(browser, testInfo, "Sam Ortiz");
+  try {
+    // The server has no provider here, so the answer that names the provider's logout is made up. It really signs
+    // out, and the "provider" sends the browser to the app's sign-in page, as a real one does.
+    await sam.page.route("**/api/v1/auth/logout", async (route) => {
+      await route.fetch();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ provider_logout_url: `${baseURL}/login` }),
+      });
+    });
+    await sam.page.goto(acme.path);
+    await expect(sam.page.getByRole("heading", { name: "Join Acme?" })).toBeVisible();
+    await sam.page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(sam.page).toHaveURL(acme.path);
+    await expect(sam.page.getByRole("heading", { name: "Join Acme", exact: true })).toBeVisible();
+    await expect(sam.page.getByRole("tab", { name: "Create account" })).toHaveAttribute("aria-selected", "true");
+  } finally {
+    await sam.context.close();
+  }
+});
+
 test("a session that ends while the confirm is open leaves the user on the page, signed out", async ({
   page,
   browser,

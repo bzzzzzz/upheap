@@ -1029,7 +1029,12 @@ export function useChangePassword() {
 export function useSignOut() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => ensureOk(await api.POST("/api/v1/auth/logout")),
+    // The body is the provider's logout URL, or `undefined` on a plain `204`.
+    mutationFn: async () => {
+      const result = await api.POST("/api/v1/auth/logout");
+      ensureOk(result);
+      return result.data;
+    },
     onSuccess: () => queryClient.clear(),
   });
 }

@@ -87,9 +87,19 @@
           "auth"
         ],
         "summary": "Ends the current session. Succeeds when there is none.",
-        "description": "Only the session cookie is ended. A bearer token is left alone, and the answer is still `204`: a client signs out\nwith `POST /oauth/revoke`.",
+        "description": "Only the session cookie is ended. A bearer token is left alone, and the answer is still `204`: a client signs out\nwith `POST /oauth/revoke`.\n\nWhen the server is set to sign people out at their OpenID Connect provider too, the session came from the\nprovider and the provider supports it, the answer is `200` with the URL to send the browser to. The session is\nended either way, and a provider that can't be reached gives `204`.",
         "operationId": "sign_out",
         "responses": {
+          "200": {
+            "description": "Signed out; the browser goes on to the provider to end its session there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            }
+          },
           "204": {
             "description": "Signed out"
           }
@@ -13756,6 +13766,19 @@
           },
           "password": {
             "type": "string"
+          }
+        }
+      },
+      "SignedOut": {
+        "type": "object",
+        "description": "Where to send the browser to end the person's session at the identity provider too.",
+        "required": [
+          "provider_logout_url"
+        ],
+        "properties": {
+          "provider_logout_url": {
+            "type": "string",
+            "description": "The provider's end session endpoint, with the ID token hint, the client and where to come back to (`/login`)."
           }
         }
       },

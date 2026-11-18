@@ -13,6 +13,7 @@ import {
   useTeam,
 } from "../api/queries";
 import { problemMessage } from "../components/ProblemText";
+import { leaveAfterSignOut } from "../signOutRedirect";
 import { AuthCard, AuthPage, authButtonClass, type RegisterRequest } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
 
@@ -204,7 +205,13 @@ function Confirm({
           disabled={signOut.isPending}
           // Signing out drops the whole cache under this page's live queries, so the page is loaded afresh, as the
           // consent page does (`AuthorizeRoute`).
-          onClick={() => signOut.mutate(undefined, { onSuccess: () => window.location.replace(window.location.href) })}
+          onClick={() =>
+            signOut.mutate(undefined, {
+              // Through the provider, if there is one, which sends the person back to sign-in, and from there to this page.
+              onSuccess: (signedOut) =>
+                leaveAfterSignOut(signedOut, `/invite/${token}`, () => window.location.replace(window.location.href)),
+            })
+          }
           className="font-semibold text-accent-ink underline disabled:opacity-40 pointer-coarse:min-h-11"
         >
           Sign out

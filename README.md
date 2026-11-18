@@ -106,6 +106,7 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | `UPHEAP_OIDC_SCOPES` | `openid email profile` | Space-separated scopes to ask for; `openid` is always asked |
 | `UPHEAP_OIDC_GROUP_TEAMS` | none | A JSON object from team slug to the list of provider groups whose members the team has: `{"ops": ["engineering", "sre"]}`. Needs the provider. See [Teams from groups](#teams-from-groups) |
 | `UPHEAP_OIDC_GROUPS_CLAIM` | `groups` | The ID token claim that lists a person's groups. Only read when `UPHEAP_OIDC_GROUP_TEAMS` is set |
+| `UPHEAP_OIDC_PROVIDER_LOGOUT` | `false` | `true` also signs a person out at the provider when they sign out of the web app, if the provider supports RP-initiated logout. Needs the provider |
 | `UPHEAP_SCIM_TOKEN` | none | The bearer token the provider's SCIM client sends, at least 32 characters; make one with `openssl rand -hex 32`. Needs the provider. Unset, there are no SCIM endpoints. See [Provisioning over SCIM](#provisioning-over-scim) |
 
 ### Signing in through a provider
@@ -123,6 +124,14 @@ refused. A first sign-in asks for a username and makes the account, also when `A
 person whose email already belongs to a local account is refused, not linked. People who sign in through the provider
 have no password in Upheap. The server doesn't contact the provider at startup, so a provider that is down never
 stops the server or local sign-in. Start with one setting missing and the server stops, naming it.
+
+With `UPHEAP_OIDC_PROVIDER_LOGOUT=true`, every sign-out in the web app (Account, and "Not you?" on the invite and
+consent pages) also ends the person's session at the provider (OpenID Connect RP-Initiated Logout), so the next person
+on a shared machine can't sign in as them with one click. Register `{BASE_URL}/login` at the provider as a post-logout
+redirect URI, where it sends the person afterwards. With the setting on, the ID token of a provider sign-in is kept on
+the session row until the person signs out or their sessions are ended (a password change or reset); a session that only
+expires keeps its row, and the token with it. A provider without logout (Google, say) and a provider that is down just
+sign the person out of Upheap. The CLI's sign-out is unchanged.
 
 #### Teams from groups
 

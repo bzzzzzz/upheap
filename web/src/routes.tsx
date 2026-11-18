@@ -2,6 +2,8 @@
 // and items by their handles (design/architecture.md, Handles), and `/h/…` short links expand to them.
 import type { QueryClient } from "@tanstack/react-query";
 import {
+  type AnyRouteMatch,
+  type AnyRouter,
   createRootRouteWithContext,
   createRoute,
   createRouter,
@@ -17,6 +19,7 @@ import { isUnauthenticated } from "./api/client";
 import type { OAuthAuthorizationRequest } from "./api/schema";
 import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queries";
 import { BASE } from "./basePath";
+import { leaveAfterSignOut, takeKeptPage } from "./signOutRedirect";
 import { parseAcrossSearch, parseListSearch } from "./components/listView";
 import { AllItemsPage } from "./pages/AllItemsPage";
 import { AccountPage } from "./pages/AccountPage";
@@ -41,7 +44,12 @@ import { WaitingPage } from "./pages/WaitingPage";
 
 const linkClass = "text-sky-700 hover:underline dark:text-sky-400";
 
-const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
+/** What route options need of the router, which they can't reach: the router's own matching of a path. */
+type RouteMatcher = { matchRoutes: (pathname: string, search: object) => AnyRouteMatch[] };
+
+const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient; router: RouteMatcher }>()({
+  component: Outlet,
+});
 
 /**
  * Sign-in's search for a user sent there from `href`, a path in the app with its search and hash, so signing in
@@ -95,7 +103,7 @@ const ITEM_KEY = /^(?=.*\d)[0-9a-hjkmnp-tv-z]{5}$/;
  * `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless. An invite link's page is
  * one too: a sign-in that started on it comes back to it.
  */
-function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | undefined) {
+function toAppPage(router: RouteMatcher, redirect: string | undefined) {
   if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
   // The URL parser drops tabs and newlines and resolves dot segments, so `/\t/evil.example` is another origin and
   // `/.//evil.example` comes out as `//evil.example`. Check what it gives, not what came in.
@@ -149,6 +157,15 @@ const loginRoute = createRoute({
     ...(typeof search.sign_in_error === "string" && { sign_in_error: search.sign_in_error }),
     ...(typeof search.login === "string" && { login: search.login }),
   }),
+  // Back from the provider's sign-out, which names no page: the one the person signed out on, if one was kept.
+  beforeLoad: ({ search, context }) => {
+    if (search.redirect !== undefined) return;
+    const kept = takeKeptPage();
+    // The page itself, as the plain sign-out reloads it: it shows signed out, or sends the person back here with
+    // its own `redirect`.
+    const page = toAppPage(context.router, kept);
+    if (page) window.location.replace(BASE + page.href);
+  },
   component: function LoginRoute() {
     const router = useRouter();
     const { redirect, sign_in_error: refusal, login } = loginRoute.useSearch();
@@ -237,11 +254,18 @@ const authorizeRoute = createRoute({
     const request = toAuthorizationRequest(Object.fromEntries(new URLSearchParams(window.location.search)));
     // Signing out drops the whole cache while this page's queries still watch it, so sign-in is loaded afresh
     // rather than reached in place, as the way back here is.
-    const toSignIn = `${BASE}/login?${new URLSearchParams(signInSearch(pageHref(router.state.location.href))).toString()}`;
+    const href = pageHref(router.state.location.href);
+    const toSignIn = `${BASE}/login?${new URLSearchParams(signInSearch(href)).toString()}`;
     return (
       <AuthorizePage
         request={request}
-        onUseAnotherAccount={() => signOut.mutate(undefined, { onSuccess: () => window.location.replace(toSignIn) })}
+        onUseAnotherAccount={() =>
+          signOut.mutate(undefined, {
+            onSuccess: (signedOut) => {
+              leaveAfterSignOut(signedOut, href, () => window.location.replace(toSignIn));
+            },
+          })
+        }
       />
     );
   },
@@ -570,13 +594,20 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {
-  // Vite's base, which is the root unless the app is built for another.
-  return createRouter({
+  // Route options see the router's context but not the router, so it carries the one thing they need of it.
+  const created: { router?: AnyRouter } = {};
+  const matcher: RouteMatcher = {
+    matchRoutes: (pathname, search) => created.router?.matchRoutes(pathname, search) ?? [],
+  };
+  const router = createRouter({
     routeTree,
-    context: { queryClient },
+    context: { queryClient, router: matcher },
     defaultPreload: "intent",
+    // Vite's base, which is the root unless the app is built for another.
     basepath: import.meta.env.BASE_URL,
   });
+  created.router = router;
+  return router;
 }
 
 declare module "@tanstack/react-router" {

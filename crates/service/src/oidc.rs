@@ -6,8 +6,12 @@
 //! verified name and email on the row for the username step. Discovery is fetched on every start and callback, so a
 //! provider that is down never stops the server.
 //!
+//! With provider logout on, the ID token is kept with the session, and signing out fetches discovery again to build
+//! the provider's logout URL from it (RP-initiated logout). Any failure there leaves a plain sign-out of Upheap.
+//!
 //! Nothing here logs a token, a code, the client secret, the state or the verifier.
 
+use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use domain::handle::Handle;
@@ -15,10 +19,11 @@ use domain::oidc::{choose_display_name, is_app_path, pending_sign_in_ends_at};
 use domain::text::Name;
 use domain::user::{DisplayName, Email};
 use domain::validation::Field;
-use openidconnect::core::{CoreClient, CoreProviderMetadata, CoreResponseType};
+use openidconnect::core::{CoreClient, CoreIdToken, CoreResponseType};
 use openidconnect::{
     AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointMaybeSet, EndpointNotSet,
-    EndpointSet, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
+    EndpointSet, IssuerUrl, LogoutRequest, Nonce, PkceCodeChallenge, PkceCodeVerifier, PostLogoutRedirectUrl,
+    ProviderMetadataWithLogout, RedirectUrl, Scope, TokenResponse,
 };
 use store::oidc_sign_ins::{NewOidcSignIn, OidcSignIn, VerifiedIdentity};
 use store::{StoreError, TransactionTrait};
@@ -53,6 +58,8 @@ pub struct OidcSettings {
     label: String,
     /// The ID token claim that lists the person's groups.
     groups_claim: String,
+    /// Whether signing out also ends the person's session at the provider.
+    provider_logout: bool,
     /// `BASE_URL`, without a trailing slash: where a finished sign-in sends the browser.
     app_url: String,
     redirect_uri: RedirectUrl,
@@ -105,6 +112,7 @@ impl OidcSettings {
                 .collect(),
             label: label.to_owned(),
             groups_claim: DEFAULT_GROUPS_CLAIM.to_owned(),
+            provider_logout: false,
             app_url: app_url.to_owned(),
             redirect_uri: RedirectUrl::new(format!("{app_url}{CALLBACK_PATH}"))
                 .map_err(OidcSettingsError::RedirectUri)?,
@@ -118,6 +126,17 @@ impl OidcSettings {
         let claim = claim.trim();
         self.groups_claim = if claim.is_empty() { DEFAULT_GROUPS_CLAIM } else { claim }.to_owned();
         self
+    }
+
+    /// Keeps the ID token with the session, so signing out can end the person's session at the provider too.
+    #[must_use]
+    pub fn with_provider_logout(mut self, on: bool) -> Self {
+        self.provider_logout = on;
+        self
+    }
+
+    pub fn provider_logout(&self) -> bool {
+        self.provider_logout
     }
 
     pub fn groups_claim(&self) -> &str {
@@ -347,6 +366,8 @@ impl Services {
             Ok(claims) => claims,
             Err(failure) => return refuse(failure.reason(), failure.log(), None).await,
         };
+        // Kept only when signing out reaches the provider.
+        let id_token_to_keep = oidc.provider_logout.then(|| claims.id_token.clone());
         if let Some(Groups::Unknown(reason)) = &claims.groups {
             tracing::warn!(
                 claim = oidc.groups_claim(),
@@ -364,7 +385,7 @@ impl Services {
             self.lock_group_teams(&txn).await?;
             self.sync_sign_in_groups(&txn, user.id, &claims.subject, claims.groups.clone(), now)
                 .await?;
-            let grant = self.open_session(&txn, user, now).await?;
+            let grant = self.open_session(&txn, user, now, id_token_to_keep.as_deref()).await?;
             store::oidc_sign_ins::delete_oidc_sign_in(&txn, state_hash).await?;
             txn.commit().await.map_err(StoreError::from)?;
             tracing::info!(user_id = %grant.user.id, "user signed in through the provider");
@@ -398,6 +419,7 @@ impl Services {
                 Some(Groups::Known(groups)) => Some(groups.into_iter().collect()),
                 Some(Groups::Unknown(_)) | None => None,
             },
+            id_token: id_token_to_keep,
         };
         if !store::oidc_sign_ins::set_oidc_sign_in_verified(&self.db, state_hash, &identity, ends_at).await? {
             return refuse(OidcRefusal::SignInExpired, "the sign-in ended meanwhile", None).await;
@@ -440,7 +462,9 @@ impl Services {
             .map(|groups| Groups::Known(groups.into_iter().collect()));
         self.sync_sign_in_groups(&txn, made.user.id, &verified.subject, token_groups, now)
             .await?;
-        let grant = self.open_session(&txn, made.user, now).await?;
+        let grant = self
+            .open_session(&txn, made.user, now, verified.id_token.as_deref())
+            .await?;
         store::oidc_sign_ins::delete_oidc_sign_in(&txn, &sha256_hex(state)).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
@@ -463,13 +487,43 @@ impl Services {
     }
 }
 
+/// Fetches the provider's discovery document and keys, with the end session endpoint if it names one.
+async fn discover_metadata(oidc: &OidcSettings) -> Result<ProviderMetadataWithLogout, DiscoveryFailure> {
+    ProviderMetadataWithLogout::discover_async(oidc.issuer.clone(), &oidc.http).await
+}
+
 /// Fetches the provider's discovery document and keys, and makes the client for them.
 async fn discover(oidc: &OidcSettings) -> Result<ProviderClient, DiscoveryFailure> {
-    let metadata = CoreProviderMetadata::discover_async(oidc.issuer.clone(), &oidc.http).await?;
+    let metadata = discover_metadata(oidc).await?;
     Ok(
         CoreClient::from_provider_metadata(metadata, oidc.client_id.clone(), Some(oidc.client_secret.clone()))
             .set_redirect_uri(oidc.redirect_uri.clone()),
     )
+}
+
+/// The URL that ends the person's session at the provider and sends them back to `/login`, or `None` when the
+/// provider names no end session endpoint, can't be reached, or `id_token` isn't a token. Signing out never fails
+/// because of the provider, so a failure is only logged, without the token.
+pub(crate) async fn provider_logout_url(oidc: &OidcSettings, id_token: &str) -> Option<String> {
+    let metadata = match discover_metadata(oidc).await {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            tracing::warn!(
+                kind = discovery_kind(&error),
+                "provider logout skipped: discovery failed"
+            );
+            return None;
+        }
+    };
+    let end_session_endpoint = metadata.additional_metadata().end_session_endpoint.clone()?;
+    let id_token = CoreIdToken::from_str(id_token).ok()?;
+    let post_logout_redirect_uri = PostLogoutRedirectUrl::new(format!("{}/login", oidc.app_url)).ok()?;
+    let url = LogoutRequest::from(end_session_endpoint)
+        .set_id_token_hint(&id_token)
+        .set_client_id(oidc.client_id.clone())
+        .set_post_logout_redirect_uri(post_logout_redirect_uri)
+        .http_get_url();
+    Some(url.to_string())
 }
 
 fn discovery_kind(error: &DiscoveryFailure) -> &'static str {
@@ -489,6 +543,8 @@ struct IdentityClaims {
     email: Option<String>,
     email_verified: Option<bool>,
     name: Option<String>,
+    /// The ID token as the provider sent it, which was verified.
+    id_token: String,
     /// `None` when the groups weren't asked for.
     groups: Option<Groups>,
 }
@@ -562,6 +618,7 @@ async fn verify_code(
             .name()
             .and_then(|name| name.get(None))
             .map(|name| name.as_str().trim().to_owned()),
+        id_token: id_token.to_string(),
         // The signature was checked above, so the payload can be read as it is.
         groups: groups_claim.map(|claim| read_groups(&id_token.to_string(), claim)),
     })
