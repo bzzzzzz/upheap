@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import {
   addDialog,
@@ -1387,4 +1387,117 @@ test("a link in the item to another in its heap brings that row into view, selec
   await expect(page).toHaveURL(new RegExp(`/heaps/${other.slug}/items/${task.key}`));
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Made from the note");
   await expect.poll(scrollY).toBe(0);
+});
+
+/** Makes a task through the API with these steps, in order, and opens it. Returns the Steps region and the item's URL. */
+async function openTaskWithSteps(page: Page, heapPath: string, titles: string[]) {
+  const headers = { "x-csrf-protection": "1" };
+  const created = await page.request.post(`/api/v1${heapPath}/items`, {
+    headers,
+    data: { title: "Rotate the certs", need: "expected" },
+  });
+  expect(created.status()).toBe(201);
+  const { key, version } = await created.json();
+  const item = `/api/v1${heapPath}/items/${key}`;
+  const made = await page.request.patch(item, {
+    headers: { ...headers, "If-Match": `"${version}"` },
+    data: { kind: "task" },
+  });
+  expect(made.status()).toBe(200);
+  for (const title of titles) {
+    const step = await page.request.post(`${item}/steps`, { headers, data: { title } });
+    expect(step.status()).toBe(201);
+  }
+  await page.goto(`${heapPath}/items/${key}`);
+  const steps = itemPane(page).getByRole("region", { name: "Steps" });
+  await expect(steps.getByRole("textbox", { name: "Step title" })).toHaveCount(titles.length);
+  return { steps, item };
+}
+
+async function expectStepOrder(steps: Locator, titles: string[]) {
+  const fields = steps.getByRole("textbox", { name: "Step title" });
+  await expect(fields).toHaveCount(titles.length);
+  for (const [index, title] of titles.entries()) await expect(fields.nth(index)).toHaveValue(title);
+}
+
+test("a step is dragged by its grip to a new place, and the server keeps it", async ({ page, heapPath }) => {
+  const { steps } = await openTaskWithSteps(page, heapPath, ["One", "Two", "Three"]);
+  const grips = steps.locator("[data-step-grip]");
+  if (test.info().project.name === "phone") {
+    await expect(grips.first()).toBeVisible();
+    const box = await grips.first().boundingBox();
+    expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(44);
+  }
+  const fields = steps.getByRole("textbox", { name: "Step title" });
+  await grips.nth(2).hover();
+  const target = await fields.nth(0).boundingBox();
+  await page.mouse.down();
+  const start = await grips.nth(2).boundingBox();
+  const fromY = (start?.y ?? 0) + (start?.height ?? 0) / 2;
+  const toY = (target?.y ?? 0) + 2;
+  for (let i = 1; i <= 6; i++) await page.mouse.move((start?.x ?? 0) + 4, fromY + ((toY - fromY) * i) / 6);
+  const saved = page.waitForResponse((r) => r.request().method() === "PATCH" && /\/steps\/3$/.test(r.url()));
+  await page.mouse.up();
+  await saved;
+  await expectStepOrder(steps, ["Three", "One", "Two"]);
+  await page.reload();
+  await expectStepOrder(steps, ["Three", "One", "Two"]);
+});
+
+test("Escape puts a dragged step back and saves nothing", async ({ page, heapPath }) => {
+  const { steps } = await openTaskWithSteps(page, heapPath, ["One", "Two", "Three"]);
+  const grips = steps.locator("[data-step-grip]");
+  await grips.nth(0).hover();
+  const last = await steps.getByRole("textbox", { name: "Step title" }).nth(2).boundingBox();
+  await page.mouse.down();
+  const start = await grips.nth(0).boundingBox();
+  const fromY = (start?.y ?? 0) + (start?.height ?? 0) / 2;
+  const toY = (last?.y ?? 0) + (last?.height ?? 0) + 4;
+  for (let i = 1; i <= 6; i++) await page.mouse.move((start?.x ?? 0) + 4, fromY + ((toY - fromY) * i) / 6);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(itemPane(page)).toBeVisible();
+  await expectStepOrder(steps, ["One", "Two", "Three"]);
+  await page.reload();
+  await expectStepOrder(steps, ["One", "Two", "Three"]);
+});
+
+test("Move up and Move down in a step's menu move it, and focus stays on its menu button", async ({
+  page,
+  heapPath,
+}) => {
+  const { steps } = await openTaskWithSteps(page, heapPath, ["One", "Two", "Three"]);
+  const actions = steps.getByRole("button", { name: "Step actions" });
+  await actions.nth(0).click();
+  await expect(page.getByRole("menuitem", { name: "Move down" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Move up" })).toHaveCount(0);
+  const saved = page.waitForResponse((r) => r.request().method() === "PATCH" && /\/steps\/1$/.test(r.url()));
+  await page.getByRole("menuitem", { name: "Move down" }).click();
+  await saved;
+  await expectStepOrder(steps, ["Two", "One", "Three"]);
+  await expect(steps.getByRole("status")).toHaveText("Moved to place 2 of 3");
+  await expect(actions.nth(1)).toBeFocused();
+
+  await actions.nth(2).click();
+  await expect(page.getByRole("menuitem", { name: "Move up" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Move down" })).toHaveCount(0);
+});
+
+test("a move the server refuses goes back, and the reason shows under the steps", async ({ page, heapPath }) => {
+  const { steps, item } = await openTaskWithSteps(page, heapPath, ["One", "Two", "Three"]);
+  // Someone else edits "Two" after the page loaded, so the page's version of it is stale.
+  const current = await page.request.get(item);
+  const two = (await current.json()).steps.find((step: { number: number }) => step.number === 2);
+  const edited = await page.request.patch(`${item}/steps/2`, {
+    headers: { "x-csrf-protection": "1", "If-Match": `"${two.version}"` },
+    data: { context: "Changed meanwhile" },
+  });
+  expect(edited.status()).toBe(200);
+
+  await steps.getByRole("button", { name: "Step actions" }).nth(1).click();
+  await page.getByRole("menuitem", { name: "Move up" }).click();
+  await expect(steps.getByRole("alert")).toHaveText(
+    "Someone else changed this item meanwhile. It now shows their version.",
+  );
+  await expectStepOrder(steps, ["One", "Two", "Three"]);
 });

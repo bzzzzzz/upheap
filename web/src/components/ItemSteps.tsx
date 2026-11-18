@@ -1,6 +1,18 @@
 import { Link } from "@tanstack/react-router";
-import { Check, ChevronRight, CircleMinus, Ellipsis, Minus, Plus, Undo2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronRight,
+  CircleMinus,
+  Ellipsis,
+  GripVertical,
+  Minus,
+  Plus,
+  Undo2,
+} from "lucide-react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
@@ -14,7 +26,9 @@ import { MenuEntry, MenuPopover } from "./Menu";
 import { useOverListLink } from "./overList";
 
 /**
- * A task's steps (ux.md, The item §3): a checklist, inline at every width, each step saving as it's changed. Only the
+ * A task's steps (ux.md, The item point 11): a checklist, inline at every width, each step saving as it's changed. An
+ * editor moves a step by dragging its grip or with Move up and Move down in its ⋯ menu; the move shows at once, from
+ * a pending order, until the server has answered. Only the
  * server's `allowed_actions` decide what can be done: ticking, editing and dropping need `edit` on the step, adding
  * needs `add_step` on the item, and the server offers that only for a task, so this renders nothing for a note. A step
  * that is dropped stays in the list, struck through, and can be restored. `item` is a single-item response, the only
@@ -27,7 +41,48 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const [shown, setShown] = useState<ReadonlySet<number>>(new Set());
   const canAdd = item.allowed_actions.includes("add_step");
 
-  const steps = item.steps ?? [];
+  const served = item.steps ?? [];
+  // The order a move has asked for, while the server saves it; the list shows it until the latest move has settled.
+  const [pending, setPending] = useState<readonly number[] | null>(null);
+  const moves = useRef(0);
+  const [moved, setMoved] = useState("");
+  const steps = pending
+    ? (() => {
+        const place = (step: Step) => {
+          const index = pending.indexOf(step.number);
+          return index < 0 ? pending.length : index;
+        };
+        return [...served].sort((a, b) => place(a) - place(b));
+      })()
+    : served;
+  const listRef = useRef<HTMLUListElement>(null);
+  const rows = useRef(new Map<number, HTMLLIElement>());
+
+  // Puts a step at an index of the shown order. A move to where it is writes nothing.
+  const moveTo = (number: number, index: number) => {
+    const order = steps.map((step) => step.number);
+    const from = order.indexOf(number);
+    if (from < 0 || from === index) return;
+    order.splice(from, 1);
+    order.splice(index, 0, number);
+    const step = steps[from];
+    if (!step) return;
+    const move = ++moves.current;
+    setPending(order);
+    setMoved(`Moved to place ${index + 1} of ${order.length}`);
+    const settled = () => {
+      if (move === moves.current) setPending(null);
+    };
+    update
+      .mutateAsync({ step, patch: { after: index === 0 ? null : (order[index - 1] ?? null) } })
+      .then(settled, settled);
+  };
+  const drag = useStepDrag({
+    listRef,
+    rows,
+    numbers: steps.map((step) => step.number),
+    onDrop: moveTo,
+  });
 
   if (steps.length === 0 && !canAdd) return null;
 
@@ -47,11 +102,20 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
         {progress ? `Steps ${progress.ticked}/${progress.total}` : "Steps"}
       </h3>
       {steps.length > 0 && (
-        <ul className="flex flex-col">
-          {steps.map((step) => (
+        <ul ref={listRef} className={`relative flex flex-col ${drag.active ? "select-none" : ""}`}>
+          {steps.map((step, index) => (
             <StepRow
               key={step.id}
               step={step}
+              rowRef={(row) => {
+                if (row) rows.current.set(step.number, row);
+                else rows.current.delete(step.number);
+              }}
+              canMoveUp={index > 0}
+              canMoveDown={index < steps.length - 1}
+              onMove={(delta) => moveTo(step.number, index + delta)}
+              grip={drag.gripProps(step.number)}
+              lift={drag.lifted === step.number ? drag.dy : null}
               contextShown={shown.has(step.number)}
               onToggleContext={() => toggleContext(step.number)}
               onSave={(patch) =>
@@ -62,8 +126,18 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
               }
             />
           ))}
+          {drag.lineY !== null && (
+            <li
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 h-0.5 bg-accent"
+              style={{ top: drag.lineY - 1 }}
+            />
+          )}
         </ul>
       )}
+      <span role="status" className="sr-only">
+        {moved}
+      </span>
       {canAdd && (
         <AddStep
           onAdd={(title) =>
@@ -87,13 +161,177 @@ const slotClass = "flex size-9 shrink-0 items-center justify-center pointer-coar
 const iconButtonClass =
   "flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11";
 
+/** The pointer handlers of a step's grip. */
+type GripProps = {
+  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
+};
+
+/** How near the edge of the scrolling pane the pointer scrolls it, and by how much a frame. */
+const EDGE_ZONE = 48;
+const EDGE_SCROLL = 8;
+
+/**
+ * Dragging a step by its grip, with pointer events (mouse, touch and pen alike). The dragged row follows the pointer
+ * (`dy`, for `lifted`) while the others stay, and `lineY` is where the landing place's line goes, within the list. The
+ * landing place is the number of other rows whose midpoint is above the pointer; the rows' rects are read again at
+ * every move and frame, since the pane may be scrolling. Escape and a cancelled pointer put the row back.
+ */
+function useStepDrag({
+  listRef,
+  rows,
+  numbers,
+  onDrop,
+}: {
+  listRef: React.RefObject<HTMLUListElement | null>;
+  rows: React.RefObject<Map<number, HTMLLIElement>>;
+  /** The step numbers in the shown order. */
+  numbers: readonly number[];
+  /** Called with the step and the index it lands at in the shown order. */
+  onDrop: (number: number, index: number) => void;
+}) {
+  const [lifted, setLifted] = useState<number | null>(null);
+  const [dy, setDy] = useState(0);
+  const [lineY, setLineY] = useState<number | null>(null);
+  const session = useRef<{
+    number: number;
+    pointerId: number;
+    startY: number;
+    startListTop: number;
+    pointerY: number;
+    others: readonly number[];
+    index: number;
+    landing: number;
+    scroller: Element;
+  } | null>(null);
+
+  const measure = useCallback(() => {
+    const current = session.current;
+    const list = listRef.current;
+    if (!current || !list) return;
+    const listTop = list.getBoundingClientRect().top;
+    // The list moves when its pane scrolls, and the row has to stay under the pointer.
+    setDy(current.pointerY - current.startY + current.startListTop - listTop);
+    const rects = current.others.map((number) => rows.current.get(number)?.getBoundingClientRect());
+    const landing = rects.filter((rect) => rect && (rect.top + rect.bottom) / 2 < current.pointerY).length;
+    current.landing = landing;
+    const above = rects[landing - 1];
+    const below = rects[landing];
+    if (landing === current.index) setLineY(null);
+    else if (above && below) setLineY((above.bottom + below.top) / 2 - listTop);
+    else if (below) setLineY(below.top - listTop);
+    else if (above) setLineY(above.bottom - listTop);
+  }, [listRef, rows]);
+
+  const end = useCallback(() => {
+    session.current = null;
+    setLifted(null);
+    setDy(0);
+    setLineY(null);
+  }, []);
+
+  useEffect(() => {
+    if (lifted === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // Only the drag takes this Escape: the item stays open.
+      event.preventDefault();
+      event.stopPropagation();
+      end();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    let frame = requestAnimationFrame(function scroll() {
+      const current = session.current;
+      if (current) {
+        const edge =
+          current.scroller === document.scrollingElement
+            ? { top: 0, bottom: window.innerHeight }
+            : current.scroller.getBoundingClientRect();
+        if (current.pointerY < edge.top + EDGE_ZONE) current.scroller.scrollTop -= EDGE_SCROLL;
+        else if (current.pointerY > edge.bottom - EDGE_ZONE) current.scroller.scrollTop += EDGE_SCROLL;
+        measure();
+      }
+      frame = requestAnimationFrame(scroll);
+    });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      cancelAnimationFrame(frame);
+    };
+  }, [lifted, measure, end]);
+
+  return {
+    active: lifted !== null,
+    lifted,
+    dy,
+    lineY,
+    gripProps: (number: number): GripProps => ({
+      onPointerDown: (event) => {
+        if (event.button !== 0 || session.current || !listRef.current) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        let scroller: Element = document.scrollingElement ?? document.documentElement;
+        for (let node = listRef.current.parentElement; node; node = node.parentElement) {
+          const { overflowY } = getComputedStyle(node);
+          if (/auto|scroll|overlay/.test(overflowY) && node.scrollHeight > node.clientHeight) {
+            scroller = node;
+            break;
+          }
+        }
+        const index = numbers.indexOf(number);
+        session.current = {
+          number,
+          pointerId: event.pointerId,
+          startY: event.clientY,
+          startListTop: listRef.current.getBoundingClientRect().top,
+          pointerY: event.clientY,
+          others: numbers.filter((other) => other !== number),
+          index,
+          landing: index,
+          scroller,
+        };
+        setLifted(number);
+      },
+      onPointerMove: (event) => {
+        if (session.current?.pointerId !== event.pointerId) return;
+        session.current.pointerY = event.clientY;
+        measure();
+      },
+      onPointerUp: (event) => {
+        const current = session.current;
+        if (current?.pointerId !== event.pointerId) return;
+        measure();
+        end();
+        if (current.landing !== current.index) onDrop(current.number, current.landing);
+      },
+      onPointerCancel: (event) => {
+        if (session.current?.pointerId === event.pointerId) end();
+      },
+    }),
+  };
+}
+
 function StepRow({
   step,
+  rowRef,
+  canMoveUp,
+  canMoveDown,
+  onMove,
+  grip,
+  lift,
   contextShown,
   onToggleContext,
   onSave,
 }: {
   step: Step;
+  rowRef: (row: HTMLLIElement | null) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  /** Moves the step by this many places. */
+  onMove: (delta: number) => void;
+  grip: GripProps;
+  /** How far the step is dragged, while it is. */
+  lift: number | null;
   contextShown: boolean;
   onToggleContext: () => void;
   /** Resolves to whether the save landed; a failure is shown by the list. */
@@ -137,8 +375,24 @@ function StepRow({
   };
 
   return (
-    <li className="flex flex-col">
+    <li
+      ref={rowRef}
+      style={lift === null ? undefined : { transform: `translateY(${lift}px)` }}
+      className={`group flex flex-col ${lift === null ? "" : "relative z-10 bg-surface shadow-lg"}`}
+    >
       <div className="flex items-start">
+        {canEdit && (
+          <span
+            aria-hidden="true"
+            data-step-grip
+            {...grip}
+            className={`${slotClass} touch-none text-muted opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100 ${
+              lift === null ? "cursor-grab" : "cursor-grabbing"
+            }`}
+          >
+            <GripVertical className="size-4" />
+          </span>
+        )}
         {dropped ? (
           <span className={`${slotClass} text-muted`}>
             <Minus aria-hidden="true" className="size-4" />
@@ -219,6 +473,16 @@ function StepRow({
             </Button>
             <MenuPopover placement="bottom end">
               <Menu aria-label="Step actions" className="outline-none">
+                {canMoveUp && (
+                  <MenuEntry id="move-up" icon={ArrowUp} onAction={() => onMove(-1)}>
+                    Move up
+                  </MenuEntry>
+                )}
+                {canMoveDown && (
+                  <MenuEntry id="move-down" icon={ArrowDown} onAction={() => onMove(1)}>
+                    Move down
+                  </MenuEntry>
+                )}
                 {dropped ? (
                   <MenuEntry id="restore" icon={Undo2} onAction={() => onSave({ state: "open" })}>
                     Restore
@@ -234,7 +498,7 @@ function StepRow({
         )}
       </div>
       {contextShown && (
-        <div className="pr-1 pb-2 pl-9 pointer-coarse:pl-11">
+        <div className={`pr-1 pb-2 ${canEdit ? "pl-18 pointer-coarse:pl-22" : "pl-9 pointer-coarse:pl-11"}`}>
           {canEdit && (editingContext || !step.context) ? (
             <LazyMarkdownEditor
               aria-label="Step context"
