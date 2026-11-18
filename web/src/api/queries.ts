@@ -417,7 +417,7 @@ export function useMoveItem(heap: HeapRef) {
 }
 
 /**
- * Moves several items of `heap`, or of any heap of its team, to another heap in one request. Each carries the newest
+ * Moves several items of `heap` to another heap of its team, `to`, in one request. Each carries the newest
  * version known, as `useMoveItem` sends it, and moves on its own: the answer lists the items that moved and those that
  * didn't, with the problem for each. Nothing navigates, as the list stays where it is.
  */
@@ -812,6 +812,7 @@ export function useUnblock(heap: HeapRef) {
       queryClient.setQueryData(itemKey(heap, saved.key), saved);
       replaceListedItem(queryClient, heap, saved);
       dropWaitingRows(queryClient, saved.id, "blocker_gone");
+      dropWaitingRows(queryClient, saved.id, "blocker_left_team");
     },
     onError: (_error, item) => {
       void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });

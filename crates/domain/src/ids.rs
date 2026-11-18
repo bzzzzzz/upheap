@@ -198,6 +198,7 @@ mod tests {
                 "blocker_done",
                 "title",
                 "heap",
+                "item_title",
                 "key",
                 "kind",
                 "stage",
@@ -285,6 +286,7 @@ mod tests {
                 "started",
                 "closed",
                 "heap_archived",
+                "moved",
                 "goal_met",
                 "handed_back"
             ]

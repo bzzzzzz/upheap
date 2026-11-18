@@ -2,7 +2,8 @@
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{
-    ItemDto, MadeItemDto, MadeStepDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto, StageDto, StepStateDto,
+    BlockerGoneHowDto, ItemDto, MadeItemDto, MadeStepDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto,
+    StageDto, StepStateDto,
 };
 use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use api_types::work::ItemRunDto;
@@ -419,6 +420,16 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
                 blocker.title,
                 state_text(blocker.state)
             )),
+        ]);
+    } else if item
+        .blocker_gone
+        .as_ref()
+        .is_some_and(|gone| gone.how == BlockerGoneHowDto::Moved)
+    {
+        // A blocker in another team is never named.
+        rows.push(vec![
+            Cell::new("Blocked by"),
+            Cell::new("an item moved to another team"),
         ]);
     }
     if let Some(reason) = &item.blocked_reason {

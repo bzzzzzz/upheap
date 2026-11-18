@@ -701,7 +701,7 @@ mod tests {
 #[serde(deny_unknown_fields)]
 #[schema(as = ItemMoveRequest)]
 pub struct ItemMoveDto {
-    /// The heap to move the item to: another heap of the item's team.
+    /// The heap to move the item to: a heap of any team the caller may edit items in.
     pub heap_id: Uuid,
 }
 
@@ -721,9 +721,10 @@ pub struct ItemVersionDto {
 #[serde(deny_unknown_fields)]
 #[schema(as = ItemsMoveRequest)]
 pub struct ItemsMoveDto {
-    /// The heap to move the items to: another heap of the items' team.
+    /// The heap to move the items to: a heap of the team in the path.
     pub heap_id: Uuid,
-    /// The items to move, each with its own version, attempted in this order. They may come from any heaps of the team.
+    /// The items to move, each with its own version, attempted in this order. They may come from any heap the single
+    /// move would take them from.
     pub items: Vec<ItemVersionDto>,
 }
 

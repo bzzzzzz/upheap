@@ -62,13 +62,13 @@ The tables and columns are in the migrations. These are the conventions they fol
   `arrives_at.unwrap_or(created_at)` as the item's age, so `arrives_at` has a second use: an item made from another
   with `age: keep` gets the origin's arrival (or its creation) there, and so counts its age from the note's creation.
   It is still `NULL` for every other item, and the API shows it only for reminders.
-- **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run
-  that added it, with `created_run_id` set beside it then. `made_in_split` marks the first kind: only those are what
-  the note became, so a follow-up a run adds doesn't count toward `nothing_made`, the run's reached check or the
-  Became list. All three are set when the item is made and never changed, and stay when either item later moves to
-  another heap, as a blocker's link does. An index on `origin_id` serves the lookup of what a note became, which the
-  item and the closed list show as `became`, each with the heap it is in now: a handful of items per note, and at
-  most one page of closed items, read in one query.
+- **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run that
+  added it, with `created_run_id` set beside it then. `made_in_split` marks the first kind: only those are what the note
+  became, so a follow-up a run adds doesn't count toward `nothing_made`, the run's reached check or the Became list. All
+  three are set when the item is made and never changed, and stay when either item later moves to another heap or team,
+  as a blocker's link does; a reader sees the other end only where they may view its heap. An index on `origin_id`
+  serves the lookup of what a note became, which the item and the closed list show as `became`, each with the heap it is
+  in now: a handful of items per note, and at most one page of closed items, read in one query.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -95,7 +95,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   item are read-only, and come back editable, unchanged, when it is reopened. A step made from a note
   (`POST …/to-step`) keeps it in `item_steps.origin_id`, set once and never changed; an index on it serves the
   lookup of the steps a note became, which the note and the closed list show as `became_steps`. The note was in the
-  task's heap then and a move stays in the team, so whoever sees the task sees the note. A heap made from a note
+  task's heap then, but either may have moved to another team since, so a note shows as the step's origin only to
+  someone who may view its heap now. A heap made from a note
   (`POST …/heaps` with `origin_id`) keeps it the same way in `heaps.origin_id`, with an index for the lookup of the
   heaps a note became (`became_heaps`) and of the heaps made from the items of a given heap, which the agent queue
   follows. The note is in the heap's team, and making the heap leaves it open: it closes on `became`.
@@ -316,7 +317,7 @@ Display names, team names and heap names stay free text that can repeat. Only ha
    thousand inserts. `domain` turns random bytes into a key, and the service draws the bytes from the
    `RandomSource` it's given, like its clock, so tests can script them. Items are never deleted, so a key is never
    reused within a heap, except that one an item took with it when it moved to another heap can be drawn again, about
-   one chance in 30 million per insert. An item that moves to another heap of its team keeps its key unless the
+   one chance in 30 million per insert. An item that moves to another heap keeps its key unless the
    target heap has an item with it, and then gets a new one, drawn under the locks the move takes.
 4. **Nothing is reserved.** Every handle sits after a fixed word in the URL (`teams/`, `heaps/`, `items/`), so it
    can't clash with a page the app has now or adds later. Teams start at `/teams/` rather than at the root because
@@ -329,8 +330,9 @@ Display names, team names and heap names stay free text that can repeat. Only ha
 6. **Changes.** Usernames are fixed, and an item's key changes only when it moves to a heap that has the key. Team
    and heap slugs can change, and an item's heap can, by a move. A move keeps the item's former
    (heap, key) handles. An item path with one names the item where it is now, for reads and writes alike, unless an
-   item holds that handle now, and then that item; of several former holders the last to leave. The web app then
-   shows the current address. A renamed team or heap slug still breaks old links.
+   item holds that handle now, and then that item; of several former holders the last to leave. It is read like any
+   item, against the heap it is in now, so after a move to another team it answers `404` to whoever can't view that
+   heap. The web app then shows the current address. A renamed team or heap slug still breaks old links.
 7. **Sign-up** asks for a username with the display name, email and password; the personal team takes it as its
    slug, and the first heap is `personal`. A first OIDC sign-in asks for a username before creating the
    user.
@@ -455,15 +457,20 @@ a fixed time.
    holding the heap row; an exclusive team lock waiting for that heap row would deadlock with it. A tag write reads
    nothing in its transaction before the team lock, so its plain reads after it see what committed while it waited;
    locking reads there would take gap locks on MySQL that deadlock tag writes of two teams.
-2. A move of an item to another heap of its team locks both heaps in heap ID order, as the agent's queue locks
-   several, then reads the item with a locking read and checks its version. A run's `became` locks the note's heap and
-   the active heaps made from the note the same way, since it defines the tasks in them. Two moves in opposite directions can't
-   wait for each other, and the second of two moves of one item finds it changed. The item's own blocker is part of
-   its old heap's state, so the moved item stays blocked with nobody picked. The items that waited for it keep it as
-   their blocker, now in another heap of the team, so they wait for the person (§3), and a move back makes it hold
-   them again; the move writes nothing to them. Since an item's heap can change, a write that finds the
-   heap through a read before the lock (a step, a question, a turn, a run) reads the item again under the lock and
-   refuses with `409 version_conflict` when it has left that heap (`find_item_locking_in`).
+2. A move of an item to another heap, in any team the caller may edit items in, locks both heaps in heap ID order, as
+   the agent's queue locks several, then reads the item with a locking read and checks its version. A run's `became`
+   locks the note's heap and the active heaps made from the note the same way, since it defines the tasks in them. Two
+   moves in opposite directions can't wait for each other, and the second of two moves of one item finds it changed. The
+   item's own blocker is part of its old heap's state, so the moved item stays blocked with nobody picked. The items
+   that waited for it keep it as their blocker, now in another heap, so they wait for the person (§3), and a move back
+   makes it hold them again; the move writes nothing to them. A blocker in another team than the item it blocks is never
+   named, to anyone: the item has no `blocked_by` and its `blocker_gone` says it moved, with no heap, whatever the
+   blocker's state there (`gone_blockers`); Waiting for me shows it as a row of its own kind, `blocker_left_team`, with
+   no blocker (a new kind, so released clients skip it, as the API adds rather than changes). A note that heaps were
+   made from, archived ones included, stays in its team, since a run's `became` defines the tasks in those heaps. Since
+   an item's heap can change, a write that finds the heap through a read before the lock (a step, a question, a turn, a
+   run) reads the item again under the lock and refuses with `409 version_conflict` when it has left that heap
+   (`find_item_locking_in`).
 3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
    itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
    same heap when it is set, also for an item made blocked (`blocked_by` on create). So is the reason in words
@@ -775,9 +782,15 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
 4. The heap log reads what is recorded against the heap. The team log reads the team's own entries and the heaps'
    own entries (created, renamed, archived, context changed), but not what happens inside the heaps. With
    `entity_id`, either reads one entity's history. The heap log then reads that entity's entries from every heap of
-   the team, because an item's entries are recorded in the heap it is in after the write: a move (`ItemMoved`) is
-   recorded in the heap the item went to, and its history from before it still shows after it, with the old heap's
-   tags and parameters named. The log is per team, so an item can only move within its team.
+   every team the reader is a member of, each team's limited to the actions the reader's role in that team may see,
+   in one query, so paging stays exact. A move within a team (`ItemMoved`) is recorded in the heap the item went to,
+   and its history from before it still shows after it, with the old heap's tags and parameters named. The log is
+   per team and its entries are never copied or re-homed, so a move to another team writes two: one in the heap the
+   item left, with the item's title (`item_title`, never shown as a change) and no target, and one in the heap it
+   went to, with the heap and nothing of the source team's. Someone in both teams sees the whole trail, and someone
+   in one sees that team's part. The old team's log names an item that is no longer in any of its heaps by the
+   `item_title` of its latest `ItemMoved` entry there. A turn the move takes back, because its person may not edit
+   items in the target heap, is recorded in the source heap.
 5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone,
    a `phrase` to read after the actor's name, and `changes`, one per changed field with the values before and after
    as text and IDs replaced by current names. The raw `diff` is returned too. An edited text people write (an

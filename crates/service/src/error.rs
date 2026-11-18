@@ -108,10 +108,14 @@ pub enum ServiceError {
     /// The blocker already waits, directly or through others, for the item being blocked.
     #[error("item {item_id} already waits for this item, so it can't block it")]
     BlockingCycle { item_id: ItemId },
-    /// The heap an item is moved to isn't another heap of the item's team, or the caller can't see it. One error for
-    /// all of those, so a stranger learns nothing about other teams' heaps.
-    #[error("the item can only move to another heap of its team")]
-    HeapNotInTeam { heap_id: HeapId },
+    /// The heap an item is moved to doesn't exist, or is in a team the caller isn't in. One error for both, so a
+    /// stranger learns nothing about other teams' heaps.
+    #[error("there is no heap {heap_id} to move the item to")]
+    MoveTargetNotFound { heap_id: HeapId },
+    /// A note that open heaps were made from can't leave its team, since a run's `became` defines the tasks in those
+    /// heaps.
+    #[error("item {item_id} has heaps made from it, so it can't move to another team")]
+    NoteHasHeaps { item_id: ItemId },
     #[error(transparent)]
     Team(#[from] TeamError),
     /// An invite link that can't be used to join its team.

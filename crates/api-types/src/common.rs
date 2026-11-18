@@ -257,7 +257,8 @@ impl From<ClosedGroup> for ClosedGroupDto {
 #[schema(as = ItemAction)]
 pub enum ItemActionDto {
     Edit,
-    /// Move the item to another heap of its team, on `POST …/move`. Offered for an open item the caller may edit.
+    /// Move the item to another heap, of any team the caller may edit items in, on `POST …/move`. Offered for an open
+    /// item the caller may edit.
     Move,
     ChangeState,
     Reopen,
@@ -673,7 +674,7 @@ pub enum BlockerGoneHowDto {
     WontDo,
     /// Closed as became: other items carry on its work.
     Became,
-    /// Moved to another heap, and still open there.
+    /// Moved to another heap, and still open there; or to another team, whatever its state is there.
     Moved,
     /// A way this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
@@ -697,7 +698,8 @@ impl From<BlockerGone> for BlockerGoneHowDto {
 #[schema(as = BlockerGone)]
 pub struct BlockerGoneDto {
     pub how: BlockerGoneHowDto,
-    /// The heap of the item's team the blocker is in now, when it was moved away from the item's heap.
+    /// The heap of the item's team the blocker is in now, when it was moved away from the item's heap. `null` when it
+    /// was moved to another team: it is never named then.
     pub moved_to: Option<HeapSummaryDto>,
 }
 
@@ -821,8 +823,9 @@ pub struct ItemDto {
     pub stage_choices: Vec<StageDto>,
     pub state: StateDto,
     /// The item this one waits for. Set only on blocked items, and only when a blocker was picked. It can be closed
-    /// as won't do, or done before closing a blocker as done freed what it blocks, or in another heap of the team
-    /// after a move: then `blocker_gone` says so.
+    /// as won't do, or done before closing a blocker as done freed what it blocks, or in another heap after a move:
+    /// then `blocker_gone` says so. `null` when the blocker moved to another team, which is never named; then
+    /// `blocker_gone` says it moved, with no heap.
     pub blocked_by: Option<ItemRefDto>,
     /// Why the item is blocked, in words, as set when it was blocked. Set only on blocked items, and only when
     /// given; cleared when the item leaves blocked.

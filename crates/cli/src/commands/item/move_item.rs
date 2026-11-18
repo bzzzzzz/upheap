@@ -1,4 +1,5 @@
-//! `upheap item move <item>... <heap>`: move one or several items to another heap of their team.
+//! `upheap item move <item>... <heap>`: move one or several items to another heap, of their team or any other team
+//! the user may edit items in.
 //!
 //! The server owns every rule: which heaps are allowed, the key, and what tags and values come along. With one item,
 //! the CLI notices an item that is in the heap already, which it has in hand from the read that gives it the version,
@@ -35,7 +36,7 @@ pub struct MoveArgs {
     /// that moved and those that didn't
     #[arg(value_name = "ITEM", num_args = 1.., required = true)]
     pub items: Vec<String>,
-    /// The heap to move them to: team/heap, or a heap slug only one of your teams has. It must be in the items' team
+    /// The heap to move them to: team/heap, or a heap slug only one of your teams has
     #[arg(value_name = "HEAP")]
     pub to: String,
     #[command(flatten)]
@@ -250,9 +251,8 @@ fn refusal(refused: &api_types::items::ItemNotMovedDto, heap: &HeapHandle, key: 
     })
 }
 
-/// The heap to move to. A bare slug is looked for in the item's team first, the only team that can be a target; when
-/// that team has no such heap it is resolved among all the user's teams as usual, so the server's `heap_not_in_team`
-/// message still comes back for another team's heap.
+/// The heap to move to. A bare slug is looked for in the item's team first; when that team has no such heap it is
+/// resolved among all the user's teams as usual.
 async fn resolve_target(
     name: HeapName<'_>,
     item_heap: &HeapHandle,

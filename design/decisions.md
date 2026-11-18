@@ -552,3 +552,34 @@ user, which would need a username Upheap can't ask for.
 **Consequences.** The SCIM URL is configured at every provider, so it can't move without breaking their setups. A
 provider whose SCIM can't carry the OIDC subject, as Entra ID's pairwise `sub`, can't be linked until sign-in matches
 on another claim.
+
+## 43. An item moves to another team with its rows; its history stays where it was recorded
+
+**Context.** People with heaps in several teams need to move an item between them. A team's log, links and names are
+read by its members only, so a move across teams has to say what each team sees of the item afterwards. A move
+within a team needs none of this: both heaps are read by the same people.
+
+**Decision.** Whoever may edit items in both heaps may move an item between them, across teams as within one, a
+personal team included. The item takes its own rows: context, steps, questions, comments, its turn and runs. Its
+tags and values carry over by name, as within a team, the target team's tags included; the rest are dropped. The
+audit entries stay in the team they were recorded in, and are never copied. The move writes two: one in the heap it
+left, which says the item left the team without naming where, and one in the heap it went to, which says it came
+from another team without naming which. An item's History reads its entries from every team the reader is a member
+of, so someone in both teams sees the whole trail and someone in one sees that team's part. The old team keeps its
+entries and nothing else: the item answers `404` there, and its log names the item by the title it had when it left.
+Links that cross the teams stay stored and are shown only to a reader who can view the other end: an item that
+waited for the moved one keeps it as its blocker and waits for the person (§35), shown only as moved out of the
+team; an origin, a Became item or step stays linked. The item's own blocker is dropped, as within a team. A turn
+stays when its person may edit items in the target heap, and is taken back otherwise. A note that heaps were made from,
+archived ones included, moves only within its team, since a run's `became` defines the tasks in those heaps.
+
+**Instead of.** Copying the history into the new team, which hands the new team what the old one wrote, comments
+and edits included, and names that team's tags and people. Moving the history with the item, which takes from the
+old team a record it already had. Clearing the links that cross teams, which loses what an item waited for (§35)
+and what a note became (§36). Refusing a move across teams, which leaves people retyping items.
+
+**Consequences.** `audit_log` rows of one entity can sit in several teams, and History is the one read that joins
+them, per reader. A name shown in a team's log is the item's current one only while it is in that team. Readers
+that resolve a link to an item (a blocker, an origin, Became) check that the reader may view its heap now, not that
+it is in the same team. The checks that a move stays in its team go: the target heap is one the caller may edit
+items in, and a heap they can't see is refused as missing.

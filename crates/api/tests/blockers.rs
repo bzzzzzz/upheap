@@ -366,6 +366,7 @@ async fn closing_a_blocker_as_wont_do_makes_what_it_blocks_wait_for_the_person()
             "heap_priority": 1,
             "question": null,
             "stuck": null,
+            "left_team": null,
             "blocker": {
                 "item": { "id": id(&blocker)?, "key": blocker["key"], "title": "Pick a host", "kind": "note", "state": "wont_do" },
                 "gone": { "how": "wont_do", "moved_to": null },

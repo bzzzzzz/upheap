@@ -114,25 +114,46 @@ impl Services {
     ) -> Result<AuditPage, ServiceError> {
         let access = authorize_heap(&self.db, principal, heap_id, Permission::ViewHeap).await?;
         let actions = visible_audit_actions(access.membership.role);
-        // An entity's history follows it between the heaps of the team (an item that moved), so it is read from all of
-        // them; the heap's own history is the heap's.
-        let scope = match request.entity_id {
-            Some(entity_id) => AuditScope::Entity {
-                team_id: access.heap.team_id,
-                entity_id,
-            },
-            None => AuditScope::Heap(heap_id),
+        // An entity's history follows it between heaps and teams (an item that moved), so it is read from every team the
+        // caller is a member of, each limited to what their role there may see; the heap's own history is the heap's.
+        let teams: Vec<(TeamId, Vec<AuditAction>)>;
+        let (scope, actions) = match request.entity_id {
+            Some(entity_id) => {
+                teams = store::teams::list_teams_for_user(&self.db, principal.user_id)
+                    .await?
+                    .into_iter()
+                    .map(|(team, role)| (team.id, visible_audit_actions(role)))
+                    .collect();
+                let mut any: Vec<AuditAction> = teams.iter().flat_map(|(_, actions)| actions.iter().copied()).collect();
+                any.sort_by_key(|action| *action as usize);
+                any.dedup();
+                (
+                    AuditScope::Entity {
+                        entity_id,
+                        teams: &teams,
+                    },
+                    any,
+                )
+            }
+            None => (AuditScope::Heap(heap_id), actions),
         };
         let (entries, next) = self.read_page(scope, &actions, request).await?;
 
-        // An item's history follows it between the heaps of the team, and so can a blocker, so what the entries name
-        // may be in any heap of the team: the heaps' names, their tags, parameters and options, and the items.
+        // An item's history follows it between heaps and teams, and so can a blocker, so what the entries name may be
+        // in any heap of any team they come from: the heaps' names, their tags, parameters and options, and the items.
         // Size assumption: a team holds a handful of heaps, each with tens of tags and parameters, so all of them are
         // loaded on every read. If teams grow to many heaps, load only the heaps the page's entries name, including
         // those in `item_moved` diffs.
+        let entry_teams: Vec<TeamId> = entries
+            .iter()
+            .map(|entry| entry.team_id)
+            .chain([access.heap.team_id])
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
         let mut names = Names::default();
         let mut team_heaps = vec![heap_id];
-        for heap in store::heaps::list_heaps_for_teams(&self.db, &[access.heap.team_id]).await? {
+        for heap in store::heaps::list_heaps_for_teams(&self.db, &entry_teams).await? {
             names.insert(*heap.id.as_uuid(), heap.name.as_str());
             if heap.id != heap_id {
                 team_heaps.push(heap.id);
@@ -141,7 +162,7 @@ impl Services {
         for heap in &team_heaps {
             self.insert_heap_vocabulary(&mut names, *heap).await?;
         }
-        // The items the entries name, looked for in this heap and then in the team's others until all are found.
+        // The items the entries name, looked for in this heap and then in the others until all are found.
         let mut missing: Vec<ItemId> = collect_referenced_items(&entries)
             .into_iter()
             .map(ItemId::from_uuid)
@@ -152,6 +173,17 @@ impl Services {
             }
             for item in store::items::list_item_summaries(&self.db, heap, missing.iter().copied()).await? {
                 names.insert(*item.id.as_uuid(), item.title.as_str());
+            }
+            missing.retain(|item| names.get(*item.as_uuid()).is_none());
+        }
+        // An item that is in no heap of a team left it, and that team's log names it by the title it had then. A page
+        // spanning teams may name an item that left any of them.
+        for team in &entry_teams {
+            if missing.is_empty() {
+                break;
+            }
+            for (item, title) in store::audit::list_left_item_titles(&self.db, *team, &missing).await? {
+                names.insert(*item.as_uuid(), &title);
             }
             missing.retain(|item| names.get(*item.as_uuid()).is_none());
         }
@@ -289,7 +321,7 @@ impl Services {
 
     pub(crate) async fn read_page(
         &self,
-        scope: AuditScope,
+        scope: AuditScope<'_>,
         actions: &[AuditAction],
         request: AuditRequest,
     ) -> Result<(Vec<AuditEntry>, Option<AuditCursor>), ServiceError> {
@@ -414,6 +446,17 @@ fn present_page(
 /// [`describe_action`], with the groups named for the two actions that come from the provider's groups.
 fn describe_phrase(action: AuditAction, about_actor: bool, diff: &Value) -> (Cow<'static, str>, bool) {
     let (phrase, names_entity) = describe_action(action, about_actor);
+    if action == AuditAction::ItemMoved {
+        // A move across teams records one side of the heap change only (architecture.md, Audit log).
+        let heap = diff.get(AuditField::Heap.code());
+        let side = |name: &str| heap.and_then(|heap| heap.get(name)).is_some_and(Value::is_null);
+        if side("after") {
+            return (Cow::Borrowed("moved item to another team"), names_entity);
+        }
+        if side("before") {
+            return (Cow::Borrowed("moved item here from another team"), names_entity);
+        }
+    }
     if action == AuditAction::MemberRoleChanged
         && diff.get(AuditField::MadeBy.code()).and_then(Value::as_str) == Some("operator")
     {
@@ -703,6 +746,8 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::AgentsPrepare => "Agents prepare new notes",
         AuditField::Title => "Title",
         AuditField::Heap => "Heap",
+        // Never shown (see `reading`).
+        AuditField::ItemTitle => field.code(),
         AuditField::Key => "Key",
         AuditField::Stage => "Stage",
         AuditField::Name => "Name",
@@ -800,6 +845,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         // A heap priority change, the only entry about a user with a name, records the heap's for account history;
         // its `heap_id` already names the heap here.
         AuditField::Name if entity_type == EntityType::User => Reading::Unshown,
+        // The name the log of the team an item left keeps for it; the phrase and the heap say the rest.
+        AuditField::ItemTitle => Reading::Unshown,
         AuditField::Parameters => Reading::PerParameter,
         AuditField::Kind => coded(|code| Kind::from_code(code).map(Kind::label)),
         AuditField::Stage => coded(|code| Stage::from_code(code).map(Stage::label)),

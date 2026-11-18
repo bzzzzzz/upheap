@@ -1,7 +1,7 @@
 //! The audit log. Insert-only: there is no update or delete function, on purpose.
 
-use domain::audit::{AuditAction, EntityType};
-use domain::{HeapId, InviteLinkId, RunId, TeamId, Timestamp, UserId};
+use domain::audit::{AuditAction, AuditField, EntityType};
+use domain::{HeapId, InviteLinkId, ItemId, RunId, TeamId, Timestamp, UserId};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, ExprTrait, QueryFilter, QueryOrder,
     QuerySelect, sea_query::Expr,
@@ -87,16 +87,20 @@ pub struct AuditEntry {
 
 /// Which part of a team's log to read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AuditScope {
+pub enum AuditScope<'a> {
     /// Everything recorded about one heap and what is in it.
     Heap(HeapId),
     /// What is recorded about the team itself, its members, and its heaps as wholes (created, renamed, archived,
     /// context changed), but not what happens inside the heaps, which [`AuditScope::Heap`] reads.
     Team(TeamId),
-    /// Everything recorded about one entity in any heap of the team, so an item's history follows it when it moves
-    /// to another heap of the team (architecture.md, Data model, Audit log). Entries recorded outside the heaps, such
-    /// as a membership's, are left out, as they are from [`AuditScope::Heap`].
-    Entity { team_id: TeamId, entity_id: Uuid },
+    /// Everything recorded about one entity in any heap of the given teams, each team's entries limited to the actions
+    /// listed with it, so an item's history follows it when it moves to another heap, of its team or another
+    /// (architecture.md, Data model, Audit log). Entries recorded outside the heaps, such as a membership's, are left
+    /// out, as they are from [`AuditScope::Heap`]. The query's own `actions` still apply to every team.
+    Entity {
+        entity_id: Uuid,
+        teams: &'a [(TeamId, Vec<AuditAction>)],
+    },
 }
 
 /// Position after which a page of audit entries starts: the last entry of the previous page.
@@ -110,7 +114,7 @@ pub struct AuditCursor {
 /// `entity_id` only when it is given.
 #[derive(Clone, Copy, Debug)]
 pub struct AuditQuery<'a> {
-    pub scope: AuditScope,
+    pub scope: AuditScope<'a>,
     pub entity_id: Option<Uuid>,
     /// Only entries of these actions. Empty reads nothing.
     pub actions: &'a [AuditAction],
@@ -138,10 +142,16 @@ pub async fn list_audit_entries(
                     .add(audit_log::Column::HeapId.is_null())
                     .add(audit_log::Column::EntityType.eq(EntityType::Heap.code())),
             ),
-        AuditScope::Entity { team_id, entity_id } => select
-            .filter(audit_log::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
+        AuditScope::Entity { entity_id, teams } => select
             .filter(audit_log::Column::HeapId.is_not_null())
-            .filter(audit_log::Column::EntityId.eq(id_to_db(&entity_id))),
+            .filter(audit_log::Column::EntityId.eq(id_to_db(&entity_id)))
+            .filter(teams.iter().fold(Condition::any(), |any, (team_id, actions)| {
+                any.add(
+                    Condition::all()
+                        .add(audit_log::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
+                        .add(audit_log::Column::Action.is_in(actions.iter().map(|action| action.code()))),
+                )
+            })),
     };
     if let Some(entity_id) = query.entity_id {
         select = select.filter(audit_log::Column::EntityId.eq(id_to_db(&entity_id)));
@@ -165,6 +175,48 @@ pub async fn list_audit_entries(
         .into_iter()
         .map(to_entry)
         .collect()
+}
+
+/// The title each of `item_ids` had when it left `team_id`, from the `item_title` its latest `item_moved` entry in that
+/// team recorded. An item that never left the team, or left before the entry recorded it, is absent.
+///
+/// Items are never deleted and a move is the only way out of a team, so the latest `item_moved` entry of an item that
+/// is no longer in the team is the one that took it out. Size assumption: a page of the log names a handful of such
+/// items, each moved out a few times.
+pub async fn list_left_item_titles(
+    db: &impl ConnectionTrait,
+    team_id: TeamId,
+    item_ids: &[ItemId],
+) -> Result<HashMap<ItemId, String>, StoreError> {
+    if item_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows = audit_log::Entity::find()
+        .filter(audit_log::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
+        .filter(audit_log::Column::Action.eq(AuditAction::ItemMoved.code()))
+        .filter(audit_log::Column::EntityId.is_in(item_ids.iter().map(|id| id_to_db(id.as_uuid()))))
+        .order_by_desc(audit_log::Column::CreatedAt)
+        .order_by_desc(audit_log::Column::Id)
+        .all(db)
+        .await?;
+    let mut titles = HashMap::new();
+    let mut seen = std::collections::HashSet::new();
+    for entry in rows.into_iter().map(to_entry) {
+        let entry = entry?;
+        let item_id = ItemId::from_uuid(entry.entity_id);
+        // Only the latest entry of an item counts, whether or not it has a title.
+        if !seen.insert(item_id) {
+            continue;
+        }
+        if let Some(title) = entry
+            .diff
+            .get(AuditField::ItemTitle.code())
+            .and_then(serde_json::Value::as_str)
+        {
+            titles.insert(item_id, title.to_owned());
+        }
+    }
+    Ok(titles)
 }
 
 /// How many people joined the team through each of `link_ids`, ever, from the `member_joined` entries recorded against

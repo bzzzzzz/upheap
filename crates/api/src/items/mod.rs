@@ -268,22 +268,24 @@ async fn reopen_item(
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 
-/// Moves an item to another heap of its team, with its context, steps, questions, turn and history. Send the item's
-/// `version` in `If-Match`. The item keeps its key unless the new heap has an item with it, and then gets a new one.
-/// Tags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of
-/// the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The
-/// items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an
-/// item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, and its old path
-/// still names it.
+/// Moves an item to another heap, of any team the caller may edit items in, with its context, steps, questions, turn
+/// and history. Send the item's `version` in `If-Match`. The item keeps its key unless the new heap has an item with
+/// it, and then gets a new one. Tags and parameter values carry over where the new heap has a tag of the same name, or
+/// a parameter and option of the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked
+/// with nobody picked. The items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for
+/// the caller; when it went to another team it is never named. A turn stays when its person may edit items in the
+/// target heap, and is taken back otherwise. A note that heaps were made from, archived ones included, can't leave its
+/// team. Moving an item to the heap it is in succeeds and changes nothing. The response is the item in its new heap; its
+/// old path still leads to it for whoever may view it there, and answers `404` for anyone else.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/move", tag = "items", security(("session" = [])),
     params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemMoveDto,
     responses(
         (status = 200, body = ItemDto),
         (status = 403, description = "From inside a run: `run_forbidden`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`version_conflict`, `item_closed` or `heap_archived` (either heap)", body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed`, `heap_archived` (either heap), or `note_has_heaps` (moving a note that heaps were made from, archived ones included, to another team)", body = Problem),
         (status = 400, description = "A body that isn't a `heap_id`", body = Problem),
-        (status = 422, description = "`heap_not_in_team`: the heap isn't another heap of the item's team, or doesn't exist", body = Problem),
+        (status = 422, description = "`heap_not_in_team`: the heap doesn't exist or isn't in a team you're in", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn move_item(
@@ -302,11 +304,11 @@ async fn move_item(
 
 /// Moves several items to one heap, each on its own: every item is moved as `POST …/items/{item}/move` moves one, in
 /// the order given, in its own transaction. One that can't move doesn't stop the others and doesn't undo them. Each item
-/// carries its own `version`, so there is no `If-Match`. The items may come from any heaps of the team. The response
-/// lists the items that moved, as the single move answers, and the ones that didn't with the problem the single move
-/// would have answered with for each, both in the order of the request. An empty list moves nothing and succeeds.
-/// The target must be a heap of `{team}` the caller can see, or the whole request is refused with `heap_not_in_team`;
-/// as an item only moves within its team, that keeps the batch to `{team}`.
+/// carries its own `version`, so there is no `If-Match`. `{team}` is the target heap's team, and the items may come
+/// from any heap the single move would take them from. The response lists the items that moved, as the single move
+/// answers, and the ones that didn't with the problem the single move would have answered with for each, both in the
+/// order of the request. An empty list moves nothing and succeeds. The target must be a heap of `{team}` the caller can
+/// see, or the whole request is refused with `heap_not_in_team`.
 #[utoipa::path(post, path = "/teams/{team}/items/move", tag = "items", security(("session" = [])),
     params(TeamParams, TimeZoneHeader), request_body = ItemsMoveDto,
     responses(
@@ -322,7 +324,7 @@ async fn move_items(
     ApiJson(body): ApiJson<ItemsMoveDto>,
 ) -> Result<Json<ItemsMovedDto>, ApiError> {
     let heap = HeapId::from_uuid(body.heap_id);
-    let not_in_team = || ServiceError::HeapNotInTeam { heap_id: heap };
+    let not_in_team = || ServiceError::MoveTargetNotFound { heap_id: heap };
     let target = match state.services.load_heap(path.principal, heap).await {
         Ok(view) => view.heap,
         Err(ServiceError::NotFound) => return Err(not_in_team().into()),
