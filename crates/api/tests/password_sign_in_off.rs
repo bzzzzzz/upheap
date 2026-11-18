@@ -38,14 +38,15 @@ fn off_app(app: &TestApp, provider: &FakeProvider) -> Result<TestApp> {
     }))
 }
 
-/// A local user's session, OAuth access token and personal token, made while passwords were on.
-struct LocalSignIns {
+/// A user's session, OAuth access token and personal token.
+struct SignIns {
     session: String,
     access: String,
     personal: String,
 }
 
-async fn local_sign_ins(on: &TestApp, email: &str) -> Result<LocalSignIns> {
+/// A local user's sign-ins, made while passwords are on.
+async fn local_sign_ins(on: &TestApp, email: &str) -> Result<SignIns> {
     let (session, _) = on.register(email).await?;
     let (access, _) = on.sign_in_cli(&session).await?;
     let made = on.make_personal_token(&session, "ci", None).await?;
@@ -53,14 +54,14 @@ async fn local_sign_ins(on: &TestApp, email: &str) -> Result<LocalSignIns> {
         .as_str()
         .context("no personal token secret")?
         .to_owned();
-    Ok(LocalSignIns {
+    Ok(SignIns {
         session,
         access,
         personal,
     })
 }
 
-async fn me_status(app: &TestApp, sign_ins: &LocalSignIns) -> Result<[StatusCode; 3]> {
+async fn me_status(app: &TestApp, sign_ins: &SignIns) -> Result<[StatusCode; 3]> {
     Ok([
         app.send(Method::GET, "/api/v1/me", Some(&sign_ins.session), None)
             .await?
@@ -192,19 +193,33 @@ async fn the_auth_check_alone_refuses_a_local_users_sign_ins() -> Result<()> {
 #[tokio::test]
 async fn ending_local_sign_ins_is_kept_when_passwords_come_back() -> Result<()> {
     let h = harness().await?;
-    let sign_ins = local_sign_ins(&h.on, "sam@example.test").await?;
+    let sign_ins = local_sign_ins(&h.on, "lee@example.test").await?;
+    // A provider user's sign-ins, which ending the local ones must leave alone.
+    let session = provider_sign_in(&h.off, &h.provider, "/").await?;
+    let (access, _) = h.off.sign_in_cli(&session).await?;
+    let made = h.off.make_personal_token(&session, "ci", None).await?;
+    let personal = made.body["secret"]
+        .as_str()
+        .context("no personal token secret")?
+        .to_owned();
+    let provider_sign_ins = SignIns {
+        session,
+        access,
+        personal,
+    };
 
     expect_that!(h.on.services.end_local_sign_ins().await?, eq(0));
     expect_that!(h.off.services.end_local_sign_ins().await?, eq(3));
     expect_that!(h.off.services.end_local_sign_ins().await?, eq(0));
 
     expect_that!(me_status(&h.on, &sign_ins).await?, eq([StatusCode::UNAUTHORIZED; 3]));
+    expect_that!(me_status(&h.off, &provider_sign_ins).await?, eq([StatusCode::OK; 3]));
     let back =
         h.on.send(
             Method::POST,
             "/api/v1/auth/login",
             None,
-            Some(json!({ "login": "sam@example.test", "password": PASSWORD })),
+            Some(json!({ "login": "lee@example.test", "password": PASSWORD })),
         )
         .await?;
     expect_that!(back.status, eq(StatusCode::OK), "{}", back.body);
