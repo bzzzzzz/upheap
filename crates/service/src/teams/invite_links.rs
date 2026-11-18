@@ -177,6 +177,7 @@ impl Services {
         token: &InviteToken,
         registration: Registration<'_>,
     ) -> Result<(SessionGrant, TeamDetail), ServiceError> {
+        self.ensure_password_sign_in()?;
         // Only to learn which team to lock: see the module doc.
         let found = store::invite_links::find_invite_link_by_token(&self.db, token)
             .await?

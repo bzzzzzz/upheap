@@ -27,6 +27,8 @@ pub struct Config {
     pub bind_addr: SocketAddr,
     /// `ALLOW_REGISTRATION`, default `true`.
     pub allow_registration: bool,
+    /// `UPHEAP_PASSWORD_SIGN_IN`, default `true`. `false` makes the OpenID Connect provider the only way to sign in.
+    pub password_sign_in: bool,
     /// `SESSION_TTL_DAYS`, default `30`.
     pub session_ttl_days: u16,
     /// `LOG_FORMAT`: `json` (default) or `pretty`.
@@ -98,6 +100,11 @@ impl Config {
             Some("false") => false,
             Some(other) => bail!("ALLOW_REGISTRATION must be true or false, not {other:?}"),
         };
+        let password_sign_in = match lookup("UPHEAP_PASSWORD_SIGN_IN").as_deref() {
+            None | Some("true") => true,
+            Some("false") => false,
+            Some(other) => bail!("UPHEAP_PASSWORD_SIGN_IN must be true or false, not {other:?}"),
+        };
         let session_ttl_days = match lookup("SESSION_TTL_DAYS") {
             None => 30,
             Some(raw) => raw
@@ -112,6 +119,11 @@ impl Config {
             Some(other) => bail!("LOG_FORMAT must be json or pretty, not {other:?}"),
         };
         let oidc = oidc_settings(&lookup, &base_url)?;
+        if !password_sign_in && oidc.is_none() {
+            bail!(
+                "UPHEAP_PASSWORD_SIGN_IN=false needs an OpenID Connect provider: set the UPHEAP_OIDC_* variables, or nobody can sign in"
+            );
+        }
         let provider_logout = provider_logout(&lookup, oidc.is_some())?;
         let oidc = oidc.map(|oidc| oidc.with_provider_logout(provider_logout));
         let group_teams = group_teams(&lookup, oidc.is_some())?;
@@ -138,6 +150,7 @@ impl Config {
             base_url,
             bind_addr,
             allow_registration,
+            password_sign_in,
             session_ttl_days,
             log_format,
             oidc,
@@ -367,6 +380,29 @@ mod tests {
         let scopes_only = [BASE[0], BASE[1], ("UPHEAP_OIDC_SCOPES", "openid email")];
         assert!(config(&scopes_only)?.oidc.is_none());
         Ok(())
+    }
+
+    #[test]
+    fn reads_whether_passwords_sign_in() -> anyhow::Result<()> {
+        let with_provider: Vec<_> = BASE.iter().chain(&OIDC).copied().collect();
+        assert!(config(&BASE)?.password_sign_in);
+        for (value, expected) in [("true", true), ("false", false)] {
+            let vars: Vec<_> = with_provider
+                .iter()
+                .copied()
+                .chain([("UPHEAP_PASSWORD_SIGN_IN", value)])
+                .collect();
+            assert_eq!(config(&vars)?.password_sign_in, expected);
+        }
+        let other = config(&[BASE[0], BASE[1], ("UPHEAP_PASSWORD_SIGN_IN", "no")]).unwrap_err();
+        assert!(format!("{other:#}").contains("UPHEAP_PASSWORD_SIGN_IN"));
+        Ok(())
+    }
+
+    #[test]
+    fn passwords_off_needs_a_provider() {
+        let error = config(&[BASE[0], BASE[1], ("UPHEAP_PASSWORD_SIGN_IN", "false")]).unwrap_err();
+        assert!(format!("{error:#}").contains("UPHEAP_PASSWORD_SIGN_IN=false needs an OpenID Connect provider"));
     }
 
     #[test]

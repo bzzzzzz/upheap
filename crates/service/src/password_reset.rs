@@ -46,6 +46,7 @@ impl Services {
     /// the user as its actor, since an entry needs an account as its actor and the operator has none; its diff says
     /// who made the link.
     pub async fn create_password_reset_link(&self, login: &str) -> Result<ResetLinkMade, ServiceError> {
+        self.ensure_password_sign_in()?;
         let login = Login::parse(login.trim()).ok_or(ServiceError::NotFound)?;
         let user = self.find_user_by_login(&login).await?.ok_or(ServiceError::NotFound)?;
         self.make_reset_link(user, "operator").await
@@ -64,6 +65,7 @@ impl Services {
     /// transaction commits, in a task of its own: the answer never waits for the provider. Nothing is written or
     /// sent for an address no account has.
     pub async fn request_password_reset(&self, email: &str) -> Result<(), ServiceError> {
+        self.ensure_password_sign_in()?;
         let Some(mail) = &self.mail else {
             return Err(ServiceError::NotFound);
         };
@@ -158,6 +160,7 @@ impl Services {
     /// holding the link has proved who they are. The reset is recorded in the user's personal team with the number of
     /// sign-ins it ended and nothing about the password or the token.
     pub async fn reset_password(&self, token: &ResetToken, new: &str) -> Result<SessionGrant, ServiceError> {
+        self.ensure_password_sign_in()?;
         let token_hash = sha256_hex(token.expose());
         let link = self.load_reset_link(token).await?;
         if let Some(error) = link.state(self.now()).error() {

@@ -3187,6 +3187,8 @@ export interface components {
         OidcProvider: {
             /** @description What the sign-in button names, such as `Acme SSO`. */
             label: string;
+            /** @description Whether local accounts may sign in with a password. `false` makes the provider the only way in. */
+            password_sign_in: boolean;
         };
         /** @description The username a person picks to finish a first sign-in through the provider. */
         OidcRegisterRequest: {
@@ -4600,6 +4602,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `password_sign_in_off`: the server signs in through its provider only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `field_empty` (`field` `login` or `password`); not counted as an attempt */
             422: {
                 headers: {
@@ -4850,6 +4861,15 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
+            /** @description `password_sign_in_off`: the server signs in through its provider only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `email_taken` (`field` `email`), or `handle_taken` (`field` `username`) */
             409: {
                 headers: {
@@ -5032,6 +5052,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InviteRegistration"];
+                };
+            };
+            /** @description `password_sign_in_off`: the server signs in through its provider only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description No such link */
@@ -5847,7 +5876,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `csrf_header_missing` */
+            /** @description `csrf_header_missing`, or `password_sign_in_off` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5942,7 +5971,7 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
-            /** @description `csrf_header_missing` */
+            /** @description `csrf_header_missing`, or `password_sign_in_off` */
             403: {
                 headers: {
                     [name: string]: unknown;

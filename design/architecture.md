@@ -582,6 +582,16 @@ a fixed time.
      `member_removed`, so it doesn't void invite links made before it. A first sign-in has no user yet, so the
      callback keeps the groups on the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step
      runs the sync after making the user. Password sign-in, invite registration and reset never sync.
+   - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)
+     makes every password path in the service layer fail with `PasswordSignInOff`, so the API and the operator
+     command both refuse: sign-in, registration, invite registration, asking for and using a reset link, and the
+     operator's reset link. A local user is one with no `user_identities` row. Two things end their sign-ins, and
+     both are needed. The server's start deletes their sessions and revokes their OAuth families and personal
+     tokens in one transaction, so turning passwords back on doesn't revive them. The auth check of sessions, access
+     tokens and personal tokens also refuses a local user's, one indexed lookup per request while passwords are off,
+     because during a rolling deploy an instance that still has passwords on can make a sign-in after the new one
+     started. Passwords are never deleted, so setting the variable back to `true` is the recovery.
+
    - **Signing out at the provider** (`UPHEAP_OIDC_PROVIDER_LOGOUT`, RP-initiated logout). Only when it is on, the
      callback keeps the raw ID token on the session row (`sessions.id_token`); a first sign-in keeps it on the
      `oidc_sign_ins` row until the username step copies it to the session, and the row's deletion removes it. With it

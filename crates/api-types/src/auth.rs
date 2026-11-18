@@ -107,6 +107,8 @@ pub struct SignedOut {
 pub struct OidcProviderDto {
     /// What the sign-in button names, such as `Acme SSO`.
     pub label: String,
+    /// Whether local accounts may sign in with a password. `false` makes the provider the only way in.
+    pub password_sign_in: bool,
 }
 
 /// Who the provider vouched for, shown on the username step.
