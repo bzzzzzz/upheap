@@ -140,7 +140,7 @@ async fn three_items_move_in_one_request() -> Result<()> {
     );
     expect_that!(moved.body["not_moved"], eq(&json!([])));
     for item in moved.body["moved"].as_array().into_iter().flatten() {
-        expect_that!(item["heap"]["id"], eq(&json!(w.to)));
+        expect_that!(item["heap_id"], eq(&json!(w.to)));
         expect_that!(moved_entries(&w.app, &id(item)).await?, eq(1));
     }
     expect_that!(ranked_ids(&w.app, &w.session, &w.from).await?, is_empty());
