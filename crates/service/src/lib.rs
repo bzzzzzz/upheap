@@ -29,6 +29,7 @@ pub mod personal_tokens;
 pub mod questions;
 mod random;
 pub mod saved_views;
+pub mod scim;
 mod splitting;
 pub mod steps;
 pub mod tags;
@@ -72,10 +73,12 @@ pub struct Settings {
     pub oidc: Option<oidc::OidcSettings>,
     /// The teams whose members come from the provider's groups. Empty when none is mapped.
     pub group_teams: group_teams::GroupTeams,
+    /// The provider's SCIM access, if the operator set a token. Needs [`Settings::oidc`].
+    pub scim: Option<scim::ScimSettings>,
 }
 
 impl Default for Settings {
-    /// Registration closed, 30-day sessions, the default sign-in limit, no provider and no group-managed team.
+    /// Registration closed, 30-day sessions, the default sign-in limit, no provider, no group-managed team and no SCIM.
     fn default() -> Self {
         Self {
             allow_registration: false,
@@ -83,6 +86,7 @@ impl Default for Settings {
             sign_in_limit: SignInLimit::DEFAULT,
             oidc: None,
             group_teams: group_teams::GroupTeams::default(),
+            scim: None,
         }
     }
 }

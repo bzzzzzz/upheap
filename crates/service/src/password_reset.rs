@@ -182,16 +182,9 @@ impl Services {
             let link = self.load_reset_link(token).await?;
             return Err(link.state(now).error().unwrap_or(ResetLinkError::Used).into());
         }
-        let live_sessions = store::sessions::count_live_sessions(&txn, user.id, now).await?;
-        let live_clients = store::oauth::list_live_token_families(&txn, user.id, now).await?.len();
-        let ended_sign_ins = u32::try_from(live_sessions.saturating_add(live_clients as u64)).unwrap_or(u32::MAX);
         store::users::set_password(&txn, user.id, &new_hash, now).await?;
-        store::oauth::expire_user_auth_codes(&txn, user.id, now).await?;
-        store::sessions::delete_user_sessions(&txn, user.id).await?;
+        let ended_sign_ins = self.end_sign_ins(&txn, user.id, None, now).await?;
         let session = self.open_session(&txn, user.clone(), now, None).await?;
-        store::oauth::revoke_user_token_families(&txn, user.id, now).await?;
-        let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(&txn, user.id, now).await?;
-        let ended_sign_ins = ended_sign_ins.saturating_add(u32::try_from(revoked_tokens).unwrap_or(u32::MAX));
         // There shouldn't be one, since making a link cancels the others; this keeps "one working link" true anyway.
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(

@@ -34,6 +34,8 @@ const MESSAGES: Record<string, string> = {
   password_too_long: "That password is too long.",
   invalid_credentials: "That email or username and password don't match an account.",
   registration_closed: "This server isn't taking new accounts.",
+  account_deactivated:
+    "Your organisation has turned off your access to Upheap. Ask your administrator to turn it back on.",
   // The Password card on Account. An empty new password has its own words in the card.
   "field_empty.current_password": "Enter your current password.",
   wrong_password: "That isn't your current password.",

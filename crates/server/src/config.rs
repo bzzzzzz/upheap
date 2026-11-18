@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::{Context, bail};
 use service::oidc::OidcSettings;
+use service::scim::ScimSettings;
 
 /// Every option the server reads. Documented in the README; validated by [`Config::from_env`].
 #[derive(Debug)]
@@ -38,6 +39,9 @@ pub struct Config {
     /// `UPHEAP_OIDC_GROUP_TEAMS`: a JSON object from team slug to the provider groups whose members the team has.
     /// Empty when unset. The slugs are checked against the teams once the database is up, not here.
     pub group_teams: Vec<(String, Vec<String>)>,
+    /// `UPHEAP_SCIM_TOKEN`: the bearer token the provider's SCIM client sends, at least 32 characters. `None` when unset
+    /// or blank: the SCIM endpoints aren't served. Needs the provider.
+    pub scim: Option<ScimSettings>,
     /// `MAIL_URL` and `MAIL_FROM`: where mail goes and who it is from. `None` when `MAIL_URL` is unset: mail is off.
     pub mail: Option<Arc<mail::Mailer>>,
 }
@@ -111,6 +115,7 @@ impl Config {
         let provider_logout = provider_logout(&lookup, oidc.is_some())?;
         let oidc = oidc.map(|oidc| oidc.with_provider_logout(provider_logout));
         let group_teams = group_teams(&lookup, oidc.is_some())?;
+        let scim = scim_settings(&lookup, oidc.is_some(), &base_url)?;
         let mail = match lookup("MAIL_URL").filter(|v| !v.trim().is_empty()) {
             None => None,
             Some(url) => {
@@ -137,6 +142,7 @@ impl Config {
             log_format,
             oidc,
             group_teams,
+            scim,
             mail,
         })
     }
@@ -217,6 +223,32 @@ fn group_teams(
         })
         .collect()
 }
+
+/// The SCIM access: none when `UPHEAP_SCIM_TOKEN` is unset or blank, and an error when it is set without a provider
+/// or is shorter than [`SCIM_TOKEN_MIN_CHARS`]. The token is never in the error.
+fn scim_settings(
+    lookup: &impl Fn(&str) -> Option<String>,
+    has_provider: bool,
+    base_url: &str,
+) -> anyhow::Result<Option<ScimSettings>> {
+    const NAME: &str = "UPHEAP_SCIM_TOKEN";
+    let Some(token) = lookup(NAME)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(None);
+    };
+    if !has_provider {
+        bail!("{NAME} is set, but there is no OpenID Connect provider whose people it could provision");
+    }
+    if token.chars().count() < SCIM_TOKEN_MIN_CHARS {
+        bail!("{NAME} must be at least {SCIM_TOKEN_MIN_CHARS} characters");
+    }
+    Ok(Some(ScimSettings::new(&token, base_url)))
+}
+
+/// The shortest `UPHEAP_SCIM_TOKEN`: `openssl rand -hex 32` makes 64.
+const SCIM_TOKEN_MIN_CHARS: usize = 32;
 
 #[cfg(test)]
 mod tests {
@@ -454,6 +486,36 @@ mod tests {
             let vars: Vec<_> = BASE.iter().chain(&OIDC).copied().filter(|(n, _)| *n != name).collect();
             let vars: Vec<_> = vars.into_iter().chain([(name, value)]).collect();
             assert!(config(&vars).is_err(), "{name}");
+        }
+    }
+
+    const SCIM_TOKEN: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn has_no_scim_unless_a_token_is_set() -> anyhow::Result<()> {
+        assert!(with_groups(&[])?.scim.is_none());
+        assert!(with_groups(&[("UPHEAP_SCIM_TOKEN", "  ")])?.scim.is_none());
+        assert!(config(&[BASE[0], BASE[1], ("UPHEAP_SCIM_TOKEN", "")])?.scim.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn reads_the_scim_token_without_showing_it() -> anyhow::Result<()> {
+        let scim = with_groups(&[("UPHEAP_SCIM_TOKEN", SCIM_TOKEN)])?
+            .scim
+            .context("scim")?;
+        assert!(!format!("{scim:?}").contains(SCIM_TOKEN));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_a_scim_token_that_is_too_short_or_has_no_provider() {
+        let short = with_groups(&[("UPHEAP_SCIM_TOKEN", "0123456789abcdef0123456789abcde")]).expect_err("short");
+        let without_provider = config(&[BASE[0], BASE[1], ("UPHEAP_SCIM_TOKEN", SCIM_TOKEN)]).expect_err("no provider");
+        for error in [short, without_provider] {
+            let message = format!("{error:#}");
+            assert!(message.contains("UPHEAP_SCIM_TOKEN"), "{message}");
+            assert!(!message.contains(SCIM_TOKEN), "{message}");
         }
     }
 }

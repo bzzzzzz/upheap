@@ -107,6 +107,7 @@ than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operatio
 | `UPHEAP_OIDC_GROUP_TEAMS` | none | A JSON object from team slug to the list of provider groups whose members the team has: `{"ops": ["engineering", "sre"]}`. Needs the provider. See [Teams from groups](#teams-from-groups) |
 | `UPHEAP_OIDC_GROUPS_CLAIM` | `groups` | The ID token claim that lists a person's groups. Only read when `UPHEAP_OIDC_GROUP_TEAMS` is set |
 | `UPHEAP_OIDC_PROVIDER_LOGOUT` | `false` | `true` also signs a person out at the provider when they sign out of the web app, if the provider supports RP-initiated logout. Needs the provider |
+| `UPHEAP_SCIM_TOKEN` | none | The bearer token the provider's SCIM client sends, at least 32 characters; make one with `openssl rand -hex 32`. Needs the provider. Unset, there are no SCIM endpoints. See [Provisioning over SCIM](#provisioning-over-scim) |
 
 ### Signing in through a provider
 
@@ -157,6 +158,48 @@ of every mapped team. People who sign in with a password never change teams this
 The server stops at startup, naming the setting or the slug, when the map is set without a provider, isn't a JSON
 object of non-empty lists of strings, names a slug no team has, or names a personal team. If a sync takes a team's last
 admin out, the team shows that it has no admin; see [Making a team admin](#making-a-team-admin).
+
+#### Provisioning over SCIM
+
+Groups arrive at sign-in, so a person taken out of a group, or out of the organisation, keeps their teams until they
+sign in again. With SCIM the provider pushes its users, groups and deactivations to Upheap as they change. Set
+`UPHEAP_SCIM_TOKEN` (the server stops at startup if it is shorter than 32 characters, or the provider isn't set up) and
+give the provider:
+
+- the base URL `{BASE_URL}/scim/v2`, and
+- the token as a bearer token: `Authorization: Bearer <token>`. Rotating it is changing the setting and restarting.
+
+Each user's `externalId` must be the person's OpenID Connect subject, the `sub` of their ID token: that is how a pushed
+user is matched to an account, never by email or user name. A pushed person with no account yet gets their teams when
+they first sign in; a push never makes an account. A pushed group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its
+`displayName` or its `externalId`, so the same map works whether the token carries names or IDs. List each group once, in the form the
+provider pushes it: a team follows the pushes only once every group it lists has been pushed. Members join and leave
+the mapped teams as the push arrives, with the same entries in the team's activity as at sign-in. Each mapped team is decided on
+its own. A team is pushed once the provider has pushed every one of its groups. For a pushed team, a pushed person's
+membership follows the groups the provider says, at each push and at sign-in instead of the ID token. A team with a group
+not pushed yet is left alone by pushes, and a sign-in syncs it from the ID token as without SCIM. If the
+provider deletes or renames one of a team's groups, that group's members leave the team unless another of its groups holds them, and it follows the ID token again. If the provider pushes several users with
+one `externalId`, they are one person: deactivated only when all are, and in the groups of the active ones.
+
+When the provider deactivates a person, or deletes them, they leave every mapped team and lose every sign-in at once:
+web sessions, command-line sign-ins and personal tokens end. Their account, personal team and other teams stay. While
+the provider keeps them deactivated they can't sign in to Upheap by any means, a password reset included; turning
+them back on at the provider lets them sign in as usual.
+
+The provider's pushes are stored, so a group mapped later already has its members.
+
+##### Okta
+
+1. In the Okta admin console, go to Applications, Browse App Catalog, and add **SCIM 2.0 Test App (Header Auth)**, or
+   create an app integration and enable SCIM provisioning on its General tab.
+2. On the Provisioning tab, choose Integration and set SCIM connector base URL to `{BASE_URL}/scim/v2`, Unique
+   identifier field for users to `userName`, and tick Push New Users, Push Profile Updates and Push Groups.
+3. Set Authentication Mode to HTTP Header and paste the token as the Authorization header's value, with `Bearer ` in
+   front. Use Test Connector Configuration to check it.
+4. Under To App, enable Create Users, Update User Attributes and Deactivate Users.
+5. In the app's attribute mappings (Profile Editor, Directory), map `externalId` to `user.id`, the same value as the
+   `sub` of the ID token Okta sends Upheap. Leave `userName` as it is.
+6. Assign the people, and on the Push Groups tab push the groups your `UPHEAP_OIDC_GROUP_TEAMS` names.
 
 ### Setting up mail
 

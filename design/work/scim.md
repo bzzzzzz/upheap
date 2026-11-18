@@ -14,8 +14,8 @@ SCIM endpoints with a token, creating, changing and deactivating users and group
 
 1. With provisioning set up, a change at the provider to who is in a mapped group adds the person to the team or
    takes them out at once, the way a sign-in would, with the same audit entries.
-2. A person the provider deactivates or deletes leaves every group-managed team at once. Their account, personal
-   team and other teams stay.
+2. A person the provider deactivates or deletes leaves every group-managed team at once, and loses every session and
+   token. Until the provider turns them back on they can't sign in. Their account, personal team and other teams stay.
 3. Teams §9 holds unchanged: the operator maps groups to existing teams, groups give membership only, a
    group-managed team takes no hand-added members, and the last admin is removed like anyone else (decisions.md §41).
 4. Nothing the provider pushes makes an Upheap account. A pushed person who has never signed in gets their teams at
@@ -23,9 +23,6 @@ SCIM endpoints with a token, creating, changing and deactivating users and group
 
 ## Out of this design
 
-- No account changes beyond team membership: a deactivated person is not signed out, and can still sign in if the
-  provider lets them (it normally doesn't). Whether deactivation should also end their sessions and tokens is a
-  separate change.
 - No in-app setup: the token and the map are server settings, as the map is now.
 - No SCIM bulk requests, sorting, ETags, password changes or custom schemas.
 - Providers whose OIDC subject a SCIM push can't carry. Entra ID's `sub` is pairwise per app and no SCIM attribute
@@ -47,7 +44,7 @@ SCIM endpoints with a token, creating, changing and deactivating users and group
 ### Authentication
 
 Every SCIM request needs `Authorization: Bearer <token>`. The server compares the SHA-256 of what it got with the
-SHA-256 of the setting in constant time. A missing or wrong token is `401` in SCIM's error shape. The token is never
+SHA-256 of the setting; digests, not tokens, are compared. A missing or wrong token is `401` in SCIM's error shape. The token is never
 logged. The SCIM token is not a user: it reaches only the SCIM endpoints, and `/api/v1` refuses it like any unknown
 bearer token.
 
@@ -59,17 +56,20 @@ Errors §4, "standards keep their own format").
 
 | Path | Methods |
 | --- | --- |
-| `/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas` | `GET`: what is supported, so providers that read it skip the rest |
+| `/ServiceProviderConfig` | `GET`: what is supported, for providers that read it. There is no `/ResourceTypes` or `/Schemas`: Okta and Entra don't read them |
 | `/Users` | `GET` with `filter` (`userName eq`, `externalId eq`), `startIndex`, `count`; `POST` |
 | `/Users/{id}` | `GET`, `PUT`, `PATCH`, `DELETE` |
-| `/Groups` | `GET` with `filter` (`displayName eq`, `externalId eq`), `startIndex`, `count`, `excludedAttributes=members`; `POST` |
+| `/Groups` | `GET` with `filter` (`displayName eq`, `externalId eq`), `startIndex`, `count`; `POST` |
 | `/Groups/{id}` | `GET`, `PUT`, `PATCH`, `DELETE` |
 
 - `PATCH` takes `add`, `remove` and `replace` on `active`, `displayName`, `externalId`, `userName` and `members`,
-  including a path filter on members (`members[value eq "…"]`), and the value-object forms Okta and Entra send (a
-  `replace` with no path and an object value; `active` as `"True"`/`"False"`).
+  including a path filter on members (`members[value eq "…"]`), and Okta's value-object form (a `replace` with no
+  path and an object value). Any other path, or key of such an object, is accepted and changes nothing; so does
+  removing `userName` or `displayName`. `active` is a boolean. The resource as sent on `POST` and `PUT` is still kept
+  whole.
 - A `POST` whose `userName`, or group `displayName`, is already taken is `409` with `scimType: uniqueness`, which is
-  how providers find and link an existing resource.
+  how providers find and link an existing resource. `externalId` isn't unique.
+- A group's `members` come back as `{"value": <user id>}` only. `attributes` and `excludedAttributes` are ignored.
 - A resource keeps what the provider sent, so a `GET` gives it back with Upheap's `id` and `meta`. Attributes
   Upheap doesn't use are kept as they came and not read.
 - Users and groups the map doesn't name are kept like the rest, so a group mapped later already has its members,
@@ -80,7 +80,7 @@ Errors §4, "standards keep their own format").
 Three tables mirror the provider. They are the provider's data, not the person's, so a `DELETE` removes the rows; the
 audit log keeps every team change they caused.
 
-- `scim_users`: Upheap's `id`, `userName` (unique), `externalId` (unique when present), `active`, the resource as
+- `scim_users`: Upheap's `id`, `userName` (unique), `externalId` (indexed), `active`, the resource as
   sent, and timestamps.
 - `scim_groups`: `id`, `displayName` (unique), `externalId`, the resource as sent, and timestamps.
 - `scim_group_members`: group and user, by Upheap's SCIM IDs. A member that names no stored user is refused with
@@ -90,6 +90,12 @@ A SCIM user is linked to an Upheap user by `user_identities`: the configured iss
 as the subject. Nothing stores the link; it is looked up each time, so a person who signs in for the first time is
 linked from then on. Never by email or `userName` (architecture.md, matching is by issuer and subject).
 
+Several SCIM users may share an `externalId` (it isn't unique), and together they are one person: one rule reads their
+state from all the records, for a push, a sign-in and the refusal alike. The person is inactive only when every record
+is inactive; their groups are those of the active records together; they have SCIM records when at least one exists.
+After a user write the person's state is read again from all their records, not taken from the row written, and so is
+the state of the person a record belonged to before a write changed its `externalId`.
+
 ### Applying a change
 
 A write that can change someone's groups (a user's `active` or `externalId`, a group's members, `displayName` or
@@ -98,18 +104,46 @@ is linked to an Upheap user, it works out their groups and runs the same sync a 
 (`sync_group_teams`), with the person as the audit entry's actor and `provider_groups` as what made the change, as
 at sign-in:
 
-- An active user's groups are the `displayName` and the `externalId` of every stored group they are in.
-- An inactive or deleted user's groups are known and empty: they leave every group-managed team.
-- A user with no `externalId`, or one no identity has, changes no team. The server logs it once at `info`.
+- Each mapped team is decided on its own. A team is pushed when every one of its groups matches a stored group (the
+  group's `displayName` or `externalId` is it). An active person's membership in a pushed team follows
+  their groups: the `displayName` and the `externalId` of every stored group their active records are in. A team
+  that isn't pushed is left alone by pushes, so pushing the group of one team never empties another, pushing a
+  team's groups one at a time doesn't empty it, and pushing people before their groups doesn't empty any team.
+- The write that makes a team pushed for the first time syncs every pushed person for that team. The write that
+  makes a team stop being pushed (deleting one of its matching groups, or renaming it or changing its `externalId`
+  away from the map) syncs the people it touched for that team with their remaining groups as known, so those in none
+  of its groups leave it, and from then on it follows the token.
+- An inactive person's groups, and those of a person whose last record was deleted, are known and empty in every
+  mapped team, pushed or not: they leave every group-managed team.
+- A user with no `externalId`, or one no identity has, changes no team. The server logs the second at `info`.
 
-Lock order: the SCIM group or user row being written, then the mapped teams in ID order, as the sync already locks
-them. A group write that touches many members syncs each in the same transaction.
+Lock order: the mapped teams in ID order, as the sync already locks them (the caller locks them before it syncs), then
+the SCIM row being written, with a locking read, so two writes of one resource run one after the other. A group write
+that touches many members syncs each in the same transaction.
+
+### Deactivation
+
+A write that leaves a linked person inactive (every record's `active` false, by `POST`, `PUT` or `PATCH`), or deletes
+their last record, ends
+every sign-in of their account in the same transaction: their web sessions are deleted, their OAuth token families
+revoked, their authorization codes expired and their personal tokens revoked. Repeating the write ends nothing more,
+so no before and after are compared. It is logged at `info` with the number of sign-ins ended, and has no audit entry
+beyond the team ones.
+
+The refusal sits where every sign-in, registration and password reset opens a session: while SCIM is set up and the
+person is inactive, opening one fails with `account_deactivated` (`403`) and the surrounding
+transaction rolls back, so a password reset then changes nothing. The provider itself normally refuses a deactivated
+person's sign-in, so this is the backstop; a password reset can give a provider-made account a password, which is why
+it is there. Reactivating is `active` true again, and nothing else happens. A person with no record is
+no longer refused; the provider won't authenticate a person it deleted, and their sessions and tokens ended at the
+delete.
 
 ### Sign-in
 
-With a SCIM token set and a SCIM user linked to the person, a sign-in through the provider syncs from the SCIM
-record instead of the ID token: the provider's pushes are the one source, so a token minted a moment before a push
-can't undo it. A person with no SCIM record syncs from the token's groups as now. The first sign-in (the username
+With a SCIM token set and the person having a SCIM record, a sign-in through the provider syncs the pushed teams from
+the SCIM state instead of the ID token: the provider's pushes are the one source, so a token minted a moment before a push
+can't undo it. For a mapped team that is not pushed, and for a person with no SCIM record, the sign-in syncs from the
+token's groups as now. The first sign-in (the username
 step) does the same once the identity exists, so a person pushed before they ever signed in gets their teams then.
 
 ### What the operator sees
@@ -122,7 +156,7 @@ step) does the same once the identity exists, so a person pushed before they eve
 
 ## Checking it
 
-- Service and API tests for each endpoint, filter and `PATCH` form, using the request bodies Okta and Entra document.
+- Service and API tests for each endpoint, filter and `PATCH` form, using the request bodies Okta documents.
 - Tests that a group push adds and removes, that deactivation and delete empty the person's group-managed teams,
   that an unlinked or unmapped user changes nothing, and that sign-in prefers the SCIM record.
 - Against a real provider: Okta's free developer org, with a SCIM 2.0 app integration pointed at a server it can
