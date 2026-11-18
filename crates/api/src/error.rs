@@ -169,6 +169,7 @@ fn classify_service(err: &ServiceError) -> Classified {
             title: "The token has expired".to_owned(),
             ..simple(StatusCode::UNAUTHORIZED, "token_expired", Category::Permission)
         },
+        ServiceError::AccountDeactivated => simple(StatusCode::FORBIDDEN, "account_deactivated", Category::Permission),
         ServiceError::InvalidCredentials => {
             simple(StatusCode::UNAUTHORIZED, "invalid_credentials", Category::Permission)
         }

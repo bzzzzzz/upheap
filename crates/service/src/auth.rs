@@ -436,12 +436,15 @@ impl Services {
         Ok((grant, made.team, made.heap))
     }
 
+    /// Opens a session for the user, the one place every sign-in, registration and password reset does. Refuses with
+    /// [`ServiceError::AccountDeactivated`] when the provider has deactivated the person (see [`crate::scim`]).
     pub(crate) async fn open_session(
         &self,
         db: &impl store::ConnectionTrait,
         user: User,
         now: Timestamp,
     ) -> Result<SessionGrant, ServiceError> {
+        self.refuse_deactivated(db, user.id).await?;
         let token = SessionToken::generate();
         let expires_at = now
             .checked_add(self.settings.session_ttl)

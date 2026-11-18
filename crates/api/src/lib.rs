@@ -1,4 +1,5 @@
-//! The HTTP API of Upheap, served under `/api/v1`, plus the health probes.
+//! The HTTP API of Upheap, served under `/api/v1`, plus the health probes and, when the operator sets a token, the
+//! SCIM endpoints under `/scim/v2`.
 //!
 //! The request and response types are in `api_types`, which clients share. Handlers translate HTTP to use-case
 //! calls and back; they never check permissions or compute anything about items themselves. Errors become
@@ -23,6 +24,7 @@ mod password_resets;
 mod paths;
 mod questions;
 mod request_id;
+mod scim;
 mod steps;
 mod tags;
 mod teams;
@@ -208,15 +210,17 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn(request_id::scope_request_id))
         .layer(TimeoutLayer::with_status_code(axum::http::StatusCode::REQUEST_TIMEOUT, std::time::Duration::from_secs(30)));
 
-    Router::new()
-        .merge(api)
-        .route(
-            "/api/v1/openapi.json",
-            axum::routing::get(
-                move || async move { ([(axum::http::header::CONTENT_TYPE, "application/json")], spec_json) },
-            ),
-        )
-        .merge(health::routes())
-        .with_state(state)
-        .layer(observed)
+    let mut app = Router::new().merge(api);
+    if state.services.scim_enabled() {
+        app = app.merge(scim::routes(&state));
+    }
+    app.route(
+        "/api/v1/openapi.json",
+        axum::routing::get(
+            move || async move { ([(axum::http::header::CONTENT_TYPE, "application/json")], spec_json) },
+        ),
+    )
+    .merge(health::routes())
+    .with_state(state)
+    .layer(observed)
 }
