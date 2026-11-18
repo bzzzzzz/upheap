@@ -327,8 +327,10 @@ Display names, team names and heap names stay free text that can repeat. Only ha
    item as its key within the default heap, or as the full path `my-team/backlog/k3x9a`, a short link without its
    `/h/`, so a pasted link works too.
 6. **Changes.** Usernames are fixed, and an item's key changes only when it moves to a heap that has the key. Team
-   and heap slugs can change, and an item's heap can, by a move. An old link stops working when any of them does;
-   redirects from old handles are out of scope for now.
+   and heap slugs can change, and an item's heap can, by a move. A move keeps the item's former
+   (heap, key) handles. An item path with one names the item where it is now, for reads and writes alike, unless an
+   item holds that handle now, and then that item; of several former holders the last to leave. The web app then
+   shows the current address. A renamed team or heap slug still breaks old links.
 7. **Sign-up** asks for a username with the display name, email and password; the personal team takes it as its
    slug, and the first heap is `personal`. A first OIDC sign-in asks for a username before creating the
    user.
@@ -929,7 +931,7 @@ section is how it maps onto this API.
    `.upheap-run` in it, naming the server, and that file's modification time is when a run last started or ended there. The
    run holds a shared lock on that file until it ends. The loop sweeps the
    root when it starts and about hourly before a claim, one worker at a time, and removes a directory whose
-   marker is 7 days old, or whose item is closed or answers 404 (deleted, moved, or no longer the person's) while
+   marker is 7 days old, or whose item is closed or answers 404 (deleted, or no longer the person's) while
    its heap still reads fine: the server answers 404 for a heap the caller can't see too, so another account's
    directories on a shared root are left alone. Only the server the marker names is asked; another server's
    directories go only for age. Any other failure to read an item keeps its directory, so a server error or a changed permission never deletes work,

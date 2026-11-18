@@ -19,7 +19,7 @@ use sea_orm::{
 
 use crate::StoreError;
 use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
-use crate::entities::{item_parameter_values, item_tags, items};
+use crate::entities::{item_former_handles, item_parameter_values, item_tags, items};
 
 const TABLE: &str = "items";
 
@@ -53,6 +53,54 @@ pub async fn find_item_id_by_key(
         .await?;
     row.map(|id| RowReader { table: TABLE, id: &id }.uuid(&id).map(ItemId::from_uuid))
         .transpose()
+}
+
+/// Records that the item `item_id` had `key` in `heap_id` before a move at `moved_at`.
+pub async fn insert_former_handle(
+    db: &impl ConnectionTrait,
+    item_id: ItemId,
+    heap_id: HeapId,
+    key: ItemKey,
+    moved_at: Timestamp,
+) -> Result<(), StoreError> {
+    item_former_handles::Entity::insert(item_former_handles::ActiveModel {
+        id: Set(id_to_db(&uuid::Uuid::now_v7())),
+        item_id: Set(id_to_db(item_id.as_uuid())),
+        heap_id: Set(id_to_db(heap_id.as_uuid())),
+        key: Set(key.as_str().to_owned()),
+        moved_at: Set(moved_at.as_millis()),
+    })
+    .exec_without_returning(db)
+    .await?;
+    Ok(())
+}
+
+/// The ID of the item that held `key` in `heap_id` before a move, or `None` when none did. Of several, the one that
+/// left last.
+pub async fn find_item_id_by_former_key(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    key: ItemKey,
+) -> Result<Option<ItemId>, StoreError> {
+    let row = item_former_handles::Entity::find()
+        .select_only()
+        .column(item_former_handles::Column::ItemId)
+        .filter(item_former_handles::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .filter(item_former_handles::Column::Key.eq(key.as_str()))
+        .order_by_desc(item_former_handles::Column::MovedAt)
+        .order_by_desc(item_former_handles::Column::Id)
+        .into_tuple::<String>()
+        .one(db)
+        .await?;
+    row.map(|id| {
+        RowReader {
+            table: "item_former_handles",
+            id: &id,
+        }
+        .uuid(&id)
+        .map(ItemId::from_uuid)
+    })
+    .transpose()
 }
 
 /// Whether an item of `heap_id` already has `key`. Run under the heap lock, so a new item can take the key safely.

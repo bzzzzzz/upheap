@@ -271,8 +271,8 @@ async fn reopen_item(
 /// Tags and parameter values carry over where the new heap has a tag of the same name, or a parameter and option of
 /// the same names; the rest are dropped. It keeps its state, and a blocked item stays blocked with nobody picked. The
 /// items that waited for it keep it as their blocker, now gone (`blocker_gone`), and wait for the caller. Moving an
-/// item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, so its old path
-/// stops working.
+/// item to the heap it is in succeeds and changes nothing. The response is the item in its new heap, and its old path
+/// still names it.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/move", tag = "items", security(("session" = [])),
     params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemMoveDto,
     responses(
