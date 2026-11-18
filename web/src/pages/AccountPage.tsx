@@ -11,6 +11,7 @@ import { NoPasswordCard, PasswordCard } from "../components/PasswordCard";
 import { ProblemText } from "../components/ProblemText";
 import { SignInsSection } from "../components/SignIns";
 import { useTheme, type Theme } from "../components/theme";
+import { leaveAfterSignOut } from "../signOutRedirect";
 
 /** The display name form in the design tokens, its buttons the size of the Your data confirm's. */
 const nameFormClasses: NameFormClasses = {
@@ -82,11 +83,9 @@ export function AccountPage() {
               disabled={signOut.isPending}
               onClick={() =>
                 signOut.mutate(undefined, {
-                  onSuccess: (signedOut) => {
-                    // The provider ends its session, and sends the person back to /login.
-                    if (signedOut?.provider_logout_url) window.location.assign(signedOut.provider_logout_url);
-                    else void navigate({ to: "/login" });
-                  },
+                  // The provider ends its session and sends the person back to /login; this page keeps nothing.
+                  onSuccess: (signedOut) =>
+                    leaveAfterSignOut(signedOut, undefined, () => void navigate({ to: "/login" })),
                 })
               }
               className={compactButtonClass.borderedDanger}

@@ -587,11 +587,12 @@ a fixed time.
      off nothing is stored, and the setting is checked again at sign-out. Sign-out deletes the session row and clears
      the cookie first, then, if the row had a token, fetches discovery and, when it names `end_session_endpoint`,
      answers `200` with that URL carrying `id_token_hint`, `client_id` and `post_logout_redirect_uri`
-     (`{BASE_URL}/login`); the web app goes there (every web sign-out does, the invite and consent pages too: they save the page to return to
-     in `sessionStorage` and the sign-in page uses it as its `redirect`). Anything else, including a provider that is down, is the plain `204`:
-     sign-out never fails because of the provider. There is no `state`, since nothing is kept to check it. The token is
-     stored as it is, not hashed, because it has to be sent back; it can't sign anyone in to Upheap, which only accepts
-     a code exchanged with the stored verifier and nonce. The CLI's sign-out only revokes its OAuth tokens.
+     (`{BASE_URL}/login`); the web app goes there (every web sign-out does, the invite and consent pages too: they keep
+     the page to return to in `sessionStorage` for ten minutes, and the sign-in page reloads that page, as the plain
+     `204` does). Anything else, including a provider that is down, is the plain `204`: sign-out never fails because of
+     the provider. There is no `state`, since nothing is kept to check it. The token is stored as it is, not hashed,
+     because it has to be sent back; it can't sign anyone in to Upheap, which only accepts a code exchanged with the
+     stored verifier and nonce. The CLI's sign-out only revokes its OAuth tokens.
    - **No password:** a provider user has no password row, so password sign-in can't succeed for them and Change
      password isn't offered (`change_password` is left out of `/me`'s allowed actions).
    - An invite page passes `redirect=/invite/<token>` through the round trip, so the person comes back to the invite

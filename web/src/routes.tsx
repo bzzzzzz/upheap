@@ -2,6 +2,8 @@
 // and items by their handles (design/architecture.md, Handles), and `/h/…` short links expand to them.
 import type { QueryClient } from "@tanstack/react-query";
 import {
+  type AnyRouteMatch,
+  type AnyRouter,
   createRootRouteWithContext,
   createRoute,
   createRouter,
@@ -17,6 +19,7 @@ import { isUnauthenticated } from "./api/client";
 import type { OAuthAuthorizationRequest } from "./api/schema";
 import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queries";
 import { BASE } from "./basePath";
+import { leaveAfterSignOut, takeKeptPage } from "./signOutRedirect";
 import { parseAcrossSearch, parseListSearch } from "./components/listView";
 import { AllItemsPage } from "./pages/AllItemsPage";
 import { AccountPage } from "./pages/AccountPage";
@@ -41,7 +44,12 @@ import { WaitingPage } from "./pages/WaitingPage";
 
 const linkClass = "text-sky-700 hover:underline dark:text-sky-400";
 
-const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
+/** What route options need of the router, which they can't reach: the router's own matching of a path. */
+type RouteMatcher = { matchRoutes: (pathname: string, search: object) => AnyRouteMatch[] };
+
+const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient; router: RouteMatcher }>()({
+  component: Outlet,
+});
 
 /**
  * Sign-in's search for a user sent there from `href`, a path in the app with its search and hash, so signing in
@@ -49,25 +57,6 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ c
  */
 export function signInSearch(href: string): { redirect?: string } {
   return href === "/" ? {} : { redirect: href };
-}
-
-const SIGN_IN_REDIRECT_KEY = "upheap.signInRedirect";
-
-/**
- * Signing out through the identity provider leaves the app, and the provider sends the person to the sign-in page
- * with no `redirect`. Keeps `href`, the app path that sign-in would have carried as `redirect`, for that page to
- * pick up (`takeSignInRedirect`), then goes to the provider's `url`.
- */
-export function signOutAtProvider(url: string, href: string): void {
-  sessionStorage.setItem(SIGN_IN_REDIRECT_KEY, href);
-  window.location.assign(url);
-}
-
-/** The path `signOutAtProvider` kept, removed as it is read. It is checked like any `redirect` when sign-in uses it. */
-function takeSignInRedirect(): string | undefined {
-  const href = sessionStorage.getItem(SIGN_IN_REDIRECT_KEY);
-  sessionStorage.removeItem(SIGN_IN_REDIRECT_KEY);
-  return href ?? undefined;
 }
 
 /**
@@ -114,7 +103,7 @@ const ITEM_KEY = /^(?=.*\d)[0-9a-hjkmnp-tv-z]{5}$/;
  * `/teams/a/zzz`, still matches loosely and opens the app's not-found, which is harmless. An invite link's page is
  * one too: a sign-in that started on it comes back to it.
  */
-function toAppPage(router: ReturnType<typeof useRouter>, redirect: string | undefined) {
+function toAppPage(router: RouteMatcher, redirect: string | undefined) {
   if (!redirect?.startsWith("/") || redirect.startsWith("//") || redirect.startsWith("/\\")) return undefined;
   // The URL parser drops tabs and newlines and resolves dot segments, so `/\t/evil.example` is another origin and
   // `/.//evil.example` comes out as `//evil.example`. Check what it gives, not what came in.
@@ -169,10 +158,13 @@ const loginRoute = createRoute({
     ...(typeof search.login === "string" && { login: search.login }),
   }),
   // Back from the provider's sign-out, which names no page: the one the person signed out on, if one was kept.
-  beforeLoad: ({ search }) => {
+  beforeLoad: ({ search, context }) => {
     if (search.redirect !== undefined) return;
-    const kept = takeSignInRedirect();
-    if (kept !== undefined) throw redirect({ to: "/login", search: { ...search, redirect: kept }, replace: true });
+    const kept = takeKeptPage();
+    // The page itself, as the plain sign-out reloads it: it shows signed out, or sends the person back here with
+    // its own `redirect`.
+    const page = toAppPage(context.router, kept);
+    if (page) window.location.replace(BASE + page.href);
   },
   component: function LoginRoute() {
     const router = useRouter();
@@ -270,8 +262,7 @@ const authorizeRoute = createRoute({
         onUseAnotherAccount={() =>
           signOut.mutate(undefined, {
             onSuccess: (signedOut) => {
-              if (signedOut?.provider_logout_url) signOutAtProvider(signedOut.provider_logout_url, href);
-              else window.location.replace(toSignIn);
+              leaveAfterSignOut(signedOut, href, () => window.location.replace(toSignIn));
             },
           })
         }
@@ -603,13 +594,20 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {
-  // Vite's base, which is the root unless the app is built for another.
-  return createRouter({
+  // Route options see the router's context but not the router, so it carries the one thing they need of it.
+  const created: { router?: AnyRouter } = {};
+  const matcher: RouteMatcher = {
+    matchRoutes: (pathname, search) => created.router?.matchRoutes(pathname, search) ?? [],
+  };
+  const router = createRouter({
     routeTree,
-    context: { queryClient },
+    context: { queryClient, router: matcher },
     defaultPreload: "intent",
+    // Vite's base, which is the root unless the app is built for another.
     basepath: import.meta.env.BASE_URL,
   });
+  created.router = router;
+  return router;
 }
 
 declare module "@tanstack/react-router" {
