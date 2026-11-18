@@ -516,6 +516,94 @@ async fn after_a_step_the_item_does_not_have_is_refused_naming_the_field() -> Re
 
 #[gtest]
 #[tokio::test]
+async fn a_step_moved_keeps_its_number_bumps_its_own_version_and_records_its_place() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = task().await?;
+    let mut added = Value::Null;
+    for title in ["One", "Two", "Three"] {
+        added = add(&app, &session, &heap, &key, json!({ "title": title })).await?.body;
+    }
+    let id = added["id"].as_str().context("no id")?.to_owned();
+
+    // Act
+    let to_first = edit(&app, &session, &heap, &key, "3", &json!(1), json!({ "after": null })).await?;
+    let after_two = edit(&app, &session, &heap, &key, "3", &json!(2), json!({ "after": 2 })).await?;
+    let in_place = edit(&app, &session, &heap, &key, "3", &json!(3), json!({ "after": 2 })).await?;
+
+    // Assert
+    expect_that!(to_first.status, eq(StatusCode::OK));
+    expect_that!(numbers(&to_first.body), eq(&vec![3, 1, 2]));
+    expect_that!(step_version(&to_first.body, 3), eq(&json!(2)));
+    expect_that!(step_version(&to_first.body, 1), eq(&json!(1)));
+    expect_that!(numbers(&after_two.body), eq(&vec![1, 2, 3]));
+    expect_that!(step_version(&after_two.body, 3), eq(&json!(3)));
+    expect_that!(in_place.status, eq(StatusCode::OK));
+    expect_that!(numbers(&in_place.body), eq(&vec![1, 2, 3]));
+    expect_that!(step_version(&in_place.body, 3), eq(&json!(3)));
+    let entries = app.audit_entries(&id).await?;
+    let updates: Vec<&Value> = entries
+        .iter()
+        .filter(|(action, _)| action == "step_updated")
+        .map(|(_, diff)| diff)
+        .collect();
+    expect_that!(updates.len(), eq(2));
+    expect_that!(updates[0]["step_place"], eq(&json!({ "before": 2, "after": 0 })));
+    expect_that!(updates[1]["step_place"], eq(&json!({ "before": 0, "after": 2 })));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_place_can_come_with_other_fields_in_one_patch() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = task().await?;
+    for title in ["One", "Two"] {
+        add(&app, &session, &heap, &key, json!({ "title": title })).await?;
+    }
+
+    // Act
+    let patched = edit(
+        &app,
+        &session,
+        &heap,
+        &key,
+        "2",
+        &json!(1),
+        json!({ "after": null, "state": "ticked" }),
+    )
+    .await?;
+
+    // Assert
+    expect_that!(numbers(&patched.body), eq(&vec![2, 1]));
+    expect_that!(patched.body["steps"][0]["state"], eq(&json!("ticked")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn moving_after_a_step_the_item_does_not_have_is_refused_naming_the_field() -> Result<()> {
+    // Arrange
+    let (app, session, heap, key) = task().await?;
+    add(&app, &session, &heap, &key, json!({ "title": "One" })).await?;
+    add(&app, &session, &heap, &key, json!({ "title": "Two" })).await?;
+
+    // Act
+    let unknown = edit(&app, &session, &heap, &key, "1", &json!(1), json!({ "after": 9 })).await?;
+    let itself = edit(&app, &session, &heap, &key, "1", &json!(1), json!({ "after": 1 })).await?;
+    let zero = edit(&app, &session, &heap, &key, "1", &json!(1), json!({ "after": 0 })).await?;
+
+    // Assert
+    expect_that!(unknown.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(unknown.body["code"], eq(&json!("step_not_in_item")));
+    expect_that!(unknown.body["field"], eq(&json!("after")));
+    expect_that!(itself.body["code"], eq(&json!("step_not_in_item")));
+    expect_that!(zero.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(zero.body["code"], eq(&json!("value_unknown")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_hundred_and_first_step_is_refused() -> Result<()> {
     // Arrange
     let (app, session, heap, key) = task().await?;

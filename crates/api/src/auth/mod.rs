@@ -2,7 +2,7 @@
 
 mod oidc;
 
-use api_types::auth::{RegisterRequest, SignInRequest};
+use api_types::auth::{RegisterRequest, SignInRequest, SignedOut};
 use api_types::me::UserDto;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
@@ -71,17 +71,28 @@ async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInReq
 ///
 /// Only the session cookie is ended. A bearer token is left alone, and the answer is still `204`: a client signs out
 /// with `POST /oauth/revoke`.
-#[utoipa::path(post, path = "/auth/logout", tag = "auth", responses((status = 204, description = "Signed out")))]
+///
+/// When the server is set to sign people out at their OpenID Connect provider too, the session came from the
+/// provider and the provider supports it, the answer is `200` with the URL to send the browser to. The session is
+/// ended either way, and a provider that can't be reached gives `204`.
+#[utoipa::path(post, path = "/auth/logout", tag = "auth",
+    responses(
+        (status = 204, description = "Signed out"),
+        (status = 200, description = "Signed out; the browser goes on to the provider to end its session there", body = SignedOut),
+    ))]
 async fn sign_out(State(state): State<AppState>, headers: HeaderMap) -> Result<Response, ApiError> {
     let cookies = &state.cookies;
-    if let Some(token) = session_token(&headers) {
-        state.services.sign_out(&token).await?;
-    }
-    Ok((
-        StatusCode::NO_CONTENT,
-        [(header::SET_COOKIE, clear_session_cookie(cookies))],
-    )
-        .into_response())
+    let provider_logout_url = match session_token(&headers) {
+        Some(token) => state.services.sign_out(&token).await?,
+        None => None,
+    };
+    let cleared = [(header::SET_COOKIE, clear_session_cookie(cookies))];
+    Ok(match provider_logout_url {
+        Some(provider_logout_url) => {
+            (StatusCode::OK, cleared, axum::Json(SignedOut { provider_logout_url })).into_response()
+        }
+        None => (StatusCode::NO_CONTENT, cleared).into_response(),
+    })
 }
 
 fn signed_in(status: StatusCode, grant: &SessionGrant, cookies: &CookieSettings) -> Response {

@@ -187,7 +187,7 @@ impl Services {
         }
         store::users::set_password(&txn, user.id, &new_hash, now).await?;
         let ended_sign_ins = self.end_sign_ins(&txn, user.id, None, now).await?;
-        let session = self.open_session(&txn, user.clone(), now).await?;
+        let session = self.open_session(&txn, user.clone(), now, None).await?;
         // There shouldn't be one, since making a link cancels the others; this keeps "one working link" true anyway.
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(

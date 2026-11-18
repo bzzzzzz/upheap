@@ -3,6 +3,8 @@
 
 mod common;
 
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode, header};
 use common::oidc::{self, APP_URL, AuthorizationRequest, Claims, FakeProvider, LABEL, TokenFault};
@@ -26,6 +28,64 @@ async fn harness() -> Result<Harness> {
     let plain = TestApp::start().await?;
     let app = plain.with_oidc(provider.settings()?);
     Ok(Harness { provider, app, plain })
+}
+
+/// A harness whose server signs out at the provider too, and whose provider names an end session endpoint when
+/// `supported`.
+async fn logout_harness(supported: bool) -> Result<Harness> {
+    let provider = FakeProvider::start().await?;
+    if supported {
+        provider.support_logout();
+    }
+    let plain = TestApp::start().await?;
+    let app = plain.with_oidc(provider.settings()?.with_provider_logout(true));
+    Ok(Harness { provider, app, plain })
+}
+
+async fn sign_out(app: &TestApp, session: &str) -> Result<TestResponse> {
+    app.send(Method::POST, "/api/v1/auth/logout", Some(session), None).await
+}
+
+/// A known person's sign-in, after a first one made them. Returns the session of the second.
+async fn sign_in_as_sam(h: &Harness) -> Result<String> {
+    sign_up(h, None, "sam").await?;
+    let started = begin(&h.app, None).await?;
+    let answered = finish(h, &started, sam()).await?;
+    answered.session_cookie.context("no session cookie")
+}
+
+fn assert_signed_out_without_provider(response: &TestResponse) {
+    expect_that!(response.status, eq(StatusCode::NO_CONTENT));
+    expect_that!(response.body, eq(&Value::Null));
+    expect_that!(
+        set_cookies(response, "heap_session"),
+        elements_are![contains_substring("Max-Age=0")]
+    );
+}
+
+/// The query of the provider logout URL the answer carries, after checking it goes to the end session endpoint.
+fn logout_query(h: &Harness, response: &TestResponse) -> Result<HashMap<String, String>> {
+    expect_that!(response.status, eq(StatusCode::OK), "{}", response.body);
+    expect_that!(
+        set_cookies(response, "heap_session"),
+        elements_are![contains_substring("Max-Age=0")]
+    );
+    let url = response.body["provider_logout_url"].as_str().context("no URL")?;
+    let (endpoint, query) = url.split_once('?').context("no query")?;
+    expect_that!(endpoint, eq(&h.provider.end_session_endpoint()));
+    Ok(form_urlencoded::parse(query.as_bytes())
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect())
+}
+
+fn expect_logout_query(h: &Harness, query: &HashMap<String, String>) -> Result<()> {
+    expect_that!(query.get("id_token_hint"), some(eq(&h.provider.last_id_token()?)));
+    expect_that!(query.get("client_id"), some(eq(oidc::CLIENT_ID)));
+    expect_that!(
+        query.get("post_logout_redirect_uri"),
+        some(eq(&format!("{APP_URL}/login")))
+    );
+    Ok(())
 }
 
 /// A sign-in the start began.
@@ -566,5 +626,90 @@ async fn a_provider_that_cant_be_reached_sends_the_person_back_to_sign_in() -> R
         ))
     );
     expect_that!(app.count_rows("oidc_sign_ins").await?, eq(0));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn signing_out_a_known_person_goes_on_to_the_provider() -> Result<()> {
+    let h = logout_harness(true).await?;
+    let session = sign_in_as_sam(&h).await?;
+
+    let out = sign_out(&h.app, &session).await?;
+    let query = logout_query(&h, &out)?;
+    expect_logout_query(&h, &query)?;
+    expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn signing_out_a_new_person_goes_on_to_the_provider() -> Result<()> {
+    let h = logout_harness(true).await?;
+    let registered = sign_up(&h, None, "sam").await?;
+    let session = registered.session_cookie.context("no session cookie")?;
+
+    let out = sign_out(&h.app, &session).await?;
+    let query = logout_query(&h, &out)?;
+    expect_logout_query(&h, &query)?;
+    expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn with_provider_logout_off_signing_out_stays_with_upheap() -> Result<()> {
+    let h = harness().await?;
+    h.provider.support_logout();
+    // The username step keeps no token before it, and the session none after it.
+    let started = begin(&h.app, None).await?;
+    finish(&h, &started, sam()).await?;
+    expect_that!(h.app.count_rows("oidc_sign_ins").await?, eq(1));
+    expect_that!(h.app.count_id_tokens("oidc_sign_ins").await?, eq(0));
+    let registered = register(&h.app, &started.request.state, "sam").await?;
+    let session = registered.session_cookie.context("no session cookie")?;
+    expect_that!(h.app.count_rows("sessions").await?, ge(1));
+    expect_that!(h.app.count_id_tokens("sessions").await?, eq(0));
+
+    let out = sign_out(&h.app, &session).await?;
+    assert_signed_out_without_provider(&out);
+    expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_provider_without_an_end_session_endpoint_only_signs_out_of_upheap() -> Result<()> {
+    let h = logout_harness(false).await?;
+    let session = sign_in_as_sam(&h).await?;
+
+    let out = sign_out(&h.app, &session).await?;
+    assert_signed_out_without_provider(&out);
+    expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_provider_that_is_down_only_signs_out_of_upheap() -> Result<()> {
+    let h = logout_harness(true).await?;
+    let session = sign_in_as_sam(&h).await?;
+    h.provider.fail_discovery();
+
+    let out = sign_out(&h.app, &session).await?;
+    assert_signed_out_without_provider(&out);
+    expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_local_person_signs_out_of_upheap_only_even_with_provider_logout_on() -> Result<()> {
+    let h = logout_harness(true).await?;
+    let (session, _) = h.plain.register("ada@example.test").await?;
+
+    let out = sign_out(&h.app, &session).await?;
+    assert_signed_out_without_provider(&out);
+    expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
     Ok(())
 }

@@ -9,6 +9,7 @@ pub struct Model {
     pub user_id: String,
     pub created_at: i64,
     pub expires_at: i64,
+    pub id_token: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

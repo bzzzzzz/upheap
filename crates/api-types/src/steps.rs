@@ -54,10 +54,16 @@ pub struct StepPatchDto {
     pub context: Option<Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<StepStateDto>,
+    /// Where the step goes in the task's order: the number of the step it goes right after, or `null` for first.
+    /// Left out, it stays where it is.
+    #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<u32>, nullable, minimum = 1)]
+    pub after: Option<Option<u32>>,
 }
 
 impl StepPatchDto {
-    /// The edit. Fails on the first invalid field; a state this server doesn't know is `ValueUnknown`.
+    /// The edit. Fails on the first invalid field; a state this server doesn't know is `ValueUnknown`, and so is an
+    /// `after` of zero, since step numbers start at 1.
     pub fn to_patch(&self) -> Result<StepPatch, ValidationError> {
         Ok(StepPatch {
             title: self.title.as_deref().map(Title::parse).transpose()?,
@@ -67,6 +73,16 @@ impl StepPatchDto {
                 Some(Some(raw)) => Some(Context::parse(raw)?),
             },
             state: self.state.map(StepState::try_from).transpose()?,
+            after: self
+                .after
+                .map(|after| {
+                    after
+                        .map(|number| {
+                            StepNumber::new(number).ok_or(ValidationError::ValueUnknown { field: Field::After })
+                        })
+                        .transpose()
+                })
+                .transpose()?,
         })
     }
 }

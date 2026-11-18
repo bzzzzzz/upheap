@@ -2,6 +2,7 @@
 
 pub mod add;
 pub mod edit;
+pub mod move_step;
 pub mod state;
 
 use api_types::common::{ItemDto, StepDto};

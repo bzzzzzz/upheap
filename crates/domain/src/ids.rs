@@ -176,6 +176,7 @@ mod tests {
                 "step_title",
                 "step_context",
                 "step_state",
+                "step_place",
                 "question",
                 "question_kind",
                 "question_text",

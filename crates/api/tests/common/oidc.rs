@@ -6,6 +6,7 @@
 //! checks the PKCE verifier against the challenge, so a callback that exchanged a wrong one fails.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -117,6 +118,12 @@ struct Shared {
     key: CoreRsaPrivateSigningKey,
     wrong_key: CoreRsaPrivateSigningKey,
     grants: Mutex<HashMap<String, Grant>>,
+    /// Whether discovery names an end session endpoint. Off by default.
+    end_session: AtomicBool,
+    /// Whether discovery answers with an error.
+    discovery_fails: AtomicBool,
+    /// The ID token the token endpoint answered with last.
+    last_id_token: Mutex<Option<String>>,
 }
 
 pub struct FakeProvider {
@@ -139,6 +146,9 @@ impl FakeProvider {
             key,
             wrong_key,
             grants: Mutex::new(HashMap::new()),
+            end_session: AtomicBool::new(false),
+            discovery_fails: AtomicBool::new(false),
+            last_id_token: Mutex::new(None),
         });
         let router = Router::new()
             .route("/realm/.well-known/openid-configuration", get(discovery))
@@ -154,6 +164,30 @@ impl FakeProvider {
     /// The server's settings for this provider.
     pub fn settings(&self) -> Result<OidcSettings> {
         settings_for(&self.issuer)
+    }
+
+    /// Makes discovery name an end session endpoint, which is [`FakeProvider::end_session_endpoint`].
+    pub fn support_logout(&self) {
+        self.shared.end_session.store(true, Ordering::SeqCst);
+    }
+
+    /// Makes discovery answer with an error from now on, as a provider that is down does.
+    pub fn fail_discovery(&self) {
+        self.shared.discovery_fails.store(true, Ordering::SeqCst);
+    }
+
+    pub fn end_session_endpoint(&self) -> String {
+        format!("{}logout", self.issuer)
+    }
+
+    /// The ID token the token endpoint issued last.
+    pub fn last_id_token(&self) -> Result<String> {
+        self.shared
+            .last_id_token
+            .lock()
+            .ok()
+            .and_then(|token| token.clone())
+            .context("no ID token issued")
     }
 
     /// A code that the token endpoint turns into an ID token with `claims`, for the sign-in `request` started.
@@ -202,9 +236,12 @@ pub fn parse_authorization(location: &str) -> Result<AuthorizationRequest> {
     })
 }
 
-async fn discovery(State(shared): State<Arc<Shared>>) -> Json<Value> {
+async fn discovery(State(shared): State<Arc<Shared>>) -> axum::response::Response {
+    if shared.discovery_fails.load(Ordering::SeqCst) {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
     let issuer = &shared.issuer;
-    Json(json!({
+    let mut document = json!({
         "issuer": issuer,
         "authorization_endpoint": format!("{issuer}authorize"),
         "token_endpoint": format!("{issuer}token"),
@@ -212,7 +249,11 @@ async fn discovery(State(shared): State<Arc<Shared>>) -> Json<Value> {
         "response_types_supported": ["code"],
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"],
-    }))
+    });
+    if shared.end_session.load(Ordering::SeqCst) {
+        document["end_session_endpoint"] = json!(format!("{issuer}logout"));
+    }
+    Json(document).into_response()
 }
 
 async fn keys(State(shared): State<Arc<Shared>>) -> Json<Value> {
@@ -248,12 +289,17 @@ async fn token(
         return invalid_grant();
     }
     match id_token(&shared, &grant) {
-        Some(id_token) => Json(json!({
-            "access_token": "access-token",
-            "token_type": "Bearer",
-            "id_token": id_token,
-        }))
-        .into_response(),
+        Some(id_token) => {
+            if let Ok(mut last) = shared.last_id_token.lock() {
+                *last = Some(id_token.clone());
+            }
+            Json(json!({
+                "access_token": "access-token",
+                "token_type": "Bearer",
+                "id_token": id_token,
+            }))
+            .into_response()
+        }
         None => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }

@@ -35,7 +35,8 @@ pub struct Config {
     pub log_format: LogFormat,
     /// `UPHEAP_OIDC_ISSUER`, `UPHEAP_OIDC_CLIENT_ID`, `UPHEAP_OIDC_CLIENT_SECRET` and `UPHEAP_OIDC_LABEL`, all or
     /// none, `UPHEAP_OIDC_SCOPES`, default `openid email profile`, and `UPHEAP_OIDC_GROUPS_CLAIM`, default `groups`:
-    /// the provider people may sign in through. No request is made to it at startup.
+    /// the provider people may sign in through, and `UPHEAP_OIDC_PROVIDER_LOGOUT`, default `false`: whether signing
+    /// out of the web app also signs out at the provider. No request is made to it at startup.
     pub oidc: Option<OidcSettings>,
     /// `UPHEAP_OIDC_GROUP_TEAMS`: a JSON object from team slug to the provider groups whose members the team has.
     /// Empty when unset. The slugs are checked against the teams once the database is up, not here.
@@ -123,6 +124,8 @@ impl Config {
                 "UPHEAP_PASSWORD_SIGN_IN=false needs an OpenID Connect provider: set the UPHEAP_OIDC_* variables, or nobody can sign in"
             );
         }
+        let provider_logout = provider_logout(&lookup, oidc.is_some())?;
+        let oidc = oidc.map(|oidc| oidc.with_provider_logout(provider_logout));
         let group_teams = group_teams(&lookup, oidc.is_some())?;
         let scim = scim_settings(&lookup, oidc.is_some(), &base_url)?;
         let mail = match lookup("MAIL_URL").filter(|v| !v.trim().is_empty()) {
@@ -191,6 +194,18 @@ fn oidc_settings(lookup: &impl Fn(&str) -> Option<String>, base_url: &str) -> an
         .context("UPHEAP_OIDC_ISSUER, UPHEAP_OIDC_LABEL or BASE_URL is not usable for the OpenID Connect provider")?
         .with_groups_claim(&lookup("UPHEAP_OIDC_GROUPS_CLAIM").unwrap_or_default());
     Ok(Some(settings))
+}
+
+/// Whether `UPHEAP_OIDC_PROVIDER_LOGOUT` is on: off when unset or blank, and an error when it is neither `true` nor
+/// `false`, or is `true` without a provider.
+fn provider_logout(lookup: &impl Fn(&str) -> Option<String>, has_provider: bool) -> anyhow::Result<bool> {
+    const NAME: &str = "UPHEAP_OIDC_PROVIDER_LOGOUT";
+    match lookup(NAME).as_deref().map(str::trim) {
+        None | Some("" | "false") => Ok(false),
+        Some("true") if has_provider => Ok(true),
+        Some("true") => bail!("{NAME} is set, but there is no OpenID Connect provider to sign out of"),
+        Some(other) => bail!("{NAME} must be true or false, not {other:?}"),
+    }
 }
 
 /// The map from team slug to provider groups: none when `UPHEAP_OIDC_GROUP_TEAMS` is unset or blank, and an error
@@ -448,6 +463,27 @@ mod tests {
             config(&[BASE[0], BASE[1], ("UPHEAP_OIDC_GROUP_TEAMS", "")])?
                 .group_teams
                 .is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn provider_logout_is_off_unless_true_and_needs_the_provider() -> anyhow::Result<()> {
+        let on = |extra: &[(&'static str, &'static str)]| -> anyhow::Result<bool> {
+            Ok(with_groups(extra)?.oidc.context("a provider")?.provider_logout())
+        };
+        assert!(!on(&[])?);
+        assert!(!on(&[("UPHEAP_OIDC_PROVIDER_LOGOUT", " ")])?);
+        assert!(!on(&[("UPHEAP_OIDC_PROVIDER_LOGOUT", "false")])?);
+        assert!(on(&[("UPHEAP_OIDC_PROVIDER_LOGOUT", "true")])?);
+
+        let without_provider = config(&[BASE[0], BASE[1], ("UPHEAP_OIDC_PROVIDER_LOGOUT", "true")]);
+        let message = format!("{:#}", without_provider.expect_err("no provider"));
+        assert!(message.contains("UPHEAP_OIDC_PROVIDER_LOGOUT"), "{message}");
+        let message = format!("{:#}", on(&[("UPHEAP_OIDC_PROVIDER_LOGOUT", "yes")]).expect_err("yes"));
+        assert_eq!(
+            message,
+            "UPHEAP_OIDC_PROVIDER_LOGOUT must be true or false, not \"yes\""
         );
         Ok(())
     }

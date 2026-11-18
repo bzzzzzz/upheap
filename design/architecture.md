@@ -85,7 +85,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   item's, and an item write never bumps a step's, so an agent ticking steps never makes an open edit of the item
   conflict. A step has a `number`, given when it is added (one past the highest the item has had) and never changed
   or reused, which is its name (`k3x9a.3`), and a `position` for its place in the order, kept apart so reordering
-  later never renames a step. Steps are never deleted: a dropped one stays. A task has at most 100, which is the size
+  never renames a step. A move (an `after` in the step's patch) writes the item's positions afresh from 0 and bumps
+  only the moved step's version; the steps it displaced keep theirs, as when an added step shifts them. Steps are never deleted: a dropped one stays. A task has at most 100, which is the size
   assumption that lets an item response carry all of its steps: only a single-item response does, and the ranked
   and closed lists carry `steps: null` and just the progress, counted in one grouped query per chunk without
   loading the steps. Progress is ticked of open plus ticked, so dropped steps don't count. A step write takes the
@@ -590,6 +591,19 @@ a fixed time.
      tokens and personal tokens also refuses a local user's, one indexed lookup per request while passwords are off,
      because during a rolling deploy an instance that still has passwords on can make a sign-in after the new one
      started. Passwords are never deleted, so setting the variable back to `true` is the recovery.
+
+   - **Signing out at the provider** (`UPHEAP_OIDC_PROVIDER_LOGOUT`, RP-initiated logout). Only when it is on, the
+     callback keeps the raw ID token on the session row (`sessions.id_token`); a first sign-in keeps it on the
+     `oidc_sign_ins` row until the username step copies it to the session, and the row's deletion removes it. With it
+     off nothing is stored, and the setting is checked again at sign-out. Sign-out deletes the session row and clears
+     the cookie first, then, if the row had a token, fetches discovery and, when it names `end_session_endpoint`,
+     answers `200` with that URL carrying `id_token_hint`, `client_id` and `post_logout_redirect_uri`
+     (`{BASE_URL}/login`); the web app goes there (every web sign-out does, the invite and consent pages too: they keep
+     the page to return to in `sessionStorage` for ten minutes, and the sign-in page reloads that page, as the plain
+     `204` does). Anything else, including a provider that is down, is the plain `204`: sign-out never fails because of
+     the provider. There is no `state`, since nothing is kept to check it. The token is stored as it is, not hashed,
+     because it has to be sent back; it can't sign anyone in to Upheap, which only accepts a code exchanged with the
+     stored verifier and nonce. The CLI's sign-out only revokes its OAuth tokens.
    - **No password:** a provider user has no password row, so password sign-in can't succeed for them and Change
      password isn't offered (`change_password` is left out of `/me`'s allowed actions).
    - An invite page passes `redirect=/invite/<token>` through the round trip, so the person comes back to the invite

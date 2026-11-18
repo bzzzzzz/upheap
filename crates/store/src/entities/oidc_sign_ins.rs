@@ -13,6 +13,7 @@ pub struct Model {
     pub email: Option<String>,
     pub display_name: Option<String>,
     pub groups: Option<String>,
+    pub id_token: Option<String>,
     pub created_at: i64,
     pub expires_at: i64,
 }
