@@ -34,6 +34,8 @@ pub struct VerifiedIdentity {
     pub display_name: DisplayName,
     /// The provider groups the person was in, or `None` when the token didn't say.
     pub groups: Option<Vec<String>>,
+    /// The raw ID token, kept only when signing out should reach the provider.
+    pub id_token: Option<String>,
 }
 
 /// A sign-in in flight. The nonce and the PKCE verifier are secrets: never log them.
@@ -57,6 +59,7 @@ pub async fn insert_oidc_sign_in(db: &impl ConnectionTrait, sign_in: &NewOidcSig
         email: Set(None),
         display_name: Set(None),
         groups: Set(None),
+        id_token: Set(None),
         created_at: Set(sign_in.now.as_millis()),
         expires_at: Set(sign_in.expires_at.as_millis()),
     };
@@ -83,6 +86,7 @@ pub async fn find_oidc_sign_in(db: &impl ConnectionTrait, state_hash: &str) -> R
             display_name: DisplayName::parse(&display_name)
                 .map_err(|_| read.corrupt("invalid display name".to_owned()))?,
             groups,
+            id_token: row.id_token,
         }),
         (None, None, None) => None,
         _ => return Err(read.corrupt("verified identity is partly set".to_owned())),
@@ -115,6 +119,7 @@ pub async fn set_oidc_sign_in_verified(
         .col_expr(Column::Email, identity.email.as_str().into())
         .col_expr(Column::DisplayName, identity.display_name.as_str().into())
         .col_expr(Column::Groups, groups.into())
+        .col_expr(Column::IdToken, identity.id_token.clone().into())
         .col_expr(Column::ExpiresAt, expires_at.as_millis().into())
         .filter(Column::StateHash.eq(state_hash))
         .exec(db)

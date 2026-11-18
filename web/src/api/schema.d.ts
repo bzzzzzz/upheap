@@ -39,6 +39,10 @@ export interface paths {
          * Ends the current session. Succeeds when there is none.
          * @description Only the session cookie is ended. A bearer token is left alone, and the answer is still `204`: a client signs out
          *     with `POST /oauth/revoke`.
+         *
+         *     When the server is set to sign people out at their OpenID Connect provider too, the session came from the
+         *     provider and the provider supports it, the answer is `200` with the URL to send the browser to. The session is
+         *     ended either way, and a provider that can't be reached gives `204`.
          */
         post: operations["sign_out"];
         delete?: never;
@@ -3887,6 +3891,11 @@ export interface components {
             login: string;
             password: string;
         };
+        /** @description Where to send the browser to end the person's session at the identity provider too. */
+        SignedOut: {
+            /** @description The provider's end session endpoint, with the ID token hint, the client and where to come back to (`/login`). */
+            provider_logout_url: string;
+        };
         /**
          * @description Effort or impact.
          * @enum {string}
@@ -4514,6 +4523,7 @@ export type SavedViewPatchRequest = components['schemas']['SavedViewPatchRequest
 export type SendToAgentRequest = components['schemas']['SendToAgentRequest'];
 export type SetPasswordRequest = components['schemas']['SetPasswordRequest'];
 export type SignInRequest = components['schemas']['SignInRequest'];
+export type SignedOut = components['schemas']['SignedOut'];
 export type Size = components['schemas']['Size'];
 export type Stage = components['schemas']['Stage'];
 export type StateMode = components['schemas']['StateMode'];
@@ -4615,6 +4625,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Signed out; the browser goes on to the provider to end its session there */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedOut"];
+                };
+            };
             /** @description Signed out */
             204: {
                 headers: {
