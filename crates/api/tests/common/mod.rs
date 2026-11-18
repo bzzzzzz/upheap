@@ -92,7 +92,7 @@ fn init_tracing() {
 
 pub struct TestApp {
     router: Router,
-    services: Services,
+    pub services: Services,
     pub clock: Arc<ManualClock>,
     /// The same database the router uses, for fixtures the API can't create yet.
     db: DatabaseConnection,
@@ -112,6 +112,7 @@ pub struct TestResponse {
 fn test_settings(allow_registration: bool) -> Settings {
     Settings {
         allow_registration,
+        password_sign_in: true,
         session_ttl: Duration::from_days(30),
         sign_in_limit: SignInLimit::DEFAULT,
         oidc: None,
@@ -202,7 +203,7 @@ impl TestApp {
         })
     }
 
-    fn with_settings(&self, settings: Settings) -> TestApp {
+    pub fn with_settings(&self, settings: Settings) -> TestApp {
         let services = Services::new(self.db.clone(), self.clock.clone(), settings);
         TestApp {
             router: api::router(AppState {

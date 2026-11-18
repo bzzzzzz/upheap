@@ -49,6 +49,16 @@
               }
             }
           },
+          "403": {
+            "description": "`password_sign_in_off`: the server signs in through its provider only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "`field_empty` (`field` `login` or `password`); not counted as an attempt",
             "content": {
@@ -365,6 +375,16 @@
               }
             }
           },
+          "403": {
+            "description": "`password_sign_in_off`: the server signs in through its provider only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`email_taken` (`field` `email`), or `handle_taken` (`field` `username`)",
             "content": {
@@ -624,6 +644,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/InviteRegistration"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`password_sign_in_off`: the server signs in through its provider only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1911,7 +1941,7 @@
             "description": "Accepted; if an account has the address, a link is on its way"
           },
           "403": {
-            "description": "`csrf_header_missing`",
+            "description": "`csrf_header_missing`, or `password_sign_in_off`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2034,7 +2064,7 @@
             }
           },
           "403": {
-            "description": "`csrf_header_missing`",
+            "description": "`csrf_header_missing`, or `password_sign_in_off`",
             "content": {
               "application/json": {
                 "schema": {
@@ -12140,12 +12170,17 @@
         "type": "object",
         "description": "The OpenID Connect provider people may sign in through on this server.",
         "required": [
-          "label"
+          "label",
+          "password_sign_in"
         ],
         "properties": {
           "label": {
             "type": "string",
             "description": "What the sign-in button names, such as `Acme SSO`."
+          },
+          "password_sign_in": {
+            "type": "boolean",
+            "description": "Whether local accounts may sign in with a password. `false` makes the provider the only way in."
           }
         }
       },

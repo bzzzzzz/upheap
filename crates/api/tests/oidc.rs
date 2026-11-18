@@ -165,7 +165,7 @@ async fn a_server_without_a_provider_has_no_sign_in_through_one() -> Result<()> 
 async fn a_new_person_picks_a_username_even_when_registration_is_closed() -> Result<()> {
     let h = harness().await?;
     let info = h.app.send(Method::GET, "/api/v1/auth/oidc", None, None).await?;
-    expect_that!(info.body, eq(&json!({ "label": LABEL })));
+    expect_that!(info.body, eq(&json!({ "label": LABEL, "password_sign_in": true })));
 
     let started = begin(&h.app, None).await?;
     let cookies = set_cookies(&started.response, "upheap_oidc");

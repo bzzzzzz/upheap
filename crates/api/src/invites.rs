@@ -124,6 +124,7 @@ async fn join_by_invite(
     params(InviteTokenParams),
     responses(
         (status = 201, description = "Registered, joined and signed in; sets the session cookie", body = InviteRegistrationDto),
+        (status = 403, description = "`password_sign_in_off`: the server signs in through its provider only", body = Problem),
         (status = 404, description = "No such link", body = Problem),
         (status = 409, description = "`invite_link_ended`, `invite_link_revoked`, `team_group_managed`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)", body = Problem),
         (status = 422, description = "Invalid email, name or password, or `invalid_handle` with a `hint`", body = Problem),

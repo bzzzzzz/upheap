@@ -33,11 +33,21 @@ export const USERNAME_HINT = "Lowercase letters, digits and dashes. It's in your
 /**
  * The line a refused sign-in through the provider gets above the card's button, from the `sign_in_error` code the
  * server sent the browser back with; nothing for a code that isn't known. `login` is the address of the account that
- * has the provider's email, which `email_taken` names.
+ * has the provider's email, which `email_taken` names. `passwordSignIn` is whether the server lets local accounts
+ * sign in with a password, which changes what `email_taken` says.
  */
-function refusalLine(code: string | undefined, label: string, login: string | undefined): string | undefined {
+function refusalLine(
+  code: string | undefined,
+  label: string,
+  login: string | undefined,
+  passwordSignIn: boolean,
+): string | undefined {
   switch (code) {
     case "email_taken":
+      // With passwords off the account can't sign in at all, so only whoever runs the server can help.
+      if (!passwordSignIn) {
+        return `An account with that email already exists and can't sign in through ${label}. Ask whoever runs this server.`;
+      }
       return login ? `An account with ${login} exists. Sign in with its password below.` : undefined;
     case "email_unverified":
       return `${label} didn't share a verified email address, which Upheap needs.`;
@@ -78,6 +88,9 @@ export type RegisterRequest = {
  * `providerRedirect` is the app path the provider sign-in returns to. A refused one comes back to the sign-in page
  * with `refusal` set to the server's code: the line says why, and `initialLogin` is the address `email_taken` carries,
  * which fills "Email or username" with the password next to type.
+ *
+ * When the server signs in through its provider only (`password_sign_in` off), the card holds the header, the
+ * notice, the refusal line and the provider button, and nothing else.
  */
 export function AuthPage({
   notice,
@@ -105,7 +118,10 @@ export function AuthPage({
   const provider = useOidcProvider().data;
   // Gone once a form is submitted. A new `refusal` in the address is a new sign-in, which comes with a new page.
   const [refusalShown, setRefusalShown] = useState(true);
-  const refusalText = refusalShown && provider ? refusalLine(refusal, provider.label, initialLogin) : undefined;
+  const refusalText =
+    refusalShown && provider
+      ? refusalLine(refusal, provider.label, initialLogin, provider.password_sign_in)
+      : undefined;
   const carriesLogin = refusal === "email_taken" && initialLogin !== undefined;
   const [mode, setMode] = useState<Mode>(initialMode);
   // After "Sign in instead", the password is the next thing to type: the address is already carried over.
@@ -168,8 +184,8 @@ export function AuthPage({
     />
   );
 
-  return (
-    <AuthCard>
+  const intro = (
+    <>
       {header}
       {notice && <p className="rounded-[10px] bg-accent-soft px-3 py-2.5 text-sm text-accent-ink">{notice}</p>}
       {refusalText && (
@@ -177,7 +193,26 @@ export function AuthPage({
           {refusalText}
         </p>
       )}
-      {provider && <ProviderButton label={provider.label} redirect={providerRedirect} />}
+    </>
+  );
+  if (provider && !provider.password_sign_in) {
+    return (
+      <AuthCard>
+        {intro}
+        <ProviderButton label={provider.label} redirect={providerRedirect} />
+      </AuthCard>
+    );
+  }
+
+  return (
+    <AuthCard>
+      {intro}
+      {provider && (
+        <>
+          <ProviderButton label={provider.label} redirect={providerRedirect} />
+          <Or />
+        </>
+      )}
       {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
       {/* Held while a submit is pending, so its result lands on the form that sent it. */}
       <Tabs
@@ -229,25 +264,29 @@ export const authButtonClass =
   "h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
 
 /**
- * Sign in through the provider, then the "or" rule that sets it apart from the forms. A plain link: the browser
- * leaves for the provider and comes back to the callback, which is no request of the app's.
+ * Sign in through the provider. A plain link: the browser leaves for the provider and comes back to the callback,
+ * which is no request of the app's.
  */
 function ProviderButton({ label, redirect }: { label: string; redirect: string | undefined }) {
   const query = redirect === undefined ? "" : `?${new URLSearchParams({ redirect })}`;
   return (
-    <>
-      <a
-        href={`${BASE}/api/v1/auth/oidc/start${query}`}
-        className="flex h-[52px] w-full items-center justify-center rounded-[14px] border border-line-strong bg-surface text-base font-semibold text-ink sm:h-11 sm:rounded-[10px] sm:text-sm"
-      >
-        Sign in with {label}
-      </a>
-      <div role="separator" className="flex items-center gap-3 text-xs text-muted">
-        <span className="h-px flex-1 bg-line" />
-        or
-        <span className="h-px flex-1 bg-line" />
-      </div>
-    </>
+    <a
+      href={`${BASE}/api/v1/auth/oidc/start${query}`}
+      className="flex h-[52px] w-full items-center justify-center rounded-[14px] border border-line-strong bg-surface text-base font-semibold text-ink sm:h-11 sm:rounded-[10px] sm:text-sm"
+    >
+      Sign in with {label}
+    </a>
+  );
+}
+
+/** The "or" rule that sets the provider button apart from the forms. */
+function Or() {
+  return (
+    <div role="separator" className="flex items-center gap-3 text-xs text-muted">
+      <span className="h-px flex-1 bg-line" />
+      or
+      <span className="h-px flex-1 bg-line" />
+    </div>
   );
 }
 

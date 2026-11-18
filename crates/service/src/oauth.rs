@@ -304,6 +304,7 @@ impl Services {
         let user_id = store::oauth::find_access_token_user(&self.db, &token.to_hash(), self.now())
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
+        self.ensure_not_local_user_while_passwords_off(user_id).await?;
         Ok(Principal { user_id, run: None })
     }
 }

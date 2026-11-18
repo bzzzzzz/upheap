@@ -64,6 +64,8 @@ pub struct Principal {
 pub struct Settings {
     /// Whether anyone can create a local account.
     pub allow_registration: bool,
+    /// Whether local accounts may sign in with a password. Off makes the provider the only way in.
+    pub password_sign_in: bool,
     /// How long a web session lasts after sign-in.
     pub session_ttl: Duration,
     /// How many sign-in attempts an email address gets.
@@ -79,6 +81,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             allow_registration: false,
+            password_sign_in: true,
             session_ttl: Duration::from_days(30),
             sign_in_limit: SignInLimit::DEFAULT,
             oidc: None,
@@ -143,6 +146,35 @@ impl Services {
     /// The current time from the injected clock.
     pub fn now(&self) -> Timestamp {
         self.clock.now()
+    }
+
+    /// Whether local accounts may sign in with a password.
+    pub fn password_sign_in(&self) -> bool {
+        self.settings.password_sign_in
+    }
+
+    /// Refuses with [`ServiceError::PasswordSignInOff`] when the provider is the only way in.
+    pub(crate) fn ensure_password_sign_in(&self) -> Result<(), ServiceError> {
+        if self.settings.password_sign_in {
+            return Ok(());
+        }
+        let label = self
+            .settings
+            .oidc
+            .as_ref()
+            .map(|oidc| oidc.label().to_owned())
+            .unwrap_or_default();
+        Err(ServiceError::PasswordSignInOff { label })
+    }
+
+    /// Fails with [`ServiceError::Unauthenticated`] for a local user (one with no identity at the provider) while
+    /// passwords are off. Sign-ins that an older instance made, or that slipped in after startup ended them, stop
+    /// working here.
+    pub(crate) async fn ensure_not_local_user_while_passwords_off(&self, user_id: UserId) -> Result<(), ServiceError> {
+        if !self.settings.password_sign_in && !store::identities::has_identity(&self.db, user_id).await? {
+            return Err(ServiceError::Unauthenticated);
+        }
+        Ok(())
     }
 
     /// Checks the database answers. Used by the readiness probe.

@@ -56,6 +56,9 @@ pub enum ServiceError {
     InvalidGrant(#[from] GrantError),
     #[error("registration is disabled on this server")]
     RegistrationClosed,
+    /// A password path, on a server whose only way in is the provider named `label`.
+    #[error("This server signs in through {label}.")]
+    PasswordSignInOff { label: String },
     #[error("heap {heap_id} is archived")]
     HeapArchived { heap_id: HeapId },
     #[error("this changed since you loaded it (version {} expected, {} current)", expected.get(), current.get())]
