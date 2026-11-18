@@ -336,7 +336,14 @@ const heapRoute = createRoute({
         heap={{ team, heap }}
         itemKey={item}
         view={view}
-        onViewChange={(next) => void navigate({ search: parseListSearch(next), replace: true })}
+        // Select mode stays, so changing the view doesn't leave it; the rest of the history state goes, as before.
+        onViewChange={(next) =>
+          void navigate({
+            search: parseListSearch(next),
+            replace: true,
+            state: (prev) => (prev.selecting ? { selecting: true } : {}),
+          })
+        }
       />
     );
   },
@@ -620,6 +627,8 @@ declare module "@tanstack/history" {
   interface HistoryState {
     /** Set on the way into an item from a page of the app, so closing the item goes back there. */
     closesBack?: boolean;
+    /** Set on the entry of a heap's list in select mode, so Back leaves select mode. */
+    selecting?: boolean;
     /** Set on each click of an agent's mark in a history, so a second click on the same run is a new location. */
     runLinkedAt?: number;
     /**

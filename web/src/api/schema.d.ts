@@ -1440,6 +1440,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/items/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Moves several items to one heap, each on its own: every item is moved as `POST …/items/{item}/move` moves one, in
+         *     the order given, in its own transaction. One that can't move doesn't stop the others and doesn't undo them. Each item
+         *     carries its own `version`, so there is no `If-Match`. `{team}` is the target heap's team, and the items may come
+         *     from any heap the single move would take them from. The response lists the items that moved, as the single move
+         *     answers, and the ones that didn't with the problem the single move would have answered with for each, both in the
+         *     order of the request. An empty list moves nothing and succeeds. The target must be a heap of `{team}` the caller can
+         *     see, or the whole request is refused with `heap_not_in_team`.
+         */
+        post: operations["move_items"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/leave": {
         parameters: {
             query?: never;
@@ -2814,6 +2839,16 @@ export interface components {
              */
             heap_id: string;
         };
+        /** @description An item that didn't move, and why. */
+        ItemNotMoved: {
+            /**
+             * Format: uuid
+             * @description The item's ID.
+             */
+            id: string;
+            /** @description What the single move would have answered with for this item. */
+            problem: components["schemas"]["Problem"];
+        };
         /** @description The option an item has for a parameter. */
         ItemOption: {
             /** @description Closed items keep archived options; open items switch to the replacement. */
@@ -2964,6 +2999,39 @@ export interface components {
              * @description The open task of the note's heap that gets the step.
              */
             task_id: string;
+        };
+        /** @description An item to move, with the version the caller last read. */
+        ItemVersion: {
+            /**
+             * Format: uuid
+             * @description The item's ID.
+             */
+            id: string;
+            /**
+             * Format: int32
+             * @description The item's `version` as the caller last read it. A stale one makes that item `version_conflict`.
+             */
+            version: number;
+        };
+        /** @description Several items to move to one heap. */
+        ItemsMoveRequest: {
+            /**
+             * Format: uuid
+             * @description The heap to move the items to: a heap of the team in the path.
+             */
+            heap_id: string;
+            /**
+             * @description The items to move, each with its own version, attempted in this order. They may come from any heap the single
+             *     move would take them from.
+             */
+            items: components["schemas"]["ItemVersion"][];
+        };
+        /** @description What a batch move did. */
+        ItemsMoveResponse: {
+            /** @description The items that moved, in the order of the request. */
+            moved: components["schemas"]["Item"][];
+            /** @description The items that didn't, in the order of the request. */
+            not_moved: components["schemas"]["ItemNotMoved"][];
         };
         /**
          * @description What an item is. A note or a reminder becomes a task in place; a task never goes back, and a note and a reminder
@@ -4449,6 +4517,7 @@ export type Item = components['schemas']['Item'];
 export type ItemAction = components['schemas']['ItemAction'];
 export type ItemHeap = components['schemas']['ItemHeap'];
 export type ItemMoveRequest = components['schemas']['ItemMoveRequest'];
+export type ItemNotMoved = components['schemas']['ItemNotMoved'];
 export type ItemOption = components['schemas']['ItemOption'];
 export type ItemOrigin = components['schemas']['ItemOrigin'];
 export type ItemParameter = components['schemas']['ItemParameter'];
@@ -4458,6 +4527,9 @@ export type ItemRun = components['schemas']['ItemRun'];
 export type ItemState = components['schemas']['ItemState'];
 export type ItemTag = components['schemas']['ItemTag'];
 export type ItemToStepRequest = components['schemas']['ItemToStepRequest'];
+export type ItemVersion = components['schemas']['ItemVersion'];
+export type ItemsMoveRequest = components['schemas']['ItemsMoveRequest'];
+export type ItemsMoveResponse = components['schemas']['ItemsMoveResponse'];
 export type Kind = components['schemas']['Kind'];
 export type LinkTagsRequest = components['schemas']['LinkTagsRequest'];
 export type ListSort = components['schemas']['ListSort'];
@@ -9230,6 +9302,64 @@ export interface operations {
             };
             /** @description No such team, or the team has no such link */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    move_items: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemsMoveRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemsMoveResponse"];
+                };
+            };
+            /** @description A body that isn't a `heap_id` and a list of items with versions */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_not_in_team`: the target isn't a heap of `{team}` the caller can see, or doesn't exist; nothing moved */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

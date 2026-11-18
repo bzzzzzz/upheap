@@ -7380,6 +7380,99 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/items/move": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Moves several items to one heap, each on its own: every item is moved as `POST …/items/{item}/move` moves one, in\nthe order given, in its own transaction. One that can't move doesn't stop the others and doesn't undo them. Each item\ncarries its own `version`, so there is no `If-Match`. `{team}` is the target heap's team, and the items may come\nfrom any heap the single move would take them from. The response lists the items that moved, as the single move\nanswers, and the ones that didn't with the problem the single move would have answered with for each, both in the\norder of the request. An empty list moves nothing and succeeds. The target must be a heap of `{team}` the caller can\nsee, or the whole request is refused with `heap_not_in_team`.",
+        "operationId": "move_items",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemsMoveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A body that isn't a `heap_id` and a list of items with versions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`heap_not_in_team`: the target isn't a heap of `{team}` the caller can see, or doesn't exist; nothing moved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/leave": {
       "post": {
         "tags": [
@@ -11193,6 +11286,25 @@
         },
         "additionalProperties": false
       },
+      "ItemNotMoved": {
+        "type": "object",
+        "description": "An item that didn't move, and why.",
+        "required": [
+          "id",
+          "problem"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The item's ID."
+          },
+          "problem": {
+            "$ref": "#/components/schemas/Problem",
+            "description": "What the single move would have answered with for this item."
+          }
+        }
+      },
       "ItemOption": {
         "type": "object",
         "description": "The option an item has for a parameter.",
@@ -11573,6 +11685,75 @@
           }
         },
         "additionalProperties": false
+      },
+      "ItemVersion": {
+        "type": "object",
+        "description": "An item to move, with the version the caller last read.",
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The item's ID."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The item's `version` as the caller last read it. A stale one makes that item `version_conflict`.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemsMoveRequest": {
+        "type": "object",
+        "description": "Several items to move to one heap.",
+        "required": [
+          "heap_id",
+          "items"
+        ],
+        "properties": {
+          "heap_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The heap to move the items to: a heap of the team in the path."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemVersion"
+            },
+            "description": "The items to move, each with its own version, attempted in this order. They may come from any heap the single\nmove would take them from."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemsMoveResponse": {
+        "type": "object",
+        "description": "What a batch move did.",
+        "required": [
+          "moved",
+          "not_moved"
+        ],
+        "properties": {
+          "moved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "description": "The items that moved, in the order of the request."
+          },
+          "not_moved": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemNotMoved"
+            },
+            "description": "The items that didn't, in the order of the request."
+          }
+        }
       },
       "Kind": {
         "type": "string",

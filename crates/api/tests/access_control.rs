@@ -56,6 +56,8 @@ enum Target {
     ClosedItem,
     /// An open item in the shared heap, and a second heap of the team to move it to, in the request's body.
     ItemAndSecondHeap,
+    /// An open item in the shared heap, and a second heap of the team to move it to, both in the request's body.
+    ItemsAndSecondHeap,
     /// A task with one step, in `{item}` and `{step}`, with the step's version for `If-Match`.
     TaskWithStep,
     /// An item with one open question, in `{item}` and `{question}`, with the question's version for `If-Match`.
@@ -136,6 +138,8 @@ enum RequestBody {
     Rename,
     /// The second heap of [`Target::ItemAndSecondHeap`], to move the item to.
     MoveItem,
+    /// The item and the second heap of [`Target::ItemsAndSecondHeap`], to move the item to.
+    MoveItems,
     /// The task of [`Target::NoteAndTask`], to make the note a step of.
     NoteToStep,
     /// A heap made from the note of [`Target::NoteForHeap`], with a context.
@@ -912,6 +916,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::POST,
+            "/teams/{team}/items/move",
+            team(EditItems),
+            Target::ItemsAndSecondHeap,
+            RequestBody::MoveItems,
+            StatusCode::OK,
+        ),
+        row(
             Method::GET,
             "/teams/{team}/heaps/{heap}/tags",
             view,
@@ -1639,6 +1651,7 @@ impl World {
                 "origin_id": parameter["id"],
             })),
             RequestBody::MoveItem => Some(json!({ "heap_id": parameter["id"] })),
+            RequestBody::MoveItems => Some(parameter.clone()),
             RequestBody::NewStep => Some(json!({ "title": "A step" })),
             RequestBody::TickStep => Some(json!({ "state": "ticked" })),
             RequestBody::NewQuestion => Some(json!({ "kind": "question", "text": "Which CA?" })),
@@ -1809,6 +1822,21 @@ impl World {
                 if_match = Some(version);
                 // The body reads the heap's ID from here, as it reads a parameter's.
                 parameter = self.create_heap().await?;
+            }
+            Target::ItemsAndSecondHeap => {
+                let (key, _) = self.create_item(false).await?;
+                let item = self
+                    .app
+                    .send(
+                        Method::GET,
+                        &format!("{}/items/{key}", self.heap_path()),
+                        Some(&self.admin.session),
+                        None,
+                    )
+                    .await?;
+                let heap = self.create_heap().await?;
+                // The body reads both from here.
+                parameter = json!({ "heap_id": heap["id"], "items": [{ "id": item.body["id"], "version": item.body["version"] }] });
             }
             Target::TaskWithStep => {
                 let (key, version) = self.create_task_with_step().await?;

@@ -283,7 +283,7 @@ export function AddItemDialog({
         to: "/all",
         search: (prev) => ({ ...prev, item: itemAddress(item.heap, item.key) }),
         resetScroll: false,
-        state: (prev) => ({ ...prev, closesBack: true }),
+        state: (prev) => ({ ...prev, selecting: undefined, closesBack: true }),
       });
       return;
     }
@@ -296,7 +296,7 @@ export function AddItemDialog({
       // starts afresh at the top.
       search: overList ? (prev) => prev : {},
       resetScroll: !overList,
-      state: (prev) => ({ ...prev, closesBack: true }),
+      state: (prev) => ({ ...prev, selecting: undefined, closesBack: true }),
     });
   };
 

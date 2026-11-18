@@ -145,7 +145,7 @@ impl HeapApi<'_> {
     }
 }
 
-fn is_stale_or_closed(err: &ClientError) -> bool {
+pub(in crate::commands) fn is_stale_or_closed(err: &ClientError) -> bool {
     matches!(err, ClientError::Problem { problem, .. } if matches!(problem.code.as_str(), "version_conflict" | "item_closed"))
 }
 

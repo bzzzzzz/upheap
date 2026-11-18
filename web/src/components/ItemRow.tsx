@@ -1,5 +1,5 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { Bot } from "lucide-react";
+import { Bot, Check } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
@@ -38,10 +38,12 @@ const DONE_DISTANCE = 96;
 /** What marks a row's link, for moving between rows with the arrow keys. */
 const ROW_LINK = "data-row-link";
 
-/** Focuses the row link `step` rows away from `from`, across the list's sections. */
+/** Focuses the row link `step` rows away from `from`, across the list's sections, and returns it. */
 function focusRow(from: HTMLElement, step: number) {
   const links = [...document.querySelectorAll<HTMLElement>(`[${ROW_LINK}]`)];
-  links[links.indexOf(from) + step]?.focus();
+  const row = links[links.indexOf(from) + step];
+  row?.focus();
+  return row;
 }
 
 /** Focuses the first row, for the arrow keys when nothing is focused yet. */
@@ -71,6 +73,10 @@ export function rowOf(key: string) {
  * The list): right marks the row done, left shows the other states and Agent to pick. The kind and stage icons end the
  * row.
  *
+ * With `selection`, the list is in select mode (ux.md, The list §19): the first slot holds a checkbox, Done and the
+ * robot are left out, swipes are off, and the row is a checkbox button in place of the link. A click toggles it, with
+ * Shift it selects the rows up to it; Shift+↑ and Shift+↓ move to the next row and select it.
+ *
  * Another page can show the row for its own list: `link` opens the item there instead of over its heap's list,
  * `heapLabel` says which heap it is in, and without `filters` the row shows no tag or parameter chips, as there is no
  * filter for them to join.
@@ -84,6 +90,7 @@ export function ItemRow({
   filters,
   link = { to: "/teams/$team/heaps/$heap/items/$item", params: { ...heapRef, item: entry.item.key }, search: true },
   heapLabel,
+  selection,
   onChangeState,
 }: {
   entry: RankedItem;
@@ -94,6 +101,7 @@ export function ItemRow({
   filters?: RowFilters;
   link?: LinkProps;
   heapLabel?: string;
+  selection?: { selected: boolean; onToggle: (range: boolean) => void };
   onChangeState: ChangeState;
 }) {
   const { item, contributors } = entry;
@@ -119,7 +127,7 @@ export function ItemRow({
   const onOpen = () => onChangeState(item, "open");
   const startable = item.state === "open" || item.state === "blocked";
   const touch = useMedia(TOUCH);
-  const swipe = useSwipe(canChangeState && touch, ACTION_WIDTH * (canSend ? 3 : 2), (state, onError) =>
+  const swipe = useSwipe(canChangeState && touch && !selection, ACTION_WIDTH * (canSend ? 3 : 2), (state, onError) =>
     onChangeState(item, state, onError),
   );
 
@@ -141,6 +149,33 @@ export function ItemRow({
       onSend();
     }
   };
+
+  const onSelectKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next = focusRow(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+      if (event.shiftKey && next?.getAttribute("aria-checked") === "false") next.click();
+    }
+  };
+
+  // What a screen reader hears after the title. The icons are for the eye.
+  const readAloud = (
+    <span className="sr-only">
+      {item.kind === "task" && ", task"}
+      {item.kind === "reminder" && ", reminder"}
+      {item.state === "blocked" && (item.blocked_reason ? `, blocked: ${item.blocked_reason}` : ", blocked")}
+      {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
+      {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
+      {item.waits_for_you && ", waits for you"}
+      {item.turn &&
+        (item.agent_state === "running" || item.agent_state === "queued") &&
+        `, with an agent, ${item.agent_state === "running" ? "running now" : "queued"}, going to ${GOAL_LABELS[item.turn.going_to]}`}
+      {item.agent_state === "stuck" && ", agent stuck"}
+    </span>
+  );
+  const coverClass =
+    "min-w-0 text-left font-medium break-words outline-none after:absolute after:inset-0 after:content-['']";
 
   return (
     // `isolate` makes the row its own stacking context: the buttons' and chips' z-10 lifts them over the row's link,
@@ -168,31 +203,43 @@ export function ItemRow({
       <motion.div
         {...swipe.dragProps}
         className={`group/row relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
-          selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
+          selected || selection?.selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
         }`}
       >
         {/* Three fixed slots, so titles line up whether or not the item can be changed or sent. A phone keeps the state
             button: it swipes instead. */}
         <span className="flex shrink-0 items-center gap-3 pointer-coarse:gap-5 max-sm:gap-0">
           <span className="size-6 shrink-0">
-            {canChangeState &&
+            {selection ? (
+              <span
+                aria-hidden="true"
+                className={`flex size-6 items-center justify-center rounded-md border-2 ${
+                  selection.selected ? "border-accent bg-accent text-canvas" : "border-line-strong bg-surface"
+                }`}
+              >
+                {selection.selected && <Check className="size-4" strokeWidth={3} />}
+              </span>
+            ) : (
+              canChangeState &&
               (item.state === "open" ? (
                 <StartButton item={item} onPress={onStart} />
               ) : item.state === "blocked" ? (
                 <UnblockButton item={item} onPress={onOpen} />
               ) : (
                 item.state === "in_progress" && <PauseButton item={item} onPress={onOpen} />
-              ))}
+              ))
+            )}
           </span>
           <span className="size-6 shrink-0 max-sm:hidden">
-            {canChangeState && <DoneButton item={item} onPress={onMarkDone} />}
+            {!selection && canChangeState && <DoneButton item={item} onPress={onMarkDone} />}
           </span>
           <span className="relative size-6 shrink-0 max-sm:hidden">
-            {item.turn ? (
-              <RobotMark item={item} turn={item.turn} link={link} itemOpen={itemOpen} />
-            ) : (
-              canSend && <RobotButton item={item} disabled={sending} onPress={onSend} />
-            )}
+            {!selection &&
+              (item.turn ? (
+                <RobotMark item={item} turn={item.turn} link={link} itemOpen={itemOpen} />
+              ) : (
+                canSend && <RobotButton item={item} disabled={sending} onPress={onSend} />
+              ))}
           </span>
         </span>
         <div className="min-w-0 flex-1">
@@ -206,35 +253,38 @@ export function ItemRow({
               <PhoneMark item={item} turn={item.turn} />
             )}
             {/* The link covers the whole row, under the buttons and tags. */}
-            <Link
-              {...link}
-              replace={itemOpen}
-              state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
-              // The item opens over the list, which stays mounted, so the page keeps its place rather than going back
-              // to the top as a move to another page does.
-              resetScroll={false}
-              onKeyDown={onKeyDown}
-              // A swipe moves the row, not a dragged copy of the link.
-              draggable={false}
-              {...{ [ROW_LINK]: item.key }}
-              aria-current={selected ? "true" : undefined}
-              className="min-w-0 font-medium break-words outline-none after:absolute after:inset-0 after:content-['']"
-            >
-              {item.title}
-              {/* The icons are for the eye; this is what a screen reader hears after the title. */}
-              <span className="sr-only">
-                {item.kind === "task" && ", task"}
-                {item.kind === "reminder" && ", reminder"}
-                {item.state === "blocked" && (item.blocked_reason ? `, blocked: ${item.blocked_reason}` : ", blocked")}
-                {item.stage && item.stage !== "as_written" && `, ${STAGE_LABELS[item.stage].toLowerCase()}`}
-                {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
-                {item.waits_for_you && ", waits for you"}
-                {item.turn &&
-                  (item.agent_state === "running" || item.agent_state === "queued") &&
-                  `, with an agent, ${item.agent_state === "running" ? "running now" : "queued"}, going to ${GOAL_LABELS[item.turn.going_to]}`}
-                {item.agent_state === "stuck" && ", agent stuck"}
-              </span>
-            </Link>
+            {selection ? (
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={selection.selected}
+                onClick={(event) => selection.onToggle(event.shiftKey)}
+                onKeyDown={onSelectKeyDown}
+                {...{ [ROW_LINK]: item.key }}
+                className={coverClass}
+              >
+                {item.title}
+                {readAloud}
+              </button>
+            ) : (
+              <Link
+                {...link}
+                replace={itemOpen}
+                state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+                // The item opens over the list, which stays mounted, so the page keeps its place rather than going back
+                // to the top as a move to another page does.
+                resetScroll={false}
+                onKeyDown={onKeyDown}
+                // A swipe moves the row, not a dragged copy of the link.
+                draggable={false}
+                {...{ [ROW_LINK]: item.key }}
+                aria-current={selected ? "true" : undefined}
+                className={coverClass}
+              >
+                {item.title}
+                {readAloud}
+              </Link>
+            )}
             {item.step_progress && (
               <span aria-hidden="true" className="text-xs text-muted tabular-nums">
                 {item.step_progress.ticked}/{item.step_progress.total}
@@ -336,7 +386,7 @@ export function ComingRow({
               params={{ ...heapRef, item: item.key }}
               search={true}
               replace={itemOpen}
-              state={(prev) => ({ ...prev, closesBack: itemOpen ? prev.closesBack : true })}
+              state={(prev) => ({ ...prev, selecting: undefined, closesBack: itemOpen ? prev.closesBack : true })}
               resetScroll={false}
               onKeyDown={onKeyDown}
               {...{ [ROW_LINK]: item.key }}

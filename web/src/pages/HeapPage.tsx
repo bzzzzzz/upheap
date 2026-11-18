@@ -20,9 +20,11 @@ import { ItemPane } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
+import { SelectionBars } from "../components/SelectionBar";
 import { titleTeam } from "../components/teamName";
 import { useToast } from "../components/UndoToast";
 import { useCloseItem } from "../components/useCloseItem";
+import { SelectButton, useSelectMode } from "../components/useSelectMode";
 import {
   DEFAULT_MODES,
   filterCount,
@@ -67,14 +69,52 @@ export function HeapPage({
   const closeItem = useCloseItem(listPage, itemKey);
   useRefocusStartedRow(list.data);
 
+  // Select mode (ux.md, The list §19): the location's state says it is on, the selected items are kept here, and the
+  // rows it can select are the ones of the list's sections that are shown.
+  const { selecting, leave: leaveSelecting } = useSelectMode(heapRef);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // The last row toggled, where a Shift-click's range starts.
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const selectable = useMemo(
+    () => (list.data ? everyEntry(shownSections(list.data, search)).map((entry) => entry.item) : []),
+    [list.data, search],
+  );
+  const selectableIds = selectable.map((item) => item.id).join(",");
+  // Adjusted as the page renders, not in an effect, so a render never shows what has been dropped. The selection ends
+  // with select mode, and only what the list shows stays selected: an item a filter or the search hides doesn't come
+  // back with it.
+  const [seen, setSeen] = useState({ selecting, selectableIds });
+  if (seen.selecting !== selecting || seen.selectableIds !== selectableIds) {
+    setSeen({ selecting, selectableIds });
+    const shown = new Set(selectableIds.split(","));
+    const kept = selecting ? [...selected].filter((id) => shown.has(id)) : [];
+    if (kept.length !== selected.size) setSelected(new Set(kept));
+    if (!selecting && anchor !== null) setAnchor(null);
+  }
+  const toggle = (id: string, range: boolean) => {
+    const from = anchor === null ? -1 : selectable.findIndex((item) => item.id === anchor);
+    const to = selectable.findIndex((item) => item.id === id);
+    const next = new Set(selected);
+    if (range && from >= 0) {
+      for (const item of selectable.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(item.id);
+    } else if (!next.delete(id)) {
+      next.add(id);
+    }
+    setSelected(next);
+    setAnchor(id);
+  };
+
   // The list's keys (ux.md, The list §4): the arrows start on the first row when nothing has the focus, and
-  // Escape closes the open item. The rows handle the arrows, `x` and `s` themselves.
+  // Escape closes the open item, or leaves select mode. The rows handle the arrows, `x` and `s` themselves.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "ArrowDown" && document.activeElement === document.body) {
         event.preventDefault();
         focusFirstRow();
+      } else if (event.key === "Escape" && selecting && !document.querySelector("[role=dialog]")) {
+        event.preventDefault();
+        leaveSelecting();
       } else if (event.key === "Escape" && closeItem && !document.querySelector("[role=dialog]")) {
         event.preventDefault();
         closeItem();
@@ -82,7 +122,7 @@ export function HeapPage({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [closeItem]);
+  }, [closeItem, selecting, leaveSelecting]);
 
   const place = itemKey && list.data ? placeOf(list.data, itemKey) : undefined;
   // The rows on screen, top to bottom, the reminders to come last, for the pane's ↑ ↓.
@@ -116,6 +156,11 @@ export function HeapPage({
           panel={panel}
           onPanel={setPanel}
           onChangeState={agentConfirm.onChangeState}
+          select={
+            selecting
+              ? { items: selectable, selected, onToggle: toggle, onSelect: setSelected, onDone: leaveSelecting }
+              : undefined
+          }
         />
       </div>
       {pane}
@@ -169,6 +214,15 @@ function nextToStart(list: RankedList, done: Item) {
   return everyEntry(list).find((entry) => entry.item.id !== done.id && entry.item.state === "open")?.item;
 }
 
+/** Select mode as the list uses it (ux.md, The list §19). */
+type SelectState = {
+  items: Item[];
+  selected: ReadonlySet<string>;
+  onToggle: (id: string, range: boolean) => void;
+  onSelect: (ids: Set<string>) => void;
+  onDone: () => void;
+};
+
 /** The list itself, with its controls. */
 function ListPage({
   heapRef,
@@ -181,6 +235,7 @@ function ListPage({
   panel,
   onPanel,
   onChangeState,
+  select,
 }: {
   heapRef: HeapRef;
   itemKey: string | undefined;
@@ -192,6 +247,8 @@ function ListPage({
   panel: Panel;
   onPanel: (panel: Panel) => void;
   onChangeState: ChangeState;
+  /** Set in select mode: the rows that can be selected, those that are, and what the bars and rows do about it. */
+  select: SelectState | undefined;
 }) {
   const { data: me } = useMe();
   const team = titleTeam(me, heapRef);
@@ -210,6 +267,7 @@ function ListPage({
       onSearch={onSearch}
       panel={panel}
       onPanel={onPanel}
+      extra={<SelectButton heapRef={heapRef} />}
       // None while the previous view stands in for this one, so the panel never shows its counts as this view's.
       counts={
         list.data && !list.isPlaceholderData
@@ -263,6 +321,7 @@ function ListPage({
       itemKey={itemKey}
       onChangeState={onChangeState}
       compact={(entry) => pinned === true && entry.item.state === "in_progress"}
+      select={select}
     />
   );
 
@@ -277,7 +336,21 @@ function ListPage({
         <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
       </div>
 
-      {controls}
+      {select ? (
+        <>
+          {/* The wide bar takes the toolbar's place; a phone keeps the toolbar under its own bars. */}
+          <div className="sm:hidden">{controls}</div>
+          <SelectionBars
+            heapRef={heapRef}
+            items={select.items}
+            selected={select.selected}
+            onSelect={select.onSelect}
+            onDone={select.onDone}
+          />
+        </>
+      ) : (
+        controls
+      )}
 
       {changed && (
         <FilterChips
@@ -410,6 +483,7 @@ function ItemList({
   filters,
   onChangeState,
   compact,
+  select,
 }: {
   entries: RankedItem[];
   heapRef: HeapRef;
@@ -417,6 +491,7 @@ function ItemList({
   filters: RowFilters;
   onChangeState: ChangeState;
   compact: (entry: RankedItem) => boolean;
+  select: SelectState | undefined;
 }) {
   return (
     <ol className="flex flex-col">
@@ -431,6 +506,12 @@ function ItemList({
             compact={compact(entry)}
             filters={filters}
             onChangeState={onChangeState}
+            selection={
+              select && {
+                selected: select.selected.has(entry.item.id),
+                onToggle: (range) => select.onToggle(entry.item.id, range),
+              }
+            }
           />
         ))}
       </AnimatePresence>

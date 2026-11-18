@@ -15,7 +15,8 @@ type MoveHeap = MoveTeam["heaps"][number];
 /**
  * The body of "Move to" (ux.md, The item §6): the item's team's heaps that aren't archived, the item's own marked and
  * disabled, with a search field from `LONG_LIST` heaps. A pick asks first, since tags the other heap lacks are dropped;
- * Move calls `onMove`. A refusal shows in `error`, above the buttons, and Cancel clears it.
+ * Move calls `onMove`. A refusal shows in `error`, above the buttons, and Cancel clears it. With `count`, it moves that
+ * many items, as the list's selection does (ux.md, The list §19), and the confirm says so.
  */
 export function MoveToHeap({
   me,
@@ -23,6 +24,7 @@ export function MoveToHeap({
   heapRef,
   pending,
   error,
+  count,
   onMove,
   onReset,
 }: {
@@ -31,6 +33,7 @@ export function MoveToHeap({
   heapRef: HeapRef;
   pending: boolean;
   error: Error | null;
+  count?: number;
   onMove: (to: HeapRef & { id: string }, name: string) => void;
   onReset: () => void;
 }) {
@@ -45,8 +48,14 @@ export function MoveToHeap({
   if (picked) {
     return (
       <div className="flex flex-col gap-3">
-        <h3 className="text-base font-semibold break-words">Move to {picked.name}?</h3>
-        <p className="text-sm text-ink-soft">Tags it doesn't have there are dropped.</p>
+        <h3 className="text-base font-semibold break-words">
+          {count === undefined
+            ? `Move to ${picked.name}?`
+            : `Move ${count === 1 ? "1 item" : `${count} items`} to ${picked.name}?`}
+        </h3>
+        <p className="text-sm text-ink-soft">
+          {count === undefined ? "Tags it doesn't have there are dropped." : "Tags they don't have there are dropped."}
+        </p>
         {error && (
           <p role="alert" className="text-sm text-overdue-ink">
             {itemProblem(error)}
@@ -71,7 +80,7 @@ export function MoveToHeap({
             onClick={() => onMove({ team: heapRef.team, heap: picked.slug, id: picked.id }, picked.name)}
             className={compactButtonClass.primary}
           >
-            {pending ? "Moving…" : "Move"}
+            {pending ? "Moving…" : count === undefined ? "Move" : `Move ${count}`}
           </button>
         </div>
       </div>

@@ -74,6 +74,7 @@ export function ListControls({
   onPanel,
   counts,
   team,
+  extra,
 }: {
   heapRef?: HeapRef;
   view: ListSearch;
@@ -85,6 +86,8 @@ export function ListControls({
   /** `undefined` while the view loads. */
   counts: ListCounts | undefined;
   team?: TeamScope;
+  /** More controls after Filters. */
+  extra?: ReactNode;
 }) {
   const phone = useMedia(PHONE);
   const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
@@ -171,6 +174,7 @@ export function ListControls({
             </span>
           )}
         </button>
+        {extra}
       </div>
 
       <PopoverSheet

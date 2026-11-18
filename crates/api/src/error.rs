@@ -556,39 +556,41 @@ fn unexpected() -> Classified {
     }
 }
 
+/// The status and body this error answers with, logged by its category: an unexpected error at error level, with the
+/// request ID in the body.
+pub(crate) fn problem_of(err: &ApiError) -> (StatusCode, Problem) {
+    let classified = classify(err);
+    let request_id = match classified.category {
+        Category::Unexpected => {
+            tracing::error!(error = ?err, "request failed unexpectedly");
+            current_request_id()
+        }
+        Category::Dependency => {
+            tracing::warn!(error = ?err, "dependency unavailable");
+            None
+        }
+        Category::Caller | Category::Permission | Category::Conflict => {
+            tracing::debug!(code = classified.code, "request rejected");
+            None
+        }
+    };
+    let body = Problem {
+        code: classified.code.to_owned(),
+        title: classified.title,
+        status: classified.status.as_u16(),
+        field: classified.field.map(str::to_owned),
+        hint: classified.hint,
+        item_key: classified.item_key,
+        highest: classified.highest,
+        request_id,
+    };
+    (classified.status, body)
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let classified = classify(&self);
-        let request_id = match classified.category {
-            Category::Unexpected => {
-                tracing::error!(error = ?self, "request failed unexpectedly");
-                current_request_id()
-            }
-            Category::Dependency => {
-                tracing::warn!(error = ?self, "dependency unavailable");
-                None
-            }
-            Category::Caller | Category::Permission | Category::Conflict => {
-                tracing::debug!(code = classified.code, "request rejected");
-                None
-            }
-        };
-        let body = Problem {
-            code: classified.code.to_owned(),
-            title: classified.title,
-            status: classified.status.as_u16(),
-            field: classified.field.map(str::to_owned),
-            hint: classified.hint,
-            item_key: classified.item_key,
-            highest: classified.highest,
-            request_id,
-        };
-        let mut response = (
-            classified.status,
-            [(header::CONTENT_TYPE, "application/problem+json")],
-            Json(body),
-        )
-            .into_response();
+        let (status, body) = problem_of(&self);
+        let mut response = (status, [(header::CONTENT_TYPE, "application/problem+json")], Json(body)).into_response();
         if matches!(
             self,
             ApiError::BearerRejected | ApiError::Service(ServiceError::TokenRevoked | ServiceError::TokenExpired)
