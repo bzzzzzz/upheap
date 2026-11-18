@@ -41,7 +41,8 @@ impl Team {
         self.personal_user.is_some()
     }
 
-    /// Refuses a change only a shared team can take: adding or removing a member, leaving, or a new slug.
+    /// Refuses a change only a shared team can take: adding or removing a member, leaving, a new name or
+    /// a new slug.
     pub const fn ensure_shared(&self) -> Result<(), TeamError> {
         if self.is_personal() {
             return Err(TeamError::PersonalTeam { team_id: self.id });

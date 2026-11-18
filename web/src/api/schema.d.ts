@@ -4062,7 +4062,7 @@ export interface components {
         };
         /** @description A change to a team. Leave a field out to keep it. */
         TeamPatchRequest: {
-            /** @description 1 to 100 characters. */
+            /** @description 1 to 100 characters. A new name is refused with `personal_team` on a personal team. */
             name?: string | null;
             /**
              * @description Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Refused with
