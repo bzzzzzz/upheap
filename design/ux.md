@@ -407,8 +407,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     dash in place of its checkbox, and stays in the list. "Add a step" opens a one-line field in place: Enter adds
     the step and keeps the field for the next, leaving it with text adds the step and closes it, Escape closes it
     without adding and puts the focus back on the button. Nothing is optimistic but a move: a change shows once the server has
-    it, while a moved step shows in its new place at once and goes back, with the failure said under the section, if
-    the server refuses. A failed change is said under the section. A closed item, an archived heap or a missing `edit`
+    it, and one that fails is said under the section; a moved step shows in its new place at once, and goes back if the
+    server refuses. A closed item, an archived heap or a missing `edit`
     leaves the steps and the count to read, with no grip, no checkbox to change, no ⋯ and no Add. A step's context opens rendered as
     Markdown text (see Toolkit), for everyone, and the chevron shows only when there is one, or the step can be edited.
     An editor sees a small Edit button under the text ("Edit step context"), which swaps it for the field with the
