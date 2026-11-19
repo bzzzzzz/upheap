@@ -12,6 +12,7 @@ import { proposalSummary } from "../components/proposalSummary";
 import { Markdown } from "../components/Markdown";
 import { StuckRow } from "../components/StuckRow";
 import { titleTeam } from "../components/teamName";
+import { RequestId } from "../components/RequestId";
 
 /** A stuck turn's or a gone blocker's row has its item's ID and its kind for a key; a question's row has the question's number. */
 const rowKey = (row: WaitingRow) =>
@@ -112,9 +113,12 @@ export function WaitingPage() {
       {waiting.isPending ? (
         <p className="py-16 text-center text-muted">Loading…</p>
       ) : waiting.data === undefined ? (
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {waiting.error?.message}
-        </p>
+        <>
+          <p role="alert" className="py-16 text-center text-overdue-ink">
+            {waiting.error?.message}
+          </p>
+          <RequestId error={waiting.error} className="justify-center" />
+        </>
       ) : rows.length === 0 ? (
         <div className="py-16 text-center">
           <p>Nothing waits for you.</p>
@@ -265,9 +269,12 @@ function RowContext({ heapRef, itemKey, heapName }: { heapRef: HeapRef; itemKey:
       {query.isPending ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : query.error ? (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {query.error.message}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {query.error.message}
+          </p>
+          <RequestId error={query.error} />
+        </>
       ) : text ? (
         <Markdown text={text} className="text-ink-soft" />
       ) : (

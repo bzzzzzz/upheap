@@ -7,6 +7,7 @@ import type { AskQuestionRequest, Item } from "../api/schema";
 import type { useAskQuestion } from "../api/queries/questions";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
+import { RequestId } from "./RequestId";
 import { focusClass, labelClass, pickBoxClass, pickClass } from "./ItemQuestions";
 import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { useFocusAfterRender } from "./useFocusAfterRender";
@@ -365,6 +366,7 @@ function AskForm({
           {problem}
         </p>
       )}
+      <RequestId error={error} />
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:self-end">
         <Button

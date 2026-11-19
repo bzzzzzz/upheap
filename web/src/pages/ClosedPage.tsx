@@ -1,12 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 
-import type { HeapRef } from "../api/client";
+import { isNotFound, type HeapRef } from "../api/client";
 import type { ClosedGroup, Item } from "../api/schema";
 import { useReopenItem } from "../api/queries/items";
 import { useClosedItems } from "../api/queries/lists";
 import { becameWords, CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
 import { useUserName } from "../components/userName";
+import { HeapNotFound } from "../components/NotFound";
+import { RequestId } from "../components/RequestId";
 
 /** A run of items next to each other with the same `closed_group`, as the server groups them. */
 interface ClosedSection {
@@ -45,10 +47,14 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
   if (closed.isError) {
+    if (isNotFound(closed.error)) return <HeapNotFound />;
     return (
-      <p role="alert" className="py-16 text-center text-overdue-ink">
-        {closed.error.message}
-      </p>
+      <>
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {closed.error.message}
+        </p>
+        <RequestId error={closed.error} className="justify-center" />
+      </>
     );
   }
 
@@ -72,9 +78,12 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
         />
       ))}
       {reopen.error && (
-        <p role="alert" className="mt-2 text-sm text-overdue-ink">
-          {reopen.error.message}
-        </p>
+        <>
+          <p role="alert" className="mt-2 text-sm text-overdue-ink">
+            {reopen.error.message}
+          </p>
+          <RequestId error={reopen.error} />
+        </>
       )}
       {closed.hasNextPage && (
         <div className="mt-4 flex justify-center">

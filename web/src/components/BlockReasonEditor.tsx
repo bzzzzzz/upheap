@@ -3,6 +3,7 @@ import { useState } from "react";
 import { compactButtonClass } from "./buttons";
 import { Field } from "./Field";
 import { itemProblem } from "./itemProblems";
+import { RequestId } from "./RequestId";
 
 /** The server's limit, in characters (domain `BlockReason::MAX_CHARS`). */
 const MAX_CHARS = 300;
@@ -66,6 +67,7 @@ export function BlockReasonEditor({
               : undefined
         }
       />
+      <RequestId error={error} />
       {chars >= COUNT_FROM && (
         <p className={`text-right text-xs tabular-nums ${tooLong ? "text-overdue-ink" : "text-muted"}`}>
           {chars} / {MAX_CHARS}

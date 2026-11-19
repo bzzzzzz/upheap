@@ -19,6 +19,7 @@ import { MenuEntry, MenuPopover } from "../components/Menu";
 import { useFocusAfterRender } from "../components/useFocusAfterRender";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, clampWeight, inputClass, introClass, labelClass } from "./settingsForm";
+import { RequestId } from "../components/RequestId";
 
 /** What "Reset all to 10" sets: the weight new heaps and parameters start with. */
 const DEFAULT_WEIGHT = 10;
@@ -78,9 +79,12 @@ export function HeapRankingSettings({ heap: heapRef }: { heap: HeapRef }) {
   const failure = (!heap.data && heap.error) || (!parameters.data && parameters.error) || (!tags.data && tags.error);
   if (failure) {
     return (
-      <p role="alert" className="py-16 text-center text-overdue-ink">
-        {failure.message}
-      </p>
+      <>
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {failure.message}
+        </p>
+        <RequestId error={failure} className="justify-center" />
+      </>
     );
   }
   if (!heap.data || !parameters.data || !tags.data) {

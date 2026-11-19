@@ -25,6 +25,7 @@ import { teamName, titleTeam } from "../components/teamName";
 import { useCloseItem } from "../components/useCloseItem";
 import { keptHeap } from "./AppLayout";
 import { HiddenNote, Section, useChangeState } from "./HeapPage";
+import { RequestId } from "../components/RequestId";
 
 /** The list the open item closes to: this page, without the item. */
 const ALL_ITEMS: NavigateOptions = { to: "/all", search: (prev) => ({ ...prev, item: undefined }) };
@@ -173,9 +174,12 @@ export function AllItemsPage({
           {list.isPending ? (
             <p className="py-16 text-center text-muted">Loading…</p>
           ) : !data || !sections ? (
-            <p role="alert" className="py-16 text-center text-red-700 dark:text-red-400">
-              {unknownTeam ? "You're not in this team." : list.error?.message}
-            </p>
+            <>
+              <p role="alert" className="py-16 text-center text-red-700 dark:text-red-400">
+                {unknownTeam ? "You're not in this team." : list.error?.message}
+              </p>
+              <RequestId error={list.error} className="justify-center" />
+            </>
           ) : (
             <>
               <ListControls

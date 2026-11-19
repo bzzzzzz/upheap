@@ -7,6 +7,7 @@ import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard, authButtonClass, REGISTER_NOTE, USERNAME_HINT } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
+import { RequestId } from "../components/RequestId";
 
 /**
  * The step after a first sign-in through the provider (ux.md, Sign in and create account): who the provider vouched
@@ -130,9 +131,12 @@ function UsernameForm({
         required
       />
       {error && !usernameError && (
-        <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-          {problemMessage(error)}
-        </p>
+        <>
+          <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+            {problemMessage(error)}
+          </p>
+          <RequestId error={error} />
+        </>
       )}
       <button type="submit" disabled={register.isPending} className={authButtonClass}>
         Create account

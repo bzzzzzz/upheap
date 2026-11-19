@@ -26,6 +26,7 @@ import {
   labelClass,
   nameFormClasses,
 } from "./settingsForm";
+import { RequestId } from "../components/RequestId";
 
 const problemClass = "text-overdue-ink";
 /** An option's place in the list, in the parameter colour. */
@@ -45,9 +46,12 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
   if (!parameters.data) {
     if (parameters.isError) {
       return (
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {parameters.error.message}
-        </p>
+        <>
+          <p role="alert" className="py-16 text-center text-overdue-ink">
+            {parameters.error.message}
+          </p>
+          <RequestId error={parameters.error} className="justify-center" />
+        </>
       );
     }
     return <p className="py-16 text-center text-muted">Loading…</p>;
