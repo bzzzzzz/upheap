@@ -9,7 +9,7 @@ import {
 import { useRef } from "react";
 import { api, unwrap, type AcrossHeapsQuery } from "../client";
 import type { User } from "../schema";
-import { acrossHeapsKey, waitingKey, decisionsKey, resultsKey, POLL_INTERVAL, invalidateMe, meKey } from "./keys";
+import { acrossHeapsKey, waitingKey, decisionsKey, POLL_INTERVAL, invalidateMe, meKey } from "./keys";
 
 export const meQuery = queryOptions({
   queryKey: meKey,
@@ -64,6 +64,8 @@ export function useDecisions() {
     refetchInterval: POLL_INTERVAL,
   });
 }
+
+const resultsKey = ["results"] as const;
 
 /** The history of runs that ended as reached in the last 30 days, a page at a time, newest first (ux.md, Agents). */
 export function useResults() {

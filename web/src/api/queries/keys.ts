@@ -21,10 +21,8 @@ export const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links
 export const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
 export const waitingKey = ["waiting"] as const;
 export const decisionsKey = ["decisions"] as const;
-export const resultsKey = ["results"] as const;
 /** Every view of the list across heaps, by prefix. */
 export const acrossHeapsKey = ["across-heaps"] as const;
-export const usersKey = (query: string) => ["users", query] as const;
 export const meKey = ["me"] as const;
 
 /**
@@ -99,4 +97,4 @@ export function invalidateTeam(queryClient: QueryClient, team: string) {
 }
 
 /** The scope that makes edits of items run one at a time. */
-export const itemEditsScope = { id: "item-edits" };
+export const itemEditsScope = { id: "item-edits" } as const;

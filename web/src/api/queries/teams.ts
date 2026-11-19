@@ -2,17 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useNavigate } from "@tanstack/react-router";
 import { api, ensureOk, unwrap } from "../client";
 import type { DataDays, Role, Team } from "../schema";
-import {
-  rankedKey,
-  closedKey,
-  tagsKey,
-  parametersKey,
-  teamKey,
-  heapKey,
-  usersKey,
-  invalidateMe,
-  invalidateTeam,
-} from "./keys";
+import { rankedKey, closedKey, tagsKey, parametersKey, teamKey, heapKey, invalidateMe, invalidateTeam } from "./keys";
 
 /** The team whose slug is `team`. */
 export function useTeam(team: string) {
@@ -130,6 +120,8 @@ export function useLeaveTeam(team: Team) {
     },
   });
 }
+
+const usersKey = (query: string) => ["users", query] as const;
 
 /**
  * Whether the server takes `query` as a user lookup: 3 characters, or a whole username shorter than that (`ab`), which
