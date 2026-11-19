@@ -990,6 +990,42 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
     Ok(())
 }
 
+// The race below runs for real on MySQL and Postgres. In-memory SQLite has one connection, so there the two requests
+// take turns, which is the order the race must end in. The assertions hold whichever side goes first.
+
+#[gtest]
+#[tokio::test]
+async fn two_deactivations_at_once_of_a_persons_last_two_records_end_their_sign_ins_and_record_one_turn_off()
+-> Result<()> {
+    // Arrange: no group-managed team, so no mapped team's lock puts the two writes in turn.
+    let h = harness_with(&[]).await?;
+    // A race may go either way, so it is run a few times, once per person.
+    for round in 0..5 {
+        let subject = format!("subject-{round}");
+        let email = format!("person{round}@example.test");
+        let first = push_user(&h, &email, Some(&subject), true).await?;
+        let second = push_user(&h, &format!("person{round}-2@example.test"), Some(&subject), true).await?;
+        let claims = Claims::verified(&subject, &email, "Person").with_claim("groups", json!([]));
+        let session = first_sign_in_as(&h, claims, &format!("person{round}")).await?;
+        let user_id = user_id_of(&me(&h.app, &session).await?)?;
+        let off = json!([{ "op": "replace", "value": { "active": false } }]);
+
+        // Act
+        let (first, second) = (format!("/scim/v2/Users/{first}"), format!("/scim/v2/Users/{second}"));
+        let (one, other) = tokio::join!(patch(&h, &first, off.clone()), patch(&h, &second, off.clone()));
+        let (one, other) = (one?, other?);
+        let ended = me(&h.app, &session).await?;
+        let turned_off = provider_entries(&h, &user_id).await?;
+
+        // Assert
+        expect_that!(one.status, eq(StatusCode::OK), "{}", one.body);
+        expect_that!(other.status, eq(StatusCode::OK), "{}", other.body);
+        expect_that!(ended.status, eq(StatusCode::UNAUTHORIZED), "round {round}");
+        expect_that!(turned_off, elements_are![eq("account_deactivated")], "round {round}");
+    }
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn deleting_one_of_two_records_keeps_the_person_and_deleting_the_last_ends_them() -> Result<()> {
