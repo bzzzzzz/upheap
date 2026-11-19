@@ -876,9 +876,10 @@ section is how it maps onto this API.
 5. **Lists.** `item list` takes the list's query parameters as flags with the same names and values. `--view` loads
    a saved view and sends its settings, with any flag given replacing that setting. The optional text narrows the
    result on the client, as the web app's search does ([Search](#search)). `--tag` takes names, resolved against
-   the heap's tags. `item add` reads the list once more to say where the item landed, a read `--quiet` and `--json`
-   skip; if it fails, the add still stands and a warning says so. `--step` is sent as one step add per step after the
-   create, so a failure leaves the item with the steps sent so far, and the CLI says which: a note on stderr, or
+   the heap's tags. With `--create-tags`, the names the heap doesn't have are added as heap tags first, right before
+   the item is written, and they stay if that write fails. `item add` reads the list once more to say where the item
+   landed, a read `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` is
+   sent as one step add per step after the create, so a failure leaves the item with the steps sent so far, and the CLI says which: a note on stderr, or
    with `--json` the item as it stands on stdout beside the problem body.
 6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens), with the machine's hostname as the
    device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and

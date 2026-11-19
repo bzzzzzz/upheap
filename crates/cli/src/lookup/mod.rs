@@ -402,16 +402,19 @@ pub fn resolve_tags(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> R
         .collect()
 }
 
-/// The IDs of the tags `names` names, as [`resolve_tags`] finds them, and the names that no tag has: trimmed,
-/// without repeats ignoring case, the first spelling typed kept, in the order typed.
+/// The IDs of the tags `names` names, as [`resolve_tags`] finds them or, failing that, among the team's tags, and the
+/// names that no tag has: trimmed, without repeats ignoring case, the first spelling typed kept, in the order typed.
 pub fn resolve_tags_or_missing(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> (Vec<Uuid>, Vec<String>) {
     let mut found = Vec::new();
     let mut missing: Vec<String> = Vec::new();
     for name in names {
-        match find_tag(name, tags, heap) {
-            Ok(tag) => found.push(tag.id),
-            Err(_) => {
-                let trimmed = name.trim();
+        let trimmed = name.trim();
+        let tag = find_tag(name, tags, heap)
+            .ok()
+            .or_else(|| tags.team_tags.iter().find(|tag| is_named(trimmed, &tag.name, tag.id)));
+        match tag {
+            Some(tag) => found.push(tag.id),
+            None => {
                 if !missing.iter().any(|seen| seen.to_lowercase() == trimmed.to_lowercase()) {
                     missing.push(trimmed.to_owned());
                 }

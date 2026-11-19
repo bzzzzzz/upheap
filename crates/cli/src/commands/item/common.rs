@@ -8,6 +8,7 @@ use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
 use api_types::tags::{CreateTagDto, TagDto};
 use api_types::turns::SendToAgentDto;
+use domain::tag::TagName;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -16,7 +17,7 @@ use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::UsageError;
 use crate::commands::heap_api::{HeapApi, is_not_found, named_heap, resolve_heap_handle};
 use crate::lookup::{DueWhen, HeapHandle, HeapName, ItemName, due_on, find_option, find_parameter, match_due_choice};
-use crate::output::{Cell, Mode, Output, Tone};
+use crate::output::{Cell, Tone};
 use crate::{App, CliError};
 
 impl HeapApi<'_> {
@@ -233,43 +234,56 @@ pub(super) fn describe_due_flag() -> String {
     format!("When: a date, YYYY-MM-DD, or a rough choice: {}", choices.join(", "))
 }
 
-/// Adds each of `names` as a tag of the heap, one at a time in order, and gives the new tags' IDs. Each added tag is
-/// said on stderr, with the name the server kept. When one can't be added, stderr says which tags weren't, and that
-/// `failed_what` (what didn't happen to the item), before the error is returned; the tags added before stay. With
-/// `--json` stderr carries only the problem body, which scripts parse, so nothing is said.
+/// What `add_missing_tags` got done before one failed: the tags added, the names it didn't add (the failed one and the
+/// ones after it), and why.
+pub(in crate::commands) struct TagsNotAdded {
+    pub added: Vec<TagDto>,
+    pub left: Vec<String>,
+    pub error: CliError,
+}
+
+/// Adds each of `names` as a tag of the heap, one at a time in order, and gives the new tags. It says nothing: the
+/// command's flow does. When one can't be added the tags added before stay.
 pub(in crate::commands) async fn add_missing_tags(
     names: &[String],
     api: &HeapApi<'_>,
-    out: &mut Output,
-    failed_what: &str,
-) -> Result<Vec<Uuid>, CliError> {
-    let mut ids = Vec::with_capacity(names.len());
+) -> Result<Vec<TagDto>, TagsNotAdded> {
+    let mut added = Vec::with_capacity(names.len());
     for (done, name) in names.iter().enumerate() {
         let body = CreateTagDto {
             name: name.clone(),
             description: None,
         };
         match api.post::<TagDto>(&["tags"], &body).await {
-            Ok(added) => {
-                if out.mode() != Mode::Json {
-                    out.note(&format!("Added tag \"{}\".", added.value.name))?;
-                }
-                ids.push(added.value.id);
-            }
-            Err(err) => {
-                if out.mode() != Mode::Json {
-                    let left: Vec<String> = names[done..].iter().map(|name| format!("\"{name}\"")).collect();
-                    let noun = if left.len() == 1 { "tag" } else { "tags" };
-                    out.note(&format!(
-                        "Couldn't add the {noun} {}, so {failed_what}.",
-                        left.join(", ")
-                    ))?;
-                }
-                return Err(err);
+            Ok(tag) => added.push(tag.value),
+            Err(error) => {
+                return Err(TagsNotAdded {
+                    added,
+                    left: names[done..].to_vec(),
+                    error,
+                });
             }
         }
     }
-    Ok(ids)
+    Ok(added)
+}
+
+/// The note for tags `left` unadded: `failed_what` is what didn't happen to the item.
+pub(in crate::commands) fn tags_not_added_note(left: &[String], failed_what: &str) -> String {
+    let quoted: Vec<String> = left.iter().map(|name| format!("\"{name}\"")).collect();
+    let noun = if quoted.len() == 1 { "tag" } else { "tags" };
+    format!("Couldn't add the {noun} {}, so {failed_what}.", quoted.join(", "))
+}
+
+/// Refuses a name no tag can have, before anything is written.
+pub(in crate::commands) fn check_tag_names(names: &[String]) -> Result<(), UsageError> {
+    for name in names {
+        TagName::parse(name).map_err(|err| UsageError::BadNewTag {
+            name: name.clone(),
+            reason: err.to_string(),
+        })?;
+    }
+    Ok(())
 }
 
 /// `ids` without repeats, in the order they first appear.

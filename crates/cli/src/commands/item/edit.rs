@@ -7,8 +7,8 @@ use clap::Args;
 use uuid::Uuid;
 
 use super::common::{
-    ParameterSetting, add_missing_tags, describe_due_flag, locate_item, merge_tag_ids, parameter_values,
-    parse_parameter_setting, resolve_due,
+    ParameterSetting, add_missing_tags, check_tag_names, describe_due_flag, locate_item, merge_tag_ids,
+    parameter_values, parse_parameter_setting, resolve_due, tags_not_added_note,
 };
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, read_context, read_description};
@@ -49,7 +49,7 @@ pub struct EditArgs {
     #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
     /// Add each --tag the heap doesn't have as a new tag of the heap, instead of refusing it
-    #[arg(long)]
+    #[arg(long, requires = "tag")]
     pub create_tags: bool,
     /// Take off a tag, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
@@ -134,6 +134,7 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
         let added = if args.create_tags {
             let (found, missing) = resolve_tags_or_missing(&args.tag, &tags.value, &heap);
+            check_tag_names(&missing)?;
             missing_tags = missing;
             found
         } else {
@@ -157,7 +158,22 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
     let tag_ids = match tag_change {
         Some((mut added, removed)) => {
             let failed_what = format!("{} wasn't changed", item.value.key);
-            added.extend(add_missing_tags(&missing_tags, &api, out, &failed_what).await?);
+            let (new, failure) = match add_missing_tags(&missing_tags, &api).await {
+                Ok(new) => (new, None),
+                Err(failed) => (failed.added, Some((failed.left, failed.error))),
+            };
+            if out.mode() != Mode::Json {
+                for tag in &new {
+                    out.note(&format!("Added tag \"{}\".", tag.name))?;
+                }
+                if let Some((left, _)) = &failure {
+                    out.note(&tags_not_added_note(left, &failed_what))?;
+                }
+            }
+            if let Some((_, error)) = failure {
+                return Err(error);
+            }
+            added.extend(new.iter().map(|tag| tag.id));
             Some(merge_tags(&item.value, added, &removed))
         }
         None => None,

@@ -458,7 +458,8 @@ and use cases. **Operations** are functions that do one job and return a result.
 2. **A pasted link works.** A full path names a record elsewhere, and a link without its prefix is the same path.
 3. **Names are resolved on the client only where it's cheap and unambiguous:** a tag by name, a choice by label,
    ignoring case. An unknown name fails with the closest existing names and the command that would create it; it
-   doesn't create silently, since a typo in a terminal would make something nobody can delete.
+   doesn't create silently, since a typo in a terminal would make something nobody can delete. An explicit flag (such as
+   `--create-tags`) may create, and says on stderr each thing it made.
 
 #### Output
 

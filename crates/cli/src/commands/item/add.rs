@@ -11,8 +11,8 @@ use domain::step::MAX_STEPS;
 use uuid::Uuid;
 
 use super::common::{
-    ParameterSetting, add_missing_tags, dedupe, describe_due_flag, parameter_values, parse_parameter_setting,
-    resolve_due,
+    ParameterSetting, add_missing_tags, check_tag_names, dedupe, describe_due_flag, parameter_values,
+    parse_parameter_setting, resolve_due, tags_not_added_note,
 };
 use crate::client::ApiClient;
 use crate::client::NO_QUERY;
@@ -48,7 +48,7 @@ pub struct AddArgs {
     #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
     /// Add each --tag the heap doesn't have as a new tag of the heap, instead of refusing it
-    #[arg(long)]
+    #[arg(long, requires = "tag")]
     pub create_tags: bool,
     /// Set a parameter of the heap to one of its options, as NAME=OPTION, each by name or ID. Repeat for more
     #[arg(long, value_name = "NAME=OPTION", value_parser = parse_parameter_setting)]
@@ -127,6 +127,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
         if args.create_tags {
             let (found, missing) = resolve_tags_or_missing(&args.tag, &tags.value, &heap);
+            check_tag_names(&missing)?;
             (Some(found), missing)
         } else {
             let found = resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?;
@@ -161,7 +162,22 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         _ => None,
     };
     if let Some(ids) = tag_ids.as_mut() {
-        ids.extend(add_missing_tags(&missing_tags, &api, out, "the item wasn't added").await?);
+        let (added, failure) = match add_missing_tags(&missing_tags, &api).await {
+            Ok(added) => (added, None),
+            Err(failed) => (failed.added, Some((failed.left, failed.error))),
+        };
+        if out.mode() != Mode::Json {
+            for tag in &added {
+                out.note(&format!("Added tag \"{}\".", tag.name))?;
+            }
+            if let Some((left, _)) = &failure {
+                out.note(&tags_not_added_note(left, "the item wasn't added"))?;
+            }
+        }
+        if let Some((_, error)) = failure {
+            return Err(error);
+        }
+        ids.extend(added.iter().map(|tag| tag.id));
         *ids = dedupe(std::mem::take(ids));
     }
     let body = CreateItemDto {

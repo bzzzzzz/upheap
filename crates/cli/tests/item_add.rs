@@ -206,6 +206,75 @@ async fn item_add_with_create_tags_uses_a_tag_the_heap_has_and_adds_none() -> Re
 
 #[gtest]
 #[tokio::test]
+async fn item_add_with_create_tags_uses_a_team_tag_and_adds_no_heap_tag() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    server
+        .send(
+            &ada,
+            "POST",
+            "/teams/ada/tags",
+            Some(serde_json::json!({ "name": "Security" })),
+        )
+        .await?;
+
+    let added = cli
+        .run(&["item", "add", "Tagged", "--tag", "security", "--create-tags", "-q"])
+        .await;
+
+    expect_that!(added.exited(0), eq(true));
+    expect_that!(added.stderr, eq(""));
+    let item = server.read_item(&ada, HEAP, added.stdout.trim()).await?;
+    expect_that!(item["tags"][0]["name"], eq("Security"));
+    expect_that!(tag_names(&server, &ada).await?, elements_are![eq("Infra")]);
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_add_with_create_tags_refuses_a_bad_new_name_before_adding_any_tag() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let before = item_count(&server, &ada).await?;
+    let too_long = "x".repeat(51);
+
+    let added = cli
+        .run(&[
+            "item",
+            "add",
+            "Tagged",
+            "--tag",
+            "ok-one",
+            "--tag",
+            &too_long,
+            "--create-tags",
+        ])
+        .await;
+
+    expect_that!(added.exited(2), eq(true));
+    expect_that!(added.stderr, contains_substring("can't be a tag"));
+    expect_that!(tag_names(&server, &ada).await?, elements_are![eq("Infra")]);
+    expect_that!(item_count(&server, &ada).await?, eq(before));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn create_tags_without_tag_is_a_usage_error() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    let added = cli.run(&["item", "add", "Tagged", "--create-tags"]).await;
+
+    expect_that!(added.exited(2), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_add_quiet_is_the_key_and_json_is_the_created_item() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
