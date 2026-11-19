@@ -50,10 +50,17 @@ export function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
 
 /**
  * After a team tag is made (`renamed` false) or edited: the team's tag list and every heap's tag list of the team,
- * and after an edit also everything that shows tag names in the team's heaps.
+ * and after an edit also everything that shows tag names in the team's heaps. A merge (`merged`) also rewrote the
+ * heaps' parameters' tag links and tag orders, so their parameters and the heaps themselves are read again too.
  */
-export function invalidateTeamTags(queryClient: QueryClient, team: string, renamed: boolean) {
+export function invalidateTeamTags(queryClient: QueryClient, team: string, renamed: boolean, merged = false) {
   return Promise.all([
+    ...(merged
+      ? [
+          queryClient.invalidateQueries({ queryKey: ["parameters", team] }),
+          queryClient.invalidateQueries({ queryKey: ["heap", team] }),
+        ]
+      : []),
     queryClient.invalidateQueries({ queryKey: teamTagsKey(team) }),
     queryClient.invalidateQueries({ queryKey: ["tags", team] }),
     ...(renamed

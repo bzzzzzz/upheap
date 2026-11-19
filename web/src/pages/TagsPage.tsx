@@ -57,7 +57,7 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
           </h3>
           <ul className="divide-y divide-line">
             {tags.data.tags.map((tag) => (
-              <TagRow key={tag.id} tag={tag} settings={heapSettings} />
+              <TagRow key={tag.id} tag={tag} settings={heapSettings} heap={heap} />
             ))}
           </ul>
         </section>

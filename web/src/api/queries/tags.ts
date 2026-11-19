@@ -22,28 +22,35 @@ export function useTags(heap: HeapRef, enabled = true) {
 /** Where a tag lives: a heap's own, or a team's, which every heap of the team uses. */
 export type TagScope = { kind: "heap"; heap: HeapRef } | { kind: "team"; team: string };
 
-/** Creates a tag in the scope. Each form holds its own, so one's error and pending state are not another's. */
+/**
+ * Creates a tag in the scope. Each form holds its own, so one's error and pending state are not another's. `confirm`
+ * is the token of the reach a team tag's merge was refused with.
+ */
 export function useCreateTagIn(scope: TagScope) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: CreateTagRequest) =>
+    mutationFn: async ({ body, confirm }: { body: CreateTagRequest; confirm?: string }) =>
       unwrap(
         scope.kind === "heap"
           ? await api.POST("/api/v1/teams/{team}/heaps/{heap}/tags", { params: { path: scope.heap }, body })
-          : await api.POST("/api/v1/teams/{team}/tags", { params: { path: { team: scope.team } }, body }),
+          : await api.POST("/api/v1/teams/{team}/tags", {
+              params: { path: { team: scope.team }, query: { ...(confirm && { confirm_reach: confirm }) } },
+              body,
+            }),
       ),
-    onSettled: () =>
+    // A confirmed merge changes items' tags in many heaps.
+    onSettled: (_data, _error, { confirm }) =>
       scope.kind === "heap"
         ? queryClient.invalidateQueries({ queryKey: tagsKey(scope.heap) })
-        : invalidateTeamTags(queryClient, scope.team, false),
+        : invalidateTeamTags(queryClient, scope.team, Boolean(confirm), Boolean(confirm)),
   });
 }
 
-/** Edits a tag in the scope. */
+/** Edits a tag in the scope. `confirm` is the token of the reach a team tag's merge was refused with. */
 export function useUpdateTagIn(scope: TagScope) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ tag, patch }: { tag: Tag; patch: TagPatchRequest }) => {
+    mutationFn: async ({ tag, patch, confirm }: { tag: Tag; patch: TagPatchRequest; confirm?: string }) => {
       const header = { "If-Match": `"${tag.version}"` };
       return unwrap(
         scope.kind === "heap"
@@ -52,19 +59,23 @@ export function useUpdateTagIn(scope: TagScope) {
               body: patch,
             })
           : await api.PATCH("/api/v1/teams/{team}/tags/{tag_id}", {
-              params: { path: { team: scope.team, tag_id: tag.id }, header },
+              params: {
+                path: { team: scope.team, tag_id: tag.id },
+                query: { ...(confirm && { confirm_reach: confirm }) },
+                header,
+              },
               body: patch,
             }),
       );
     },
     // Items show tag names, so a rename refreshes them too.
-    onSettled: () =>
+    onSettled: (_data, _error, { confirm }) =>
       scope.kind === "heap"
         ? Promise.all([
             queryClient.invalidateQueries({ queryKey: tagsKey(scope.heap) }),
             invalidateHeap(queryClient, scope.heap),
           ])
-        : invalidateTeamTags(queryClient, scope.team, true),
+        : invalidateTeamTags(queryClient, scope.team, true, Boolean(confirm)),
   });
 }
 
