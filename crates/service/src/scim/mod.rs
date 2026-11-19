@@ -8,7 +8,8 @@
 //!
 //! Records may share an `externalId`, so a person's state is read from all of them at once ([`ScimPerson`]): inactive
 //! only when every record is, else in the groups of the active ones. A linked person who is left inactive, or whose
-//! last record is deleted, also loses every session and token, and [`Services::open_session`] refuses an inactive
+//! last record is deleted, also loses every session and token, and a write to users that turns a linked person off
+//! or back on records it in their personal team's audit log, and [`Services::open_session`] refuses an inactive
 //! person until the provider turns them back on.
 //!
 //! Resources are JSON as in RFC 7643, built and read here; the HTTP side is in `api`.
@@ -18,6 +19,7 @@ mod patch;
 
 use std::collections::BTreeSet;
 
+use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::{TeamId, Timestamp, UserId};
 use serde_json::{Map, Value, json};
 use store::scim::{GroupField, ScimGroup, ScimUser, UserField};
@@ -26,7 +28,7 @@ use uuid::Uuid;
 
 use crate::auth::sha256_hex;
 use crate::group_teams::Groups;
-use crate::{ServiceError, Services};
+use crate::{Principal, ServiceError, Services};
 
 const USER_SCHEMA: &str = "urn:ietf:params:scim:schemas:core:2.0:User";
 const GROUP_SCHEMA: &str = "urn:ietf:params:scim:schemas:core:2.0:Group";
@@ -341,12 +343,14 @@ impl Services {
         };
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
+        let subjects: BTreeSet<String> = user.external_id.iter().cloned().collect();
+        let was_off = self.off_subjects(&txn, &subjects).await?;
         store::scim::insert_user(&txn, &user)
             .await
             .map_err(|e| taken_on_duplicate(e, "userName is taken"))?;
-        let subjects = user.external_id.iter().cloned().collect();
         let pushed = self.pushed_teams(&txn).await?;
-        self.apply_to_linked(&txn, subjects, false, true, &pushed, now).await?;
+        self.apply_to_linked(&txn, subjects, false, Some(&was_off), &pushed, now)
+            .await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_user_id = %user.id, active = user.active, "SCIM user created");
         self.render_user(&user)
@@ -381,6 +385,12 @@ impl Services {
         self.lock_group_teams(&txn).await?;
         let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
         let input = change(&current)?;
+        // The person the record was linked to before, if the write moves it to another.
+        let subjects: BTreeSet<String> = [input.external_id.clone(), current.external_id.clone()]
+            .into_iter()
+            .flatten()
+            .collect();
+        let was_off = self.off_subjects(&txn, &subjects).await?;
         let user = ScimUser {
             id,
             user_name: input.user_name,
@@ -393,13 +403,9 @@ impl Services {
         store::scim::update_user(&txn, &user)
             .await
             .map_err(|e| taken_on_duplicate(e, "userName is taken"))?;
-        // The person the record was linked to before, if the write moved it to another.
-        let subjects = [user.external_id.clone(), current.external_id]
-            .into_iter()
-            .flatten()
-            .collect();
         let pushed = self.pushed_teams(&txn).await?;
-        self.apply_to_linked(&txn, subjects, false, true, &pushed, now).await?;
+        self.apply_to_linked(&txn, subjects, false, Some(&was_off), &pushed, now)
+            .await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_user_id = %user.id, active = user.active, "SCIM user changed");
         self.render_user(&user)
@@ -411,12 +417,14 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
         let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
+        let subjects: BTreeSet<String> = current.external_id.into_iter().collect();
+        let was_off = self.off_subjects(&txn, &subjects).await?;
         store::scim::delete_user_memberships(&txn, id).await?;
         store::scim::delete_user(&txn, id).await?;
         // A person left with no record is inactive: no groups and no sign-ins.
-        let subjects = current.external_id.into_iter().collect();
         let pushed = self.pushed_teams(&txn).await?;
-        self.apply_to_linked(&txn, subjects, true, true, &pushed, now).await?;
+        self.apply_to_linked(&txn, subjects, true, Some(&was_off), &pushed, now)
+            .await?;
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(scim_user_id = %id, "SCIM user deleted");
         Ok(())
@@ -542,17 +550,39 @@ impl Services {
             );
         }
         let teams: BTreeSet<TeamId> = pushed_before.union(&pushed_after).copied().collect();
-        self.apply_to_linked(txn, subjects, false, false, &teams, now).await?;
+        self.apply_to_linked(txn, subjects, false, None, &teams, now).await?;
         let started: BTreeSet<TeamId> = pushed_after.difference(pushed_before).copied().collect();
         if !started.is_empty() {
             let everyone = store::scim::list_external_ids(txn).await?;
-            self.apply_to_linked(txn, everyone, false, false, &started, now).await?;
+            self.apply_to_linked(txn, everyone, false, None, &started, now).await?;
         }
         Ok(())
     }
 
-    /// For each person among `subjects` who is linked to an account: ends their sign-ins when `end_sign_ins` and they
-    /// are inactive, and syncs their teams from their SCIM state: an active person's membership in `teams`, an
+    /// The people among `subjects` who are off: they have records and every one is inactive. Read before a write to
+    /// users changes the rows, and after the locks.
+    async fn off_subjects(
+        &self,
+        db: &impl ConnectionTrait,
+        subjects: &BTreeSet<String>,
+    ) -> Result<BTreeSet<String>, ServiceError> {
+        let mut off = BTreeSet::new();
+        for subject in subjects {
+            if self
+                .scim_person(db, subject)
+                .await?
+                .is_some_and(|person| !person.active)
+            {
+                off.insert(subject.clone());
+            }
+        }
+        Ok(off)
+    }
+
+    /// For each person among `subjects` who is linked to an account: for a write to users (`was_off` is `Some`, the
+    /// people who were off before it) ends the sign-ins of an inactive person, and records `account_deactivated` in
+    /// their personal team when they weren't off before, or `account_reactivated` when they were and are active now.
+    /// Syncs their teams from their SCIM state: an active person's membership in `teams`, an
     /// inactive person's in every mapped team. A person left with no record is inactive when
     /// `deleted`, else unchanged. Logs once how many aren't linked, and changes nothing for them.
     async fn apply_to_linked(
@@ -560,7 +590,7 @@ impl Services {
         txn: &impl ConnectionTrait,
         subjects: BTreeSet<String>,
         deleted: bool,
-        end_sign_ins: bool,
+        was_off: Option<&BTreeSet<String>>,
         teams: &BTreeSet<TeamId>,
         now: Timestamp,
     ) -> Result<(), ScimError> {
@@ -575,9 +605,20 @@ impl Services {
                 None if deleted => ScimPerson::inactive(),
                 None => continue,
             };
-            if end_sign_ins && !person.active {
-                let ended_sign_ins = self.end_sign_ins(txn, user_id, None, now).await?;
-                tracing::info!(%user_id, ended_sign_ins, "ended the sign-ins of a person the provider deactivated");
+            if let Some(was_off) = was_off {
+                let off_before = was_off.contains(subject);
+                if !person.active {
+                    let ended_sign_ins = self.end_sign_ins(txn, user_id, None, now).await?;
+                    tracing::info!(%user_id, ended_sign_ins, "ended the sign-ins of a person the provider deactivated");
+                    if !off_before {
+                        let diff = json!({ AuditField::EndedSignIns.code(): ended_sign_ins });
+                        self.record_account_change(txn, user_id, AuditAction::AccountDeactivated, diff, now)
+                            .await?;
+                    }
+                } else if off_before {
+                    self.record_account_change(txn, user_id, AuditAction::AccountReactivated, json!({}), now)
+                        .await?;
+                }
             }
             if !self.settings.group_teams.is_empty() {
                 let teams = person.active.then_some(teams);
@@ -591,6 +632,34 @@ impl Services {
                 "SCIM push touched people with no linked account; no team changes for them"
             );
         }
+        Ok(())
+    }
+
+    /// Writes an account entry for a change the provider made, in the person's personal team, with the person as the
+    /// actor: no account did it. The personal team isn't locked: the write already holds the mapped teams and the SCIM
+    /// row, and an insert needs no lock.
+    async fn record_account_change(
+        &self,
+        txn: &impl ConnectionTrait,
+        user_id: UserId,
+        action: AuditAction,
+        diff: Value,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
+        let user = store::users::find_user(txn, user_id)
+            .await?
+            .ok_or(ServiceError::Unauthenticated)?;
+        let personal_team = self.load_personal_team(txn, &user).await?;
+        let entry = self.team_audit_entry(
+            Principal { user_id, run: None },
+            personal_team,
+            action,
+            EntityType::User,
+            *user_id.as_uuid(),
+            diff,
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
         Ok(())
     }
 

@@ -73,6 +73,8 @@ pub enum AuditActionDto {
     PasswordChanged,
     PasswordResetLinkMade,
     PasswordReset,
+    AccountDeactivated,
+    AccountReactivated,
     /// An action this client doesn't know: one the server added later. Only read, never sent, so it isn't in the
     /// API's schema.
     #[serde(other, skip_serializing)]
@@ -129,6 +131,8 @@ impl From<AuditAction> for AuditActionDto {
             AuditAction::PasswordChanged => Self::PasswordChanged,
             AuditAction::PasswordResetLinkMade => Self::PasswordResetLinkMade,
             AuditAction::PasswordReset => Self::PasswordReset,
+            AuditAction::AccountDeactivated => Self::AccountDeactivated,
+            AuditAction::AccountReactivated => Self::AccountReactivated,
         }
     }
 }

@@ -1022,9 +1022,10 @@ Make a token. The secret lives only in the page's state, so leaving the page dro
 
 Account's last card, after Command line and before Sign out, is headed "History" and holds one collapsed disclosure,
 "Changes to your account", like the ones on a tag or a member, with the same chevron and touch target. It loads only
-when opened, and lists the user's password events and their own heap priority changes, newest first, each a sentence
+when opened, and lists the user's password events, the sign-in provider's turn-offs and turn-ons, and their own heap priority changes, newest first, each a sentence
 from the server and its time: "Password changed. 2 other sign-ins ended.", "Reset link made by whoever runs the
-server.", "Reset link sent by mail, as asked on the sign-in page.", "Password set with a reset link. 3 sign-ins ended."
+server.", "Reset link sent by mail, as asked on the sign-in page.", "Password set with a reset link. 3 sign-ins ended.",
+"Turned off by your sign-in provider. 3 sign-ins ended.", "Turned back on by your sign-in provider."
 and "You changed your priority for Work from 1 to 3." It names no actor, since it is the user's own account, and holds
 nothing else of the account (not sign-ups or profile changes). Empty, it says "No account changes yet."; an error
 shows the server's message; **Load more** fetches the next page. A password change or a priority change adds its entry
