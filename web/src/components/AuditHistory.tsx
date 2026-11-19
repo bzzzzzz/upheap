@@ -213,16 +213,19 @@ export function HistoryDisclosure({
   entityId,
   label = "History",
   className = "mt-1",
+  showEntity,
 }: {
   scope: AuditScope;
   entityId?: string;
   label?: string;
+  /** Each entry names the entity it is about, as in a team's history. */
+  showEntity?: boolean;
   /** Where it sits: its margins, or how much of a row it takes. */
   className?: string;
 }) {
   return (
     <Disclosure label={label} className={className}>
-      <AuditHistory scope={scope} entityId={entityId} />
+      <AuditHistory scope={scope} entityId={entityId} showEntity={showEntity} />
     </Disclosure>
   );
 }

@@ -6,12 +6,14 @@ mod common;
 use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode};
 use common::{TestApp, TestResponse};
+use domain::team::Role;
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
 /// A team with three heaps, A, B and C, and its admin.
 struct World {
     app: TestApp,
+    team: String,
     session: String,
     team_path: String,
     a: String,
@@ -40,6 +42,7 @@ async fn world() -> Result<World> {
     let b = others.pop().context("no heap B")?;
     Ok(World {
         app,
+        team,
         session,
         team_path,
         a,
@@ -540,5 +543,80 @@ async fn an_item_edit_adding_the_tag_being_merged_never_keeps_a_merged_tag() -> 
         expect_that!(edited.status.is_success(), eq(true));
         expect_that!(carries_heap_tag, eq(true));
     }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_member_reads_a_team_tags_history_with_its_merge_naming_the_heap_tags() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let member_email = "grace@example.test";
+    let (member, _) = w.app.register(member_email).await?;
+    let me = w.app.send(Method::GET, "/api/v1/me", Some(&member), None).await?;
+    let member_id = me.body["user"]["id"].as_str().context("user has no id")?;
+    w.app.add_member(&w.team, member_id, Role::Member).await?;
+    let team_tag = w.make_team_tag(json!({ "name": "billing-ops" }), None).await?.body;
+    let described = w
+        .app
+        .patch(
+            &w.session,
+            &format!("{}/tags/{}", w.team_path, id(&team_tag)),
+            &team_tag["version"],
+            json!({ "description": "Money matters" }),
+        )
+        .await?;
+    let heap_tag = w.heap_tag(&w.c, "billing").await?;
+    w.item(&w.c, "One", &[&heap_tag]).await?;
+    w.item(&w.c, "Two", &[&heap_tag]).await?;
+    let refused = w.rename_team_tag(&described.body, "billing", None).await?;
+    let token = refused.body["merge_reach"]["token"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    // Act
+    let renamed = w.rename_team_tag(&described.body, "billing", Some(&token)).await?;
+    let history = w
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/audit?entity_id={}", w.team_path, id(&team_tag)),
+            Some(&member),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(renamed.status, eq(StatusCode::OK));
+    expect_that!(history.status, eq(StatusCode::OK));
+    expect_that!(
+        actions(&history.body),
+        elements_are![
+            eq(&"tag_merged"),
+            eq(&"tag_updated"),
+            eq(&"tag_updated"),
+            eq(&"tag_created")
+        ]
+    );
+    let entries = &history.body["entries"];
+    expect_that!(
+        entries[0]["changes"],
+        eq(&json!([
+            { "field": "merged", "label": "Merged", "before": null, "after": "C's \u{201c}billing\u{201d} (2 items)", "text_diff": null },
+        ]))
+    );
+    expect_that!(
+        entries[1]["changes"],
+        eq(&json!([
+            { "field": "name", "label": "Name", "before": "billing-ops", "after": "billing", "text_diff": null },
+        ]))
+    );
+    expect_that!(
+        entries[2]["changes"],
+        eq(&json!([
+            { "field": "description", "label": "Description", "before": null, "after": "Money matters", "text_diff": null },
+        ]))
+    );
     Ok(())
 }

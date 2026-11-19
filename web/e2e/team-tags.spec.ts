@@ -98,6 +98,35 @@ test("a team tag is made on the Team page, used and filtered in two heaps, and r
   await expect(row(page, "Alpha work").getByRole("button", { name: "Filter by tag security-review" })).toBeVisible();
 });
 
+test("a team tag's History reads its rename on the Team page and on a heap's Tags tab", async ({ page, heapPath }) => {
+  const team = /\/teams\/([^/]+)\//.exec(heapPath)?.[1] ?? "";
+
+  // Made and renamed on the Team page. The renamed row only exists once the server has answered.
+  await page.goto(`/teams/${team}`);
+  const tags = page.getByRole("region", { name: "Tags", exact: true });
+  await tags.getByLabel("New team tag name").fill("security");
+  await tags.getByRole("button", { name: "Add tag" }).click();
+  await tags.getByRole("button", { name: "Edit security" }).click();
+  await tags.getByLabel("Name of tag security").fill("security-review");
+  await tags.getByRole("button", { name: "Save" }).click();
+  await expect(tags.getByRole("button", { name: "Edit security-review" })).toBeVisible();
+
+  // An editor finds History in the row's form.
+  await tags.getByRole("button", { name: "Edit security-review" }).click();
+  await tags.getByText("History", { exact: true }).click();
+  await expect(tags.getByText("You edited tag security-review")).toBeVisible();
+  await expect(tags.getByText("Name: security → security-review")).toBeVisible();
+
+  // The heap's Tags tab shows the same rename in the team card.
+  await page.goto(heapPath);
+  await goTo(page, "Tags");
+  const card = page.getByRole("region", { name: /^1 tag of the team / });
+  await card.getByRole("button", { name: "Edit security-review" }).click();
+  await card.getByText("History", { exact: true }).click();
+  await expect(card.getByText("You edited tag security-review")).toBeVisible();
+  await expect(card.getByText("Name: security → security-review")).toBeVisible();
+});
+
 /** Makes the heap tag `name` in the heap at `path` through the API. */
 async function addHeapTag(page: Page, path: string, name: string) {
   const made = await page.request.post(`/api/v1${path}/tags`, {

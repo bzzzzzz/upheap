@@ -839,8 +839,9 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
    own entries (created, renamed, archived, context changed), but not what happens inside the heaps. A team tag's
    entries (made, edited, merged) are the team's own, with no heap, so the team log reads them; a merge also writes
    one on each item it changed, in that item's heap, so the item's History says its tag was merged. With
-   `entity_id`, either reads one entity's history. The heap log then reads that entity's entries from every heap of
-   every team the reader is a member of, each team's limited to the actions the reader's role in that team may see,
+   `entity_id`, either reads one entity's history; the team log with a team tag's ID is that tag's history, and its
+   merge entry shows the heap tags it took in (heap, name, items). The heap log then reads that entity's entries
+   from every heap of every team the reader is a member of, each team's limited to the actions the reader's role in that team may see,
    in one query, so paging stays exact. A move within a team (`ItemMoved`) is recorded in the heap the item went to,
    and its history from before it still shows after it, with the old heap's tags and parameters named. The log is
    per team and its entries are never copied or re-homed, so a move to another team writes two: one in the heap the
