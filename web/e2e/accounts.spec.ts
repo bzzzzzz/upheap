@@ -89,6 +89,24 @@ test("a taken email and a short password show their errors under the field", asy
   await expect(passwordInput).toBeFocused();
 });
 
+test("a taken username shows a free one to try under the field", async ({ page }) => {
+  const { username } = await registerThroughApi(page);
+  await page.context().clearCookies();
+
+  await page.goto("/login");
+  await page.getByRole("tab", { name: "Create account" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Ada");
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel("Email").fill(uniqueUser().email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
+
+  const usernameInput = page.getByLabel("Username");
+  await expect(usernameInput).toHaveAttribute("aria-invalid", "true");
+  await expect(usernameInput).toHaveAccessibleDescription(`That's taken. Pick another. Try “${username}-2”.`);
+  await expect(usernameInput).toBeFocused();
+});
+
 test("an item link opened while signed out signs in and opens the item", async ({ page }) => {
   const { email } = await registerThroughApi(page);
   await page.goto("/");

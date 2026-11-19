@@ -184,8 +184,9 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some(Field::Email.as_str()),
             ..simple(StatusCode::CONFLICT, "email_taken", Category::Conflict)
         },
-        ServiceError::HandleTaken { field } => Classified {
+        ServiceError::HandleTaken { field, hint } => Classified {
             field: Some(field.as_str()),
+            hint: hint.as_ref().map(|hint| hint.to_string()),
             ..simple(StatusCode::CONFLICT, "handle_taken", Category::Conflict)
         },
         ServiceError::Authorization(error) => classify_authorization(error, simple),

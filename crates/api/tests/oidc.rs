@@ -557,6 +557,7 @@ async fn a_bad_username_is_refused_and_the_sign_in_waits_for_another() -> Result
         (taken.status, &taken.body["code"], &taken.body["field"]),
         eq((StatusCode::CONFLICT, &json!("handle_taken"), &json!("username")))
     );
+    expect_that!(taken.body["hint"], eq(&json!("sam-2")));
     expect_that!(h.app.count_rows("user_identities").await?, eq(0));
 
     let made = register(&h.app, state, "sam-doe").await?;

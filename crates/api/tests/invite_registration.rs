@@ -319,6 +319,7 @@ async fn a_taken_email_or_username_is_refused_and_leaves_nothing() -> Result<()>
     expect_that!(email.body["field"], eq(&json!("email")));
     assert_problem(&username, StatusCode::CONFLICT, "handle_taken").await;
     expect_that!(username.body["field"], eq(&json!("username")));
+    expect_that!(username.body["hint"], eq(&json!("sam-2")));
     expect_that!(after, eq(before));
     Ok(())
 }
