@@ -175,7 +175,7 @@ export function SelectionBars({
           ) : (
             <MoveToHeap
               me={me}
-              team={team}
+              teams={[team]}
               heapRef={heapRef}
               pending={move.isPending}
               error={move.error}

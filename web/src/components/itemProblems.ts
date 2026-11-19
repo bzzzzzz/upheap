@@ -26,7 +26,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   nothing_to_redo: "The agent's work changed meanwhile: there's nothing to send back.",
   pick_invalid: "That pick doesn't fit this question. Pick again.",
   heap_archived: "That heap was archived meanwhile.",
-  heap_not_in_team: "That heap isn't in this item's team any more.",
+  heap_not_in_team: "You can't move items to that heap any more.",
   ...NETWORK_EDIT_MESSAGES,
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };

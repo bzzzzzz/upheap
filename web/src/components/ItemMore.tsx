@@ -135,8 +135,17 @@ export function ItemActions({
   const navigate = useNavigate();
   const toast = useToast();
   const { data: me } = useMe();
-  const team = me?.teams.find((t) => t.slug === heapRef.team);
-  const actions = actionsOf(item, team?.heaps.some((heap) => !heap.archived && heap.slug !== heapRef.heap) ?? false);
+  const own = me?.teams.find((t) => t.slug === heapRef.team);
+  // A note heaps were made from moves only within its team.
+  const noteTeamOnly = (item.became_heaps?.length ?? 0) > 0;
+  const moveTeams = !me || !own ? [] : noteTeamOnly ? [own] : [own, ...me.teams.filter((t) => t !== own)];
+  const opener = item.turn?.opened_by;
+  const actions = actionsOf(
+    item,
+    moveTeams.some((t) =>
+      t.heaps.some((heap) => !heap.archived && !(t.slug === heapRef.team && heap.slug === heapRef.heap)),
+    ),
+  );
   const bar = variant === "bar";
   // Done or Won't do picked from ⋯ closes the item, and a closed item has no ⋯: focus, given back to ⋯ as its menu
   // closed, goes to the main button (Reopen) instead of falling to the page.
@@ -158,7 +167,7 @@ export function ItemActions({
     setMoving(false);
     focusAfterRender(() => moreRef.current);
   };
-  const moveTo = async (to: HeapRef & { id: string }, name: string) => {
+  const moveTo = async (to: HeapRef & { id: string }, label: string) => {
     try {
       const saved = await move.mutateAsync({ item, to });
       await navigate({
@@ -168,7 +177,7 @@ export function ItemActions({
       });
       // This component belongs to the old heap, whose toast the provider puts away: the toast is the new heap's.
       toast(
-        { message: `Moved to ${name}.${saved.key !== item.key ? ` Its key is now ${saved.key}.` : ""}` },
+        { message: `Moved to ${label}.${saved.key !== item.key ? ` Its key is now ${saved.key}.` : ""}` },
         { heap: to },
       );
     } catch {
@@ -348,7 +357,7 @@ export function ItemActions({
           />
         </PopoverSheet>
       )}
-      {actions.move && team && me && (
+      {actions.move && me && own && (
         <PopoverSheet
           title="Move to"
           triggerRef={moreRef}
@@ -359,11 +368,15 @@ export function ItemActions({
         >
           <MoveToHeap
             me={me}
-            team={team}
+            teams={moveTeams}
             heapRef={heapRef}
             pending={move.isPending}
             error={move.error}
-            onMove={(to, name) => void moveTo(to, name)}
+            teamOnly={noteTeamOnly}
+            turnBy={
+              !item.turn ? undefined : !opener ? null : opener.id !== me.user.id ? opener.display_name : undefined
+            }
+            onMove={(to, label) => void moveTo(to, label)}
             onReset={move.reset}
           />
         </PopoverSheet>
