@@ -505,7 +505,7 @@ async fn an_item_edit_and_a_merge_in_the_same_heap_both_finish() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn an_item_edit_adding_the_tag_being_merged_never_leaves_it_on_the_item() -> Result<()> {
+async fn an_item_edit_adding_the_tag_being_merged_never_keeps_a_merged_tag() -> Result<()> {
     // Arrange
     let w = world().await?;
     let tag = w.heap_tag(&w.a, "billing").await?;

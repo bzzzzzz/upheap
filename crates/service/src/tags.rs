@@ -334,7 +334,9 @@ impl Services {
     /// transaction's first plain read fixes its snapshot). Under the locks they are read again: a heap made in between
     /// could already hold a heap tag of the name this write takes, so if the set changed, the transaction is dropped
     /// and the write starts again with the new set. A heap made after that read meets this write on the team's lowest
-    /// heap, which a heap tag write locks shared first (see [`authorize_tag_write`]).
+    /// heap, which a heap tag write locks shared first (see [`authorize_tag_write`]). A team with no heaps has no lowest
+    /// heap, so there the write locks the team row instead: making a heap checks the team row's key, so it waits for
+    /// this write, and with no heaps there is no item write to deadlock with.
     async fn begin_team_tag_write(
         &self,
         principal: Principal,
@@ -343,6 +345,11 @@ impl Services {
         let mut heap_ids = team_heap_ids(&self.db, team_id).await?;
         loop {
             let txn = self.db.begin().await.map_err(StoreError::from)?;
+            if heap_ids.is_empty() {
+                store::teams::lock_team(&txn, team_id)
+                    .await?
+                    .ok_or(ServiceError::NotFound)?;
+            }
             let (membership, heaps) = authorize_team_write(&txn, principal, team_id, &heap_ids).await?;
             let now_ids = team_heap_ids(&txn, team_id).await?;
             if now_ids == heap_ids {
@@ -539,7 +546,7 @@ async fn team_heap_ids(db: &impl ConnectionTrait, team_id: TeamId) -> Result<Vec
 /// The team's lowest heap ID when it isn't `heap_id` itself, read before a heap tag write's transaction begins (see
 /// [`authorize_tag_write`]). `None` for the lowest heap itself, and for a heap that doesn't exist. Heaps are never
 /// deleted and never change team, and their IDs are UUIDv7, rising with the time they were made, so the lowest one
-/// stays the lowest.
+/// stays the lowest, as long as the servers' clocks agree to within the age of the team's first heap.
 async fn lower_team_heap(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Option<HeapId>, ServiceError> {
     let Some(heap) = store::heaps::find_heap(db, heap_id).await? else {
         return Ok(None);

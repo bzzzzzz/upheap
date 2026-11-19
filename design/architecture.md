@@ -466,9 +466,10 @@ a fixed time.
    row instead would deadlock with an item write, which holds its heap row and then needs the team row's key for its
    audit entry. A heap tag write and a team tag write of one team meet on the heap row, or on the team's lowest heap
    for a heap made after the team tag write read the team's heaps again (heaps are never deleted and never change
-   team, and their IDs are UUIDv7, rising with time, so the lowest stays the lowest; every team tag write locks it
-   exclusively), and two team tag writes on that heap too (or, in a team with no heaps, on the unique index of team
-   tag names), so no two tags take one name. The lock order stays ascending. A merge does a
+   team, and their IDs are UUIDv7, rising with time, so the lowest stays the lowest while the servers' clocks agree to
+   within the age of the team's first heap; every team tag write locks it exclusively), and two team tag writes on
+   that heap too. In a team with no heaps a team tag write locks the team row instead, which making the first heap
+   waits for (it checks the row's key), and there is no item write to deadlock with. So no two tags take one name. The lock order stays ascending. A merge does a
    handful of queries per item it reaches while it holds every heap lock of the team, so item writes in the team wait
    for it; that is fine for merges of up to a few hundred items, which is the size assumption, and there is no limit.
    The plain reads of a tag write come after its locks, so on MySQL their snapshot sees what committed while it
