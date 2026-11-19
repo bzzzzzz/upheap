@@ -842,7 +842,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | C10 | `item to-step` | A4 | Sometimes | Enabler | A core move with no other way for an agent |
 | C11 | `heap add --from` | A4 | Sometimes | Enabler | A core move with no other way for an agent |
 | C12 | What a run is refused, and what it's told | A5, P12 | Weekly | Core | An agent that isn't told why repeats the same write |
-| C13 | The person's side: `item send`, `item take-back`, `question list` (what waits for you, across heaps: questions, requests, reviews and done proposals, each with how to reply; stuck turns and gone blockers stay on the web page), `question reply` | P3, P4 | Weekly | Nice to have | |
+| C13 | The person's side: `item send`, `item take-back`, `question list` (what waits for you, across heaps: questions, requests, reviews and done proposals, each with how to reply; the footer counts stuck turns and gone blockers; `item list --all-heaps --agent stuck` and `item list --all-heaps --blocker gone` list them, and `item reopen` unblocks one, as the web's Unblock does), `question reply` | P3, P4 | Weekly | Nice to have | |
 | C14 | `item list` showing kind and who has it | P2 | Weekly | Nice to have | |
 | C15 | `item add --reminder` | P1 | Sometimes | Nice to have | |
 | C16 | `work queue`: the whole queue, with why each is where it is | A1 | Sometimes | Polish | |
