@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, unwrap } from "../client";
-import { inviteLinksKey, invalidateMe } from "./keys";
+import { inviteLinksKey, invalidateMe, removeUserQueries } from "./keys";
 
 /** The team's invite links, every one made and past, newest first. Admins only: `enabled` is whether the caller is. */
 export function useInviteLinks(team: string, enabled: boolean) {
@@ -65,7 +65,7 @@ export function useRegisterByInvite(token: string) {
     mutationFn: async (body: { email: string; username: string; display_name: string; password: string }) =>
       unwrap(await api.POST("/api/v1/invites/{token}/register", { params: { path: { token } }, body })),
     // As `useRegister`: nothing of a previous user's cache survives.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
     onError: (error) => refreshInvitationAfter(queryClient, token, error),
   });
 }

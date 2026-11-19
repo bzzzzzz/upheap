@@ -96,5 +96,21 @@ export function invalidateTeam(queryClient: QueryClient, team: string) {
   return Promise.all([queryClient.invalidateQueries({ queryKey: teamKey(team) }), invalidateMe(queryClient)]);
 }
 
+export const oidcProviderKey = ["oidc-provider"] as const;
+export const passwordResetOptionsKey = ["password-reset-options"] as const;
+const SERVER_WIDE_KEYS = new Set<unknown>([oidcProviderKey[0], passwordResetOptionsKey[0]]);
+
+/**
+ * Drops every cached query of the user whose session ended or changed, so the next one sees none of their data. The
+ * server's own settings (its provider, whether it mails reset links) stay: they are the same for everyone, and a
+ * query removed while it loads never answers, which would leave a sign-in page that waits on it with no form.
+ * `keep` spares more, such as the reset link a page was opened with.
+ */
+export function removeUserQueries(queryClient: QueryClient, keep?: (queryKey: readonly unknown[]) => boolean) {
+  queryClient.removeQueries({
+    predicate: ({ queryKey }) => !SERVER_WIDE_KEYS.has(queryKey[0]) && !keep?.(queryKey),
+  });
+}
+
 /** The scope that makes edits of items run one at a time. */
 export const itemEditsScope = { id: "item-edits" } as const;

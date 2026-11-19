@@ -6,6 +6,7 @@ import { RouterProvider as AriaRouterProvider } from "react-aria-components";
 import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
+import { removeUserQueries } from "./api/queries/keys";
 import { followThemeAcrossTabs } from "./components/theme";
 import { createAppRouter, handlesOwnSignIn, isSignInPath, pageHref, signInSearch } from "./routes";
 import "./index.css";
@@ -13,10 +14,11 @@ import "./index.css";
 /**
  * Sends a user whose session has ended to sign-in, which returns to the page, as the guard (`appRoute`) does. While a
  * navigation is pending, `location` is already where it's going, so the two send the user to the same place. It
- * replaces the page, so Back doesn't return to it signed out. The cache goes first, so neither Back nor a sign-in
- * from another tab lets the guard pass on the last user's `me`, or shows their rows. Sign-in has no queries and its
- * wrong password is `invalid_credentials`, so nothing there gets here and it can't loop; but another request of the
- * page that fails after the first has moved to sign-in mustn't replace its `redirect` with one to sign-in.
+ * replaces the page, so Back doesn't return to it signed out. The user's cache goes first, so neither Back nor a
+ * sign-in from another tab lets the guard pass on the last user's `me`, or shows their rows; the server's settings
+ * stay (`removeUserQueries`). Sign-in's queries need no session and its wrong password is `invalid_credentials`, so
+ * nothing there gets here and it can't loop; but another request of the page that fails after the first has moved to
+ * sign-in mustn't replace its `redirect` with one to sign-in.
  *
  * An invite link's page handles its own sign-in, so a `401` there (the session ended while its confirm was open)
  * leaves the user on it and the cache as it is: the page reads the invitation again and shows it signed out. A reset
@@ -26,7 +28,7 @@ function onUnauthenticated(error: Error) {
   if (!isUnauthenticated(error)) return;
   const { location } = router.state;
   if (handlesOwnSignIn(router, location.pathname)) return;
-  queryClient.removeQueries();
+  removeUserQueries(queryClient);
   if (isSignInPath(router, location.pathname)) return;
   void router.navigate({ to: "/login", search: signInSearch(pageHref(location.href)), replace: true });
 }

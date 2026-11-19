@@ -217,3 +217,32 @@ test("a redirect that isn't a page of the app is ignored", async ({ page, baseUR
     expect(new URL(page.url()).origin, payload).toBe(origin);
   }
 });
+
+// The test server has no provider, so these answer `/auth/oidc` themselves, as a server that has one would.
+test("a provider-only server never shows the password form, even while it loads", async ({ page }) => {
+  const held: Route[] = [];
+  await page.route("**/api/v1/auth/oidc", (route) => void held.push(route));
+  await page.goto("/login");
+  await expect.poll(() => held.length).toBeGreaterThan(0);
+  // The card is up, and waits for the answer with no form and no button.
+  await expect(page.getByRole("heading", { name: "Upheap" })).toBeVisible();
+  await expect(page.getByLabel("Password")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Sign in" })).toHaveCount(0);
+
+  await held[0]?.fulfill({ json: { label: "Acme SSO", password_sign_in: false } });
+  await expect(page.getByRole("link", { name: "Sign in with Acme SSO" })).toBeVisible();
+  await expect(page.getByLabel("Password")).toHaveCount(0);
+});
+
+test("sign-in shows the forms when the provider settings can't be read", async ({ page }) => {
+  await page.route("**/api/v1/auth/oidc", (route) =>
+    route.fulfill({
+      status: 500,
+      json: { type: "about:blank", title: "Internal error", status: 500, code: "internal" },
+    }),
+  );
+  await page.goto("/login");
+  // After the app's retries of a server error.
+  await expect(page.getByLabel("Password")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: /^Sign in with/ })).toHaveCount(0);
+});

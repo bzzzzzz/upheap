@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, ensureOk, unwrap } from "../client";
+import { passwordResetOptionsKey, removeUserQueries } from "./keys";
 
 /** Whether the server mails password reset links. Read once: the operator sets mail up with the server's configuration. */
 export function usePasswordResetOptions() {
   return useQuery({
-    queryKey: ["password-reset-options"],
+    queryKey: passwordResetOptionsKey,
     queryFn: async () => unwrap(await api.GET("/api/v1/password-resets")),
     staleTime: Infinity,
   });
@@ -42,8 +43,7 @@ export function useResetPassword(token: string) {
       unwrap(await api.POST("/api/v1/password-resets/{token}", { params: { path: { token } }, body })),
     // As `useSignIn`: nothing of a previous user's cache survives, and the guard loads `me` afresh. The link stays,
     // so the page doesn't flash "Checking the link…" before it moves on.
-    onSuccess: () =>
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== passwordResetKey(token)[0] }),
+    onSuccess: () => removeUserQueries(queryClient, (queryKey) => queryKey[0] === passwordResetKey(token)[0]),
     onError: (error) => {
       if (error instanceof ApiProblem && (error.status === 404 || error.status === 409)) {
         void queryClient.invalidateQueries({ queryKey: passwordResetKey(token) });

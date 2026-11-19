@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, ensureOk, unwrap } from "../client";
 import type { OAuthAuthorizationRequest } from "../schema";
+import { oidcProviderKey, removeUserQueries } from "./keys";
 
 export function useSignIn() {
   const queryClient = useQueryClient();
@@ -9,7 +10,7 @@ export function useSignIn() {
       unwrap(await api.POST("/api/v1/auth/login", { body })),
     // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
     // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
   });
 }
 
@@ -20,7 +21,7 @@ export function useRegister() {
       unwrap(await api.POST("/api/v1/auth/register", { body })),
     // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
     // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
   });
 }
 
@@ -30,7 +31,7 @@ export function useRegister() {
  */
 export function useOidcProvider() {
   return useQuery({
-    queryKey: ["oidc-provider"],
+    queryKey: oidcProviderKey,
     queryFn: async () => {
       try {
         return unwrap(await api.GET("/api/v1/auth/oidc"));
@@ -58,7 +59,7 @@ export function useRegisterOidc() {
   return useMutation({
     mutationFn: async (body: { username: string }) => unwrap(await api.POST("/api/v1/auth/oidc/register", { body })),
     // As `useRegister`: nothing of a previous user's cache survives, and the guard loads `me` afresh.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
   });
 }
 
@@ -95,6 +96,10 @@ export function useSignOut() {
       ensureOk(result);
       return result.data;
     },
-    onSuccess: () => queryClient.clear(),
+    // The mutations go too: their variables may hold what the user typed.
+    onSuccess: () => {
+      removeUserQueries(queryClient);
+      queryClient.getMutationCache().clear();
+    },
   });
 }
