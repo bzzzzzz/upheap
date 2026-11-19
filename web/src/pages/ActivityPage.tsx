@@ -1,4 +1,6 @@
-import { useHeap, useMe, useTeam } from "../api/queries";
+import { useHeap } from "../api/queries/heaps";
+import { useMe } from "../api/queries/me";
+import { useTeam } from "../api/queries/teams";
 import { AuditHistory } from "../components/AuditHistory";
 import { teamName } from "../components/teamName";
 import type { HeapRef } from "../api/client";

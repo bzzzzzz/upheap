@@ -2,7 +2,7 @@ import { useNavigate, useParams, useRouter, useRouterState } from "@tanstack/rea
 import { ListChecks } from "lucide-react";
 
 import type { HeapRef } from "../api/client";
-import { useMe } from "../api/queries";
+import { useMe } from "../api/queries/me";
 
 /**
  * Select mode on a heap's list (ux.md, The list §19). `canSelect` says whether the heap offers it: the heap isn't

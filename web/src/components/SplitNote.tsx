@@ -14,15 +14,11 @@ import {
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Age, Heap, Item, Need } from "../api/schema";
-import {
-  useBecame,
-  useBlockerCandidates,
-  useCachedItem,
-  useCreateHeap,
-  useCreateItem,
-  useNoteToStep,
-  useTeam,
-} from "../api/queries";
+import { useCreateHeap } from "../api/queries/heaps";
+import { useCachedItem, useCreateItem } from "../api/queries/items";
+import { useBlockerCandidates } from "../api/queries/lists";
+import { useBecame, useNoteToStep } from "../api/queries/moves";
+import { useTeam } from "../api/queries/teams";
 import { compactButtonClass } from "./buttons";
 import { choiceButtonClass, ChoiceButtons } from "./ChoiceButtons";
 import { itemProblem } from "./itemProblems";

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import type { HeapRef } from "../api/client";
 import type { DecisionRow, Me, ResultRow } from "../api/schema";
-import { useDecisions, useMe, useResults } from "../api/queries";
+import { useDecisions, useMe, useResults } from "../api/queries/me";
 import { readDecisionsFolded, writeDecisionsFolded } from "../components/agentsStorage";
 import { KIND_LABELS, STAGE_LABELS } from "../components/labels";
 import { titleTeam } from "../components/teamName";

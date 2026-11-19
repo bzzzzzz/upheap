@@ -1,6 +1,6 @@
 import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
-import { useMe } from "../api/queries";
+import { useMe } from "../api/queries/me";
 
 type NamedTeam = { name: string; personal: boolean };
 

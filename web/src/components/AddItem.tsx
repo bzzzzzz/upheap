@@ -5,7 +5,11 @@ import { Dialog, Modal, ModalOverlay, ToggleButton, ToggleButtonGroup } from "re
 
 import type { HeapRef } from "../api/client";
 import type { DueInput, Item, ItemTag, Me, Need, Parameter, Size } from "../api/schema";
-import { useCreateItem, useRefetchRankedList, useMe, useParameters, useTags } from "../api/queries";
+import { useCreateItem } from "../api/queries/items";
+import { useRefetchRankedList } from "../api/queries/lists";
+import { useMe } from "../api/queries/me";
+import { useParameters } from "../api/queries/parameters";
+import { useTags } from "../api/queries/tags";
 import { useAddAnother } from "./addAnother";
 import { ChoiceButtons, choiceButtonClass } from "./ChoiceButtons";
 import { DateField } from "./DateField";
