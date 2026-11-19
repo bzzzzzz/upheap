@@ -4,7 +4,8 @@ import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components
 
 import { isNotFound } from "../api/client";
 import type { DataDays, Me, TeamData } from "../api/schema";
-import { useMe, useTeamData } from "../api/queries";
+import { useMe } from "../api/queries/me";
+import { useTeamData } from "../api/queries/teams";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { DataChart, type DataSeries } from "../components/DataChart";
 import { usd } from "../components/labels";

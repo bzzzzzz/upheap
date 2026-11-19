@@ -4,7 +4,7 @@ import { Button } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { BlockerGone, WaitingBlocker } from "../api/schema";
-import { useUnblock } from "../api/queries";
+import { useUnblock } from "../api/queries/items";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { useOverListLink } from "./overList";

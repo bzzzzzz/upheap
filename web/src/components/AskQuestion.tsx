@@ -4,7 +4,7 @@ import { Button, Input, Label, Radio, RadioGroup, TextField } from "react-aria-c
 
 import { ApiProblem } from "../api/client";
 import type { AskQuestionRequest, Item } from "../api/schema";
-import type { useAskQuestion } from "../api/queries";
+import type { useAskQuestion } from "../api/queries/questions";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { RequestId } from "./RequestId";

@@ -17,7 +17,7 @@ import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
 import type { Item, Step, StepPatch } from "../api/schema";
-import { useAddStep, useUpdateStep } from "../api/queries";
+import { useAddStep, useUpdateStep } from "../api/queries/steps";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { LazyMarkdownEditor } from "./LazyMarkdownEditor";

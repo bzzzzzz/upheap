@@ -6,7 +6,7 @@ import { RouterProvider as AriaRouterProvider } from "react-aria-components";
 import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
-import { removeUserQueries } from "./api/queries";
+import { removeUserQueries } from "./api/queries/keys";
 import { followThemeAcrossTabs } from "./components/theme";
 import { createAppRouter, handlesOwnSignIn, isSignInPath, pageHref, signInSearch } from "./routes";
 import "./index.css";

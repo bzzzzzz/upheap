@@ -4,7 +4,7 @@ import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-ari
 
 import { ApiProblem, requestIdOf, type HeapRef } from "../api/client";
 import type { Goal, Item, Reach, Turn } from "../api/schema";
-import { useRedoTurn, useSendToAgent, useTakeBack } from "../api/queries";
+import { useRedoTurn, useSendToAgent, useTakeBack } from "../api/queries/turns";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { chipClass, compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";

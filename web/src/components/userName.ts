@@ -1,5 +1,5 @@
 import type { UserRef } from "../api/schema";
-import { useMe } from "../api/queries";
+import { useMe } from "../api/queries/me";
 
 /**
  * How a user is named after "by": "you" for the viewer, as History says "You", or their display name. `undefined` when

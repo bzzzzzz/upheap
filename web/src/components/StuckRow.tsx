@@ -4,7 +4,7 @@ import { Button } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { WaitingStuck } from "../api/schema";
-import { useRetryTurn, useTakeBack } from "../api/queries";
+import { useRetryTurn, useTakeBack } from "../api/queries/turns";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";

@@ -3,7 +3,7 @@
 import { Terminal } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
-import { useEndSignIn, useSignIns } from "../api/queries";
+import { useEndSignIn, useSignIns } from "../api/queries/signIns";
 import type { ClientSignIn } from "../api/schema";
 import { BASE } from "../basePath";
 import { compactButtonClass } from "./buttons";

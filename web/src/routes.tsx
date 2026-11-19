@@ -17,7 +17,9 @@ import {
 
 import { isNotFound, isUnauthenticated } from "./api/client";
 import type { OAuthAuthorizationRequest } from "./api/schema";
-import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queries";
+import { useAuthorizationCheck, useSignOut } from "./api/queries/auth";
+import { useHeap } from "./api/queries/heaps";
+import { meQuery } from "./api/queries/me";
 import { BASE } from "./basePath";
 import { leaveAfterSignOut, takeKeptPage } from "./signOutRedirect";
 import { parseAcrossSearch, parseListSearch } from "./components/listView";

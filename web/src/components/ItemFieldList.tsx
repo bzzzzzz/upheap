@@ -4,7 +4,7 @@ import { ToggleButtonGroup } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemTag, Need, RankedItem, Size } from "../api/schema";
-import { useParameters } from "../api/queries";
+import { useParameters } from "../api/queries/parameters";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DateField } from "./DateField";
 import { DuePicker, DueRows } from "./DuePicker";

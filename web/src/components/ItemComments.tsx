@@ -3,7 +3,7 @@ import { Button } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
 import type { Item } from "../api/schema";
-import { useAddComment } from "../api/queries";
+import { useAddComment } from "../api/queries/comments";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { focusClass } from "./ItemQuestions";

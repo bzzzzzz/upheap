@@ -5,7 +5,8 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { isNotFound, type HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemState, RankedItem } from "../api/schema";
-import { useItem, useMe, useUpdateItem } from "../api/queries";
+import { useItem, useUpdateItem } from "../api/queries/items";
+import { useMe } from "../api/queries/me";
 import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
 import { borderedClass, buttonClass } from "./buttons";

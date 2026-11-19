@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Tag } from "../api/schema";
-import { useCreateTag, useTags, useUpdateTag } from "../api/queries";
+import { useCreateTag, useTags, useUpdateTag } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { useReturnFocus } from "../components/useConfirmation";

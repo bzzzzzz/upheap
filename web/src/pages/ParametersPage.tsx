@@ -9,8 +9,8 @@ import {
   useChangeParameter,
   useCreateParameter,
   useParameters,
-  useTags,
-} from "../api/queries";
+} from "../api/queries/parameters";
+import { useTags } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { NameForm } from "../components/NameForm";

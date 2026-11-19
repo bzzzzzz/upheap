@@ -1,7 +1,8 @@
 import { useState } from "react";
 
 import type { OAuthAuthorizationRequest } from "../api/schema";
-import { useApproveAuthorization, useAuthorizationCheck, useMe } from "../api/queries";
+import { useApproveAuthorization, useAuthorizationCheck } from "../api/queries/auth";
+import { useMe } from "../api/queries/me";
 import { borderedClass } from "../components/buttons";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard } from "./AuthPage";

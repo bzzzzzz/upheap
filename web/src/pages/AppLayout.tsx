@@ -33,7 +33,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
-import { useHeap, useMe, useDecisions, useSetHeapArchived, useWaiting } from "../api/queries";
+import { useHeap, useSetHeapArchived } from "../api/queries/heaps";
+import { useMe, useDecisions, useWaiting } from "../api/queries/me";
 import { AddItemDialog } from "../components/AddItem";
 import { ConnectionBanner } from "../components/ConnectionBanner";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";

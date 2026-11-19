@@ -4,7 +4,7 @@ import { Switch, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Heap } from "../api/schema";
-import { useHeap, useSetHeapPriority, useUpdateHeap } from "../api/queries";
+import { useHeap, useSetHeapPriority, useUpdateHeap } from "../api/queries/heaps";
 import { BASE } from "../basePath";
 import { useArchiveHeap } from "../components/archiveHeap";
 import { HistoryDisclosure } from "../components/AuditHistory";

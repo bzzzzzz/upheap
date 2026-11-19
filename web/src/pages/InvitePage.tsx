@@ -3,15 +3,10 @@ import { useEffect, useRef } from "react";
 
 import { ApiProblem } from "../api/client";
 import type { Invitation, Team } from "../api/schema";
-import {
-  isInvitationChange,
-  useInvitation,
-  useJoinByInvite,
-  useMe,
-  useRegisterByInvite,
-  useSignOut,
-  useTeam,
-} from "../api/queries";
+import { useSignOut } from "../api/queries/auth";
+import { isInvitationChange, useInvitation, useJoinByInvite, useRegisterByInvite } from "../api/queries/invites";
+import { useMe } from "../api/queries/me";
+import { useTeam } from "../api/queries/teams";
 import { problemMessage } from "../components/ProblemText";
 import { RequestId } from "../components/RequestId";
 import { leaveAfterSignOut } from "../signOutRedirect";

@@ -3,7 +3,7 @@ import { Popover } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { ItemTag } from "../api/schema";
-import { useCreateTag, useTags } from "../api/queries";
+import { useCreateTag, useTags } from "../api/queries/tags";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 import { RequestId } from "./RequestId";
 

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ApiProblem, isNotFound, requestIdOf, type HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, RankedItem, RankedList } from "../api/schema";
-import { useMe, useRankedList, useUpdateItem } from "../api/queries";
+import { useUpdateItem } from "../api/queries/items";
+import { useRankedList } from "../api/queries/lists";
+import { useMe } from "../api/queries/me";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
 import {

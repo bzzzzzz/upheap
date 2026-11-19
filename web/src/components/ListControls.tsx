@@ -3,7 +3,8 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import type { HeapRef } from "../api/client";
 import type { BlockedLayout, Me, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/schema";
-import { useParameters, useTags } from "../api/queries";
+import { useParameters } from "../api/queries/parameters";
+import { useTags } from "../api/queries/tags";
 import {
   AGENT_STATE_LABELS,
   AGENT_STATES,

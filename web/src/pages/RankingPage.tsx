@@ -8,12 +8,12 @@ import type { Heap, HeapWeightsPatchRequest, Parameter, RankingPreview, Tag } fr
 import {
   PREVIEW_ITEMS,
   useHeap,
-  useParameters,
   useRankingPreview,
-  useTags,
   useUpdateWeights,
   type RankingPreviewDraft,
-} from "../api/queries";
+} from "../api/queries/heaps";
+import { useParameters } from "../api/queries/parameters";
+import { useTags } from "../api/queries/tags";
 import { compactButtonClass } from "../components/buttons";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { useFocusAfterRender } from "../components/useFocusAfterRender";
