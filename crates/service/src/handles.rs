@@ -98,7 +98,21 @@ pub(crate) async fn free_team_slug(db: &impl ConnectionTrait, name: &Name) -> Re
             return Ok(candidate);
         }
     }
-    Err(ServiceError::HandleTaken { field: Field::Slug })
+    Err(ServiceError::HandleTaken {
+        field: Field::Slug,
+        hint: None,
+    })
+}
+
+/// A free username to offer someone who asked for `taken`: the first of `taken-2`, `taken-3`… that no team or
+/// username has, shortened to fit as [`Handle::with_suffix`] does. `None` when all of them are taken.
+pub(crate) async fn free_username(db: &impl ConnectionTrait, taken: &Handle) -> Result<Option<Handle>, ServiceError> {
+    for candidate in (2..=MAX_SUFFIX).map(|n| taken.with_suffix(n)) {
+        if store::teams::find_team_by_slug(db, &candidate).await?.is_none() {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
 }
 
 /// A free slug for a new heap of `team_id` called `name`, as [`free_team_slug`] makes one among the team's heaps.
@@ -115,7 +129,10 @@ pub(crate) async fn free_heap_slug(
             return Ok(candidate);
         }
     }
-    Err(ServiceError::HandleTaken { field: Field::Slug })
+    Err(ServiceError::HandleTaken {
+        field: Field::Slug,
+        hint: None,
+    })
 }
 
 /// How many times a create with a derived slug starts again after losing that slug to a create running alongside.
@@ -147,6 +164,9 @@ where
 fn candidates(name: &Name, fallback: &str) -> Result<impl Iterator<Item = Handle>, ServiceError> {
     let base = Handle::derive(name.as_str())
         .or_else(|| Handle::derive(fallback))
-        .ok_or(ServiceError::HandleTaken { field: Field::Slug })?;
+        .ok_or(ServiceError::HandleTaken {
+            field: Field::Slug,
+            hint: None,
+        })?;
     Ok(std::iter::once(base.clone()).chain((2..=MAX_SUFFIX).map(move |n| base.with_suffix(n))))
 }

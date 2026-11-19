@@ -13,6 +13,7 @@ use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError};
 
 use crate::error::handle_taken_on_duplicate;
+use crate::handles::free_username;
 use crate::{ServiceError, Services};
 
 /// Everyone's first heap, in their personal team.
@@ -29,7 +30,7 @@ pub(crate) struct PersonalUser {
 impl Services {
     /// Inserts a new user, their personal team with `username` as its slug and them as its only admin, and a first
     /// heap in it, with an audit entry for each. Fails with [`ServiceError::EmailTaken`] when the email is taken and
-    /// [`ServiceError::HandleTaken`] when the username is.
+    /// [`ServiceError::HandleTaken`] when the username is, with a free one as its hint.
     pub(crate) async fn insert_personal_user(
         &self,
         txn: &impl ConnectionTrait,
@@ -79,6 +80,15 @@ impl Services {
             StoreError::Duplicate(_) => ServiceError::EmailTaken,
             other => other.into(),
         })?;
+        // Looked up first, while the transaction can still read (a refused insert ends it on Postgres), to offer a
+        // free username. A sign-up running alongside can still take it first; then the index refuses this one,
+        // without a hint.
+        if store::teams::find_team_by_slug(txn, &team.slug).await?.is_some() {
+            return Err(ServiceError::HandleTaken {
+                field: Field::Username,
+                hint: free_username(txn, &team.slug).await?,
+            });
+        }
         store::teams::insert_team(txn, &team)
             .await
             .map_err(|e| handle_taken_on_duplicate(e, Field::Username))?;

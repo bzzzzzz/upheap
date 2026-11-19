@@ -308,7 +308,8 @@ Display names, team names and heap names stay free text that can repeat. Only ha
    is `422 invalid_handle` with a hint showing `my-team`. A team or heap created without a slug gets one derived
    from its name, with `-2`, `-3`… where that's taken. Two creates of one name at once can both find the same slug
    free; the one the unique index refuses starts again with the next suffix, so only a slug the caller chose is
-   ever `409 handle_taken`.
+   ever `409 handle_taken`. A taken username at sign-up comes with a free one as the hint, made the same way:
+   `sam-2` for `sam`.
 3. **Item keys** are five characters from Crockford's base32 alphabet in lowercase (no `i`, `l`, `o` or `u`), with
    at least one digit, so they're easy to read aloud and type and can't spell real words: about 30 million per
    heap. They're random, so a key says nothing about when an item was made or how many a heap has. The key is drawn

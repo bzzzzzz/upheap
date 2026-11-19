@@ -12888,7 +12888,7 @@
               "string",
               "null"
             ],
-            "description": "A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints\nat, such as `my-team` for `My-Team`."
+            "description": "A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints\nat, such as `my-team` for `My-Team`, or a free username for a taken one on `handle_taken`, such as `sam-2`."
           },
           "item_key": {
             "type": [

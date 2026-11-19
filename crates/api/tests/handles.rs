@@ -79,6 +79,31 @@ async fn a_username_must_be_well_formed_and_free_of_teams_too() -> Result<()> {
         expect_that!(taken.body["code"], eq(&json!("handle_taken")));
         expect_that!(taken.body["field"], eq(&json!("username")));
     }
+    expect_that!(users_name.body["hint"], eq(&json!("ada-2")));
+    expect_that!(teams_name.body["hint"], eq(&json!("platform-2")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_taken_username_hints_at_a_free_one_that_fits() -> Result<()> {
+    // Arrange: `sam-2` is a team's slug and `sam-3` a username, so the first free one is `sam-4`.
+    let app = TestApp::start().await?;
+    let (sam, _) = app.register_as("sam@example.test", "Sam").await?;
+    post(&app, &sam, "/api/v1/teams", json!({ "name": "Ops", "slug": "sam-2" })).await?;
+    register(&app, "sam3@example.test", "sam-3").await?;
+    let long = "a".repeat(39);
+    register(&app, "long@example.test", &long).await?;
+
+    // Act
+    let skipped = register(&app, "grace@example.test", "sam").await?;
+    let shortened = register(&app, "grace@example.test", &long).await?;
+
+    // Assert
+    expect_that!(skipped.body["code"], eq(&json!("handle_taken")));
+    expect_that!(skipped.body["hint"], eq(&json!("sam-4")));
+    expect_that!(shortened.body["code"], eq(&json!("handle_taken")));
+    expect_that!(shortened.body["hint"], eq(&json!(format!("{}-2", "a".repeat(37)))));
     Ok(())
 }
 

@@ -3470,7 +3470,7 @@ export interface components {
             highest?: string | null;
             /**
              * @description A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints
-             *     at, such as `my-team` for `My-Team`.
+             *     at, such as `my-team` for `My-Team`, or a free username for a taken one on `handle_taken`, such as `sam-2`.
              */
             hint?: string | null;
             /**
