@@ -268,12 +268,14 @@ enum CommentCommand {
 
 #[derive(Subcommand)]
 enum TagCommand {
-    /// The heap's tags
+    /// The heap's tags and its team's
     List(commands::tag::list::ListArgs),
-    /// Add a tag
+    /// Add a tag to a heap, or with --team to a team
     Add(commands::tag::add::AddArgs),
     /// Rename a tag or change its description
     Edit(commands::tag::edit::EditArgs),
+    /// Make a heap's tag a team tag, which every heap of the team has
+    Promote(commands::tag::promote::PromoteArgs),
 }
 
 #[derive(Subcommand)]
@@ -388,6 +390,7 @@ impl Command {
             Self::Tag(TagCommand::List(args)) => &args.shared,
             Self::Tag(TagCommand::Add(args)) => &args.shared,
             Self::Tag(TagCommand::Edit(args)) => &args.shared,
+            Self::Tag(TagCommand::Promote(args)) => &args.shared,
             Self::Parameter(ParameterCommand::List(args)) => &args.shared,
             Self::Parameter(ParameterCommand::Add(args)) => &args.shared,
             Self::Parameter(ParameterCommand::Edit(args)) => &args.shared,
@@ -555,6 +558,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Tag(TagCommand::List(args)) => commands::tag::list::run(args, app, out).await,
         Command::Tag(TagCommand::Add(args)) => commands::tag::add::run(args, app, out).await,
         Command::Tag(TagCommand::Edit(args)) => commands::tag::edit::run(args, app, out).await,
+        Command::Tag(TagCommand::Promote(args)) => commands::tag::promote::run(args, app, out).await,
         Command::Parameter(ParameterCommand::List(args)) => commands::parameter::list::run(args, app, out).await,
         Command::Parameter(ParameterCommand::Add(args)) => commands::parameter::add::run(args, app, out).await,
         Command::Parameter(ParameterCommand::Edit(args)) => commands::parameter::edit::run(args, app, out).await,

@@ -57,6 +57,15 @@ pub enum CliError {
         #[source]
         source: ClientError,
     },
+    /// The server refused a team tag write, and the CLI has more to say than the refusal's title: the heap tags a merge
+    /// would take in with the command that confirms it, or the heaps a run wasn't given. `lines` are the message,
+    /// whole, as `to_message_in` returns them.
+    #[error("{source}")]
+    TagWriteRefused {
+        lines: Vec<String>,
+        #[source]
+        source: ClientError,
+    },
     #[error(transparent)]
     Auth(#[from] AuthError),
     #[error(transparent)]
@@ -155,7 +164,8 @@ impl CliError {
             Self::Auth(AuthError::Client(err) | AuthError::Revoke(err))
             | Self::Client(err)
             | Self::NoSuchItem { source: err, .. }
-            | Self::ItemRefused { source: err, .. } => client_exit_code(err),
+            | Self::ItemRefused { source: err, .. }
+            | Self::TagWriteRefused { source: err, .. } => client_exit_code(err),
             Self::Login(LoginError::Loopback(LoopbackError::Bind(_))) => 6,
             Self::Login(LoginError::Loopback(LoopbackError::TimedOut(_)) | LoginError::Cancelled) => 4,
             Self::Login(LoginError::Refused { .. }) => 4,
@@ -185,8 +195,10 @@ impl CliError {
     /// [`to_message`](Self::to_message) for a command run inside a run (`UPHEAP_RUN` is set), whose hints are about
     /// what an agent does next.
     pub fn to_message_in(&self, in_run: bool) -> Vec<String> {
-        if matches!(self, Self::Reported { .. }) {
-            return Vec::new();
+        match self {
+            Self::Reported { .. } => return Vec::new(),
+            Self::TagWriteRefused { lines, .. } => return lines.clone(),
+            _ => {}
         }
         let mut lines = vec![format!("error: {}", self.with_causes())];
         if let Some(problem) = self.problem()
@@ -213,6 +225,10 @@ impl CliError {
                 ..
             }
             | Self::ItemRefused {
+                source: ClientError::Problem { body, .. },
+                ..
+            }
+            | Self::TagWriteRefused {
                 source: ClientError::Problem { body, .. },
                 ..
             }
@@ -243,6 +259,10 @@ impl CliError {
                 source: ClientError::Problem { problem, .. },
                 ..
             }
+            | Self::TagWriteRefused {
+                source: ClientError::Problem { problem, .. },
+                ..
+            }
             | Self::Auth(
                 AuthError::Client(ClientError::Problem { problem, .. })
                 | AuthError::Revoke(ClientError::Problem { problem, .. }),
@@ -258,6 +278,7 @@ impl CliError {
             | Self::Client(err)
             | Self::NoSuchItem { source: err, .. }
             | Self::ItemRefused { source: err, .. }
+            | Self::TagWriteRefused { source: err, .. }
             | Self::EnvTokenRefused { refused: err } => Some(err),
             _ => None,
         }
@@ -425,7 +446,7 @@ fn tag_add_command(name: &str, heap: &str) -> String {
 
 /// `text` as one shell word: unchanged when it is only ASCII letters, digits and `-_./`, otherwise in single
 /// quotes with each `'` written as `'\''`.
-fn shell_quoted(text: &str) -> String {
+pub(crate) fn shell_quoted(text: &str) -> String {
     let is_plain = !text.is_empty()
         && text
             .chars()

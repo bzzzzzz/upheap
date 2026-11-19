@@ -117,7 +117,10 @@ fn the_flags_most_commands_share_are_listed_once() {
         guide,
         contains_substring("  upheap heap list: Every heap you can use, by team\n")
     );
-    expect_that!(guide, contains_substring("  upheap tag list [heap]: The heap's tags\n"));
+    expect_that!(
+        guide,
+        contains_substring("  upheap tag list [heap]: The heap's tags and its team's\n")
+    );
 }
 
 #[gtest]

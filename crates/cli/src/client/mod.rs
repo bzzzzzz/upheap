@@ -159,7 +159,23 @@ impl ApiClient {
         body: &(impl Serialize + ?Sized),
         token: &str,
     ) -> Result<Fetched<T>, ClientError> {
-        let request = self.http.post(self.api_url(path)).json(body).bearer_auth(token);
+        self.post_with_query(path, NO_QUERY, body, token).await
+    }
+
+    /// [`ApiClient::post`] with `query` on the URL.
+    pub async fn post_with_query<T: DeserializeOwned>(
+        &self,
+        path: &[&str],
+        query: &(impl Serialize + ?Sized),
+        body: &(impl Serialize + ?Sized),
+        token: &str,
+    ) -> Result<Fetched<T>, ClientError> {
+        let request = self
+            .http
+            .post(self.api_url(path))
+            .query(query)
+            .json(body)
+            .bearer_auth(token);
         let response = self.send(request).await?;
         self.read_json(response).await
     }
@@ -197,9 +213,22 @@ impl ApiClient {
         version: u32,
         token: &str,
     ) -> Result<Fetched<T>, ClientError> {
+        self.patch_with_query(path, NO_QUERY, body, version, token).await
+    }
+
+    /// [`ApiClient::patch`] with `query` on the URL.
+    pub async fn patch_with_query<T: DeserializeOwned>(
+        &self,
+        path: &[&str],
+        query: &(impl Serialize + ?Sized),
+        body: &(impl Serialize + ?Sized),
+        version: u32,
+        token: &str,
+    ) -> Result<Fetched<T>, ClientError> {
         let request = self
             .http
             .patch(self.api_url(path))
+            .query(query)
             .header(reqwest::header::IF_MATCH, format!("\"{version}\""))
             .json(body)
             .bearer_auth(token);

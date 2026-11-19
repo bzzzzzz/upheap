@@ -203,6 +203,64 @@ fn find_tag_matches_by_name_ignoring_case_and_by_id() -> googletest::Result<()> 
     )
 }
 
+/// Heap tags `heap_names` and team tags `team_names`, the team tags with IDs from 101.
+fn heap_and_team_tags(heap_names: &[&str], team_names: &[&str]) -> googletest::Result<TagListDto> {
+    let mut tags = tags_named(heap_names)?;
+    tags.team_tags = serde_json::from_value(json!(
+        team_names.iter().enumerate().map(|(i, name)| json!({
+            "id": Uuid::from_u128(i as u128 + 101), "kind": "team", "heap_id": null, "name": name, "description": null,
+            "version": 1, "allowed_actions": [],
+        })).collect::<Vec<_>>()
+    ))?;
+    Ok(tags)
+}
+
+#[gtest]
+fn find_tag_finds_a_team_tag_by_name_and_by_id() -> googletest::Result<()> {
+    let tags = heap_and_team_tags(&["Infra"], &["Security"])?;
+
+    verify_that!(
+        find_tag("security", &tags, &handle()).map(|tag| tag.id),
+        ok(eq(&Uuid::from_u128(101)))
+    )?;
+    verify_that!(
+        find_tag(&Uuid::from_u128(101).to_string(), &tags, &handle()).map(|tag| tag.name.clone()),
+        ok(eq("Security"))
+    )
+}
+
+#[gtest]
+fn an_unknown_tag_names_the_closest_of_the_heaps_and_the_teams() -> googletest::Result<()> {
+    let tags = heap_and_team_tags(&["Infra"], &["Security", "Ops"])?;
+
+    verify_that!(
+        find_tag("Opz", &tags, &handle()),
+        err(displays_as(eq(
+            "ada/personal has no tag `Opz`; it has Ops, Infra, Security"
+        )))
+    )
+}
+
+#[gtest]
+fn find_team_tag_looks_in_the_teams_tags_alone() -> googletest::Result<()> {
+    let tags: TeamTagListDto = serde_json::from_value(json!({
+        "tags": [{
+            "id": Uuid::from_u128(101), "kind": "team", "heap_id": null, "name": "Security", "description": null,
+            "version": 1, "allowed_actions": [],
+        }],
+        "allowed_actions": [],
+    }))?;
+
+    verify_that!(
+        find_team_tag("SECURITY", &tags, "ada").map(|tag| tag.version),
+        ok(eq(&1))
+    )?;
+    verify_that!(
+        find_team_tag("ops", &tags, "ada"),
+        err(displays_as(eq("team ada has no tag `ops`; it has Security")))
+    )
+}
+
 #[gtest]
 fn edit_distance_counts_chars() {
     expect_that!(levenshtein("kitten", "sitting"), eq(3));
