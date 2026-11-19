@@ -90,7 +90,8 @@ export type RegisterRequest = {
  * which fills "Email or username" with the password next to type.
  *
  * When the server signs in through its provider only (`password_sign_in` off), the card holds the header, the
- * notice, the refusal line and the provider button, and nothing else.
+ * notice, the refusal line and the provider button, and nothing else. While the provider is loading, it holds the
+ * header and the notice only.
  */
 export function AuthPage({
   notice,
@@ -115,7 +116,8 @@ export function AuthPage({
   initialLogin?: string | undefined;
   onSignedIn: () => void;
 }) {
-  const provider = useOidcProvider().data;
+  const providerQuery = useOidcProvider();
+  const provider = providerQuery.data;
   // Gone once a form is submitted. A new `refusal` in the address is a new sign-in, which comes with a new page.
   const [refusalShown, setRefusalShown] = useState(true);
   const refusalText =
@@ -195,6 +197,9 @@ export function AuthPage({
       )}
     </>
   );
+  // Until the server says how it signs in, neither the forms nor the button: a provider-only server mustn't flash
+  // the password form. A failed read isn't pending, so the forms show then, and the page is never left empty.
+  if (providerQuery.isPending) return <AuthCard>{intro}</AuthCard>;
   if (provider && !provider.password_sign_in) {
     return (
       <AuthCard>

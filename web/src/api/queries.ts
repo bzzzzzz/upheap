@@ -995,6 +995,22 @@ export function useArchiveOption(heap: HeapRef) {
   });
 }
 
+const oidcProviderKey = ["oidc-provider"] as const;
+const passwordResetOptionsKey = ["password-reset-options"] as const;
+const SERVER_WIDE_KEYS = new Set<unknown>([oidcProviderKey[0], passwordResetOptionsKey[0]]);
+
+/**
+ * Drops every cached query of the user whose session ended or changed, so the next one sees none of their data. The
+ * server's own settings (its provider, whether it mails reset links) stay: they are the same for everyone, and a
+ * query removed while it loads never answers, which would leave a sign-in page that waits on it with no form.
+ * `keep` spares more, such as the reset link a page was opened with.
+ */
+export function removeUserQueries(queryClient: QueryClient, keep?: (queryKey: readonly unknown[]) => boolean) {
+  queryClient.removeQueries({
+    predicate: ({ queryKey }) => !SERVER_WIDE_KEYS.has(queryKey[0]) && !keep?.(queryKey),
+  });
+}
+
 export function useSignIn() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -1002,7 +1018,7 @@ export function useSignIn() {
       unwrap(await api.POST("/api/v1/auth/login", { body })),
     // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
     // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
   });
 }
 
@@ -1013,7 +1029,7 @@ export function useRegister() {
       unwrap(await api.POST("/api/v1/auth/register", { body })),
     // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
     // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
   });
 }
 
@@ -1023,7 +1039,7 @@ export function useRegister() {
  */
 export function useOidcProvider() {
   return useQuery({
-    queryKey: ["oidc-provider"],
+    queryKey: oidcProviderKey,
     queryFn: async () => {
       try {
         return unwrap(await api.GET("/api/v1/auth/oidc"));
@@ -1039,7 +1055,7 @@ export function useOidcProvider() {
 /** Whether the server mails password reset links. Read once: the operator sets mail up with the server's configuration. */
 export function usePasswordResetOptions() {
   return useQuery({
-    queryKey: ["password-reset-options"],
+    queryKey: passwordResetOptionsKey,
     queryFn: async () => unwrap(await api.GET("/api/v1/password-resets")),
     staleTime: Infinity,
   });
@@ -1067,7 +1083,7 @@ export function useRegisterOidc() {
   return useMutation({
     mutationFn: async (body: { username: string }) => unwrap(await api.POST("/api/v1/auth/oidc/register", { body })),
     // As `useRegister`: nothing of a previous user's cache survives, and the guard loads `me` afresh.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
   });
 }
 
@@ -1190,7 +1206,11 @@ export function useSignOut() {
       ensureOk(result);
       return result.data;
     },
-    onSuccess: () => queryClient.clear(),
+    // The mutations go too: their variables may hold what the user typed.
+    onSuccess: () => {
+      removeUserQueries(queryClient);
+      queryClient.getMutationCache().clear();
+    },
   });
 }
 
@@ -1369,7 +1389,7 @@ export function useRegisterByInvite(token: string) {
     mutationFn: async (body: { email: string; username: string; display_name: string; password: string }) =>
       unwrap(await api.POST("/api/v1/invites/{token}/register", { params: { path: { token } }, body })),
     // As `useRegister`: nothing of a previous user's cache survives.
-    onSuccess: () => queryClient.removeQueries(),
+    onSuccess: () => removeUserQueries(queryClient),
     onError: (error) => refreshInvitationAfter(queryClient, token, error),
   });
 }
@@ -1399,8 +1419,7 @@ export function useResetPassword(token: string) {
       unwrap(await api.POST("/api/v1/password-resets/{token}", { params: { path: { token } }, body })),
     // As `useSignIn`: nothing of a previous user's cache survives, and the guard loads `me` afresh. The link stays,
     // so the page doesn't flash "Checking the link…" before it moves on.
-    onSuccess: () =>
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== passwordResetKey(token)[0] }),
+    onSuccess: () => removeUserQueries(queryClient, (queryKey) => queryKey[0] === passwordResetKey(token)[0]),
     onError: (error) => {
       if (error instanceof ApiProblem && (error.status === 404 || error.status === 409)) {
         void queryClient.invalidateQueries({ queryKey: passwordResetKey(token) });
