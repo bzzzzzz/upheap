@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use cli::ToolStart;
-use common::{HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, key};
+use common::{HEAP, Outcome, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap};
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -187,21 +187,36 @@ async fn an_agent_in_a_run_given_one_heap_is_refused_a_team_tag_rename_naming_th
     assert!(made.exited(0), "{}", made.stderr);
     add_item(&cli, "ada/beta", "Patch the VPN", "ops").await?;
     add_item(&cli, HEAP, "Rotate the keys", "ops").await?;
-    let note = server
+    server
         .add_item(&ada, HEAP, json!({ "title": "Tidy the alerts" }))
         .await?;
-    let note = key(&note)?.to_owned();
     let agent = cli.agent();
     let outcomes: Arc<Mutex<Vec<Outcome>>> = Arc::default();
     let tool = {
-        let (outcomes, note) = (outcomes.clone(), note.clone());
+        let outcomes = outcomes.clone();
         StandIn::new(move |start: ToolStart| {
-            let (agent, outcomes, note) = (agent.clone(), outcomes.clone(), note.clone());
+            let (agent, outcomes) = (agent.clone(), outcomes.clone());
             async move {
                 let rename = agent
                     .upheap(&start, &["tag", "edit", "ops", "--name", "operations"])
                     .await;
-                let tagged = agent.upheap(&start, &["item", "edit", &note, "--tag", "ops"]).await;
+                let tagged = agent
+                    .upheap_with_stdin(
+                        &start,
+                        &[
+                            "item",
+                            "add",
+                            "Check the ops alerts",
+                            "--task",
+                            "--context-file",
+                            "-",
+                            "--tag",
+                            "ops",
+                            "--json",
+                        ],
+                        "Came up while tidying the alerts.",
+                    )
+                    .await;
                 if let Ok(mut all) = outcomes.lock() {
                     all.extend([rename, tagged]);
                 }
@@ -224,8 +239,9 @@ async fn an_agent_in_a_run_given_one_heap_is_refused_a_team_tag_rename_naming_th
             hint: ask the person: upheap question request <key> \"Rename the team tag ops to operations\"\n"
         )
     );
-    // The CLI finds the team tag by name; it is the server that doesn't let a run set an item's tags.
-    expect_that!(outcomes[1].stderr, not(contains_substring("has no tag")));
-    expect_that!(outcomes[1].stderr, contains_substring("run_forbidden"));
+    // Putting the team tag on an item the run adds in its own heap works.
+    expect_that!(outcomes[1].exited(0), eq(true), "{}", outcomes[1].stderr);
+    let added: Value = serde_json::from_str(&outcomes[1].stdout)?;
+    expect_that!(added["tags"][0]["name"], eq(&json!("ops")));
     Ok(())
 }
