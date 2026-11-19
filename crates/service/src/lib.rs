@@ -169,6 +169,11 @@ impl Services {
         });
     }
 
+    /// Whether anyone may register (`ALLOW_REGISTRATION`).
+    pub fn registration_open(&self) -> bool {
+        self.settings.allow_registration
+    }
+
     /// The current time from the injected clock.
     pub fn now(&self) -> Timestamp {
         self.clock.now()

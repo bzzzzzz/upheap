@@ -50,10 +50,17 @@ export function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
 
 /**
  * After a team tag is made (`renamed` false) or edited: the team's tag list and every heap's tag list of the team,
- * and after an edit also everything that shows tag names in the team's heaps.
+ * and after an edit also everything that shows tag names in the team's heaps. A merge (`merged`) also rewrote the
+ * heaps' parameters' tag links and tag orders, so their parameters and the heaps themselves are read again too.
  */
-export function invalidateTeamTags(queryClient: QueryClient, team: string, renamed: boolean) {
+export function invalidateTeamTags(queryClient: QueryClient, team: string, renamed: boolean, merged = false) {
   return Promise.all([
+    ...(merged
+      ? [
+          queryClient.invalidateQueries({ queryKey: ["parameters", team] }),
+          queryClient.invalidateQueries({ queryKey: ["heap", team] }),
+        ]
+      : []),
     queryClient.invalidateQueries({ queryKey: teamTagsKey(team) }),
     queryClient.invalidateQueries({ queryKey: ["tags", team] }),
     ...(renamed
@@ -120,12 +127,14 @@ export function invalidateTeam(queryClient: QueryClient, team: string) {
 
 export const oidcProviderKey = ["oidc-provider"] as const;
 export const passwordResetOptionsKey = ["password-reset-options"] as const;
-const SERVER_WIDE_KEYS = new Set<unknown>([oidcProviderKey[0], passwordResetOptionsKey[0]]);
+export const registrationOptionsKey = ["registration-options"] as const;
+const SERVER_WIDE_KEYS = new Set<unknown>([oidcProviderKey[0], passwordResetOptionsKey[0], registrationOptionsKey[0]]);
 
 /**
  * Drops every cached query of the user whose session ended or changed, so the next one sees none of their data. The
- * server's own settings (its provider, whether it mails reset links) stay: they are the same for everyone, and a
- * query removed while it loads never answers, which would leave a sign-in page that waits on it with no form.
+ * server's own settings (its provider, whether it mails reset links, whether registration is open) stay: they are the
+ * same for everyone, and a query removed while it loads never answers, which would leave a sign-in page that waits on
+ * it with no form.
  * `keep` spares more, such as the reset link a page was opened with.
  */
 export function removeUserQueries(queryClient: QueryClient, keep?: (queryKey: readonly unknown[]) => boolean) {

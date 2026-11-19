@@ -83,7 +83,7 @@ export function TagPicker({
     if (busy) return;
     // Through the promise rather than `onSuccess`, which is dropped if the picker goes away meanwhile (a phone's
     // sheet closed at once), so the new tag still lands on the item. A failure shows as `create.error`.
-    create.mutateAsync({ name: query }).then(add, () => {});
+    create.mutateAsync({ body: { name: query } }).then(add, () => {});
   };
 
   const choose = (index: number) => {

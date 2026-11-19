@@ -75,6 +75,15 @@ pub struct PasswordResetOptionsDto {
     pub by_mail: bool,
 }
 
+/// Whether this server lets anyone create an account.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = RegistrationOptions)]
+pub struct RegistrationOptionsDto {
+    /// `true` when anyone may register. When `false`, only an invite link, or a first sign-in through the server's
+    /// identity provider, creates an account.
+    pub open: bool,
+}
+
 /// The address a signed-out user asks a reset link for.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]

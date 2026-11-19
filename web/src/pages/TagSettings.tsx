@@ -1,16 +1,21 @@
 // The parts of a tag's settings that a heap's Tags tab and the Team page's Tags section share: the New tag card, a tag
 // as a row, and the form that edits it. What differs between a heap's tags and a team's comes in as `TagSettings`.
-import { Pencil } from "lucide-react";
+import { Ellipsis, Pencil, Users } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
-import type { Tag } from "../api/schema";
+import type { HeapSummary, MergeReach, Tag } from "../api/schema";
 import { useCreateTagIn, useUpdateTagIn, type TagScope } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
+import { MenuEntry, MenuPopover } from "../components/Menu";
+import { useToast } from "../components/UndoToast";
 import { useReturnFocus } from "../components/useConfirmation";
 import { RequestId } from "../components/RequestId";
-import { listOf } from "../components/words";
+import { problemMessage } from "../components/ProblemText";
+import { plural } from "../components/words";
+import { MergeConfirm } from "./MergeConfirm";
 import { cardClass, cardTitleClass, inputClass } from "./settingsForm";
 
 export const chipClass =
@@ -26,6 +31,17 @@ export type TagSettings = {
   teamName: string;
 };
 
+/** The reach a team tag's write was refused with because it would merge heap tags, or nothing for any other error. */
+const mergeReachOf = (error: unknown): MergeReach | undefined =>
+  error instanceof ApiProblem && error.code === "tag_merge_unconfirmed" ? error.mergeReach : undefined;
+
+/** The toast after a confirmed merge: how many items in how many heaps carry the team tag. */
+const carriedBy = (reach: MergeReach) =>
+  `${plural(
+    reach.heaps.reduce((sum, reached) => sum + reached.items, 0),
+    "item",
+  )} in ${plural(reach.heaps.length, "heap")} carry it.`;
+
 /** "New tag" for a heap's tags, "New team tag" for a team's; the inputs' names follow it. */
 export function NewTagForm({ settings }: { settings: TagSettings }) {
   const create = useCreateTagIn(settings.scope);
@@ -33,17 +49,21 @@ export function NewTagForm({ settings }: { settings: TagSettings }) {
   const title = team ? "New team tag" : "New tag";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [reach, setReach] = useState<MergeReach | null>(null);
+  const showToast = useToast();
+  const body = { name, description: description || null };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (name.trim() === "") return;
     create.mutate(
-      { name, description: description || null },
+      { body },
       {
         onSuccess: () => {
           setName("");
           setDescription("");
         },
+        onError: (error) => setReach(mergeReachOf(error) ?? null),
       },
     );
   };
@@ -78,17 +98,35 @@ export function NewTagForm({ settings }: { settings: TagSettings }) {
         <button type="submit" disabled={create.isPending || name.trim() === ""} className={compactButtonClass.primary}>
           Add tag
         </button>
-        <TagProblem error={create.error} typed={name} settings={settings} />
+        {!reach && <TagProblem error={create.error} typed={name} settings={settings} />}
       </form>
+      {reach && (
+        <MergeConfirm
+          mutation={create}
+          variables={{ body }}
+          act={{ kind: "make", name }}
+          reach={reach}
+          description={body.description}
+          settings={settings}
+          onDone={(confirmed) => {
+            showToast({ message: `“${name}” is a team tag now: ${carriedBy(confirmed)}` });
+            setName("");
+            setDescription("");
+            setReach(null);
+          }}
+          onClose={() => setReach(null)}
+        />
+      )}
     </section>
   );
 }
 
 /**
  * A tag as a row: its name, its description and, for those who may edit it, an edit button that turns the row into
- * the form. Those who may not still find a heap tag's history in the row; editors find it in the form.
+ * the form. Those who may not still find a heap tag's history in the row; editors find it in the form. In a heap, an
+ * editor's row also has a ⋯ with Make a team tag; `heap` is the heap the row is in.
  */
-export function TagRow({ tag, settings }: { tag: Tag; settings: TagSettings }) {
+export function TagRow({ tag, settings, heap }: { tag: Tag; settings: TagSettings; heap?: HeapSummary }) {
   const historyHeap = settings.scope.kind === "heap" ? settings.scope.heap : undefined;
   const canEdit = tag.allowed_actions.includes("edit");
   const [editing, setEditing] = useState(false);
@@ -117,6 +155,9 @@ export function TagRow({ tag, settings }: { tag: Tag; settings: TagSettings }) {
             <span className="text-sm text-muted italic">No description</span>
           )}
         </div>
+        {canEdit && heap && settings.scope.kind === "heap" && (
+          <MakeTeamTag tag={tag} heap={heap} team={settings.scope.heap.team} teamName={settings.teamName} />
+        )}
         {canEdit && (
           <button
             ref={editButton}
@@ -134,6 +175,63 @@ export function TagRow({ tag, settings }: { tag: Tag; settings: TagSettings }) {
   );
 }
 
+/** The ⋯ of a heap tag's row: Make a team tag, which asks first when it merges heap tags of the team. */
+function MakeTeamTag({ tag, heap, team, teamName }: { tag: Tag; heap: HeapSummary; team: string; teamName: string }) {
+  const create = useCreateTagIn({ kind: "team", team });
+  const showToast = useToast();
+  const [reach, setReach] = useState<MergeReach | null>(null);
+  const settings: TagSettings = { scope: { kind: "team", team }, teamName };
+  const variables = { body: { name: tag.name, description: tag.description } };
+  const make = () =>
+    create.mutate(variables, {
+      onError: (error) => {
+        const refused = mergeReachOf(error);
+        if (refused) setReach(refused);
+        else {
+          showToast({
+            message: tagProblemMessage(error, tag.name, settings),
+            error: true,
+            requestId: error instanceof ApiProblem ? error.requestId : undefined,
+          });
+        }
+      },
+    });
+
+  return (
+    <>
+      <MenuTrigger>
+        <Button aria-label={`More for ${tag.name}`} className={compactButtonClass.icon}>
+          <Ellipsis aria-hidden="true" className="size-4" />
+        </Button>
+        <MenuPopover placement="bottom end">
+          <Menu aria-label={`More for ${tag.name}`} className="outline-none">
+            <MenuEntry id="make-team-tag" icon={Users} onAction={make}>
+              Make a team tag
+            </MenuEntry>
+          </Menu>
+        </MenuPopover>
+      </MenuTrigger>
+      {reach && (
+        <MergeConfirm
+          mutation={create}
+          variables={variables}
+          act={{ kind: "make", name: tag.name }}
+          reach={reach}
+          description={tag.description ?? null}
+          descriptionFrom={heap.name}
+          promotingHeapId={heap.id}
+          settings={settings}
+          onDone={(confirmed) => {
+            showToast({ message: `“${tag.name}” is a team tag now: ${carriedBy(confirmed)}` });
+            setReach(null);
+          }}
+          onClose={() => setReach(null)}
+        />
+      )}
+    </>
+  );
+}
+
 /**
  * The tag's name and description, saved together. Saving, Cancel or Escape close the form; Save with nothing changed
  * just closes it. A newer version from the server (someone else's edit) replaces what's typed.
@@ -145,96 +243,123 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
   const [name, setName] = useState(tag.name);
   const [description, setDescription] = useState(tag.description ?? "");
   const [shownVersion, setShownVersion] = useState(tag.version);
+  // The refused write, as it was sent: a refetch behind the confirm resets the fields, and the confirm must send, and
+  // name, what the person asked for, so a newer version is refused as a conflict.
+  const [asked, setAsked] = useState<{ reach: MergeReach; variables: typeof variables } | null>(null);
+  const showToast = useToast();
   if (shownVersion !== tag.version) {
     setShownVersion(tag.version);
     setName(tag.name);
     setDescription(tag.description ?? "");
   }
   const changed = name !== tag.name || description !== (tag.description ?? "");
+  const variables = {
+    tag,
+    patch: {
+      ...(name !== tag.name && { name }),
+      ...(description !== (tag.description ?? "") && { description: description || null }),
+    },
+  };
   const save = (event: FormEvent) => {
     event.preventDefault();
     if (!changed) {
       onClose();
       return;
     }
-    update.mutate(
-      {
-        tag,
-        patch: {
-          ...(name !== tag.name && { name }),
-          ...(description !== (tag.description ?? "") && { description: description || null }),
-        },
+    update.mutate(variables, {
+      onSuccess: onClose,
+      onError: (error) => {
+        const reach = mergeReachOf(error);
+        setAsked(reach ? { reach, variables } : null);
       },
-      { onSuccess: onClose },
-    );
+    });
   };
 
   return (
-    <form
-      onSubmit={save}
-      onKeyDown={(e) => {
-        if (e.key !== "Escape") return;
-        e.preventDefault();
-        onClose();
-      }}
-      className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
-    >
-      <input
-        aria-label={`Name of tag ${tag.name}`}
-        value={name}
-        autoFocus
-        onChange={(e) => setName(e.target.value)}
-        maxLength={50}
-        className={`${inputClass} font-medium sm:max-w-[200px] sm:flex-[1_1_160px]`}
-      />
-      <input
-        aria-label={`Description of tag ${tag.name}`}
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder="No description"
-        className={`${inputClass} sm:flex-[999_1_240px]`}
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={update.isPending || name.trim() === ""}
-          className={`${compactButtonClass.primary} max-sm:flex-1`}
-        >
-          Save
-        </button>
-        <button type="button" onClick={onClose} className={compactButtonClass.quiet}>
-          Cancel
-        </button>
-      </div>
-      {team && <p className="basis-full text-[13px] text-muted">Changes in every heap of {teamName}.</p>}
-      <TagProblem error={update.error} typed={name} settings={settings} />
-    </form>
+    <>
+      <form
+        onSubmit={save}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault();
+          onClose();
+        }}
+        className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
+      >
+        <input
+          aria-label={`Name of tag ${tag.name}`}
+          value={name}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          maxLength={50}
+          className={`${inputClass} font-medium sm:max-w-[200px] sm:flex-[1_1_160px]`}
+        />
+        <input
+          aria-label={`Description of tag ${tag.name}`}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="No description"
+          className={`${inputClass} sm:flex-[999_1_240px]`}
+        />
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={update.isPending || name.trim() === ""}
+            className={`${compactButtonClass.primary} max-sm:flex-1`}
+          >
+            Save
+          </button>
+          <button type="button" onClick={onClose} className={compactButtonClass.quiet}>
+            Cancel
+          </button>
+        </div>
+        {team && <p className="basis-full text-[13px] text-muted">Changes in every heap of {teamName}.</p>}
+        {!asked && <TagProblem error={update.error} typed={name} settings={settings} />}
+      </form>
+      {asked && (
+        <MergeConfirm
+          mutation={update}
+          variables={asked.variables}
+          act={{ kind: "rename", from: asked.variables.tag.name, to: asked.variables.patch.name ?? "" }}
+          reach={asked.reach}
+          description={
+            asked.variables.patch.description === undefined
+              ? (asked.variables.tag.description ?? null)
+              : asked.variables.patch.description
+          }
+          settings={settings}
+          onDone={(confirmed) => {
+            showToast({ message: `Renamed to “${asked.variables.patch.name ?? ""}”: ${carriedBy(confirmed)}` });
+            onClose();
+          }}
+          onClose={() => setAsked(null)}
+        />
+      )}
+    </>
   );
 }
 
-/** Why a write was refused, under the field. `typed` is the name in the field. */
-function TagProblem({ error, typed, settings }: { error: Error | null; typed: string; settings: TagSettings }) {
-  if (!error) return null;
+/** Why a write was refused. `typed` is the name in the field. */
+function tagProblemMessage(error: Error, typed: string, settings: TagSettings): string {
   const { teamName } = settings;
   const team = settings.scope.kind === "team";
   const code = error instanceof ApiProblem ? error.code : undefined;
-  let message = error.message;
-  if (code === "version_conflict") {
-    message = "Someone else changed this tag. It now shows their version.";
-  } else if (!team && code === "tag_name_taken") {
-    message = "This heap already has a tag with that name.";
-  } else if (!team && code === "tag_name_taken_by_team_tag") {
-    message = `“${typed}” is a team tag of ${teamName}. Use it on items here instead.`;
-  } else if (team && code === "tag_name_taken") {
-    message = `${teamName} already has a team tag with that name.`;
-  } else if (team && code === "tag_merge_unconfirmed" && error instanceof ApiProblem && error.mergeReach) {
-    const heaps = error.mergeReach.heaps.map((reached) => reached.heap.name);
-    message = `${listOf(heaps)} ${heaps.length === 1 ? "has" : "have"} a heap tag “${typed}”. Making it a team tag merges them; that isn't in the web app yet. Use the CLI or pick another name.`;
+  if (code === "version_conflict") return "Someone else changed this tag. It now shows their version.";
+  if (!team && code === "tag_name_taken") return "This heap already has a tag with that name.";
+  if (!team && code === "tag_name_taken_by_team_tag") {
+    return `“${typed}” is a team tag of ${teamName}. Use it on items here instead.`;
   }
+  if (team && code === "tag_name_taken") return `${teamName} already has a team tag with that name.`;
+  return problemMessage(error);
+}
+
+/** Why a write was refused, under the field. A merge that needs confirming is the confirm's to show. */
+export function TagProblem({ error, typed, settings }: { error: Error | null; typed: string; settings: TagSettings }) {
+  if (!error || mergeReachOf(error)) return null;
   return (
     <>
       <p role="alert" className="basis-full text-sm text-overdue-ink">
-        {message}
+        {tagProblemMessage(error, typed, settings)}
       </p>
       <RequestId error={error} />
     </>

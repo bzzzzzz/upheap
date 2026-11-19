@@ -84,3 +84,61 @@ test("a team tag is made on the Team page, used and filtered in two heaps, and r
   await page.goto(heapA);
   await expect(row(page, "Alpha work").getByRole("button", { name: "Filter by tag security-review" })).toBeVisible();
 });
+
+/** In the heap at `path`, makes the heap tag `name` through the item's Tags field and puts it on a new item `title`. */
+async function heapTagOnNewItem(page: Page, path: string, title: string, name: string) {
+  await page.goto(path);
+  await addItem(page, title);
+  await openItem(page, title);
+  await fieldButton(page, "Tags").click();
+  await itemPane(page).getByRole("combobox", { name: "Add a tag" }).fill(name);
+  await page.getByRole("option", { name: `Create heap tag “${name}”` }).click();
+  await expect(itemPane(page).getByRole("button", { name: `Remove tag ${name}` })).toBeVisible();
+  await closeItem(page);
+}
+
+test("a heap tag is made a team tag after the merge is confirmed, and both heaps' items carry it", async ({
+  page,
+  heapPath,
+}) => {
+  const heapA = heapPath;
+  const team = /\/teams\/([^/]+)\//.exec(heapA)?.[1] ?? "";
+  await addHeaps(page, ["Beta"]);
+  const heapB = `/teams/${team}/heaps/beta`;
+  await heapTagOnNewItem(page, heapA, "Alpha invoice", "billing");
+  await heapTagOnNewItem(page, heapB, "Beta invoice", "billing");
+
+  // The ⋯ on the heap tag opens the confirm, which lists both heaps' tags and marks this heap.
+  await page.goto(heapA);
+  await goTo(page, "Tags");
+  await page.getByRole("button", { name: "More for billing" }).click();
+  await page.getByRole("menuitem", { name: "Make a team tag" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Make “billing” a team tag?" });
+  const rows = confirm.getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: "this heap" })).toHaveCount(1);
+  await expect(rows.filter({ hasText: "1 item" })).toHaveCount(2);
+  await expect(confirm).toContainText("2 items in 2 heaps will carry the team tag.");
+
+  // The toast exists only once the server has merged them.
+  await confirm.getByRole("button", { name: "Make team tag" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "is a team tag now" })).toContainText(
+    "“billing” is a team tag now: 2 items in 2 heaps carry it.",
+  );
+  await expect(page.getByRole("region", { name: /^1 tag of the team / })).toContainText("billing");
+  await expect(page.getByText("No tags of this heap yet.")).toBeVisible();
+
+  // Each heap's item carries the team tag now: filtering by the team tag finds it. Beta's Tags tab lists it in the
+  // team's card.
+  for (const [path, tagged, plain] of [
+    [heapA, "Alpha invoice", "Alpha plain"],
+    [heapB, "Beta invoice", "Beta plain"],
+  ] as const) {
+    await page.goto(path);
+    await addItem(page, plain);
+    await filterByTeamTag(page, "billing", tagged, plain);
+  }
+  await goTo(page, "Tags");
+  await expect(page.getByRole("region", { name: /^1 tag of the team / })).toContainText("billing");
+  await expect(page.getByText("No tags of this heap yet.")).toBeVisible();
+});

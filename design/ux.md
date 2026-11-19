@@ -183,10 +183,27 @@ archived heaps too; an error shows under the card.
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags of this heap" whose rows read as the tag's name in a chip and its description
 (or "No description"); an edit button on the row turns it into the form (name, description, Save, Cancel, History),
-highlighted in the accent. A second card, "{n} tags of the team {team}", with a Team page link in its header, lists the
+highlighted in the accent. Beside it a ⋯ holds Make a team tag, for anyone who may edit the tag (so not in an archived
+heap). A second card, "{n} tags of the team {team}", with a Team page link in its header, lists the
 team's tags the same way, without History, and edits them in place: the form adds "Changes in every heap of {team}."
 and saves through the team's tag (an archived heap too, as the server allows). Adding or renaming a heap tag to a team
 tag's name is refused under the field: "“security” is a team tag of Acme. Use it on items here instead."
+
+**The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, Make a team tag, or a
+rename into a name heap tags have) is refused by the server with the list of what it would merge, and the app asks
+first, in a dialog on a wide screen and a bottom sheet on a phone. It is headed "Make “billing” a team tag?" or "Rename
+“old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
+"archived" and, for Make a team tag, "this heap" marked. Under the rows a total says "{n items} in {m heaps} will
+carry the team tag.", then the description the team tag will have, and the quiet line "The items keep their history.
+This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button reads
+"Making…" or "Renaming…" and nothing can be pressed or dismissed. If the list changed while it was open, the server
+refuses the button's write with the new list: the dialog stays, shows "This changed while it was open. Check the list
+again; the button confirms this one.", marks rows "new" and counts "was {n}", names what left the list, and the button
+confirms the new list. Another failure shows above the buttons, with its request ID, and the dialog stays; a rename
+someone else changed meanwhile closes it and shows the form's version-conflict line. Success closes it with a toast,
+"“billing” is a team tag now: 2 items in 2 heaps carry it." (for a rename, "Renamed to “billing”: …"). Cancel changes
+nothing, and the form keeps what was typed.
+
 **Parameters** opens its add form from a New parameter button, and gives each parameter a
 card: the name with Rename, the weight, the options as a numbered list (↑ ↓ and Archive on each; Archive turns the
 row into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History
@@ -863,7 +880,7 @@ The Team page follows the settings layout ([Rules](#rules) §3): the name with t
 Activity, Data) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
 Archive or Unarchive, History), then Tags, the team's own, used in every heap of the team (a New team tag card, and
 rows that are edited in place, with "Changes in every heap of {team}." under the form; a name that heap tags of the team
-have is refused and names those heaps, as merging them isn't in the web app), then Members with a search whose results are a listbox under it (arrows move, Enter
+have opens the merge confirm, see Tags), then Members with a search whose results are a listbox under it (arrows move, Enter
 adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
 line saying why the only admin can't leave. Removing a member says what happens: "They lose access to Launch and
 Support. Their items stay." It's confirmed inline on a wide screen and in the member's actions sheet on a phone,
@@ -894,6 +911,15 @@ send; the field and button stay, so the user can send again. An address problem 
 problem (too many requests, a network error) shows above the line, under the button. Without mail, or while the page
 doesn't know yet, the disclosure shows one line, "Whoever runs this Upheap server can send you a reset link.", and no
 form. Create account has none. The invite page's Sign in side has it too.
+
+On a server with registration closed, the sign-in page has no switch and no Create account: the Sign in form shows
+alone, and under its button a footnote in Create account's style says "New accounts need an invite link from a team's
+admin." With a provider there is no footnote, since a first sign-in through it makes the account. The invite page keeps
+its Create account, since the link makes the account. While the page doesn't know yet, the card holds only what it holds
+while it waits for the provider; if the read fails, the switch shows. A sign-in the server throttles shows "Too many
+attempts. Try again in 12:40." in the line above the button, counting down once a second from the server's wait, and
+Sign in is disabled until it ends; editing a field doesn't clear it. When it reaches zero the line goes and Sign in is
+enabled.
 
 When the server has an identity provider, the card starts with a bordered button, **Sign in with Acme SSO**, the width
 of the card (52 px on a phone, 44 px beyond), and under it an "or" rule, above the switch; the dark Sign in button

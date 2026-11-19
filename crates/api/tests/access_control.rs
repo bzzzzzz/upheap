@@ -465,6 +465,14 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
+            "/auth/registration",
+            Public,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
             "/password-resets",
             Public,
             Target::Nothing,

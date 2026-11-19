@@ -41,6 +41,10 @@ closed(
       // Ana signs in, makes the team Acme with its one heap, and copies a link from the Team page.
       const page = await ana.newPage();
       await page.goto(`${baseURL}/login`);
+      // Registration is closed here, so the sign-in page offers no Create account and says why.
+      await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Create account" })).toHaveCount(0);
+      await expect(page.getByText("New accounts need an invite link from a team's admin.")).toBeVisible();
       await page.getByLabel("Email or username").fill(admin.email);
       await page.getByLabel("Password").fill(PASSWORD);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();

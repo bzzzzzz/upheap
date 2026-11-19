@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Tab, TabList, TabPanel, Tabs, type Key } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
-import { useOidcProvider, useRegister, useSignIn } from "../api/queries/auth";
+import { useOidcProvider, useRegister, useRegistrationOptions, useSignIn } from "../api/queries/auth";
 import { usePasswordResetOptions, useRequestPasswordReset } from "../api/queries/passwordReset";
 import { BASE } from "../basePath";
 import { Field } from "../components/Field";
@@ -22,6 +22,9 @@ const FIELDS: Record<Mode, readonly FieldName[]> = {
 
 /** Create account's footnote, which the username step after a provider sign-in has too. */
 export const REGISTER_NOTE = "You'll start in your own heap. Teams come next.";
+
+/** Sign in's footnote on a server with registration closed and no provider. */
+const CLOSED_NOTE = "New accounts need an invite link from a team's admin.";
 
 /** The Username field's hint, as sign-up and the username step say it. */
 export const USERNAME_HINT = "Lowercase letters, digits and dashes. It's in your links, and can't be changed later.";
@@ -88,8 +91,14 @@ export type RegisterRequest = {
  * which fills "Email or username" with the password next to type.
  *
  * When the server signs in through its provider only (`password_sign_in` off), the card holds the header, the
- * notice, the refusal line and the provider button, and nothing else. While the provider is loading, it holds the
- * header and the notice only.
+ * notice, the refusal line and the provider button, and nothing else. While the provider or the server's registration
+ * setting is loading, it holds the header and the notice only.
+ *
+ * When the server has registration closed, the sign-in page (the one without a `register` request of its own) has no
+ * switch and no Create account: the Sign in form shows alone, and without a provider (whose first sign-in makes an
+ * account) a footnote says accounts come with an invite link. A failed read of the setting shows the switch. A
+ * sign-in the server throttles counts down in its error line and holds the button until the wait ends
+ * (`useRetryCountdown`).
  */
 export function AuthPage({
   notice,
@@ -116,6 +125,9 @@ export function AuthPage({
 }) {
   const providerQuery = useOidcProvider();
   const provider = providerQuery.data;
+  const registrationQuery = useRegistrationOptions();
+  // The invite page (it passes `register`) keeps Create account on a closed server: its link makes the account.
+  const registrationClosed = registerOverride === undefined && registrationQuery.data?.open === false;
   // Gone once a form is submitted. A new `refusal` in the address is a new sign-in, which comes with a new page.
   const [refusalShown, setRefusalShown] = useState(true);
   const refusalText =
@@ -162,7 +174,8 @@ export function AuthPage({
       mode={formMode}
       mutation={formMode === "sign_in" ? signIn : register}
       submitLabel={formMode === "register" ? registerLabel : undefined}
-      note={formMode === "register" ? registerNote : undefined}
+      // With a provider, its first sign-in makes an account even on a closed server, so the footnote would be wrong.
+      note={formMode === "register" ? registerNote : registrationClosed && !provider ? CLOSED_NOTE : undefined}
       focusPassword={focusPassword}
       onSignInInstead={() => {
         setFocusPassword(true);
@@ -195,9 +208,13 @@ export function AuthPage({
       )}
     </>
   );
-  // Until the server says how it signs in, neither the forms nor the button: a provider-only server mustn't flash
-  // the password form. A failed read isn't pending, so the forms show then, and the page is never left empty.
-  if (providerQuery.isPending) return <AuthCard>{intro}</AuthCard>;
+  // Until the server says how it signs in and whether it takes registrations, neither the forms nor the button: a
+  // provider-only server mustn't flash the password form, nor a closed one the switch. The invite page doesn't use
+  // the registration setting, so it doesn't wait for it. A failed read isn't pending, so the forms show then, and the
+  // page is never left empty.
+  if (providerQuery.isPending || (registerOverride === undefined && registrationQuery.isPending)) {
+    return <AuthCard>{intro}</AuthCard>;
+  }
   if (provider && !provider.password_sign_in) {
     return (
       <AuthCard>
@@ -218,28 +235,32 @@ export function AuthPage({
       )}
       {/* Tabs, as the switch picks which form shows below it, and arrow keys move between the two. */}
       {/* Held while a submit is pending, so its result lands on the form that sent it. */}
-      <Tabs
-        selectedKey={mode}
-        isDisabled={pending}
-        onSelectionChange={(key) => {
-          setFocusPassword(false);
-          selectMode(key);
-        }}
-      >
-        <TabList
-          aria-label="Sign in or create account"
-          className="flex gap-1 rounded-xl bg-sunken p-[3px] sm:rounded-[10px]"
+      {registrationClosed ? (
+        form("sign_in")
+      ) : (
+        <Tabs
+          selectedKey={mode}
+          isDisabled={pending}
+          onSelectionChange={(key) => {
+            setFocusPassword(false);
+            selectMode(key);
+          }}
         >
-          {/* A link that invites someone to a team opens with Create account, so it comes first. */}
-          {initialMode === "register" ? [registerTab, signInTab] : [signInTab, registerTab]}
-        </TabList>
-        <TabPanel id="sign_in" className="mt-4">
-          {form("sign_in")}
-        </TabPanel>
-        <TabPanel id="register" className="mt-4">
-          {form("register")}
-        </TabPanel>
-      </Tabs>
+          <TabList
+            aria-label="Sign in or create account"
+            className="flex gap-1 rounded-xl bg-sunken p-[3px] sm:rounded-[10px]"
+          >
+            {/* A link that invites someone to a team opens with Create account, so it comes first. */}
+            {initialMode === "register" ? [registerTab, signInTab] : [signInTab, registerTab]}
+          </TabList>
+          <TabPanel id="sign_in" className="mt-4">
+            {form("sign_in")}
+          </TabPanel>
+          <TabPanel id="register" className="mt-4">
+            {form("register")}
+          </TabPanel>
+        </Tabs>
+      )}
     </AuthCard>
   );
 }
@@ -323,7 +344,7 @@ function AuthForm({
   mutation: { error: Error | null; isPending: boolean; reset: () => void };
   /** What Create account's button says; the default is "Create account". */
   submitLabel?: string | undefined;
-  /** The footnote under Create account's button. */
+  /** The footnote under the button: Create account's, or Sign in's when registration is closed. */
   note?: string | undefined;
   /** Whether Password takes focus as the form shows, as after "Sign in instead". */
   focusPassword: boolean;
@@ -337,6 +358,7 @@ function AuthForm({
   // A problem about one of this form's inputs shows under it; any other, above the button.
   const errorField = error instanceof ApiProblem ? FIELDS[mode].find((name) => name === error.field) : undefined;
   const formRef = useRef<HTMLFormElement>(null);
+  const waitLeft = useRetryCountdown(mode === "sign_in" ? error : null, mutation.reset);
   // Asking for a reset link is its own request, with its own form (`ResetRequestForm`) beside this one.
   const resetRequest = useRequestPasswordReset();
   const [resetEmail, setResetEmail] = useState("");
@@ -439,15 +461,15 @@ function AuthForm({
         {error && !errorField && (
           <>
             <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-              {problemMessage(error)}
+              {waitLeft === undefined ? problemMessage(error) : `Too many attempts. Try again in ${clock(waitLeft)}.`}
             </p>
             <RequestId error={error} />
           </>
         )}
-        <button type="submit" disabled={mutation.isPending} className={authButtonClass}>
+        <button type="submit" disabled={mutation.isPending || waitLeft !== undefined} className={authButtonClass}>
           {mode === "sign_in" ? "Sign in" : (submitLabel ?? "Create account")}
         </button>
-        {mode === "register" && note && <p className="text-center text-xs text-muted">{note}</p>}
+        {note && <p className="text-center text-xs text-muted">{note}</p>}
       </form>
       {/* Forms can't nest, so the reset's form sits here, and its field and button name it in their `form`. */}
       <form
@@ -460,6 +482,36 @@ function AuthForm({
       />
     </>
   );
+}
+
+/** Seconds as M:SS. */
+function clock(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * The seconds left of the wait a `429 too_many_attempts` asks for, counting down from when the error arrived, or
+ * `undefined` when `error` isn't one. At zero it calls `reset`, which clears the error.
+ */
+function useRetryCountdown(error: Error | null, reset: () => void): number | undefined {
+  const retryAfter = error instanceof ApiProblem && error.code === "too_many_attempts" ? error.retryAfter : undefined;
+  const [left, setLeft] = useState<number>();
+  useEffect(() => {
+    if (retryAfter === undefined) return;
+    const deadline = Date.now() + retryAfter * 1000;
+    const tick = () => {
+      const seconds = Math.ceil((deadline - Date.now()) / 1000);
+      if (seconds <= 0) reset();
+      else setLeft(seconds);
+    };
+    const timer = setInterval(tick, 1000);
+    return () => {
+      clearInterval(timer);
+      setLeft(undefined);
+    };
+  }, [error, retryAfter, reset]);
+  // Until the first tick, the whole wait.
+  return retryAfter === undefined ? undefined : (left ?? retryAfter);
 }
 
 const RESET_FORM_ID = "reset-request";
