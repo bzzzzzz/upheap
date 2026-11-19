@@ -123,7 +123,9 @@ async fn the_team_tags_path_steps_1_to_7() -> Result<()> {
     expect_that!(refused.exited(3), eq(true));
     expect_that!(
         refused.stderr,
-        contains_substring("Promoting \"billing\" to a team tag of ada merges these heap tags into it:")
+        contains_substring(
+            "Promoting \"billing\" to a team tag of ada merges these heap tags into it (tag_merge_unconfirmed):"
+        )
     );
     expect_that!(refused.stderr, contains_substring("  personal  billing  1 item\n"));
     expect_that!(refused.stderr, contains_substring("  beta      billing  1 item\n"));
@@ -138,6 +140,9 @@ async fn the_team_tags_path_steps_1_to_7() -> Result<()> {
     let promoted = cli.run(&command).await;
     expect_that!(promoted.exited(0), eq(true));
     expect_that!(promoted.stdout, eq("Promoted \"billing\" to a team tag of ada.\n"));
+    let again = cli.run(&command).await;
+    expect_that!(again.exited(0), eq(true));
+    expect_that!(again.stdout, eq("\"billing\" is already a team tag of ada.\n"));
     let listed = cli.run(&["tag", "list", "--json"]).await;
     let listed: Value = serde_json::from_str(&listed.stdout)?;
     expect_that!(
@@ -235,8 +240,8 @@ async fn an_agent_in_a_run_given_one_heap_is_refused_a_team_tag_rename_naming_th
     expect_that!(
         outcomes[0].stderr,
         eq(
-            "error: renaming team tag \"ops\" reaches ada/beta, which this run wasn't given.\n\
-            hint: ask the person: upheap question request <key> \"Rename the team tag ops to operations\"\n"
+            "error: renaming team tag \"ops\" reaches ada/beta, which this run wasn't given (run_forbidden).\n\
+            hint: ask the person: upheap question request <key> 'Rename the team tag ops to operations'\n"
         )
     );
     // Putting the team tag on an item the run adds in its own heap works.

@@ -1,6 +1,6 @@
 //! `upheap tag promote <tag>`: make a heap's tag a team tag, which every heap of the team has.
 
-use api_types::tags::{CreateTagDto, TagDto, TagListDto};
+use api_types::tags::{CreateTagDto, TagDto, TagKindDto, TagListDto};
 use clap::Args;
 
 use super::refusal::TeamTagWrite;
@@ -40,6 +40,15 @@ pub async fn run(args: PromoteArgs, app: &App, out: &mut Output) -> Result<(), C
     };
     let tags = heap_api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
     let tag = find_tag(&args.tag, &tags.value, &heap)?;
+    if tag.kind == TagKindDto::Team {
+        // Already promoted, by this command or another: repeating it is safe.
+        match out.mode() {
+            Mode::Json => out.json(&serde_json::to_string(tag).map_err(std::io::Error::other)?)?,
+            Mode::Quiet => out.line(&tag.name)?,
+            Mode::Human => out.line(&format!("\"{}\" is already a team tag of {}.", tag.name, heap.team))?,
+        }
+        return Ok(());
+    }
     let body = CreateTagDto {
         name: tag.name.clone(),
         description: tag.description.clone(),

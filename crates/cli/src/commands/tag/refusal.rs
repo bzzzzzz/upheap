@@ -81,7 +81,7 @@ impl TeamTagWrite<'_> {
             .max()
             .unwrap_or(0);
         let mut lines = vec![format!(
-            "error: {} merges these heap tags into it:",
+            "error: {} merges these heap tags into it (tag_merge_unconfirmed):",
             self.merge_phrase()
         )];
         for merged in &reach.heaps {
@@ -174,16 +174,13 @@ impl TeamTagWrite<'_> {
             .filter(|slug| Some(slug.as_str()) != run_heap)
             .collect();
         let (what, request) = self.run_words();
-        let request = if request.contains('"') {
-            shell_quoted(&request)
-        } else {
-            format!("\"{request}\"")
-        };
+        // Single-quoted: the names come from other people, and inside double quotes a shell would run `$(...)`.
+        let request = shell_quoted(&request);
         let error = if others.is_empty() {
             format!("error: {refused}")
         } else {
             format!(
-                "error: {what} reaches {}, which this run wasn't given.",
+                "error: {what} reaches {}, which this run wasn't given (run_forbidden).",
                 others.join(", ")
             )
         };
@@ -345,7 +342,7 @@ mod tests {
         verify_that!(
             write.merge_lines(&reach),
             elements_are![
-                eq("error: Adding team tag \"billing\" to ada merges these heap tags into it:"),
+                eq("error: Adding team tag \"billing\" to ada merges these heap tags into it (tag_merge_unconfirmed):"),
                 eq("  a          Billing  1 item"),
                 eq("  long-heap  billing  12 items  (archived)"),
                 eq("This can't be undone. To go ahead, run:"),

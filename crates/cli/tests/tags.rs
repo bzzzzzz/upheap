@@ -314,7 +314,7 @@ async fn a_team_tag_of_a_name_a_heap_tag_has_is_refused_with_the_reach_and_the_l
     expect_that!(
         refused.stderr.as_str(),
         eq(format!(
-            "error: Adding team tag \"infra\" to ada merges these heap tags into it:\n  \
+            "error: Adding team tag \"infra\" to ada merges these heap tags into it (tag_merge_unconfirmed):\n  \
              personal  Infra  1 item\n\
              This can't be undone. To go ahead, run:\n  \
              upheap tag add infra --team ada --description Servers --confirm {token}\n"
