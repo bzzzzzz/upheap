@@ -83,6 +83,30 @@ async fn item_edit_adds_and_takes_off_tags_by_name() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn item_edit_with_create_tags_adds_the_tag_and_keeps_the_items_other_tags() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let key = key(&items[0])?;
+
+    // Act
+    let edited = cli.run(&["item", "edit", key, "--tag", "fresh", "--create-tags"]).await;
+
+    // Assert
+    expect_that!(edited.exited(0), eq(true));
+    expect_that!(edited.stderr, eq("Added tag \"fresh\".\n"));
+    let item = server.read_item(&ada, HEAP, key).await?;
+    let names: Vec<&str> = item["tags"]
+        .as_array()
+        .map(|tags| tags.iter().filter_map(|tag| tag["name"].as_str()).collect())
+        .unwrap_or_default();
+    expect_that!(names, unordered_elements_are![eq(&"Infra"), eq(&"fresh")]);
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_edit_with_nothing_to_change_makes_no_request() -> Result<()> {
     // Arrange: nobody is signed in and no server is set, so any request or setting lookup would fail.
     let server = TestServer::start().await?;

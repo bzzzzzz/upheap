@@ -402,6 +402,25 @@ pub fn resolve_tags(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> R
         .collect()
 }
 
+/// The IDs of the tags `names` names, as [`resolve_tags`] finds them, and the names that no tag has: trimmed,
+/// without repeats ignoring case, the first spelling typed kept, in the order typed.
+pub fn resolve_tags_or_missing(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> (Vec<Uuid>, Vec<String>) {
+    let mut found = Vec::new();
+    let mut missing: Vec<String> = Vec::new();
+    for name in names {
+        match find_tag(name, tags, heap) {
+            Ok(tag) => found.push(tag.id),
+            Err(_) => {
+                let trimmed = name.trim();
+                if !missing.iter().any(|seen| seen.to_lowercase() == trimmed.to_lowercase()) {
+                    missing.push(trimmed.to_owned());
+                }
+            }
+        }
+    }
+    (found, missing)
+}
+
 /// The tag `name` names, trimmed, by name ignoring case, as the server compares them, or by ID. The first match wins. An
 /// unknown one carries the names closest to it, by edit distance, ties in the server's order.
 pub fn find_tag<'t>(name: &str, tags: &'t TagListDto, heap: &HeapHandle) -> Result<&'t TagDto, LookupError> {

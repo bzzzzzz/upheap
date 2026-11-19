@@ -6,6 +6,7 @@ use api_types::common::{ItemDto, KindDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
+use api_types::tags::{CreateTagDto, TagDto};
 use api_types::turns::SendToAgentDto;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -15,7 +16,7 @@ use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::UsageError;
 use crate::commands::heap_api::{HeapApi, is_not_found, named_heap, resolve_heap_handle};
 use crate::lookup::{DueWhen, HeapHandle, HeapName, ItemName, due_on, find_option, find_parameter, match_due_choice};
-use crate::output::{Cell, Tone};
+use crate::output::{Cell, Mode, Output, Tone};
 use crate::{App, CliError};
 
 impl HeapApi<'_> {
@@ -230,6 +231,45 @@ pub(super) fn describe_due_flag() -> String {
         .map(|label| label.replace(' ', "-"))
         .collect();
     format!("When: a date, YYYY-MM-DD, or a rough choice: {}", choices.join(", "))
+}
+
+/// Adds each of `names` as a tag of the heap, one at a time in order, and gives the new tags' IDs. Each added tag is
+/// said on stderr, with the name the server kept. When one can't be added, stderr says which tags weren't, and that
+/// `failed_what` (what didn't happen to the item), before the error is returned; the tags added before stay. With
+/// `--json` stderr carries only the problem body, which scripts parse, so nothing is said.
+pub(in crate::commands) async fn add_missing_tags(
+    names: &[String],
+    api: &HeapApi<'_>,
+    out: &mut Output,
+    failed_what: &str,
+) -> Result<Vec<Uuid>, CliError> {
+    let mut ids = Vec::with_capacity(names.len());
+    for (done, name) in names.iter().enumerate() {
+        let body = CreateTagDto {
+            name: name.clone(),
+            description: None,
+        };
+        match api.post::<TagDto>(&["tags"], &body).await {
+            Ok(added) => {
+                if out.mode() != Mode::Json {
+                    out.note(&format!("Added tag \"{}\".", added.value.name))?;
+                }
+                ids.push(added.value.id);
+            }
+            Err(err) => {
+                if out.mode() != Mode::Json {
+                    let left: Vec<String> = names[done..].iter().map(|name| format!("\"{name}\"")).collect();
+                    let noun = if left.len() == 1 { "tag" } else { "tags" };
+                    out.note(&format!(
+                        "Couldn't add the {noun} {}, so {failed_what}.",
+                        left.join(", ")
+                    ))?;
+                }
+                return Err(err);
+            }
+        }
+    }
+    Ok(ids)
 }
 
 /// `ids` without repeats, in the order they first appear.

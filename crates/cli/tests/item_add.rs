@@ -139,6 +139,71 @@ async fn item_add_with_an_unknown_tag_lists_the_heaps_tags_and_adds_nothing() ->
     Ok(())
 }
 
+async fn tag_names(server: &TestServer, ada: &common::TestUser) -> Result<Vec<String>> {
+    let list = server.send(ada, "GET", "/teams/ada/heaps/personal/tags", None).await?;
+    Ok(list["tags"]
+        .as_array()
+        .context("tags")?
+        .iter()
+        .filter_map(|tag| tag["name"].as_str().map(str::to_owned))
+        .collect())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_add_with_create_tags_adds_a_tag_the_heap_hasnt_got_once() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let added = cli
+        .run(&[
+            "item",
+            "add",
+            "Tagged",
+            "--tag",
+            "New-one",
+            "--tag",
+            "new-ONE",
+            "--create-tags",
+            "-q",
+        ])
+        .await;
+
+    // Assert
+    expect_that!(added.exited(0), eq(true));
+    expect_that!(added.stderr, eq("Added tag \"New-one\".\n"));
+    let item = server.read_item(&ada, HEAP, added.stdout.trim()).await?;
+    expect_that!(item["tags"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(item["tags"][0]["name"], eq("New-one"));
+    expect_that!(
+        tag_names(&server, &ada).await?,
+        elements_are![eq("Infra"), eq("New-one")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_add_with_create_tags_uses_a_tag_the_heap_has_and_adds_none() -> Result<()> {
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    let added = cli
+        .run(&["item", "add", "Tagged", "--tag", "infra", "--create-tags", "-q"])
+        .await;
+
+    expect_that!(added.exited(0), eq(true));
+    expect_that!(added.stderr, eq(""));
+    let item = server.read_item(&ada, HEAP, added.stdout.trim()).await?;
+    expect_that!(item["tags"][0]["name"], eq("Infra"));
+    expect_that!(tag_names(&server, &ada).await?, elements_are![eq("Infra")]);
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn item_add_quiet_is_the_key_and_json_is_the_created_item() -> Result<()> {
