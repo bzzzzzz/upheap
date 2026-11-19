@@ -274,3 +274,43 @@ test("sign-in shows the forms when the provider settings can't be read", async (
   await expect(page.getByLabel("Password")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("link", { name: /^Sign in with/ })).toHaveCount(0);
 });
+
+test("a closed server with a provider hides Create account and doesn't send people for an invite", async ({ page }) => {
+  await page.route("**/api/v1/auth/registration", (route) => route.fulfill({ json: { open: false } }));
+  await page.route("**/api/v1/auth/oidc", (route) =>
+    route.fulfill({ json: { label: "Acme SSO", password_sign_in: true } }),
+  );
+  await page.goto("/login");
+  await expect(page.getByRole("link", { name: "Sign in with Acme SSO" })).toBeVisible();
+  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Create account" })).toHaveCount(0);
+  // A first sign-in through the provider makes the account, so the invite-link footnote would be wrong.
+  await expect(page.getByText("New accounts need an invite link from a team's admin.")).toHaveCount(0);
+});
+
+test("a throttled sign-in counts down the wait and then lets the user try again", async ({ page }) => {
+  await page.clock.install();
+  await page.route("**/api/v1/auth/login", (route) =>
+    route.fulfill({
+      status: 429,
+      contentType: "application/problem+json",
+      headers: { "Retry-After": "900" },
+      body: JSON.stringify({ status: 429, code: "too_many_attempts", title: "Too many attempts. Try again later." }),
+    }),
+  );
+  await page.goto("/login");
+  await page.getByLabel("Email or username").fill("ana");
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
+  const line = page.getByRole("alert");
+  await expect(line).toHaveText("Too many attempts. Try again in 15:00.");
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeDisabled();
+
+  await page.clock.fastForward("01:00");
+  await expect(line).toHaveText("Too many attempts. Try again in 14:00.");
+
+  await page.clock.fastForward("14:00");
+  await expect(line).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeEnabled();
+});
