@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
-import type { CreateItemRequest, Item, ItemPatchRequest } from "../schema";
+import type { CreateItemRequest, Item, ItemPatchRequest, ItemState } from "../schema";
 import {
   itemKey,
   invalidateHeap,
@@ -75,6 +75,43 @@ export function useUpdateItem(heap: HeapRef) {
     // Always re-render from the server, also after a conflict, so the row shows the latest version.
     onSettled: (_saved, _error, { patch }) => {
       if (patch.state !== undefined) invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
+  });
+}
+
+/**
+ * Moves several items to `state`, one after another in the order given, each as `useUpdateItem` saves one: in the item
+ * edits' scope, at the newest version known. An item the server refuses, or a request that fails, is listed with its
+ * error and the run goes on. Each saved item is written into the cache; the lists and open counts are fetched again
+ * once, after the last.
+ */
+export function useChangeStates(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    scope: itemEditsScope,
+    mutationFn: async ({ items, state }: { items: Item[]; state: ItemState }) => {
+      const changed: Item[] = [];
+      const refused: { item: Item; error: Error }[] = [];
+      for (const item of items) {
+        const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
+        try {
+          const saved = unwrap(
+            await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}", {
+              params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${version}"` } },
+              body: { state },
+            }),
+          );
+          queryClient.setQueryData(itemKey(heap, saved.key), saved);
+          changed.push(saved);
+        } catch (error) {
+          refused.push({ item, error: error instanceof Error ? error : new Error(String(error)) });
+        }
+      }
+      return { changed, refused };
+    },
+    onSettled: () => {
+      invalidateOpenCounts(queryClient);
       return invalidateHeap(queryClient, heap);
     },
   });

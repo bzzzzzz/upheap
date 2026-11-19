@@ -1,33 +1,35 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Check, Minus, X } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Bot,
+  Check,
+  CircleCheck,
+  CirclePause,
+  CirclePlay,
+  CircleX,
+  Minus,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useRef, useState } from "react";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Item } from "../api/schema";
 import { useMe } from "../api/queries/me";
 import { useMoveItems } from "../api/queries/moves";
-import { compactButtonClass } from "./buttons";
+import { plural, RefusedPanel, useBulkActions, type BulkAction, type Refused } from "./bulkActions";
+import { buttonClass, compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { MoveToHeap } from "./MoveToHeap";
 import { PopoverSheet } from "./PopoverSheet";
 import { useToast } from "./UndoToast";
 
-/** What the batch move said when some items stayed: where they went and why each didn't. */
-type Refused = {
-  target: string;
-  moved: number;
-  total: number;
-  notMoved: { id: string; title: string; reason: string }[];
-};
-
-const plural = (count: number) => `${count} item${count === 1 ? "" : "s"}`;
-
 /**
- * The bars of select mode on a heap's list (ux.md, The list §19), and the Move to… picker they open. On a tablet or
- * wide screen one bar replaces the toolbar: a box, how many are selected, Select all, Move to… and Done. On a phone a
- * bar over the top bar has ✕ and Select all, and one over the tabs has Move to…. `items` are the rows that can be
- * selected, as the list shows them; `selected` holds their IDs. `onSelect` takes the whole new selection, `onDone` ends
- * select mode.
+ * The bars of select mode on a heap's list (ux.md, The list §19), the bulk actions on them, and the Move to… picker. On
+ * a tablet or wide screen one bar replaces the toolbar: a box, how many are selected, Select all, the actions and ✕.
+ * On a phone a bar over the top bar has ✕ and Select all, and one over the tabs has the actions. `items` are the rows
+ * that can be selected, as the list shows them; `selected` holds their IDs. `onSelect` takes the whole new selection,
+ * `onDone` ends select mode.
  */
 export function SelectionBars({
   heapRef,
@@ -57,6 +59,8 @@ export function SelectionBars({
   const toggleAll = () => (all ? onSelect(new Set()) : selectAll());
   const chosen = items.filter((item) => selected.has(item.id));
 
+  const bulk = useBulkActions({ heapRef, chosen, onSelect, onDone });
+  const busy = bulk.running !== null;
   const open = () => {
     move.reset();
     setMoving(true);
@@ -83,10 +87,12 @@ export function SelectionBars({
         onDone();
       } else {
         setRefused({
-          target: name,
-          moved: answer.moved.length,
-          total: chosen.length,
-          notMoved: answer.not_moved.map(({ id, problem }) => ({
+          headline:
+            answer.moved.length === 0
+              ? `None of the ${plural(chosen.length)} moved.`
+              : `Moved ${answer.moved.length} of ${plural(chosen.length)} to ${name}.`,
+          heading: "Not moved:",
+          entries: answer.not_moved.map(({ id, problem }) => ({
             id,
             title: chosen.find((item) => item.id === id)?.title ?? "An item",
             reason: itemProblem(new ApiProblem(problem.status, problem.code, problem.title)),
@@ -99,7 +105,7 @@ export function SelectionBars({
   };
   // Close keeps select mode, with only the items that stayed selected; those no longer shown are dropped with the rest.
   const closeRefused = () => {
-    if (refused) onSelect(new Set(refused.notMoved.map((entry) => entry.id)));
+    if (refused) onSelect(new Set(refused.entries.map((entry) => entry.id)));
     close();
   };
 
@@ -108,15 +114,33 @@ export function SelectionBars({
       {count} selected
     </span>
   );
-  const moveButton = (className: string, ref?: typeof moveRef) => (
-    <button ref={ref} type="button" disabled={count === 0} onClick={open} className={className}>
-      Move to…
+  const startAction: BulkAction = bulk.pausing ? "pause" : "start";
+  const startLabel = bulk.pausing ? "Pause" : "Start";
+  const actionButton = (
+    action: BulkAction,
+    label: string,
+    className: string,
+    shortLabel?: string,
+    Icon?: LucideIcon,
+  ) => (
+    <button
+      type="button"
+      aria-label={shortLabel ? label : undefined}
+      aria-busy={bulk.running === action || undefined}
+      disabled={count === 0 || busy}
+      onClick={(event) => bulk.begin(action, event.currentTarget)}
+      className={className}
+    >
+      {Icon && <Icon aria-hidden="true" className="size-5" />}
+      {shortLabel ?? label}
     </button>
   );
+  const wideClass = compactButtonClass.bordered;
+  const phoneClass = `${buttonClass} min-h-12 flex-1 flex-col gap-0.5 rounded-lg px-1 text-xs text-ink`;
 
   return (
     <>
-      <div className="mt-6 flex items-center gap-3 max-sm:hidden">
+      <div className="mt-6 flex flex-wrap items-center gap-3 max-sm:hidden">
         <button
           type="button"
           role="checkbox"
@@ -140,10 +164,16 @@ export function SelectionBars({
         <button type="button" onClick={selectAll} className={compactButtonClass.quiet}>
           Select all {items.length}
         </button>
-        <span className="ml-auto flex items-center gap-2">
-          {moveButton(compactButtonClass.bordered, moveRef)}
-          <button type="button" onClick={onDone} className={compactButtonClass.primary}>
-            Done
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          {actionButton(startAction, startLabel, wideClass)}
+          {actionButton("done", "Done", wideClass)}
+          {actionButton("wont_do", "Won't do", wideClass)}
+          {actionButton("send", "Send to an agent…", wideClass)}
+          <button ref={moveRef} type="button" disabled={count === 0 || busy} onClick={open} className={wideClass}>
+            Move to…
+          </button>
+          <button type="button" aria-label="Done selecting" onClick={onDone} className={compactButtonClass.icon}>
+            <X aria-hidden="true" className="size-5" />
           </button>
         </span>
       </div>
@@ -158,8 +188,24 @@ export function SelectionBars({
         </button>
       </div>
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:hidden">
-        {moveButton(`${compactButtonClass.primary} h-12 w-full`)}
+        <div className="flex gap-1">
+          {actionButton("done", "Done", phoneClass, "Done", CircleCheck)}
+          {actionButton("wont_do", "Won't do", phoneClass, "Won't do", CircleX)}
+          {actionButton(startAction, startLabel, phoneClass, startLabel, bulk.pausing ? CirclePause : CirclePlay)}
+          {actionButton("send", "Send to an agent…", phoneClass, "Agent…", Bot)}
+          <button
+            type="button"
+            aria-label="Move to…"
+            disabled={count === 0 || busy}
+            onClick={open}
+            className={phoneClass}
+          >
+            <ArrowRightLeft aria-hidden="true" className="size-5" />
+            Move…
+          </button>
+        </div>
       </div>
+      {bulk.overlays}
 
       {team && me && (
         <PopoverSheet
@@ -171,7 +217,7 @@ export function SelectionBars({
           size="narrow"
         >
           {refused ? (
-            <MoveRefused refused={refused} onClose={closeRefused} />
+            <RefusedPanel refused={refused} onClose={closeRefused} />
           ) : (
             <MoveToHeap
               me={me}
@@ -187,31 +233,5 @@ export function SelectionBars({
         </PopoverSheet>
       )}
     </>
-  );
-}
-
-/** What a batch move left behind: how many moved, and each item that didn't, with the reason. */
-function MoveRefused({ refused, onClose }: { refused: Refused; onClose: () => void }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-base font-semibold break-words">
-        {refused.moved === 0
-          ? `None of the ${plural(refused.total)} moved.`
-          : `Moved ${refused.moved} of ${plural(refused.total)} to ${refused.target}.`}
-      </h3>
-      <p className="text-sm font-medium">Not moved:</p>
-      <ul className="flex flex-col gap-1 text-sm text-ink-soft">
-        {refused.notMoved.map((entry) => (
-          <li key={entry.id} className="break-words">
-            {entry.title} — {entry.reason}
-          </li>
-        ))}
-      </ul>
-      <div className="flex justify-end">
-        <button type="button" autoFocus onClick={onClose} className={compactButtonClass.primary}>
-          Close
-        </button>
-      </div>
-    </div>
   );
 }

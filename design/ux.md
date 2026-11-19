@@ -344,21 +344,43 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 18. Sort by offers Priority, Due soonest, Most needed, Smallest effort and Largest impact, then each custom parameter
     that has an order. Most needed lists Critical first, then Expected, Nice to have and Idea; items of the same
     need keep priority order.
-19. **Selecting and moving several items** works on a heap's own list only: not on All items, not on Closed, and the
+19. **Selecting and acting on several items** works on a heap's own list only: not on All items, not on Closed, and the
     reminders to come aren't selectable. **Select** shows when the heap isn't archived and its team has another heap
     that isn't. On a tablet or wide screen it is a button in the toolbar after Filters; on a phone it is a text button
-    at the end of the top bar, with no item open. Select mode is a history entry, so Back leaves it, as do Done, ✕,
-    Escape and a move that took every item; changing a filter or the sort doesn't. Entering it closes an open item
+    at the end of the top bar, with no item open. Select mode is a history entry, so Back leaves it, as do ✕,
+    Escape, and Done, Won't do or a move that took every item; changing a filter or the sort doesn't. Entering it closes an open item
     for good, so leaving lands on the list, and starts with nothing selected.
     In select mode a row's first slot holds a checkbox, Done and the robot are hidden, swipes are off, and the row is
     a checkbox: a click or tap or Space toggles it, Shift-click selects every row between the last one toggled and
     this one, and Shift+↑ and Shift+↓ move to the next row and select it. `x`, `s` and `a` do nothing. Tags and
     parameters in a row still filter the list. On a tablet or wide screen a bar takes the toolbar's place: a box that
-    selects or clears every row shown (mixed while some are), "3 selected · Select all 14", **Move to…** (off while
-    nothing is selected) and **Done**; the chips of the filters stay. On a phone a bar over the top bar has ✕, "3
-    selected" and Select all (Clear all when all are), and a bar over the tabs has Move to… across its width. The
-    count is announced. Only rows the list shows stay selected: a row a filter or the search hides is dropped from the
+    selects or clears every row shown (mixed while some are), "3 selected · Select all 14", and, right-aligned,
+    **Start** (**Pause** when every selected item is in progress), **Done**, **Won't do**, **Send to an agent…** and
+    **Move to…**, then a ✕ that leaves select mode; the chips of the filters stay, and the bar wraps when it is
+    too narrow. On a phone a bar over the top bar has ✕, "3 selected" and Select all (Clear all when all are), and a
+    bar over the tabs has one row of equal buttons, an icon over a short label: Done, Won't do, Start or Pause,
+    Agent… and Move…, each named in full ("Send to an agent…", "Move to…") for a screen reader. The count is
+    announced. Only rows the list shows stay selected: a row a filter or the search hides is dropped from the
     selection and doesn't come back when the filter is taken off.
+    Every action button is off while nothing is selected and while a bulk request runs. Done, Won't do, Start,
+    Pause and Send go item by item, in the list's order, through the item's own endpoints, so each item is checked on
+    its own. Done and Won't do touch every selected item, Pause too; Start touches the ones not in progress, blocked
+    ones included (starting drops their blocker). Send gives every item its own next goal. No item is left out for
+    not allowing the action: the server refuses it and says why.
+    Done and Won't do ask first, in a dialog (a sheet on a phone): "Mark 3 items done?" with "Mark 3 done", and
+    "Close 3 items as won't do?" with "Close 3". Start asks only when an agent has some of the items it touches. The
+    body says "An agent has 2 of them. This takes them back." when it applies, and otherwise, for Done and Won't do,
+    "There is no Undo."; Cancel returns focus to the button. Pause never asks, and Send's form is its question.
+    Send to an agent… opens a popover under the button (a sheet on a phone) with "How far": One step or All the way,
+    "A line for the agent (optional)", Send and Cancel. Send is off while it runs.
+    When every item changed, the toast says "Marked 3 items done.", "Closed 3 items as won't do.", "Started 3
+    items.", "Paused 3 items." or "Sent 3 items to an agent."; after Done and Won't do select mode ends and the rows
+    are gone, and after the others the selection stays. There is no Undo. When some were refused (changed by someone
+    else meanwhile, closed, or not allowed), a panel under the button, in the send form's place for Send, says
+    "Marked 2 of 4 items done." (or "Closed 2 of 4 items as won't do.", "Started…", "Paused…", "Sent 2 of 4 items to
+    an agent.", or "None of the 4 items changed."), then "Not marked done:" (or "Not closed:", "Not started:", "Not
+    paused:", "Not sent:") and a line for each, "Title — reason", with **Close**; Close keeps select mode with only
+    the refused rows selected. A failed request, on the network or not, counts as that item's refusal.
     Move to… opens the item's Move picker (The item §6) for the selection, with its own team's heaps only. Picking a
     heap asks first, "Move 3 items to Marketing?" and "Tags they don't have there are dropped.", with Cancel and
     "Move 3". When every item moves, the picker closes, select mode ends and the list stays where it is, with the

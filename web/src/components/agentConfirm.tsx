@@ -49,8 +49,9 @@ export function useConfirmAgentStateChange(change: ChangeState): { onChangeState
   const focusAfterRender = useFocusAfterRender();
   const stop = () => setAsking(null);
   const confirm = asking && (
-    <AgentStateConfirm
-      question={rowQuestion(asking.item, asking.state)}
+    <ConfirmDialog
+      title="Take back from the agent?"
+      body={rowQuestion(asking.item, asking.state)}
       confirmLabel={`Take back and ${doing(asking.state)}`}
       onConfirm={() => {
         stop();
@@ -66,14 +67,19 @@ export function useConfirmAgentStateChange(change: ChangeState): { onChangeState
   return { onChangeState, confirm };
 }
 
-/** Asks whether to take the item back from the agent and carry on: a centred dialog on a wide screen, a sheet on a phone. */
-function AgentStateConfirm({
-  question,
+/**
+ * Asks a question before an action and carries on when confirmed: a centred dialog on a wide screen, a sheet on a
+ * phone. The list's state changes of an item an agent has, and the bulk actions of select mode, ask through it.
+ */
+export function ConfirmDialog({
+  title,
+  body,
   confirmLabel,
   onConfirm,
   onCancel,
 }: {
-  question: string;
+  title: string;
+  body: string;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -82,10 +88,10 @@ function AgentStateConfirm({
   const bodyId = useId();
   if (phone) {
     return (
-      <Sheet title="Take back from the agent?" role="alertdialog" describedBy={bodyId} isOpen onClose={onCancel}>
+      <Sheet title={title} role="alertdialog" describedBy={bodyId} isOpen onClose={onCancel}>
         <div className="flex flex-col gap-2 pb-1">
           <p id={bodyId} className="px-1 py-1 text-[15px] break-words text-ink">
-            {question}
+            {body}
           </p>
           <button
             type="button"
@@ -115,10 +121,10 @@ function AgentStateConfirm({
       <Modal className="w-full max-w-[440px] rounded-2xl bg-surface p-[22px] text-ink shadow-xl outline-none">
         <Dialog role="alertdialog" aria-describedby={bodyId} className="flex flex-col gap-3.5 outline-none">
           <Heading slot="title" className="text-base font-semibold">
-            Take back from the agent?
+            {title}
           </Heading>
           <p id={bodyId} className="text-sm break-words text-ink-soft">
-            {question}
+            {body}
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button type="button" autoFocus onClick={onCancel} className={compactButtonClass.quiet}>
