@@ -88,6 +88,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::TurnRedone
         | AuditAction::TagCreated
         | AuditAction::TagUpdated
+        | AuditAction::TagMerged
         | AuditAction::SavedViewCreated
         | AuditAction::SavedViewUpdated
         | AuditAction::SavedViewArchived => Permission::EditItems,

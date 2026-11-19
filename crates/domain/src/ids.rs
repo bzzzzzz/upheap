@@ -155,6 +155,7 @@ mod tests {
                 "turn_redone",
                 "tag_created",
                 "tag_updated",
+                "tag_merged",
                 "saved_view_created",
                 "saved_view_updated",
                 "saved_view_archived",
@@ -241,7 +242,8 @@ mod tests {
                 "username",
                 "groups",
                 "by",
-                "archived_at"
+                "archived_at",
+                "merged"
             ]
         );
         pinned!(

@@ -116,6 +116,39 @@ pub fn parse_tag_set(ids: impl IntoIterator<Item = TagId>) -> Result<BTreeSet<Ta
     Ok(set)
 }
 
+/// A heap's tag order after `merged` heap tags are merged into the team tag `team_tag`: the team tag takes the
+/// position of the highest-ranked of itself and the merged tags the order holds, and the others are removed.
+/// `None` when the order holds none of the merged tags, so it needs no write.
+pub fn merged_tag_order(order: &[TagId], team_tag: TagId, merged: &BTreeSet<TagId>) -> Option<Vec<TagId>> {
+    if !order.iter().any(|tag| merged.contains(tag)) {
+        return None;
+    }
+    let mut placed = false;
+    let mut new_order = Vec::with_capacity(order.len());
+    for tag in order {
+        if *tag == team_tag || merged.contains(tag) {
+            if !placed {
+                new_order.push(team_tag);
+                placed = true;
+            }
+        } else {
+            new_order.push(*tag);
+        }
+    }
+    Some(new_order)
+}
+
+/// The text a merge's reach is hashed from: for each heap tag in the reach, by tag ID, `"<tag id>:<items>\n"`, with
+/// `items` the number of items that carry it. It changes when a heap tag joins or leaves the reach or a count changes.
+pub fn reach_text(entries: impl IntoIterator<Item = (TagId, u32)>) -> String {
+    let mut entries: Vec<(TagId, u32)> = entries.into_iter().collect();
+    entries.sort_by_key(|(tag, _)| *tag);
+    entries
+        .into_iter()
+        .map(|(tag, items)| format!("{tag}:{items}\n"))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use googletest::prelude::*;
@@ -182,5 +215,47 @@ mod tests {
 
         expect_that!(parse_tag_set([id, id]).map(|s| s.len()), ok(eq(&1)));
         expect_that!(parse_tag_set(many), err(anything()));
+    }
+
+    fn tag_n(n: u128) -> TagId {
+        TagId::from_uuid(Uuid::from_u128(n))
+    }
+
+    #[gtest]
+    fn the_team_tag_takes_the_highest_position_of_the_merged_tags() {
+        let merged = BTreeSet::from([tag_n(2), tag_n(4)]);
+
+        let order = merged_tag_order(&[tag_n(1), tag_n(4), tag_n(3), tag_n(2)], tag_n(9), &merged);
+
+        expect_that!(order, some(eq(&vec![tag_n(1), tag_n(9), tag_n(3)])));
+    }
+
+    #[gtest]
+    fn a_team_tag_already_ranked_keeps_the_higher_position() {
+        let merged = BTreeSet::from([tag_n(2)]);
+
+        let before = merged_tag_order(&[tag_n(9), tag_n(1), tag_n(2)], tag_n(9), &merged);
+        let after = merged_tag_order(&[tag_n(1), tag_n(2), tag_n(9)], tag_n(9), &merged);
+
+        expect_that!(before, some(eq(&vec![tag_n(9), tag_n(1)])));
+        expect_that!(after, some(eq(&vec![tag_n(1), tag_n(9)])));
+    }
+
+    #[gtest]
+    fn an_order_without_merged_tags_is_left_alone() {
+        let merged = BTreeSet::from([tag_n(2)]);
+
+        expect_that!(merged_tag_order(&[tag_n(1), tag_n(9)], tag_n(9), &merged), none());
+        expect_that!(merged_tag_order(&[], tag_n(9), &merged), none());
+    }
+
+    #[gtest]
+    fn the_reach_text_is_the_same_in_any_input_order_and_changes_with_a_count() {
+        let one = reach_text([(tag_n(1), 2), (tag_n(2), 0)]);
+        let other_order = reach_text([(tag_n(2), 0), (tag_n(1), 2)]);
+        let counted = reach_text([(tag_n(1), 3), (tag_n(2), 0)]);
+
+        expect_that!(one, eq(&other_order));
+        expect_that!(one, not(eq(&counted)));
     }
 }

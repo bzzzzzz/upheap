@@ -3,6 +3,7 @@
 //! Every [`ServiceError`] variant is matched exhaustively, so a new variant doesn't compile until it has a
 //! status and a code. Clients branch on `code`, never on `title` or `detail`.
 
+use api_types::problem::MergeReachDto;
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::{StatusCode, header};
@@ -26,6 +27,7 @@ use store_error::StoreErrorKind;
 pub(crate) use api_types::problem::Problem;
 
 use crate::request_id::current_request_id;
+use crate::tags::to_merge_reach_dto;
 
 /// Why a request failed.
 #[derive(Debug)]
@@ -101,6 +103,7 @@ struct Classified {
     hint: Option<String>,
     item_key: Option<String>,
     highest: Option<String>,
+    merge_reach: Option<MergeReachDto>,
     category: Category,
 }
 
@@ -113,6 +116,7 @@ fn classify(err: &ApiError) -> Classified {
         hint: None,
         item_key: None,
         highest: None,
+        merge_reach: None,
         category,
     };
     match err {
@@ -154,6 +158,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         hint: None,
         item_key: None,
         highest: None,
+        merge_reach: None,
         category,
     };
     match err {
@@ -399,6 +404,10 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("name"),
             ..simple(StatusCode::CONFLICT, "tag_name_taken_by_team_tag", Category::Conflict)
         },
+        ServiceError::TagMergeUnconfirmed { reach, .. } => Classified {
+            merge_reach: Some(to_merge_reach_dto(reach)),
+            ..simple(StatusCode::CONFLICT, "tag_merge_unconfirmed", Category::Conflict)
+        },
         ServiceError::Parameter(error) => classify_parameter(error, simple),
         ServiceError::ParameterNameTaken { .. } => Classified {
             field: Some("name"),
@@ -419,6 +428,7 @@ fn classify_service(err: &ServiceError) -> Classified {
                 hint: None,
                 item_key: None,
                 highest: None,
+                merge_reach: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -539,6 +549,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         hint,
         item_key: None,
         highest: None,
+        merge_reach: None,
         category: Category::Caller,
     }
 }
@@ -552,6 +563,7 @@ fn unexpected() -> Classified {
         hint: None,
         item_key: None,
         highest: None,
+        merge_reach: None,
         category: Category::Unexpected,
     }
 }
@@ -582,6 +594,7 @@ pub(crate) fn problem_of(err: &ApiError) -> (StatusCode, Problem) {
         hint: classified.hint,
         item_key: classified.item_key,
         highest: classified.highest,
+        merge_reach: classified.merge_reach,
         request_id,
     };
     (classified.status, body)

@@ -505,6 +505,34 @@ async fn attach_values(db: &impl ConnectionTrait, items: &mut [Item]) -> Result<
     Ok(())
 }
 
+/// The active `(item, tag)` links of the tags `tag_ids`, whatever the item's state and heap, in no particular order.
+/// Serves the reach of a tag merge: how many items carry each tag, and which items to rewrite.
+pub async fn list_active_tag_links(
+    db: &impl ConnectionTrait,
+    tag_ids: &[TagId],
+) -> Result<Vec<(ItemId, TagId)>, StoreError> {
+    let ids: Vec<String> = tag_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut links = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_tags::Entity::find()
+            .filter(item_tags::Column::TagId.is_in(chunk.iter().map(String::as_str)))
+            .filter(item_tags::Column::RemovedAt.is_null())
+            .all(db)
+            .await?;
+        for row in rows {
+            let read = RowReader {
+                table: "item_tags",
+                id: &row.item_id,
+            };
+            links.push((
+                ItemId::from_uuid(read.uuid(&row.item_id)?),
+                TagId::from_uuid(read.uuid(&row.tag_id)?),
+            ));
+        }
+    }
+    Ok(links)
+}
+
 /// Makes the item's active tags exactly `tags`: adds the missing ones and marks the others removed.
 async fn sync_tags(
     db: &impl ConnectionTrait,

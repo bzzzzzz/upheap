@@ -14,6 +14,8 @@ use domain::validation::Field;
 use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
+use crate::tags::MergeReach;
+
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
@@ -135,6 +137,12 @@ pub enum ServiceError {
     /// The name is a team tag of the heap's team; `name` is the team tag's, as stored.
     #[error("{name:?} is a team tag; use it instead")]
     TeamTagNameTaken { name: String },
+    /// A team tag write that would merge heap tags was not confirmed with the token of their current reach.
+    #[error(
+        "Making {name:?} a team tag merges {} into it",
+        heap_tags(reach.entries.len())
+    )]
+    TagMergeUnconfirmed { name: String, reach: MergeReach },
     #[error(transparent)]
     Parameter(#[from] ParameterError),
     #[error("this heap already has a parameter called {name:?}")]
@@ -167,5 +175,13 @@ fn in_minutes(wait: Duration) -> String {
     match wait.as_minutes_ceil() {
         1 => "1 minute".to_owned(),
         minutes => format!("{minutes} minutes"),
+    }
+}
+
+/// "1 heap tag", "3 heap tags".
+fn heap_tags(count: usize) -> String {
+    match count {
+        1 => "1 heap tag".to_owned(),
+        n => format!("{n} heap tags"),
     }
 }

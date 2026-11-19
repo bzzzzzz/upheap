@@ -1,6 +1,7 @@
 //! A heap's tags and a team's: listing, creating, renaming and describing them. Tags are never deleted.
 
 use api_types::common::HeapSummaryDto;
+use api_types::problem::{MergeReachDto, MergeReachHeapDto};
 use api_types::tags::{
     CreateTagDto, TagActionDto, TagDto, TagKindDto, TagListActionDto, TagListDto, TagPatchDto, TeamTagListDto,
 };
@@ -11,14 +12,15 @@ use domain::TagId;
 use domain::tag::TagOwner;
 use serde::Deserialize;
 use service::ServiceError;
-use service::tags::TagView;
+use service::tags::{MergeReach, TagView};
+use utoipa::IntoParams;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::dto::IfMatchHeader;
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, IfMatch};
+use crate::extract::{ApiJson, ApiPath, ApiQuery, IfMatch};
 use crate::paths::{HeapParams, HeapPath, TeamParams, TeamPath};
 use crate::{ApiError, AppState};
 
@@ -34,6 +36,32 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 #[derive(Deserialize)]
 struct TagPathId {
     tag_id: Uuid,
+}
+
+/// `confirm_reach`, on the writes that may merge heap tags into a team tag.
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+struct ConfirmReachQuery {
+    /// The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the
+    /// heap tags it would merge are still those, with the same item counts.
+    confirm_reach: Option<String>,
+}
+
+pub(crate) fn to_merge_reach_dto(reach: &MergeReach) -> MergeReachDto {
+    MergeReachDto {
+        token: reach.token.clone(),
+        heaps: reach
+            .entries
+            .iter()
+            .map(|entry| MergeReachHeapDto {
+                heap: HeapSummaryDto::from(&entry.heap),
+                archived: entry.heap.is_archived(),
+                tag_id: *entry.tag.id.as_uuid(),
+                tag_name: entry.tag.name.as_str().to_owned(),
+                items: entry.items,
+            })
+            .collect(),
+    }
 }
 
 fn to_tag_dto(view: TagView) -> TagDto {
@@ -133,36 +161,39 @@ async fn list_team_tags(State(state): State<AppState>, path: TeamPath) -> Result
     }))
 }
 
-/// Adds a tag to the team, for all its heaps. The name must be free among the team's tags and the tags of every
-/// heap of the team.
+/// Adds a tag to the team, for all its heaps. The name must be free among the team's tags. Heap tags of the team's
+/// heaps with that name are merged into it, in every heap, archived ones included; that needs `confirm_reach`, the
+/// token of the reach a first attempt is refused with.
 #[utoipa::path(post, path = "/teams/{team}/tags", tag = "tags", security(("session" = [])),
-    params(TeamParams), request_body = CreateTagDto,
+    params(TeamParams, ConfirmReachQuery), request_body = CreateTagDto,
     responses(
         (status = 201, body = TagDto),
         (status = 404, body = Problem),
-        (status = 409, description = "`tag_name_taken`", body = Problem),
+        (status = 409, description = "`tag_name_taken` or `tag_merge_unconfirmed`", body = Problem),
         (status = 422, body = Problem),
     ))]
 async fn create_team_tag(
     State(state): State<AppState>,
     path: TeamPath,
+    ApiQuery(query): ApiQuery<ConfirmReachQuery>,
     ApiJson(body): ApiJson<CreateTagDto>,
 ) -> Result<(StatusCode, Json<TagDto>), ApiError> {
     let fields = body.to_new_tag().map_err(ServiceError::from)?;
     let view = state
         .services
-        .create_team_tag(path.principal, path.team_id, fields)
+        .create_team_tag(path.principal, path.team_id, fields, query.confirm_reach.as_deref())
         .await?;
     Ok((StatusCode::CREATED, Json(to_tag_dto(view))))
 }
 
 /// Renames a team's tag or changes its description, in every heap at once. Send the tag's `version` in `If-Match`.
+/// A rename to a name heap tags of the team have merges them, and needs `confirm_reach` as making a team tag does.
 #[utoipa::path(patch, path = "/teams/{team}/tags/{tag_id}", tag = "tags", security(("session" = [])),
-    params(TeamParams, ("tag_id" = Uuid, Path), IfMatchHeader), request_body = TagPatchDto,
+    params(TeamParams, ("tag_id" = Uuid, Path), IfMatchHeader, ConfirmReachQuery), request_body = TagPatchDto,
     responses(
         (status = 200, body = TagDto),
         (status = 404, body = Problem),
-        (status = 409, description = "`tag_name_taken` or `version_conflict`", body = Problem),
+        (status = 409, description = "`tag_name_taken`, `tag_merge_unconfirmed` or `version_conflict`", body = Problem),
         (status = 422, body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
@@ -171,12 +202,20 @@ async fn update_team_tag(
     path: TeamPath,
     IfMatch(expected): IfMatch,
     ApiPath(TagPathId { tag_id }): ApiPath<TagPathId>,
+    ApiQuery(query): ApiQuery<ConfirmReachQuery>,
     ApiJson(body): ApiJson<TagPatchDto>,
 ) -> Result<Json<TagDto>, ApiError> {
     let patch = body.to_patch().map_err(ServiceError::from)?;
     let view = state
         .services
-        .update_team_tag(path.principal, path.team_id, TagId::from_uuid(tag_id), patch, expected)
+        .update_team_tag(
+            path.principal,
+            path.team_id,
+            TagId::from_uuid(tag_id),
+            patch,
+            expected,
+            query.confirm_reach.as_deref(),
+        )
         .await?;
     Ok(Json(to_tag_dto(view)))
 }
