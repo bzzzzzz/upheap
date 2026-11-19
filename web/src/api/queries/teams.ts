@@ -132,10 +132,6 @@ export function useLeaveTeam(team: Team) {
 }
 
 /**
- * Users with a word of their name starting with `query`, or whose email starts with it once it has an `@` and part of
- * the domain. Runs once `query` has the 3 characters the server needs.
- */
-/**
  * Whether the server takes `query` as a user lookup: 3 characters, or a whole username shorter than that (`ab`), which
  * then matches only that username.
  */
@@ -144,6 +140,10 @@ export function isUserQuery(query: string): boolean {
   return [...text].length >= 3 || /^[a-z][a-z0-9]$/.test(text);
 }
 
+/**
+ * Users with a word of their name starting with `query`, or whose email starts with it once it has an `@` and part of
+ * the domain. Runs once `query` has the 3 characters the server needs.
+ */
 export function useFindUsers(query: string) {
   const text = query.trim();
   return useQuery({

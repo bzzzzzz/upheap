@@ -1,5 +1,6 @@
-// Server state lives in TanStack Query. Components read it through these hooks and never copy it.
-// This file holds the query keys and the cache helpers that several resources' hooks share, so prefix-based invalidations line up.
+// Server state lives in TanStack Query. Components read it through the hooks in this directory, one file per
+// resource, and never copy it. This file holds the query keys and the cache helpers that several resources' hooks
+// share, so prefix-based invalidations line up.
 import { type QueryClient } from "@tanstack/react-query";
 import { type HeapRef, type ListViewQuery } from "../client";
 import type { Item, RankedList, Waiting, WaitingRow } from "../schema";
