@@ -457,7 +457,7 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
 
   // Blocking saved the state at once; the blocker is named after, from ⋯, and the status line links to it.
   await openItem(page, "Deploy");
-  await (await changeBlocker()).getByLabel("Waiting for").selectOption({ label: "Get approval" });
+  await (await changeBlocker()).getByRole("menuitem", { name: "Get approval" }).click();
   await expect(status()).toContainText("Blocked by");
   await expect(status().getByRole("link", { name: /^[0-9a-z]{5} Get approval$/ })).toBeVisible();
   await closeItem(page);
@@ -468,8 +468,7 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
   await openItem(page, "Get approval");
   await changeState(page, "Block", "more");
   const blocker = await changeBlocker();
-  await expect(blocker.getByLabel("Waiting for")).toBeVisible();
-  await expect(blocker.getByLabel("Waiting for").getByRole("option")).toHaveText(["Nothing picked"]);
+  await expect(blocker.getByRole("menu", { name: "Waiting for" }).getByRole("menuitem")).toHaveText(["Nothing picked"]);
   await closeField(page);
   await changeState(page, "Unblock", "main");
   await expect(status()).not.toContainText("Blocked");
@@ -480,6 +479,49 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
   await expect(status()).not.toContainText("Blocked by");
   await closeItem(page);
   await expect(row(page, "Get approval")).not.toContainText("Blocks “Deploy”");
+});
+
+test("the blocker is found by typing part of its title, and picked with the keyboard or a click", async ({ page }) => {
+  await addItem(page, "Deploy");
+  await addItem(page, "Get approval");
+  await addItem(page, "Get budget");
+  await addItem(page, "Write docs");
+  const status = () => itemPane(page).getByRole("group", { name: "Status" });
+  const changeBlocker = async () => {
+    await moreEntry(page, await openMore(page), "Change blocker…").click();
+    const dialog = page.getByRole("dialog", { name: "Change blocker", exact: true });
+    await expect(dialog.getByLabel("Find an item")).toBeFocused();
+    return dialog;
+  };
+  const rows = (dialog: Locator) => dialog.getByRole("menu", { name: "Waiting for" }).getByRole("menuitem");
+
+  await openItem(page, "Deploy");
+  await changeState(page, "Block", "more");
+
+  // Typing keeps the titles that hold the text, in any case, and Enter picks the first.
+  let picker = await changeBlocker();
+  await expect(rows(picker)).toHaveText(["Nothing picked", "Get approval", "Get budget", "Write docs"]);
+  await picker.getByLabel("Find an item").fill("BUDG");
+  await expect(rows(picker)).toHaveText(["Get budget"]);
+  await page.keyboard.press("Enter");
+  await expect(status().getByRole("link", { name: /^[0-9a-z]{5} Get budget$/ })).toBeVisible();
+
+  // The current blocker is marked and can't be picked again; arrow keys move to another.
+  picker = await changeBlocker();
+  await expect(rows(picker).filter({ hasText: "Get budget" })).toBeDisabled();
+  await picker.getByLabel("Find an item").fill("get");
+  // In list order, where the blocker now ranks first for what it blocks.
+  await expect(rows(picker)).toHaveText(["Get budget", "Get approval"]);
+  await picker.getByLabel("Find an item").fill("nothing like it");
+  await expect(rows(picker)).toHaveText(["No item matches “nothing like it”"]);
+  await picker.getByLabel("Find an item").fill("docs");
+  await page.keyboard.press("Enter");
+  await expect(status().getByRole("link", { name: /^[0-9a-z]{5} Write docs$/ })).toBeVisible();
+
+  // Nothing picked clears it, and leaves the item blocked.
+  await (await changeBlocker()).getByRole("menuitem", { name: "Nothing picked" }).click();
+  await expect(status()).toContainText("Blocked");
+  await expect(status()).not.toContainText("Blocked by");
 });
 
 test("a blocked item shows why in words, in the pane and on the row's padlock", async ({ page, heapPath }) => {
@@ -520,8 +562,8 @@ test("a blocked item shows why in words, in the pane and on the row's padlock", 
   await moreEntry(page, await openMore(page), "Change blocker…").click();
   await page
     .getByRole("dialog", { name: "Change blocker", exact: true })
-    .getByLabel("Waiting for")
-    .selectOption({ label: "Pay the registrar" });
+    .getByRole("menuitem", { name: "Pay the registrar" })
+    .click();
   await expect(status().getByRole("link", { name: /^[0-9a-z]{5} Pay the registrar$/ })).toBeVisible();
   await expect(status()).toContainText(": Waiting for the registrar's invoice");
 

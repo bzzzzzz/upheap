@@ -419,8 +419,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    heap already had its key, the key it got. There's no Undo, as the tags can't come back. A refusal shows in the
    picker, above the buttons; a note heaps were made from says it moves only within its team, and a heap the person
    can't move to any more says "You can't move items to that heap any more."
-   Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
-   a popover (a sheet on a phone) and saves on a pick. Make it a task asks first, naming the item, since a task can't
+   Block saves the state at once; the blocker is named after, with Change blocker…, which opens a popover (a sheet on
+   a phone) as Move to does: "Find an item", focused, over the heap's other open items in list order, without those
+   that wait for this one, which would be a cycle. Typing keeps the titles that hold the text, in any case, or says "No
+   item matches “<text>”"; arrow keys move, and Enter or a click saves the pick. Nothing picked comes first while the
+   field is empty, and the current blocker (Nothing picked when there's none) is marked and can't be picked again. Make it a task asks first, naming the item, since a task can't
    go back to a note (or to a reminder). **Split…** on an open note opens a dialog (a sheet on a phone) with three
    outcomes: Tasks, A step, and A heap, the last only for someone who may make heaps. Tasks and a heap's first items are
    rows of title, need and age, with nothing preselected and the needs above the note's need off; age is Keep the
