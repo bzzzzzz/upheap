@@ -21,7 +21,7 @@ use domain::tag::{NewTag, Tag, TagName, TagOwner, TagPatch, merged_tag_order, re
 use domain::team::Membership;
 use domain::{HeapId, ItemId, TagId, TeamId, Timestamp, Version};
 use store::audit::NewAuditEntry;
-use store::{ConnectionTrait, StoreError, TransactionTrait};
+use store::{ConnectionTrait, DatabaseTransaction, StoreError, TransactionTrait};
 
 use crate::access::{HeapAccess, authorize_heap, authorize_team, ensure_active};
 use crate::audit::{describe_new_tag, diff_tags};
@@ -222,9 +222,7 @@ impl Services {
         fields: NewTag,
         confirm: Option<&str>,
     ) -> Result<TagView, ServiceError> {
-        let heap_ids = team_heap_ids(&self.db, team_id).await?;
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (membership, heaps) = authorize_team_write(&txn, principal, team_id, &heap_ids).await?;
+        let (txn, membership, heaps) = self.begin_team_tag_write(principal, team_id).await?;
         ensure_team_tag_name_free(&txn, team_id, &fields.name, None).await?;
         let reach = reach_of(&txn, &heaps, &fields.name).await?;
         ensure_confirmed(&fields.name, &reach, confirm)?;
@@ -270,9 +268,7 @@ impl Services {
         expected: Version,
         confirm: Option<&str>,
     ) -> Result<TagView, ServiceError> {
-        let heap_ids = team_heap_ids(&self.db, team_id).await?;
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (membership, heaps) = authorize_team_write(&txn, principal, team_id, &heap_ids).await?;
+        let (txn, membership, heaps) = self.begin_team_tag_write(principal, team_id).await?;
         let current = store::tags::find_tag(&txn, tag_id)
             .await?
             .filter(|tag| tag.owner == TagOwner::Team(team_id))
@@ -329,6 +325,32 @@ impl Services {
             tag: saved,
             allowed_actions,
         })
+    }
+
+    /// Begins a write to a team's tags: a transaction holding the lock of every heap of the team, in heap ID order,
+    /// with the caller's membership and the heaps as read under those locks.
+    ///
+    /// The heap IDs are read before the transaction, so the locks come before every other read in it (on MySQL a
+    /// transaction's first plain read fixes its snapshot). Under the locks they are read again: a heap made in between
+    /// could already hold a heap tag of the name this write takes, so if the set changed, the transaction is dropped
+    /// and the write starts again with the new set. A heap made after that read meets this write on the team's lowest
+    /// heap, which a heap tag write locks shared first (see [`authorize_tag_write`]).
+    async fn begin_team_tag_write(
+        &self,
+        principal: Principal,
+        team_id: TeamId,
+    ) -> Result<(DatabaseTransaction, Membership, Vec<Heap>), ServiceError> {
+        let mut heap_ids = team_heap_ids(&self.db, team_id).await?;
+        loop {
+            let txn = self.db.begin().await.map_err(StoreError::from)?;
+            let (membership, heaps) = authorize_team_write(&txn, principal, team_id, &heap_ids).await?;
+            let now_ids = team_heap_ids(&txn, team_id).await?;
+            if now_ids == heap_ids {
+                return Ok((txn, membership, heaps));
+            }
+            txn.rollback().await.map_err(StoreError::from)?;
+            heap_ids = now_ids;
+        }
     }
 
     /// Merges the heap tags of `reach` into the team tag `team_tag`, at `now`, by the caller. The caller holds the lock
@@ -408,7 +430,9 @@ impl Services {
             store::audit::insert_audit_entry(txn, &entry).await?;
         }
 
-        for heap in heaps {
+        // A heap tag is named only in its own heap's parameters, views and tag order.
+        let reached: BTreeSet<HeapId> = reach.iter().map(|entry| entry.heap.id).collect();
+        for heap in heaps.iter().filter(|heap| reached.contains(&heap.id)) {
             for parameter in store::parameters::list_parameters(txn, heap.id).await? {
                 let Some(tags) = replaced(&parameter.tags) else {
                     continue;
@@ -501,8 +525,7 @@ fn locked_row_changed(table: &'static str, id: &str) -> ServiceError {
     StoreError::corrupt(table, id, "a row changed under the lock of its heap").into()
 }
 
-/// The IDs of the team's heaps, archived ones included, in heap ID order, read before a team tag write's transaction
-/// begins (see [`authorize_team_write`]).
+/// The IDs of the team's heaps, archived ones included, in heap ID order (see [`Services::begin_team_tag_write`]).
 async fn team_heap_ids(db: &impl ConnectionTrait, team_id: TeamId) -> Result<Vec<HeapId>, ServiceError> {
     let mut ids: Vec<HeapId> = store::heaps::list_heaps_for_teams(db, &[team_id])
         .await?
@@ -515,7 +538,8 @@ async fn team_heap_ids(db: &impl ConnectionTrait, team_id: TeamId) -> Result<Vec
 
 /// The team's lowest heap ID when it isn't `heap_id` itself, read before a heap tag write's transaction begins (see
 /// [`authorize_tag_write`]). `None` for the lowest heap itself, and for a heap that doesn't exist. Heaps are never
-/// deleted and never change team, so the lowest one is stable.
+/// deleted and never change team, and their IDs are UUIDv7, rising with the time they were made, so the lowest one
+/// stays the lowest.
 async fn lower_team_heap(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Option<HeapId>, ServiceError> {
     let Some(heap) = store::heaps::find_heap(db, heap_id).await? else {
         return Ok(None);
@@ -530,9 +554,7 @@ async fn lower_team_heap(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<O
 /// A merge writes items, parameters, views and heaps in every heap of the team, so it waits for the item writes in
 /// flight and holds the others off, each of which holds its heap row. The locks come before every other read, so
 /// the plain reads after them see what a competing write committed (on MySQL a transaction's first plain read fixes
-/// its snapshot). A heap made after `heap_ids` was read isn't locked here and starts with no tags, so it can't be in
-/// the reach; a heap tag write in it takes a shared lock on the team's lowest heap, which this write holds
-/// exclusively, so the two meet there. A non-member gets [`ServiceError::NotFound`], as for a missing team.
+/// its snapshot). A non-member gets [`ServiceError::NotFound`], as for a missing team.
 async fn authorize_team_write(
     txn: &impl ConnectionTrait,
     principal: Principal,

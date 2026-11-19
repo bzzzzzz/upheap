@@ -526,10 +526,19 @@ async fn an_item_edit_adding_the_tag_being_merged_never_leaves_it_on_the_item() 
     let (merged, edited) = (merged?, edited?);
     let read = w.get(&item_url).await?;
 
-    // Assert
-    expect_that!(merged.status, eq(StatusCode::CREATED));
+    // Assert: whichever comes first, the item stays readable and never keeps a merged tag. If the edit comes first,
+    // the reach changed under the token (one item more), so the merge is refused and the heap tag stays in use.
     expect_that!(edited.status.is_server_error(), eq(false));
     expect_that!(read.status, eq(StatusCode::OK));
-    expect_that!(tag_ids(&read.body).contains(&tag.as_str()), eq(false));
+    let carries_heap_tag = tag_ids(&read.body).contains(&tag.as_str());
+    if merged.status == StatusCode::CREATED {
+        expect_that!(carries_heap_tag, eq(false));
+    } else {
+        expect_that!(merged.status, eq(StatusCode::CONFLICT));
+        expect_that!(merged.body["code"], eq(&json!("tag_merge_unconfirmed")));
+        expect_that!(merged.body["merge_reach"]["heaps"][0]["items"], eq(&json!(1)));
+        expect_that!(edited.status.is_success(), eq(true));
+        expect_that!(carries_heap_tag, eq(true));
+    }
     Ok(())
 }
