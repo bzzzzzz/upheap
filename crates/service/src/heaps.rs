@@ -22,7 +22,7 @@ use crate::access::{authorize_heap, authorize_heap_write, authorize_team, ensure
 use crate::audit::{diff_parameters, diff_policies};
 use crate::error::handle_taken_on_duplicate;
 use crate::handles::{free_heap_slug, retry_derived_slug};
-use crate::items::load_heap_tags;
+use crate::items::{ensure_tags_in_use, load_heap_tags};
 use crate::parameters::{ParameterEntry, list_parameters_in_use, lock_listed};
 use crate::teams::{HeapView, count_heap_open_items, load_heap_priority, load_heap_view, to_heap_view, with_origin};
 use crate::{Principal, ServiceError, Services};
@@ -346,6 +346,7 @@ impl Services {
                     return Err(ValidationError::DuplicateTag.into());
                 }
                 load_heap_tags(&txn, heap_id, &distinct).await?;
+                ensure_tags_in_use(&txn, &distinct).await?;
                 order.clone()
             }
             None => heap.tag_order.clone(),

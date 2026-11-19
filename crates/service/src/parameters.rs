@@ -23,7 +23,7 @@ use store::{ConnectionTrait, DatabaseTransaction, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, authorize_heap_write};
 use crate::audit::{describe_new_parameter, diff_parameters, diff_switched_value};
-use crate::items::load_heap_tags;
+use crate::items::{ensure_tags_in_use, load_heap_tags};
 use crate::{Principal, ServiceError, Services};
 
 /// A parameter with what the caller may do with it.
@@ -82,6 +82,7 @@ impl Services {
         let access = authorize_heap_write(&txn, principal, heap_id, Permission::ConfigureHeap).await?;
         load_heap_tags(&txn, heap_id, &draft.tags).await?;
         ensure_name_free(&txn, heap_id, &draft.name, None).await?;
+        ensure_tags_in_use(&txn, &draft.tags).await?;
 
         let now = self.now();
         let options = draft
@@ -183,6 +184,7 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let (heap, role, current) = lock_for_write(&txn, principal, heap_id, parameter_id, Some(expected)).await?;
         load_heap_tags(&txn, current.heap_id, &tags).await?;
+        ensure_tags_in_use(&txn, &tags).await?;
         let edited = current.link_tags(tags)?;
         self.finish_edit(txn, &heap, role, principal, current, edited).await
     }

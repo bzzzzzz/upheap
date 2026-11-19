@@ -774,6 +774,7 @@ impl Services {
         let tags = load_heap_tags(&txn, heap_id, &fields.tags).await?;
         let parameters = store::parameters::list_parameters_locking(&txn, heap_id).await?;
         check_values(&parameters, fields.parameters.iter().map(|(p, o)| (*p, Some(*o))))?;
+        ensure_tags_in_use(&txn, &fields.tags).await?;
 
         if let (Some(origin), Some(item)) = (fields.origin, &origin_item) {
             fields.arrives_at = origin.age.arrives_at(item);
@@ -999,6 +1000,9 @@ impl Services {
         // The patch is applied first, so editing an item that stays closed fails with `item_closed`.
         let mut edited = current.apply_patch(&patch, principal.user_id, now)?;
         check_values(&parameters, patch.parameters.iter().map(|(p, o)| (*p, *o)))?;
+        if let Some(tags) = &patch.tags {
+            ensure_tags_in_use(&txn, tags).await?;
+        }
         // A reopened item gets the values archiving would have given it had it been open.
         if let Some(reopened) = edited.as_mut().filter(|e| current.is_closed() && !e.is_closed()) {
             reopened.parameters = current_values(&parameters, &reopened.parameters);
@@ -2059,6 +2063,20 @@ pub(crate) fn describe_values(item: &Item, parameters: &[Parameter]) -> Vec<Para
             })
         })
         .collect()
+}
+
+/// Fails with [`ServiceError::TagNotInHeap`] for any of `ids` that is no longer a tag in use, read with a locking
+/// read, so a merge that committed while this write waited for its heap lock is seen. Called after the heap lock and
+/// the other checks, by every write that stores tag IDs. An empty set reads nothing.
+pub(crate) async fn ensure_tags_in_use(db: &impl ConnectionTrait, ids: &BTreeSet<TagId>) -> Result<(), ServiceError> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let found = store::tags::lock_tags_in_use(db, ids).await?;
+    match ids.difference(&found).next() {
+        Some(&tag_id) => Err(ServiceError::TagNotInHeap { tag_id }),
+        None => Ok(()),
+    }
 }
 
 /// The tags `ids` names, by name. Fails with [`ServiceError::TagNotInHeap`] if any of them isn't a tag of

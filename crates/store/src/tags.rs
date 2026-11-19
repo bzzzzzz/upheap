@@ -5,10 +5,14 @@
 //! A heap tag merged into a team tag keeps its row (`merged_into` is the team tag) so the history still names it, but
 //! every function here but [`list_tags_for_history`] leaves it out, as if it were unknown.
 
+use std::collections::BTreeSet;
+
 use domain::tag::{Tag, TagDescription, TagName, TagOwner};
 use domain::{HeapId, TagId, TeamId, Version};
 use sea_orm::sea_query::{Expr, ExprTrait};
-use sea_orm::{ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 
 use crate::StoreError;
 use crate::codes::{IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
@@ -128,6 +132,31 @@ pub async fn list_team_tags(db: &impl ConnectionTrait, team_id: TeamId) -> Resul
         .into_iter()
         .map(to_tag)
         .collect()
+}
+
+/// The IDs among `ids` of tags in use (not merged), read with a locking read (`FOR SHARE` on MySQL and Postgres), so
+/// the answer is the latest committed one and not the transaction's snapshot, and a merge can't retire one of them
+/// before this transaction ends. On SQLite, which has one writer at a time, it is a plain read.
+///
+/// It is a primary-key lookup, so it takes record locks only, no gap locks.
+pub async fn lock_tags_in_use(
+    db: &impl ConnectionTrait,
+    ids: impl IntoIterator<Item = &TagId>,
+) -> Result<BTreeSet<TagId>, StoreError> {
+    let ids: Vec<String> = ids.into_iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut found = BTreeSet::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = tags::Entity::find()
+            .filter(tags::Column::Id.is_in(chunk.iter().cloned()))
+            .filter(tags::Column::MergedInto.is_null())
+            .lock_shared()
+            .all(db)
+            .await?;
+        for row in rows {
+            found.insert(to_tag(row)?.id);
+        }
+    }
+    Ok(found)
 }
 
 /// The tags in use of `heap_ids` called `name`, ignoring case: at most one per heap.

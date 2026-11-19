@@ -139,7 +139,7 @@ pub enum ServiceError {
     TeamTagNameTaken { name: String },
     /// A team tag write that would merge heap tags was not confirmed with the token of their current reach.
     #[error(
-        "Making {name:?} a team tag merges {} into it",
+        "{name:?} merges {} into the team tag",
         heap_tags(reach.entries.len())
     )]
     TagMergeUnconfirmed { name: String, reach: MergeReach },

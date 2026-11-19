@@ -455,18 +455,23 @@ a fixed time.
    blocker chain, a parameter and its options, a saved view, an item and its steps for a step write) are locking
    reads too, because on MySQL a plain read before the lock would fix the transaction's snapshot and hide changes
    that committed while it waited. SQLite has one writer at a time, so there the second of two conflicting writes
-   fails instead of waiting; the outcome that matters, no inconsistent state, holds either way.
-   A heap tag write locks its heap row first, then reads. A team tag write reads the team's heap IDs before its
+   fails instead of waiting; the outcome that matters, no inconsistent state, holds either way. The tag IDs a
+   write stores are checked with a locking read, since a merge can retire a heap tag while the write waited.
+   A heap tag write first takes a shared lock (`FOR SHARE`) on its team's lowest heap, unless that is its own heap,
+   then locks its own heap row, then reads. A team tag write reads the team's heap IDs before its
    transaction, then locks each of those heaps in heap ID order, as a move does, and reads after that. A team tag
    write that merges heap tags (making or renaming a team tag into a name the team's heaps have) writes items,
    parameters, saved views and tag orders in every heap of the team, so it needs every heap row; locking the team
    row instead would deadlock with an item write, which holds its heap row and then needs the team row's key for its
-   audit entry. A heap tag write and a team tag write of one team meet on the heap row, two team tag writes on the
-   team's first heap (or, in a team with no heaps, on the unique index of team tag names), so no two tags take one
-   name. A heap made while a team tag write runs has no tags, so it can't be in the merge; a heap tag made in it
-   meanwhile with the same name shows as a name clash that a rename fixes. The plain reads of a tag write come after
-   its locks, so on MySQL their snapshot sees what committed while it waited; the name checks take no locking reads,
-   which would take gap locks that deadlock tag writes of two teams.
+   audit entry. A heap tag write and a team tag write of one team meet on the heap row, or on the team's lowest heap
+   for a heap made after the team tag write read the team's heaps (heaps are never deleted and never change team, so
+   the lowest is stable, and every team tag write locks it exclusively), and two team tag writes on that heap too (or,
+   in a team with no heaps, on the unique index of team tag names), so no two tags take one name. The lock order
+   stays ascending. A heap made while a team tag write runs has no tags, so it can't be in the merge. A merge does a
+   handful of queries per item it reaches while it holds every heap lock of the team, so item writes in the team wait
+   for it; that is fine for merges of up to a few hundred items, which is the size assumption, and there is no limit.
+   The plain reads of a tag write come after its locks, so on MySQL their snapshot sees what committed while it
+   waited; the name checks take no locking reads, which would take gap locks that deadlock tag writes of two teams.
 2. A move of an item to another heap, in any team the caller may edit items in, locks both heaps in heap ID order, as
    the agent's queue locks several, then reads the item with a locking read and checks its version. A run's `became`
    locks the note's heap and the active heaps made from the note the same way, since it defines the tasks in them. Two

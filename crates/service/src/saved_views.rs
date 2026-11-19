@@ -18,7 +18,7 @@ use store::{ConnectionTrait, DatabaseTransaction, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, authorize_heap_write};
 use crate::audit::{describe_new_saved_view, diff_saved_views};
-use crate::items::ensure_view_in_heap;
+use crate::items::{ensure_tags_in_use, ensure_view_in_heap};
 use crate::{Principal, ServiceError, Services};
 
 /// A saved view with what the caller may do with it.
@@ -250,5 +250,6 @@ async fn ensure_view_belongs_to_heap(
     domain::saved_view::ensure_savable(view)?;
     let heap_tags = store::tags::list_tags(db, heap_id).await?;
     let parameters = store::parameters::list_parameters(db, heap_id).await?;
-    ensure_view_in_heap(&heap_tags, &parameters, view)
+    ensure_view_in_heap(&heap_tags, &parameters, view)?;
+    ensure_tags_in_use(db, &view.filter.tags).await
 }

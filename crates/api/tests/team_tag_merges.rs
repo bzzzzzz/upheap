@@ -159,7 +159,7 @@ async fn renaming_a_team_tag_back_merges_the_heap_tag_that_took_its_old_name() -
     expect_that!(refused.body["code"], eq(&json!("tag_merge_unconfirmed")));
     expect_that!(
         refused.body["title"],
-        eq(&json!("Making \"security\" a team tag merges 1 heap tag into it"))
+        eq(&json!("\"security\" merges 1 heap tag into the team tag"))
     );
     let reach = &refused.body["merge_reach"]["heaps"];
     expect_that!(reach.as_array().map(Vec::len), some(eq(1)));
@@ -495,8 +495,41 @@ async fn an_item_edit_and_a_merge_in_the_same_heap_both_finish() -> Result<()> {
     let (merged, edited) = (merged?, edited?);
 
     // Assert
-    for status in [merged.status, edited.status] {
-        expect_that!(status.is_success() || status == StatusCode::CONFLICT, eq(true));
-    }
+    expect_that!(merged.status, eq(StatusCode::CREATED));
+    expect_that!(
+        edited.status.is_success() || edited.status == StatusCode::CONFLICT,
+        eq(true)
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_item_edit_adding_the_tag_being_merged_never_leaves_it_on_the_item() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let tag = w.heap_tag(&w.a, "billing").await?;
+    let item = w.item(&w.a, "Invoice", &[]).await?;
+    let item_url = w.app.item_url(id(&item)).await?;
+    let refused = w.make_team_tag(json!({ "name": "billing" }), None).await?;
+    let token = refused.body["merge_reach"]["token"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    // Act
+    let (merged, edited) = tokio::join!(
+        w.make_team_tag(json!({ "name": "billing" }), Some(&token)),
+        w.app
+            .patch(&w.session, &item_url, &item["version"], json!({ "tag_ids": [tag] })),
+    );
+    let (merged, edited) = (merged?, edited?);
+    let read = w.get(&item_url).await?;
+
+    // Assert
+    expect_that!(merged.status, eq(StatusCode::CREATED));
+    expect_that!(edited.status.is_server_error(), eq(false));
+    expect_that!(read.status, eq(StatusCode::OK));
+    expect_that!(tag_ids(&read.body).contains(&tag.as_str()), eq(false));
     Ok(())
 }
