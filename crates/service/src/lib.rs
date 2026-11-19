@@ -147,6 +147,11 @@ impl Services {
         self.mail.is_some()
     }
 
+    /// Whether anyone may create an account without an invite link.
+    pub fn registration_open(&self) -> bool {
+        self.settings.allow_registration
+    }
+
     /// The current time from the injected clock.
     pub fn now(&self) -> Timestamp {
         self.clock.now()

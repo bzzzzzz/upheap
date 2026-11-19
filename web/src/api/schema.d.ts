@@ -168,6 +168,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the server lets anyone create an account. Needs no sign-in.
+         * @description The sign-in page uses it to decide whether to offer Create account. An invite link still creates an account on a
+         *     server where registration is closed.
+         */
+        get: operations["registration_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/due-choices": {
         parameters: {
             query?: never;
@@ -3788,6 +3809,11 @@ export interface components {
              */
             username: string;
         };
+        /** @description Whether this server lets anyone create an account. */
+        RegistrationOptions: {
+            /** @description `true` when anyone may register. When `false`, only an invite link creates an account. */
+            open: boolean;
+        };
         /**
          * @description Whether the list has a group of the heap's reminders to come, which are out of the ranking until their date.
          * @enum {string}
@@ -4621,6 +4647,7 @@ export type Reach = components['schemas']['Reach'];
 export type ReachedRequest = components['schemas']['ReachedRequest'];
 export type RedoTurnRequest = components['schemas']['RedoTurnRequest'];
 export type RegisterRequest = components['schemas']['RegisterRequest'];
+export type RegistrationOptions = components['schemas']['RegistrationOptions'];
 export type RemindersMode = components['schemas']['RemindersMode'];
 export type RequestPasswordReset = components['schemas']['RequestPasswordReset'];
 export type ResultRow = components['schemas']['ResultRow'];
@@ -4995,6 +5022,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    registration_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether registration is open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationOptions"];
                 };
             };
         };

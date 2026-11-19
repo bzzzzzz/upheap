@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, ensureOk, unwrap } from "../client";
 import type { OAuthAuthorizationRequest } from "../schema";
-import { oidcProviderKey, removeUserQueries } from "./keys";
+import { oidcProviderKey, registrationOptionsKey, removeUserQueries } from "./keys";
 
 export function useSignIn() {
   const queryClient = useQueryClient();
@@ -40,6 +40,15 @@ export function useOidcProvider() {
         throw error;
       }
     },
+    staleTime: Infinity,
+  });
+}
+
+/** Whether anyone may create an account on this server. Read once: the operator sets it with the server's configuration. */
+export function useRegistrationOptions() {
+  return useQuery({
+    queryKey: registrationOptionsKey,
+    queryFn: async () => unwrap(await api.GET("/api/v1/auth/registration")),
     staleTime: Infinity,
   });
 }

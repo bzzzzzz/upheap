@@ -163,6 +163,27 @@ async fn a_newcomer_registers_through_a_link_on_a_closed_server() -> Result<()> 
 
 #[gtest]
 #[tokio::test]
+async fn the_registration_read_says_whether_registration_is_open() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let closed = app.with_registration_closed();
+
+    // Act
+    let open_answer = app.send(Method::GET, "/api/v1/auth/registration", None, None).await?;
+    let closed_answer = closed
+        .send(Method::GET, "/api/v1/auth/registration", None, None)
+        .await?;
+
+    // Assert
+    expect_that!(open_answer.status, eq(StatusCode::OK));
+    expect_that!(open_answer.body, eq(&json!({ "open": true })));
+    expect_that!(closed_answer.status, eq(StatusCode::OK));
+    expect_that!(closed_answer.body, eq(&json!({ "open": false })));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_newcomer_registers_through_a_link_on_an_open_server() -> Result<()> {
     // Arrange
     let setup = setup().await?;

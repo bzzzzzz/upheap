@@ -30,6 +30,8 @@ export class ApiProblem extends Error {
   readonly requestId: string | undefined;
   /** What a team tag's name would merge, on `tag_merge_unconfirmed`. */
   readonly mergeReach: MergeReach | undefined;
+  /** Seconds to wait before trying again, from the `Retry-After` header of a `429`. */
+  readonly retryAfter: number | undefined;
 
   constructor(
     status: number,
@@ -39,6 +41,7 @@ export class ApiProblem extends Error {
     hint?: string,
     requestId?: string,
     mergeReach?: MergeReach,
+    retryAfter?: number,
   ) {
     super(message);
     this.status = status;
@@ -47,6 +50,7 @@ export class ApiProblem extends Error {
     this.hint = hint;
     this.requestId = requestId;
     this.mergeReach = mergeReach;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -135,6 +139,8 @@ export function ensureOk(result: { error?: unknown; response: Response }): void 
 
 function toProblem(error: unknown, response: Response): ApiProblem {
   const requestId = response.status >= 500 ? (response.headers.get("x-request-id") ?? undefined) : undefined;
+  const retryHeader = response.headers.get("retry-after");
+  const retryAfter = retryHeader === null ? undefined : Number(retryHeader);
   if (isProblem(error)) {
     return new ApiProblem(
       error.status,
@@ -144,6 +150,7 @@ function toProblem(error: unknown, response: Response): ApiProblem {
       error.hint ?? undefined,
       requestId,
       error.merge_reach ?? undefined,
+      retryAfter,
     );
   }
   if (isProxyFailure(response)) {

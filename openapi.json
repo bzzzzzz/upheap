@@ -418,6 +418,28 @@
         }
       }
     },
+    "/api/v1/auth/registration": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Whether the server lets anyone create an account. Needs no sign-in.",
+        "description": "The sign-in page uses it to decide whether to offer Create account. An invite link still creates an account on a\nserver where registration is closed.",
+        "operationId": "registration_options",
+        "responses": {
+          "200": {
+            "description": "Whether registration is open",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationOptions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/due-choices": {
       "get": {
         "tags": [
@@ -13608,6 +13630,19 @@
             "type": "string",
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of\nthe personal team, and can't be changed later.",
             "example": "eugene"
+          }
+        }
+      },
+      "RegistrationOptions": {
+        "type": "object",
+        "description": "Whether this server lets anyone create an account.",
+        "required": [
+          "open"
+        ],
+        "properties": {
+          "open": {
+            "type": "boolean",
+            "description": "`true` when anyone may register. When `false`, only an invite link creates an account."
           }
         }
       },

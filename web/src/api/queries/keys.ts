@@ -120,11 +120,12 @@ export function invalidateTeam(queryClient: QueryClient, team: string) {
 
 export const oidcProviderKey = ["oidc-provider"] as const;
 export const passwordResetOptionsKey = ["password-reset-options"] as const;
-const SERVER_WIDE_KEYS = new Set<unknown>([oidcProviderKey[0], passwordResetOptionsKey[0]]);
+export const registrationOptionsKey = ["registration-options"] as const;
+const SERVER_WIDE_KEYS = new Set<unknown>([oidcProviderKey[0], passwordResetOptionsKey[0], registrationOptionsKey[0]]);
 
 /**
  * Drops every cached query of the user whose session ended or changed, so the next one sees none of their data. The
- * server's own settings (its provider, whether it mails reset links) stay: they are the same for everyone, and a
+ * server's own settings (its provider, whether it mails reset links, whether registration is open) stay: they are the same for everyone, and a
  * query removed while it loads never answers, which would leave a sign-in page that waits on it with no form.
  * `keep` spares more, such as the reset link a page was opened with.
  */

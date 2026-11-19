@@ -891,6 +891,14 @@ problem (too many requests, a network error) shows above the line, under the but
 doesn't know yet, the disclosure shows one line, "Whoever runs this Upheap server can send you a reset link.", and no
 form. Create account has none. The invite page's Sign in side has it too.
 
+On a server with registration closed, the sign-in page has no switch and no Create account: the Sign in form shows
+alone, and under its button a footnote in Create account's style says "New accounts need an invite link from a team's
+admin." The invite page keeps its Create account, since the link makes the account. While the page doesn't know yet,
+the card holds only what it holds while it waits for the provider; if the read fails, the switch shows. A sign-in the
+server throttles shows "Too many attempts. Try again in 12:40." in the line above the button, counting down once a
+second from the server's wait, and Sign in is disabled until it ends; editing a field doesn't clear it. When it
+reaches zero the line goes and Sign in is enabled.
+
 When the server has an identity provider, the card starts with a bordered button, **Sign in with Acme SSO**, the width
 of the card (52 px on a phone, 44 px beyond), and under it an "or" rule, above the switch; the dark Sign in button
 stays the main one. It is a plain link that leaves for the provider, carrying the page to return to. Without a
