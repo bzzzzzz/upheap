@@ -2,7 +2,7 @@
 
 mod common;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use common::{HEAP, TestCli, TestServer, TestUser, ada_with_items, cli_in_heap, key};
 use googletest::prelude::*;
 use serde_json::{Value, json};
@@ -291,5 +291,74 @@ async fn only_putting_an_unknown_tag_on_an_item_offers_to_add_it() -> Result<()>
     expect_that!(untagged.exited(3), eq(true));
     expect_that!(untagged.stderr, not(contains_substring("hint:")));
     expect_that!(padded.exited(0), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_team_tag_of_a_name_a_heap_tag_has_is_refused_with_the_reach_and_the_line_that_confirms_it() -> Result<()> {
+    // Arrange: Infra is a heap tag with one item.
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let refused = cli
+        .run(&["tag", "add", "infra", "--team", "ada", "--description", "Servers"])
+        .await;
+
+    // Assert
+    expect_that!(refused.exited(3), eq(true));
+    let (_, line) = refused.stderr.rsplit_once("  ").context("a command line")?;
+    let token = line.trim().rsplit(' ').next().context("a token")?.to_owned();
+    expect_that!(
+        refused.stderr.as_str(),
+        eq(format!(
+            "error: Adding team tag \"infra\" to ada merges these heap tags into it:\n  \
+             personal  Infra  1 item\n\
+             This can't be undone. To go ahead, run:\n  \
+             upheap tag add infra --team ada --description Servers --confirm {token}\n"
+        )
+        .as_str())
+    );
+    let confirmed = cli
+        .run(&[
+            "tag",
+            "add",
+            "infra",
+            "--team",
+            "ada",
+            "--description",
+            "Servers",
+            "--confirm",
+            &token,
+        ])
+        .await;
+    expect_that!(confirmed.exited(0), eq(true));
+    expect_that!(confirmed.stdout, eq("Added team tag \"infra\" to ada.\n"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn tag_list_merges_heap_and_team_tags_by_name_and_team_lists_the_teams_alone() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    add_tag(&server, &ada, json!({ "name": "billing" })).await?;
+    server
+        .send(&ada, "POST", "/teams/ada/tags", Some(json!({ "name": "Ops" })))
+        .await?;
+
+    // Act
+    let merged = cli.run(&["tag", "list", "-q"]).await;
+    let team = cli.run(&["tag", "list", "--team", "ada", "-q"]).await;
+    let unknown = cli.run(&["tag", "list", "--team", "ghost-team"]).await;
+
+    // Assert
+    expect_that!(merged.stdout, eq("billing\nInfra\nOps\n"));
+    expect_that!(team.stdout, eq("Ops\n"));
+    expect_that!(unknown.exited(4), eq(true));
     Ok(())
 }

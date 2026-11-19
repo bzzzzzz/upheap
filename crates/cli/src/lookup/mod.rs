@@ -5,7 +5,7 @@ use api_types::common::{DueInputDto, ItemDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::me::MeDto;
 use api_types::parameters::{ArchivedOptionDto, OptionDto, ParameterDto, ParameterListDto};
-use api_types::tags::{TagDto, TagListDto};
+use api_types::tags::{TagDto, TagListDto, TeamTagListDto};
 use api_types::views::{SavedViewDto, SavedViewListDto};
 use domain::step::StepNumber;
 use uuid::Uuid;
@@ -402,19 +402,16 @@ pub fn resolve_tags(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> R
         .collect()
 }
 
-/// The IDs of the tags `names` names, as [`resolve_tags`] finds them or, failing that, among the team's tags, and the
-/// names that no tag has: trimmed, without repeats ignoring case, the first spelling typed kept, in the order typed.
+/// The IDs of the tags `names` names, as [`resolve_tags`] finds them, and the names that no tag has: trimmed, without
+/// repeats ignoring case, the first spelling typed kept, in the order typed.
 pub fn resolve_tags_or_missing(names: &[String], tags: &TagListDto, heap: &HeapHandle) -> (Vec<Uuid>, Vec<String>) {
     let mut found = Vec::new();
     let mut missing: Vec<String> = Vec::new();
     for name in names {
-        let trimmed = name.trim();
-        let tag = find_tag(name, tags, heap)
-            .ok()
-            .or_else(|| tags.team_tags.iter().find(|tag| is_named(trimmed, &tag.name, tag.id)));
-        match tag {
-            Some(tag) => found.push(tag.id),
-            None => {
+        match find_tag(name, tags, heap) {
+            Ok(tag) => found.push(tag.id),
+            Err(_) => {
+                let trimmed = name.trim();
                 if !missing.iter().any(|seen| seen.to_lowercase() == trimmed.to_lowercase()) {
                     missing.push(trimmed.to_owned());
                 }
@@ -424,31 +421,43 @@ pub fn resolve_tags_or_missing(names: &[String], tags: &TagListDto, heap: &HeapH
     (found, missing)
 }
 
-/// The tag `name` names, trimmed, by name ignoring case, as the server compares them, or by ID. The first match wins. An
-/// unknown one carries the names closest to it, by edit distance, ties in the server's order.
+/// The tag `name` names among the heap's tags and then its team's, trimmed, by name ignoring case, as the server
+/// compares them, or by ID. The first match wins. An unknown one carries the names closest to it, by edit distance,
+/// ties in the server's order.
 pub fn find_tag<'t>(name: &str, tags: &'t TagListDto, heap: &HeapHandle) -> Result<&'t TagDto, LookupError> {
+    find_among(name, tags.tags.iter().chain(&tags.team_tags), &heap.to_string())
+}
+
+/// [`find_tag`] among a team's tags, which the error calls `team <slug>`.
+pub fn find_team_tag<'t>(name: &str, tags: &'t TeamTagListDto, team: &str) -> Result<&'t TagDto, LookupError> {
+    find_among(name, tags.tags.iter(), &format!("team {team}"))
+}
+
+fn find_among<'t>(
+    name: &str,
+    tags: impl Iterator<Item = &'t TagDto> + Clone,
+    place: &str,
+) -> Result<&'t TagDto, LookupError> {
     // The server trims names, so `"ops "` is the tag Ops.
     let trimmed = name.trim();
-    tags.tags
-        .iter()
+    tags.clone()
         .find(|tag| is_named(trimmed, &tag.name, tag.id))
         .ok_or_else(|| {
             let typed = trimmed.to_lowercase();
             let mut closest: Vec<(usize, &str)> = tags
-                .tags
-                .iter()
+                .clone()
                 .map(|tag| (levenshtein(&typed, &tag.name.to_lowercase()), tag.name.as_str()))
                 .collect();
             closest.sort_by_key(|(distance, _)| *distance);
             LookupError::UnknownTag {
                 name: name.to_owned(),
-                heap: heap.to_string(),
+                heap: place.to_owned(),
                 known: closest
                     .into_iter()
                     .take(NAMED_TAGS)
                     .map(|(_, name)| name.to_owned())
                     .collect(),
-                total: tags.tags.len(),
+                total: tags.count(),
                 offer_add: false,
             }
         })

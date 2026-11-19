@@ -94,6 +94,57 @@ impl HeapApi<'_> {
     }
 }
 
+/// The calls under one team's path, as one caller.
+pub(crate) struct TeamApi<'a> {
+    pub client: &'a ApiClient,
+    pub token: &'a str,
+    pub team: &'a str,
+}
+
+impl TeamApi<'_> {
+    /// `GET` of `resource` under the team, such as `["tags"]`, or the team itself for none.
+    pub async fn get<T: DeserializeOwned>(&self, resource: &[&str]) -> Result<Fetched<T>, ClientError> {
+        self.client.get(&self.path(resource), NO_QUERY, self.token).await
+    }
+
+    /// `POST` of `body` to `resource` under the team, with the merge `confirm` token when there is one.
+    pub async fn post_confirming<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        body: &(impl Serialize + ?Sized),
+        confirm: Option<&str>,
+    ) -> Result<Fetched<T>, ClientError> {
+        self.client
+            .post_with_query(&self.path(resource), &confirm_query(confirm), body, self.token)
+            .await
+    }
+
+    /// `PATCH` of `body` to `resource` under the team, which is at `version`, with the merge `confirm` token when
+    /// there is one.
+    pub async fn patch_confirming<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        version: u32,
+        body: &(impl Serialize + ?Sized),
+        confirm: Option<&str>,
+    ) -> Result<Fetched<T>, ClientError> {
+        self.client
+            .patch_with_query(&self.path(resource), &confirm_query(confirm), body, version, self.token)
+            .await
+    }
+
+    fn path<'p>(&'p self, resource: &[&'p str]) -> Vec<&'p str> {
+        let mut path = vec!["teams", self.team];
+        path.extend_from_slice(resource);
+        path
+    }
+}
+
+/// The query that confirms a merge: `confirm_reach` with the token the refusal named.
+fn confirm_query(confirm: Option<&str>) -> Vec<(&'static str, &str)> {
+    confirm.map(|token| ("confirm_reach", token)).into_iter().collect()
+}
+
 /// Whether the server answered `404`: the thing isn't there, or the heap isn't the caller's, which it doesn't tell
 /// apart.
 pub(crate) fn is_not_found(err: &ClientError) -> bool {
