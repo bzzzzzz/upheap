@@ -2,7 +2,7 @@ import { type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { ApiProblem, type HeapRef } from "../api/client";
+import { ApiProblem, isNotFound, requestIdOf, type HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, RankedItem, RankedList } from "../api/schema";
 import { useUpdateItem } from "../api/queries/items";
 import { useRankedList } from "../api/queries/lists";
@@ -40,6 +40,8 @@ import {
   viewChanges,
   type ListSearch,
 } from "../components/listView";
+import { HeapNotFound } from "../components/NotFound";
+import { RequestId } from "../components/RequestId";
 
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
@@ -130,7 +132,8 @@ export function HeapPage({
   // The rows on screen, top to bottom, the reminders to come last, for the pane's ↑ ↓.
   const onScreen = list.data ? rowsOnScreen(shownSections(list.data, search)) : [];
   const index = onScreen.findIndex((item) => item.key === itemKey);
-  const pane = itemKey && closeItem && (
+  // A link to an item in a missing heap shows only the heap's not-found page.
+  const pane = itemKey && closeItem && !(list.isError && isNotFound(list.error)) && (
     <ItemPane
       heapRef={heapRef}
       itemKey={itemKey}
@@ -139,6 +142,7 @@ export function HeapPage({
       listed={index >= 0}
       previousKey={index > 0 ? onScreen[index - 1]?.key : undefined}
       nextKey={index >= 0 ? onScreen[index + 1]?.key : undefined}
+      listName={list.data?.heap.name}
       onClose={closeItem}
     />
   );
@@ -179,7 +183,8 @@ export function HeapPage({
 export function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const update = useUpdateItem(heapRef);
   const setToast = useToast();
-  const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
+  const failed = (error: Error) =>
+    setToast({ message: itemProblem(error), error: true, requestId: requestIdOf(error) });
 
   const run: ChangeState = (item, state, onError) => {
     const next = state === "done" && list ? nextToStart(list, item) : undefined;
@@ -280,6 +285,7 @@ function ListPage({
   );
 
   if (list.isError) {
+    if (isNotFound(list.error)) return <HeapNotFound />;
     // A view the server refuses (a stale tag in a bookmark, say) keeps the controls, so it can be changed or reset.
     const badView = list.error instanceof ApiProblem && (list.error.status === 400 || list.error.status === 422);
     return (
@@ -289,6 +295,7 @@ function ListPage({
           <p role="alert" className="text-red-700 dark:text-red-400">
             {badView ? `This view can't be shown: ${list.error.message}` : list.error.message}
           </p>
+          <RequestId error={list.error} className="justify-center" />
           {badView && (
             <button
               type="button"

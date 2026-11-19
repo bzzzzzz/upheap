@@ -10,6 +10,7 @@ import { useAuditLog, type AuditScope } from "../api/queries/audit";
 import { useMe } from "../api/queries/me";
 import { useOverListLink } from "./overList";
 import { TextDiff } from "./TextDiff";
+import { RequestId } from "./RequestId";
 
 /**
  * The history of `scope`, or of one entity in it, newest first, a page at a time. With `showEntity` each entry
@@ -51,9 +52,12 @@ export function PagedHistory<Entry>({
   }
   if (history.isError) {
     return (
-      <p role="alert" className="py-4 text-sm text-overdue-ink">
-        {history.error.message}
-      </p>
+      <>
+        <p role="alert" className="py-4 text-sm text-overdue-ink">
+          {history.error.message}
+        </p>
+        <RequestId error={history.error} />
+      </>
     );
   }
 

@@ -17,6 +17,7 @@ import { StuckRow } from "./StuckRow";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useUserName } from "./userName";
+import { RequestId } from "./RequestId";
 
 export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 const detailsButtonClass = `-ml-1 flex min-h-9 items-center gap-1 self-start rounded-lg px-1 text-sm text-ink-soft hover:text-ink ${focusClass} pointer-coarse:min-h-11`;
@@ -462,9 +463,12 @@ export function QuestionRow({
         />
       )}
       {reply.error && !isAnsweredMeanwhile(reply.error) && !isClosedMeanwhile(reply.error) && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(reply.error)}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(reply.error)}
+          </p>
+          <RequestId error={reply.error} />
+        </>
       )}
     </li>
   );
@@ -720,9 +724,12 @@ function AnsweredRow({
             Cancel
           </Button>
           {reply.error && (
-            <p role="alert" className="text-sm text-overdue-ink">
-              {itemProblem(reply.error)}
-            </p>
+            <>
+              <p role="alert" className="text-sm text-overdue-ink">
+                {itemProblem(reply.error)}
+              </p>
+              <RequestId error={reply.error} />
+            </>
           )}
         </div>
       )}

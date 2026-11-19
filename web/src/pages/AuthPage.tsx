@@ -7,7 +7,8 @@ import { usePasswordResetOptions, useRequestPasswordReset } from "../api/queries
 import { BASE } from "../basePath";
 import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";
-import { problemMessage } from "../components/ProblemText";
+import { ACCOUNT_DEACTIVATED, problemMessage } from "../components/ProblemText";
+import { RequestId } from "../components/RequestId";
 
 export type Mode = "sign_in" | "register";
 /** The form's inputs, named as the API names them, so a problem's `field` says which one it's about. */
@@ -52,6 +53,8 @@ function refusalLine(
       return "That sign-in took too long. Try again.";
     case "provider_unreachable":
       return `${label} can't be reached right now. Try again in a minute.`;
+    case "account_deactivated":
+      return ACCOUNT_DEACTIVATED;
     default:
       return undefined;
   }
@@ -434,9 +437,12 @@ function AuthForm({
           <ForgotPassword request={resetRequest} email={resetEmail} onEmailChange={setResetEmail} />
         )}
         {error && !errorField && (
-          <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-            {problemMessage(error)}
-          </p>
+          <>
+            <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+              {problemMessage(error)}
+            </p>
+            <RequestId error={error} />
+          </>
         )}
         <button type="submit" disabled={mutation.isPending} className={authButtonClass}>
           {mode === "sign_in" ? "Sign in" : (submitLabel ?? "Create account")}
@@ -524,9 +530,12 @@ function ForgotPassword({
             Send me a link
           </button>
           {error && !emailProblem && (
-            <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-              {problemMessage(error)}
-            </p>
+            <>
+              <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+                {problemMessage(error)}
+              </p>
+              <RequestId error={error} />
+            </>
           )}
           {request.isSuccess && (
             <p role="status" className="text-sm text-ink-soft">

@@ -5,6 +5,7 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 import { problemMessage } from "../components/ProblemText";
 import { authButtonClass } from "./AuthPage";
+import { RequestId } from "../components/RequestId";
 
 /** Whether the page has shown a state already, so a heading that mounts now replaces one and takes focus. */
 export type MoveFocus = RefObject<boolean>;
@@ -29,6 +30,7 @@ export function Retry({ error, onRetry }: { error: Error | null; onRetry: () => 
       <p role="alert" className="text-sm font-medium text-overdue-ink">
         {error ? problemMessage(error) : "The link couldn't be read."}
       </p>
+      <RequestId error={error} />
       <button type="button" onClick={onRetry} className={authButtonClass}>
         Try again
       </button>

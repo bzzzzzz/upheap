@@ -2,12 +2,14 @@ import { ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
 import { ToggleButton, ToggleButtonGroup, type Key } from "react-aria-components";
 
+import { isNotFound } from "../api/client";
 import type { DataDays, Me, TeamData } from "../api/schema";
 import { useMe } from "../api/queries/me";
 import { useTeamData } from "../api/queries/teams";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { DataChart, type DataSeries } from "../components/DataChart";
 import { usd } from "../components/labels";
+import { TeamNotFound } from "../components/NotFound";
 import { PopoverSheet } from "../components/PopoverSheet";
 import { ProblemText } from "../components/ProblemText";
 import { SheetChoice } from "../components/Sheet";
@@ -57,6 +59,8 @@ export function DataPage({
   const days: DataDays = `${search.days ?? 30}` as DataDays;
   const data = useTeamData(slug, { heap: search.heap, days });
   const team = me?.teams.find((t) => t.slug === slug);
+  // A `heap` that isn't the team's answers `404` too, and the page keeps its filter then.
+  if (data.isError && !data.data && isNotFound(data.error) && search.heap === undefined) return <TeamNotFound />;
 
   return (
     <main>

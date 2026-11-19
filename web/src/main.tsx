@@ -45,10 +45,13 @@ const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError: onUnauthenticated }),
   defaultOptions: {
     queries: {
-      // Client errors won't fix themselves; retry only server and network failures.
-      retry: (failures, error) => !(error instanceof ApiProblem && error.status < 500) && failures < 2,
+      // Client errors won't fix themselves; retry only server and network failures (status 0).
+      retry: (failures, error) =>
+        (!(error instanceof ApiProblem) || error.status >= 500 || error.status === 0) && failures < 2,
       refetchOnWindowFocus: true,
     },
+    // An edit while offline fails at once, with the `offline` problem, rather than waiting for the connection.
+    mutations: { networkMode: "always" },
   },
 });
 

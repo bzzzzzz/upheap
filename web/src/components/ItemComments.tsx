@@ -11,6 +11,7 @@ import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { Markdown } from "./Markdown";
 import type { MarkdownEditorHandle } from "./MarkdownEditor";
 import { useFocusAfterRender } from "./useFocusAfterRender";
+import { RequestId } from "./RequestId";
 
 /**
  * An item's comments (ux.md, The item §18): the thread under the context, oldest first, at every width and always
@@ -92,9 +93,12 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
             className="min-h-14 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
           />
           {add.isError && (
-            <p role="alert" className="text-sm text-overdue-ink">
-              {itemProblem(add.error)}
-            </p>
+            <>
+              <p role="alert" className="text-sm text-overdue-ink">
+                {itemProblem(add.error)}
+              </p>
+              <RequestId error={add.error} />
+            </>
           )}
           <Button
             type="submit"

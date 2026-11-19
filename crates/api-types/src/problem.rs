@@ -18,7 +18,7 @@ pub struct Problem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
     /// A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints
-    /// at, such as `my-team` for `My-Team`.
+    /// at, such as `my-team` for `My-Team`, or a free username for a taken one on `handle_taken`, such as `sam-2`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
     /// The key of the item the error is about, when it is one other than the item asked for: the item a run holds,

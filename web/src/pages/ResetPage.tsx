@@ -8,6 +8,7 @@ import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard, authButtonClass } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
+import { RequestId } from "../components/RequestId";
 
 /** The line the app shows once the user lands (`NoticeLine`). */
 const SIGNED_IN_NOTICE = "Password changed. You're signed in.";
@@ -158,9 +159,12 @@ function SetPassword({ account, token }: { account: PasswordResetAccount; token:
         required
       />
       {aboveButton && (
-        <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-          {problemMessage(aboveButton)}
-        </p>
+        <>
+          <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+            {problemMessage(aboveButton)}
+          </p>
+          <RequestId error={aboveButton} />
+        </>
       )}
       <button type="submit" disabled={busy} className={authButtonClass}>
         Set password and sign in

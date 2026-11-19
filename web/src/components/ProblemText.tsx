@@ -1,4 +1,15 @@
 import { ApiProblem } from "../api/client";
+import { RequestId } from "./RequestId";
+
+/** What to tell the user when an edit didn't reach the server, by `code`. Shared with the item messages. */
+export const NETWORK_EDIT_MESSAGES: Record<string, string> = {
+  offline: "You're offline, so this wasn't saved.",
+  unreachable: "Couldn't reach the server, so this wasn't saved.",
+};
+
+/** What a person the organisation's provider has deactivated is told, signing in with a password or the provider. */
+export const ACCOUNT_DEACTIVATED =
+  "Your organisation has turned off your access to Upheap. Ask your administrator to turn it back on.";
 
 /**
  * What to tell the user for problem codes they can act on, by `code`, or by `code.field` where the field changes the
@@ -34,8 +45,7 @@ const MESSAGES: Record<string, string> = {
   password_too_long: "That password is too long.",
   invalid_credentials: "That email or username and password don't match an account.",
   registration_closed: "This server isn't taking new accounts.",
-  account_deactivated:
-    "Your organisation has turned off your access to Upheap. Ask your administrator to turn it back on.",
+  account_deactivated: ACCOUNT_DEACTIVATED,
   // The Password card on Account. An empty new password has its own words in the card.
   "field_empty.current_password": "Enter your current password.",
   wrong_password: "That isn't your current password.",
@@ -50,6 +60,7 @@ const MESSAGES: Record<string, string> = {
   code_challenge_invalid: "This sign-in link is incomplete. Start the sign-in again from the terminal.",
   code_challenge_method_unsupported: "This sign-in link uses a check this server doesn't accept. Update the app.",
   state_missing: "This sign-in link is incomplete. Start the sign-in again from the terminal.",
+  ...NETWORK_EDIT_MESSAGES,
 };
 
 export function problemMessage(error: Error): string {
@@ -70,8 +81,11 @@ export function ProblemText({
 }) {
   if (!error) return null;
   return (
-    <p role="alert" className={`basis-full text-sm ${className}`}>
-      {problemMessage(error)}
-    </p>
+    <>
+      <p role="alert" className={`basis-full text-sm ${className}`}>
+        {problemMessage(error)}
+      </p>
+      <RequestId error={error} />
+    </>
   );
 }

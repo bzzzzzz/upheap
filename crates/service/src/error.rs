@@ -1,4 +1,5 @@
 use domain::comment::CommentError;
+use domain::handle::Handle;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::{AuthorizationError, GrantError};
@@ -50,9 +51,10 @@ pub enum ServiceError {
     TooManyResetRequests { retry_after: Duration },
     #[error("an account with this email already exists")]
     EmailTaken,
-    /// Another user or team has the username or team slug, or another heap of the team has the heap slug.
+    /// Another user or team has the username or team slug, or another heap of the team has the heap slug. `hint` is
+    /// a free one to offer instead, when the use case looked for one.
     #[error("this {field} is taken")]
-    HandleTaken { field: Field },
+    HandleTaken { field: Field, hint: Option<Handle> },
     /// An OAuth authorization request that can't be approved, found before anything was stored.
     #[error(transparent)]
     Authorization(#[from] AuthorizationError),
@@ -165,7 +167,7 @@ pub enum ServiceError {
 /// A duplicate-key failure on a write that sets a handle means another row has it.
 pub(crate) fn handle_taken_on_duplicate(err: StoreError, field: Field) -> ServiceError {
     match err {
-        StoreError::Duplicate(_) => ServiceError::HandleTaken { field },
+        StoreError::Duplicate(_) => ServiceError::HandleTaken { field, hint: None },
         other => ServiceError::Store(other),
     }
 }
