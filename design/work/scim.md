@@ -118,24 +118,28 @@ at sign-in:
 - A user with no `externalId`, or one no identity has, changes no team. The server logs the second at `info`.
 
 Lock order: the mapped teams in ID order, as the sync already locks them (the caller locks them before it syncs), then
-the SCIM row being written, with a locking read, so two writes of one resource run one after the other. A group write
-that touches many members syncs each in the same transaction.
+the SCIM row being written, with a locking read, so two writes of one resource run one after the other. A write to
+users then locks the personal team of each linked person it touches, before it ends any sign-in, as a password change
+does. A group write that touches many members syncs each in the same transaction.
 
 ### Deactivation
 
 A write that leaves a linked person inactive (every record's `active` false, by `POST`, `PUT` or `PATCH`), or deletes
 their last record, ends
 every sign-in of their account in the same transaction: their web sessions are deleted, their OAuth token families
-revoked, their authorization codes expired and their personal tokens revoked. Repeating the write ends nothing more,
-so no before and after are compared. It is logged at `info` with the number of sign-ins ended, and has no audit entry
-beyond the team ones.
+revoked, their authorization codes expired and their personal tokens revoked. The write reads whether the person
+was off before it (they have records and every one is inactive). A change from on to off records `account_deactivated`
+in the person's personal team, with the number of sign-ins ended; from off to on, `account_reactivated`. A repeated
+push ends nothing more and records nothing. It is logged at `info` with the number of sign-ins ended. A person with
+no record is not off, so a delete of the last record records a turn-off only when they weren't off already, and a new
+active record after it records no turn-on: they could sign in again from the delete.
 
 The refusal sits where every sign-in, registration and password reset opens a session: while SCIM is set up and the
 person is inactive, opening one fails with `account_deactivated` (`403`) and the surrounding
 transaction rolls back, so a password reset then changes nothing. The provider itself normally refuses a deactivated
 person's sign-in, so this is the backstop; a password reset can give a provider-made account a password, which is why
-it is there. Reactivating is `active` true again, and nothing else happens. A person with no record is
-no longer refused; the provider won't authenticate a person it deleted, and their sessions and tokens ended at the
+it is there. Reactivating is `active` true again, which records `account_reactivated` and nothing else. A person
+with no record is no longer refused; the provider won't authenticate a person it deleted, and their sessions and tokens ended at the
 delete.
 
 ### Sign-in
@@ -158,7 +162,8 @@ step) does the same once the identity exists, so a person pushed before they eve
 
 - Service and API tests for each endpoint, filter and `PATCH` form, using the request bodies Okta documents.
 - Tests that a group push adds and removes, that deactivation and delete empty the person's group-managed teams,
-  that an unlinked or unmapped user changes nothing, and that sign-in prefers the SCIM record.
+  that an unlinked or unmapped user changes nothing, that sign-in prefers the SCIM record, and that a turn-off and
+  a turn-on record their `account_deactivated` and `account_reactivated` entries once, and a repeat records none.
 - Against a real provider: Okta's free developer org, with a SCIM 2.0 app integration pointed at a server it can
   reach, pushing a user, a group, a membership change and a deactivation.
 

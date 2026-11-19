@@ -110,14 +110,15 @@ impl Services {
             return Ok(current);
         }
 
-        // Team rows first, in ID order, then the user row: the order membership changes take them in (team, then the
-        // user rows their inserts reference), so the two can't deadlock on MySQL.
+        // Team rows first, then the user row: the order membership changes take them in (team, then the user rows their
+        // inserts reference), so the two can't deadlock on MySQL. Group-managed teams come before the rest, each part in
+        // ID order, as a SCIM write locks the mapped teams before the person's personal team.
         let mut team_ids: Vec<TeamId> = store::teams::list_teams_for_user(&txn, principal.user_id)
             .await?
             .into_iter()
             .map(|(team, _)| team.id)
             .collect();
-        team_ids.sort();
+        team_ids.sort_by_key(|team_id| (self.settings.group_teams.get(*team_id).is_none(), *team_id));
         for team_id in &team_ids {
             store::teams::lock_team(&txn, *team_id).await?;
         }

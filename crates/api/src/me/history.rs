@@ -1,4 +1,5 @@
-//! The signed-in user's account history: their password changes and resets, and their own heap priority changes.
+//! The signed-in user's account history: their password changes and resets, the sign-in provider's turn-offs and turn-ons, and their own heap
+//! priority changes.
 
 use api_types::me::{AccountEventDto, AccountEventKindDto, AccountHistoryDto, AccountHistoryQueryDto};
 use axum::Json;
@@ -21,6 +22,8 @@ fn to_kind_dto(kind: AccountEventKind) -> AccountEventKindDto {
         AccountEventKind::PasswordChanged => AccountEventKindDto::PasswordChanged,
         AccountEventKind::PasswordResetLinkMade => AccountEventKindDto::PasswordResetLinkMade,
         AccountEventKind::PasswordReset => AccountEventKindDto::PasswordReset,
+        AccountEventKind::AccountDeactivated => AccountEventKindDto::AccountDeactivated,
+        AccountEventKind::AccountReactivated => AccountEventKindDto::AccountReactivated,
         AccountEventKind::HeapPriorityChanged => AccountEventKindDto::HeapPriorityChanged,
     }
 }

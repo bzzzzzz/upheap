@@ -97,7 +97,7 @@ impl Services {
     /// Makes a reset link for `user` that works for an hour, cancels their earlier working one, and records who
     /// made it (`made_by`, `"operator"` or `"mail"`), in one transaction.
     async fn make_reset_link(&self, user: User, made_by: &'static str) -> Result<ResetLinkMade, ServiceError> {
-        let personal_team = self.load_personal_team(&user).await?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
         let now = self.now();
         let expires_at = ResetLink::end_from(now).ok_or(ValidationError::TimestampOutOfRange)?;
         let token = ResetToken::new(random_token());
@@ -171,7 +171,7 @@ impl Services {
         }
         validate_new_password(new)?;
         let user = self.load_reset_link_user(&link).await?;
-        let personal_team = self.load_personal_team(&user).await?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
         let new = new.to_owned();
         let new_hash = run_blocking(move || hash_password(&new)).await?;
 
@@ -229,8 +229,12 @@ impl Services {
 
     /// The id of the user's personal team, the team their account entries are recorded in (as `UserRegistered` is).
     /// Its slug is the username.
-    pub(crate) async fn load_personal_team(&self, user: &User) -> Result<domain::TeamId, ServiceError> {
-        let team = store::teams::find_team_by_slug(&self.db, &user.username)
+    pub(crate) async fn load_personal_team(
+        &self,
+        db: &impl store::ConnectionTrait,
+        user: &User,
+    ) -> Result<domain::TeamId, ServiceError> {
+        let team = store::teams::find_team_by_slug(db, &user.username)
             .await?
             .ok_or_else(|| StoreError::corrupt("users", &user.id.to_string(), "user has no personal team"))?;
         Ok(team.id)

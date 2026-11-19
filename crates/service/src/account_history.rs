@@ -1,5 +1,6 @@
-//! A user's account history: the password changes, reset links and resets recorded about them, and their own heap
-//! priority changes (architecture.md, Authentication and authorization).
+//! A user's account history: the password changes, reset links and resets recorded about them, the sign-in
+//! provider's turn-offs and turn-ons, and their own heap priority changes (architecture.md, Authentication and
+//! authorization).
 //!
 //! The entries are the audit log's, in the user's personal team where their account entries go. The history is
 //! theirs alone, so there is no way to name another user or team.
@@ -34,15 +35,19 @@ pub enum AccountEventKind {
     PasswordChanged,
     PasswordResetLinkMade,
     PasswordReset,
+    AccountDeactivated,
+    AccountReactivated,
     HeapPriorityChanged,
 }
 
 impl AccountEventKind {
     /// Every kind. The actions the history reads are derived from it, so a new kind is read as soon as it's listed.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 6] = [
         Self::PasswordChanged,
         Self::PasswordResetLinkMade,
         Self::PasswordReset,
+        Self::AccountDeactivated,
+        Self::AccountReactivated,
         Self::HeapPriorityChanged,
     ];
 
@@ -52,6 +57,8 @@ impl AccountEventKind {
             Self::PasswordChanged => AuditAction::PasswordChanged,
             Self::PasswordResetLinkMade => AuditAction::PasswordResetLinkMade,
             Self::PasswordReset => AuditAction::PasswordReset,
+            Self::AccountDeactivated => AuditAction::AccountDeactivated,
+            Self::AccountReactivated => AuditAction::AccountReactivated,
             Self::HeapPriorityChanged => AuditAction::HeapPriorityChanged,
         }
     }
@@ -83,8 +90,8 @@ pub struct AccountEvent {
 }
 
 impl Services {
-    /// The caller's own password changes, reset links made for them, passwords set with one and heap priority changes,
-    /// newest first.
+    /// The caller's own password changes, reset links made for them, passwords set with one, the sign-in provider's
+    /// turn-offs and turn-ons, and heap priority changes, newest first.
     /// `limit` is clamped to 1..=[`crate::audit_log::MAX_AUDIT_PAGE`].
     pub async fn list_account_history(
         &self,
@@ -96,7 +103,7 @@ impl Services {
         let user = store::users::find_user(&self.db, principal.user_id)
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
-        let personal_team = self.load_personal_team(&user).await?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
         let request = AuditRequest {
             entity_id: Some(*principal.user_id.as_uuid()),
             after,
@@ -181,6 +188,17 @@ fn describe_account_event(kind: AccountEventKind, diff: &Value, heap_name: Optio
         (AccountEventKind::PasswordReset, Some(1)) => "Password set with a reset link. 1 sign-in ended.".to_owned(),
         (AccountEventKind::PasswordReset, Some(n)) => format!("Password set with a reset link. {n} sign-ins ended."),
         (AccountEventKind::PasswordReset, None) => "Password set with a reset link.".to_owned(),
+        (AccountEventKind::AccountDeactivated, Some(0)) => {
+            "Turned off by your sign-in provider. No sign-ins were open.".to_owned()
+        }
+        (AccountEventKind::AccountDeactivated, Some(1)) => {
+            "Turned off by your sign-in provider. 1 sign-in ended.".to_owned()
+        }
+        (AccountEventKind::AccountDeactivated, Some(n)) => {
+            format!("Turned off by your sign-in provider. {n} sign-ins ended.")
+        }
+        (AccountEventKind::AccountDeactivated, None) => "Turned off by your sign-in provider.".to_owned(),
+        (AccountEventKind::AccountReactivated, _) => "Turned back on by your sign-in provider.".to_owned(),
         (AccountEventKind::HeapPriorityChanged, _) => {
             let heap = heap_name.unwrap_or("a heap");
             let priority = diff.get(AuditField::Priority.code());
@@ -258,6 +276,26 @@ mod tests {
         assert_eq!(reset(0), "Password set with a reset link. No sign-ins were open.");
         assert_eq!(reset(1), "Password set with a reset link. 1 sign-in ended.");
         assert_eq!(reset(3), "Password set with a reset link. 3 sign-ins ended.");
+    }
+
+    #[test]
+    fn account_deactivated_counts_ended_sign_ins() {
+        let off = |n| describe(AccountEventKind::AccountDeactivated, json!({ "ended_sign_ins": n }));
+        assert_eq!(off(0), "Turned off by your sign-in provider. No sign-ins were open.");
+        assert_eq!(off(1), "Turned off by your sign-in provider. 1 sign-in ended.");
+        assert_eq!(off(3), "Turned off by your sign-in provider. 3 sign-ins ended.");
+        assert_eq!(
+            describe(AccountEventKind::AccountDeactivated, json!({})),
+            "Turned off by your sign-in provider."
+        );
+    }
+
+    #[test]
+    fn account_reactivated_says_the_provider_turned_it_back_on() {
+        assert_eq!(
+            describe(AccountEventKind::AccountReactivated, json!({})),
+            "Turned back on by your sign-in provider."
+        );
     }
 
     #[test]

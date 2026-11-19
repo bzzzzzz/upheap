@@ -64,7 +64,9 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::PasswordChanged
         | AuditAction::HeapPriorityChanged
         | AuditAction::PasswordResetLinkMade
-        | AuditAction::PasswordReset => Permission::ManageTeam,
+        | AuditAction::PasswordReset
+        | AuditAction::AccountDeactivated
+        | AuditAction::AccountReactivated => Permission::ManageTeam,
         AuditAction::HeapCreated
         | AuditAction::HeapUpdated
         | AuditAction::HeapArchived

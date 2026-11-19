@@ -428,7 +428,7 @@ impl Services {
         let user = store::users::find_user(&self.db, principal.user_id)
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
-        let personal_team = self.load_personal_team(&user).await?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         // The personal team first, as the other writes to it lock it, so they take locks in one order; it also
         // serialises two sets of the same person, so each audit entry's "before" is the value it replaced.

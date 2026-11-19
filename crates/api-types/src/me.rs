@@ -122,6 +122,10 @@ pub enum AccountEventKindDto {
     PasswordResetLinkMade,
     /// A password was set with a reset link.
     PasswordReset,
+    /// The sign-in provider turned the account off, or removed its last record.
+    AccountDeactivated,
+    /// The sign-in provider turned the account back on.
+    AccountReactivated,
     /// The user changed their own priority for a heap.
     HeapPriorityChanged,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's

@@ -693,6 +693,16 @@ async fn deactivating_a_linked_person_ends_their_teams_and_sign_ins_and_refuses_
         .filter(|(action, _)| action == "group_member_removed")
         .collect();
     expect_that!(removed, len(eq(1)));
+    // The first turn-off is recorded once, with what it ended; the repeated one adds nothing.
+    let provider_actions = |entries: Vec<(String, Value)>, action: &str| -> Vec<Value> {
+        entries
+            .into_iter()
+            .filter(|(a, _)| a == action)
+            .map(|(_, diff)| diff)
+            .collect()
+    };
+    let deactivations = provider_actions(h.app.audit_entries(&user_id).await?, "account_deactivated");
+    expect_that!(deactivations, elements_are![eq(&json!({ "ended_sign_ins": 3 }))]);
 
     // A provider sign-in is sent back to the sign-in page, told why, with no session, and so is a password reset
     // refused, which then changes nothing.
@@ -753,6 +763,26 @@ async fn deactivating_a_linked_person_ends_their_teams_and_sign_ins_and_refuses_
     expect_that!(back.status, eq(StatusCode::SEE_OTHER));
     let session = back.session_cookie.context("no session")?;
     expect_that!(in_ops(&me(&h.app, &session).await?), eq(true));
+    let reactivations = provider_actions(h.app.audit_entries(&user_id).await?, "account_reactivated");
+    expect_that!(reactivations, elements_are![eq(&json!({}))]);
+    let history = h
+        .app
+        .send(Method::GET, "/api/v1/me/history", Some(&session), None)
+        .await?;
+    let descriptions: Vec<&str> = history.body["entries"]
+        .as_array()
+        .context("no entries")?
+        .iter()
+        .filter_map(|entry| entry["description"].as_str())
+        .filter(|text| text.contains("sign-in provider"))
+        .collect();
+    expect_that!(
+        descriptions,
+        eq(&vec![
+            "Turned back on by your sign-in provider.",
+            "Turned off by your sign-in provider. 3 sign-ins ended."
+        ])
+    );
     Ok(())
 }
 
@@ -779,6 +809,34 @@ async fn deleting_a_linked_person_takes_them_out_of_their_teams_and_ends_their_s
     let session = again.session_cookie.context("no session")?;
     expect_that!(in_ops(&me(&h.app, &session).await?), eq(false));
     expect_that!(h.app.count_rows("scim_group_members").await?, eq(0));
+    // The delete turned the person off, so the history says so.
+    let user_id = user_id_of(&me(&h.app, &session).await?)?;
+    let actions = provider_entries(&h, &user_id).await?;
+    expect_that!(actions, elements_are![eq("account_deactivated")]);
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn deleting_the_last_record_of_a_person_already_off_records_nothing_more() -> Result<()> {
+    // Arrange
+    let h = harness().await?;
+    let session = first_sign_in(&h, sam()).await?;
+    let user_id = user_id_of(&me(&h.app, &session).await?)?;
+    let scim_sam = push_user(&h, "sam@example.test", Some("subject-sam"), true).await?;
+    patch(
+        &h,
+        &format!("/scim/v2/Users/{scim_sam}"),
+        json!([{ "op": "replace", "path": "active", "value": false }]),
+    )
+    .await?;
+
+    // Act
+    scim(&h, Method::DELETE, &format!("/scim/v2/Users/{scim_sam}"), None).await?;
+
+    // Assert
+    let actions = provider_entries(&h, &user_id).await?;
+    expect_that!(actions, elements_are![eq("account_deactivated")]);
     Ok(())
 }
 
@@ -871,6 +929,17 @@ async fn groups_are_left_alone_until_a_mapped_group_has_been_pushed() -> Result<
     Ok(())
 }
 
+/// The provider's account entries about the user, oldest first.
+async fn provider_entries(h: &Harness, user_id: &str) -> Result<Vec<String>> {
+    Ok(h.app
+        .audit_entries(user_id)
+        .await?
+        .into_iter()
+        .map(|(action, _)| action)
+        .filter(|action| action.starts_with("account_"))
+        .collect())
+}
+
 #[gtest]
 #[tokio::test]
 async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_are() -> Result<()> {
@@ -882,6 +951,7 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
 
     // Act: Sam signs in with a token that lists no groups.
     let session = first_sign_in(&h, sam()).await?;
+    let user_id = user_id_of(&me(&h.app, &session).await?)?;
     let signed_in = in_ops(&me(&h.app, &session).await?);
     // The inactive record is written again: Sam is still active through the other.
     patch(
@@ -891,6 +961,7 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
     )
     .await?;
     let still_in = in_ops(&me(&h.app, &session).await?);
+    let turned_off_then = provider_entries(&h, &user_id).await?;
     // The active one is deactivated too.
     patch(
         &h,
@@ -899,11 +970,14 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
     )
     .await?;
     let ended = me(&h.app, &session).await?;
+    let turned_off_after = provider_entries(&h, &user_id).await?;
     let (refused, _) = sign_in(&h, sam()).await?;
 
     // Assert
     expect_that!(signed_in, eq(true));
     expect_that!(still_in, eq(true));
+    expect_that!(turned_off_then, len(eq(0)));
+    expect_that!(turned_off_after, elements_are![eq("account_deactivated")]);
     expect_that!(ended.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(refused.status, eq(StatusCode::SEE_OTHER));
     expect_that!(

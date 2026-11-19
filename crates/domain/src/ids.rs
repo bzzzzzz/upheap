@@ -167,7 +167,9 @@ mod tests {
                 "invite_link_revoked",
                 "password_changed",
                 "password_reset_link_made",
-                "password_reset"
+                "password_reset",
+                "account_deactivated",
+                "account_reactivated"
             ]
         );
         pinned!(

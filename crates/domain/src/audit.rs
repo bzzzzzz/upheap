@@ -54,6 +54,8 @@ coded_enum! {
         PasswordChanged = "password_changed",
         PasswordResetLinkMade = "password_reset_link_made",
         PasswordReset = "password_reset",
+        AccountDeactivated = "account_deactivated",
+        AccountReactivated = "account_reactivated",
     }
 }
 

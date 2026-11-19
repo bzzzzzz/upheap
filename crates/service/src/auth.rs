@@ -345,7 +345,7 @@ impl Services {
         }
         let new = new.to_owned();
         let new_hash = run_blocking(move || hash_password(&new)).await?;
-        let personal_team = self.load_personal_team(&user).await?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
 
         let now = self.now();
         let old_hash = session.to_hash();
