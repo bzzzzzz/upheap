@@ -7,13 +7,13 @@ use clap::Args;
 use uuid::Uuid;
 
 use super::common::{
-    ParameterSetting, describe_due_flag, locate_item, merge_tag_ids, parameter_values, parse_parameter_setting,
-    resolve_due,
+    ParameterSetting, add_missing_tags, check_tag_names, describe_due_flag, locate_item, merge_tag_ids,
+    parameter_values, parse_parameter_setting, resolve_due, tags_not_added_note,
 };
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, read_context, read_description};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
-use crate::lookup::{ItemName, LookupError, resolve_tags};
+use crate::lookup::{ItemName, LookupError, resolve_tags, resolve_tags_or_missing};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -48,6 +48,9 @@ pub struct EditArgs {
     /// Add a tag of the heap, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
+    /// Add each --tag the heap doesn't have as a new tag of the heap, instead of refusing it
+    #[arg(long, requires = "tag")]
+    pub create_tags: bool,
     /// Take off a tag, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
     pub untag: Vec<String>,
@@ -123,11 +126,20 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         heap: &heap,
     };
     let item = api.get_item(&args.item, &at.key).await?;
-    let tag_ids = if args.tag.is_empty() && args.untag.is_empty() {
+    // With --create-tags, the tags the heap doesn't have are added after everything else is read, right before the patch.
+    let mut missing_tags = Vec::new();
+    let tag_change = if args.tag.is_empty() && args.untag.is_empty() {
         None
     } else {
         let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
-        let added = resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?;
+        let added = if args.create_tags {
+            let (found, missing) = resolve_tags_or_missing(&args.tag, &tags.value, &heap);
+            check_tag_names(&missing)?;
+            missing_tags = missing;
+            found
+        } else {
+            resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?
+        };
         let removed = resolve_tags(&args.untag, &tags.value, &heap)?;
         if let Some(position) = added.iter().position(|id| removed.contains(id)) {
             return Err(UsageError::TagAndUntag {
@@ -135,13 +147,36 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
             }
             .into());
         }
-        Some(merge_tags(&item.value, added, &removed))
+        Some((added, removed))
     };
     let parameter_values = parameter_values(&args.parameter, &args.no_parameter, &api).await?;
     let due = match (&args.due, args.no_due) {
         (Some(raw), _) => Some(Some(resolve_due(raw, &client, &token).await?)),
         (None, true) => Some(None),
         (None, false) => None,
+    };
+    let tag_ids = match tag_change {
+        Some((mut added, removed)) => {
+            let failed_what = format!("{} wasn't changed", item.value.key);
+            let (new, failure) = match add_missing_tags(&missing_tags, &api).await {
+                Ok(new) => (new, None),
+                Err(failed) => (failed.added, Some((failed.left, failed.error))),
+            };
+            if out.mode() != Mode::Json {
+                for tag in &new {
+                    out.note(&format!("Added tag \"{}\".", tag.name))?;
+                }
+                if let Some((left, _)) = &failure {
+                    out.note(&tags_not_added_note(left, &failed_what))?;
+                }
+            }
+            if let Some((_, error)) = failure {
+                return Err(error);
+            }
+            added.extend(new.iter().map(|tag| tag.id));
+            Some(merge_tags(&item.value, added, &removed))
+        }
+        None => None,
     };
     let patch = ItemPatchDto {
         title: args.title,

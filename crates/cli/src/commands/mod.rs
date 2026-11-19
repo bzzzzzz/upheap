@@ -52,6 +52,8 @@ pub enum UsageError {
         item_heap: String,
         flag_heap: String,
     },
+    #[error("`{name}` can't be a tag: {reason}")]
+    BadNewTag { name: String, reason: String },
     #[error("--tag and --untag both name {name}")]
     TagAndUntag { name: String },
     #[error("--parameter and --no-parameter both name {name}; give it once")]

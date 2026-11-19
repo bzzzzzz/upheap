@@ -286,6 +286,30 @@ async fn next_says_how_many_items_wait_for_you() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_run_cannot_add_tags_so_create_tags_names_them_and_changes_nothing() -> Result<()> {
+    // Arrange
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    let claimed = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claimed.stdout.trim().to_owned());
+
+    // Act
+    let edited = cli
+        .run(&["item", "edit", &note, "--tag", "fresh", "--create-tags"])
+        .await;
+
+    // Assert
+    expect_that!(edited.exited(3), eq(true));
+    expect_that!(edited.stderr, contains_substring("Couldn't add the tag \"fresh\""));
+    expect_that!(edited.stderr, contains_substring("(run_forbidden)"));
+    let item = server.read_item(&ada, HEAP, &note).await?;
+    expect_that!(item["tags"].as_array().map(Vec::len), some(eq(0)));
+    let tags = server.send(&ada, "GET", "/teams/ada/heaps/personal/tags", None).await?;
+    expect_that!(tags["tags"].as_array().map(Vec::len), some(eq(0)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn claim_inside_a_run_and_reached_or_finish_outside_one_are_usage_errors() -> Result<()> {
     // Arrange
     let (_server, _ada, mut cli, _note) = with_prepared_note().await?;

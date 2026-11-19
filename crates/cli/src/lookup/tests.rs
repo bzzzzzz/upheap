@@ -129,6 +129,20 @@ fn tags_resolve_by_name_ignoring_case_or_by_id() -> googletest::Result<()> {
     )
 }
 
+#[gtest]
+fn tags_found_and_missing_are_told_apart_with_the_missing_trimmed_and_deduped() -> googletest::Result<()> {
+    let mut tags = tags_named(&["Infra"])?;
+    tags.team_tags = tags_named(&["Security"])?.tags;
+    let names: Vec<String> = [" New ", "infra", "new", "Other", "NEW", "SECURITY"]
+        .map(str::to_owned)
+        .into();
+
+    let (found, missing) = resolve_tags_or_missing(&names, &tags, &handle());
+
+    verify_that!(found.len(), eq(2))?;
+    verify_that!(missing, elements_are![eq("New"), eq("Other")])
+}
+
 fn tags_named(names: &[&str]) -> googletest::Result<TagListDto> {
     Ok(serde_json::from_value(json!({
         "heap": { "id": Uuid::new_v4(), "team_id": Uuid::new_v4(), "slug": "personal", "name": "Personal", "archived": false },

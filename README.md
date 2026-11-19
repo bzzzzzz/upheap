@@ -371,6 +371,7 @@ UPHEAP_RUN=<id> cargo run -p cli -- item edit k3x9a --context-file context.md  #
 UPHEAP_RUN=<id> cargo run -p cli -- work reached --result "Wrote the context"  # the turn's goal is reached
 UPHEAP_RUN=<id> cargo run -p cli -- work finish --cost-usd 0.12  # the run is over; what it cost
 cargo run -p cli -- tag add infra --description "Servers and the network"
+cargo run -p cli -- item add "Patch the VPN" --tag network --create-tags   # adds the tag network if the heap hasn't got it
 cargo run -p cli -- parameter list                              # a heap's parameters and their options
 cargo run -p cli -- parameter add Area --option Backend --option Frontend  # an admin adds one; --weight, --tag; edit and archive too
 cargo run -p cli -- parameter option archive Area Backend --replace-with Frontend  # open items with it move to the other

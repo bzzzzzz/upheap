@@ -11,13 +11,14 @@ use domain::step::MAX_STEPS;
 use uuid::Uuid;
 
 use super::common::{
-    ParameterSetting, dedupe, describe_due_flag, parameter_values, parse_parameter_setting, resolve_due,
+    ParameterSetting, add_missing_tags, check_tag_names, dedupe, describe_due_flag, parameter_values,
+    parse_parameter_setting, resolve_due, tags_not_added_note,
 };
 use crate::client::ApiClient;
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, named_heap, read_context, read_description, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
-use crate::lookup::{HeapHandle, ItemName, LookupError, resolve_tags};
+use crate::lookup::{HeapHandle, ItemName, LookupError, resolve_tags, resolve_tags_or_missing};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -46,6 +47,9 @@ pub struct AddArgs {
     /// A tag of the heap, by name or ID. Repeat for more
     #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
+    /// Add each --tag the heap doesn't have as a new tag of the heap, instead of refusing it
+    #[arg(long, requires = "tag")]
+    pub create_tags: bool,
     /// Set a parameter of the heap to one of its options, as NAME=OPTION, each by name or ID. Repeat for more
     #[arg(long, value_name = "NAME=OPTION", value_parser = parse_parameter_setting)]
     pub parameter: Vec<ParameterSetting>,
@@ -116,13 +120,19 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         token: &token,
         heap: &heap,
     };
-    let tag_ids = if args.tag.is_empty() {
-        None
+    // With --create-tags, the tags the heap doesn't have are added after everything else is read, right before the item.
+    let (mut tag_ids, missing_tags) = if args.tag.is_empty() {
+        (None, Vec::new())
     } else {
         let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
-        Some(dedupe(
-            resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?,
-        ))
+        if args.create_tags {
+            let (found, missing) = resolve_tags_or_missing(&args.tag, &tags.value, &heap);
+            check_tag_names(&missing)?;
+            (Some(found), missing)
+        } else {
+            let found = resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?;
+            (Some(found), Vec::new())
+        }
     };
     let parameter_values = parameter_values(&args.parameter, &[], &api).await?.map(|values| {
         values
@@ -151,6 +161,25 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         (Some(name), Some(typed)) => Some(item_id_of(name, typed, &heap, &client, &token).await?),
         _ => None,
     };
+    if let Some(ids) = tag_ids.as_mut() {
+        let (added, failure) = match add_missing_tags(&missing_tags, &api).await {
+            Ok(added) => (added, None),
+            Err(failed) => (failed.added, Some((failed.left, failed.error))),
+        };
+        if out.mode() != Mode::Json {
+            for tag in &added {
+                out.note(&format!("Added tag \"{}\".", tag.name))?;
+            }
+            if let Some((left, _)) = &failure {
+                out.note(&tags_not_added_note(left, "the item wasn't added"))?;
+            }
+        }
+        if let Some((_, error)) = failure {
+            return Err(error);
+        }
+        ids.extend(added.iter().map(|tag| tag.id));
+        *ids = dedupe(std::mem::take(ids));
+    }
     let body = CreateItemDto {
         title: args.title,
         description,

@@ -6,7 +6,9 @@ use api_types::common::{ItemDto, KindDto, SizeDto, StateDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
+use api_types::tags::{CreateTagDto, TagDto};
 use api_types::turns::SendToAgentDto;
+use domain::tag::TagName;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -230,6 +232,58 @@ pub(super) fn describe_due_flag() -> String {
         .map(|label| label.replace(' ', "-"))
         .collect();
     format!("When: a date, YYYY-MM-DD, or a rough choice: {}", choices.join(", "))
+}
+
+/// What `add_missing_tags` got done before one failed: the tags added, the names it didn't add (the failed one and the
+/// ones after it), and why.
+pub(in crate::commands) struct TagsNotAdded {
+    pub added: Vec<TagDto>,
+    pub left: Vec<String>,
+    pub error: CliError,
+}
+
+/// Adds each of `names` as a tag of the heap, one at a time in order, and gives the new tags. It says nothing: the
+/// command's flow does. When one can't be added the tags added before stay.
+pub(in crate::commands) async fn add_missing_tags(
+    names: &[String],
+    api: &HeapApi<'_>,
+) -> Result<Vec<TagDto>, TagsNotAdded> {
+    let mut added = Vec::with_capacity(names.len());
+    for (done, name) in names.iter().enumerate() {
+        let body = CreateTagDto {
+            name: name.clone(),
+            description: None,
+        };
+        match api.post::<TagDto>(&["tags"], &body).await {
+            Ok(tag) => added.push(tag.value),
+            Err(error) => {
+                return Err(TagsNotAdded {
+                    added,
+                    left: names[done..].to_vec(),
+                    error,
+                });
+            }
+        }
+    }
+    Ok(added)
+}
+
+/// The note for tags `left` unadded: `failed_what` is what didn't happen to the item.
+pub(in crate::commands) fn tags_not_added_note(left: &[String], failed_what: &str) -> String {
+    let quoted: Vec<String> = left.iter().map(|name| format!("\"{name}\"")).collect();
+    let noun = if quoted.len() == 1 { "tag" } else { "tags" };
+    format!("Couldn't add the {noun} {}, so {failed_what}.", quoted.join(", "))
+}
+
+/// Refuses a name no tag can have, before anything is written.
+pub(in crate::commands) fn check_tag_names(names: &[String]) -> Result<(), UsageError> {
+    for name in names {
+        TagName::parse(name).map_err(|err| UsageError::BadNewTag {
+            name: name.clone(),
+            reason: err.to_string(),
+        })?;
+    }
+    Ok(())
 }
 
 /// `ids` without repeats, in the order they first appear.
