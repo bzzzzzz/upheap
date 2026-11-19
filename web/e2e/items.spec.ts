@@ -1081,6 +1081,29 @@ test("selected items are sent to an agent at once", async ({ page }) => {
   await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
 });
 
+test("Start on a selection where an agent has an item asks first, and confirming starts them", async ({
+  page,
+  heapPath,
+}) => {
+  await addHeaps(page, ["Garden"]);
+  const held = await seedItem(page, heapPath, "Water the plants");
+  await seedItem(page, heapPath, "Pull the weeds");
+  const sent = await page.request.post(`/api/v1${heapPath}/items/${held.key}/turn`, {
+    headers: { "x-csrf-protection": "1" },
+    data: { reach: "one", line: null },
+  });
+  expect(sent.status()).toBe(201);
+  await page.goto(heapPath);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  await bulkButton(page, "Start").click();
+  const question = page.getByRole("alertdialog", { name: "Start 2 items?" });
+  await expect(question).toContainText("An agent has 1 of them. This takes them back.");
+  await question.getByRole("button", { name: "Start 2", exact: true }).click();
+  await expect(toastWith(page, "Started 2 items.")).toBeVisible();
+  await expect(bulkButton(page, "Pause")).toBeVisible();
+});
+
 test("selecting from an open item leaves on the list, not on the item, after a move", async ({ page }) => {
   test.skip(
     page.viewportSize()?.width !== 1280,

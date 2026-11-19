@@ -172,14 +172,14 @@ export function SelectionBars({
           <button ref={moveRef} type="button" disabled={count === 0 || busy} onClick={open} className={wideClass}>
             Move to…
           </button>
-          <button type="button" aria-label="Done selecting" onClick={onDone} className={compactButtonClass.icon}>
+          <button type="button" aria-label="Leave select mode" onClick={onDone} className={compactButtonClass.icon}>
             <X aria-hidden="true" className="size-5" />
           </button>
         </span>
       </div>
 
       <div className="fixed inset-x-0 top-0 z-20 flex items-center gap-1 bg-surface px-2 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 sm:hidden">
-        <button type="button" aria-label="Done selecting" onClick={onDone} className={compactButtonClass.icon}>
+        <button type="button" aria-label="Leave select mode" onClick={onDone} className={compactButtonClass.icon}>
           <X aria-hidden="true" className="size-5" />
         </button>
         {status}
