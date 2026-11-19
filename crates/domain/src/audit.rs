@@ -41,6 +41,7 @@ coded_enum! {
         TurnRedone = "turn_redone",
         TagCreated = "tag_created",
         TagUpdated = "tag_updated",
+        TagMerged = "tag_merged",
         SavedViewCreated = "saved_view_created",
         SavedViewUpdated = "saved_view_updated",
         SavedViewArchived = "saved_view_archived",
@@ -151,5 +152,6 @@ coded_enum! {
         Groups = "groups",
         By = "by",
         ArchivedAt = "archived_at",
+        Merged = "merged",
     }
 }

@@ -94,6 +94,17 @@ pub async fn lock_heap(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<H
     row.map(to_heap).transpose()
 }
 
+/// Locks the heap row against exclusive locks until the transaction ends (`FOR SHARE` on MySQL and Postgres), and
+/// returns it. A shared lock waits for an exclusive one and holds off new ones, as [`lock_heap`] does, and doesn't
+/// wait for other shared ones.
+pub async fn lock_heap_shared(db: &impl ConnectionTrait, id: HeapId) -> Result<Option<Heap>, StoreError> {
+    let row = heaps::Entity::find_by_id(id_to_db(id.as_uuid()))
+        .lock_shared()
+        .one(db)
+        .await?;
+    row.map(to_heap).transpose()
+}
+
 /// Writes the slug, name, context, prepare setting, weights and archive time if the stored row still has version `expected`, and
 /// returns the heap with its new version. Returns `None` when the stored version differs, and fails with
 /// [`StoreError::Duplicate`] when another heap of the team has the slug.

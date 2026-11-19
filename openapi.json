@@ -153,7 +153,7 @@
           "auth"
         ],
         "summary": "Where the provider sends the browser back. Registered with the provider as `{BASE_URL}/api/v1/auth/oidc/callback`.",
-        "description": "Always answers `303`. A known person is signed in and sent to the page the sign-in started from, or `/`. A new\none is sent to `/login/provider` to pick a username. A refusal is sent to `/login?sign_in_error=<code>`, with\n`redirect` when the sign-in started from a page, and `login` for `email_taken`. The codes are `email_taken`,\n`email_unverified`, `provider_refused`, `sign_in_expired` and `provider_unreachable`.",
+        "description": "Always answers `303`. A known person is signed in and sent to the page the sign-in started from, or `/`. A new\none is sent to `/login/provider` to pick a username. A refusal is sent to `/login?sign_in_error=<code>`, with\n`redirect` when the sign-in started from a page, and `login` for `email_taken`. The codes are `email_taken`,\n`email_unverified`, `provider_refused`, `sign_in_expired`, `provider_unreachable` and `account_deactivated`.",
         "operationId": "callback",
         "parameters": [
           {
@@ -7845,7 +7845,7 @@
         "tags": [
           "tags"
         ],
-        "summary": "Adds a tag to the team, for all its heaps. The name must be free among the team's tags and the tags of every\nheap of the team.",
+        "summary": "Adds a tag to the team, for all its heaps. The name must be free among the team's tags. Heap tags of the team's\nheaps with that name are merged into it, in every heap, archived ones included; that needs `confirm_reach`, the\ntoken of the reach a first attempt is refused with.",
         "operationId": "create_team_tag",
         "parameters": [
           {
@@ -7857,6 +7857,15 @@
               "type": "string"
             },
             "example": "my-team"
+          },
+          {
+            "name": "confirm_reach",
+            "in": "query",
+            "description": "The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the\nheap tags it would merge are still those, with the same item counts.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -7891,7 +7900,7 @@
             }
           },
           "409": {
-            "description": "`tag_name_taken`",
+            "description": "`tag_name_taken` or `tag_merge_unconfirmed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7926,7 +7935,7 @@
         "tags": [
           "tags"
         ],
-        "summary": "Renames a team's tag or changes its description, in every heap at once. Send the tag's `version` in `If-Match`.",
+        "summary": "Renames a team's tag or changes its description, in every heap at once. Send the tag's `version` in `If-Match`.\nA rename to a name heap tags of the team have merges them, and needs `confirm_reach` as making a team tag does.",
         "operationId": "update_team_tag",
         "parameters": [
           {
@@ -7953,6 +7962,15 @@
             "in": "header",
             "description": "The `version` of what is being edited, for example `\"3\"`.",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confirm_reach",
+            "in": "query",
+            "description": "The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the\nheap tags it would merge are still those, with the same item counts.",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -7990,7 +8008,7 @@
             }
           },
           "409": {
-            "description": "`tag_name_taken` or `version_conflict`",
+            "description": "`tag_name_taken`, `tag_merge_unconfirmed` or `version_conflict`",
             "content": {
               "application/json": {
                 "schema": {
@@ -9107,6 +9125,7 @@
           "turn_redone",
           "tag_created",
           "tag_updated",
+          "tag_merged",
           "saved_view_created",
           "saved_view_updated",
           "saved_view_archived",
@@ -12146,6 +12165,60 @@
           }
         }
       },
+      "MergeReach": {
+        "type": "object",
+        "description": "What making or renaming a team tag into a name would merge: the heap tags of the team's heaps with that name.",
+        "required": [
+          "token",
+          "heaps"
+        ],
+        "properties": {
+          "heaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MergeReachHeap"
+            },
+            "description": "By heap name, then heap ID."
+          },
+          "token": {
+            "type": "string",
+            "description": "Names exactly these heap tags and item counts; it changes when either does."
+          }
+        }
+      },
+      "MergeReachHeap": {
+        "type": "object",
+        "description": "A heap tag a merge would take in.",
+        "required": [
+          "heap",
+          "archived",
+          "tag_id",
+          "tag_name",
+          "items"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "heap": {
+            "$ref": "#/components/schemas/HeapSummary"
+          },
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Items with an active link to the tag, open or closed.",
+            "minimum": 0
+          },
+          "tag_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tag_name": {
+            "type": "string",
+            "description": "The heap tag's name as written."
+          }
+        }
+      },
       "Need": {
         "type": "string",
         "description": "How much an item is needed: what happens if it never gets done, from least to most.\n\n- `idea`: kept so it isn't forgotten; nothing is lost if it never happens.\n- `nice_to_have`: wanted, but nobody is waiting for it.\n- `expected`: someone is counting on it; skipping it lets them down.\n- `critical`: it has to happen; skipping it does real damage.",
@@ -12892,7 +12965,7 @@
               "string",
               "null"
             ],
-            "description": "A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints\nat, such as `my-team` for `My-Team`."
+            "description": "A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints\nat, such as `my-team` for `My-Team`, or a free username for a taken one on `handle_taken`, such as `sam-2`."
           },
           "item_key": {
             "type": [
@@ -12900,6 +12973,17 @@
               "null"
             ],
             "description": "The key of the item the error is about, when it is one other than the item asked for: the item a run holds,\nfor `run_wrong_item`."
+          },
+          "merge_reach": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MergeReach",
+                "description": "The heap tags a team tag write would merge, for `tag_merge_unconfirmed`: repeat the write with `token` as\n`confirm_reach` to merge them."
+              }
+            ]
           },
           "request_id": {
             "type": [

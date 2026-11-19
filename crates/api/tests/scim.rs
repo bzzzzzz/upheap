@@ -704,10 +704,29 @@ async fn deactivating_a_linked_person_ends_their_teams_and_sign_ins_and_refuses_
     let deactivations = provider_actions(h.app.audit_entries(&user_id).await?, "account_deactivated");
     expect_that!(deactivations, elements_are![eq(&json!({ "ended_sign_ins": 3 }))]);
 
-    // A provider sign-in is refused, and so is a password reset, which then changes nothing.
+    // A provider sign-in is sent back to the sign-in page, told why, with no session, and so is a password reset
+    // refused, which then changes nothing.
     let (refused, _) = sign_in(&h, sam()).await?;
-    expect_that!(refused.status, eq(StatusCode::FORBIDDEN));
-    expect_that!(refused.body["code"], eq(&json!("account_deactivated")));
+    expect_that!(refused.status, eq(StatusCode::SEE_OTHER));
+    expect_that!(
+        refused
+            .headers
+            .get(header::LOCATION)
+            .and_then(|value| value.to_str().ok()),
+        some(eq(&format!(
+            "{}/login?sign_in_error=account_deactivated",
+            oidc::APP_URL
+        )))
+    );
+    expect_that!(refused.session_cookie, none());
+    let state_cookies: Vec<_> = refused
+        .headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .filter(|value| value.starts_with("upheap_oidc="))
+        .collect();
+    expect_that!(state_cookies, elements_are![contains_substring("Max-Age=0")]);
     let link = h.app.make_reset_link("sam").await?;
     let reset = h
         .app
@@ -960,7 +979,14 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
     expect_that!(turned_off_then, len(eq(0)));
     expect_that!(turned_off_after, elements_are![eq("account_deactivated")]);
     expect_that!(ended.status, eq(StatusCode::UNAUTHORIZED));
-    expect_that!(refused.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(refused.status, eq(StatusCode::SEE_OTHER));
+    expect_that!(
+        refused
+            .headers
+            .get(header::LOCATION)
+            .and_then(|value| value.to_str().ok()),
+        some(ends_with("sign_in_error=account_deactivated"))
+    );
     Ok(())
 }
 

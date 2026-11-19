@@ -80,7 +80,7 @@ export interface paths {
          * @description Always answers `303`. A known person is signed in and sent to the page the sign-in started from, or `/`. A new
          *     one is sent to `/login/provider` to pick a username. A refusal is sent to `/login?sign_in_error=<code>`, with
          *     `redirect` when the sign-in started from a page, and `login` for `email_taken`. The codes are `email_taken`,
-         *     `email_unverified`, `provider_refused`, `sign_in_expired` and `provider_unreachable`.
+         *     `email_unverified`, `provider_refused`, `sign_in_expired`, `provider_unreachable` and `account_deactivated`.
          */
         get: operations["callback"];
         put?: never;
@@ -1531,8 +1531,9 @@ export interface paths {
         get: operations["list_team_tags"];
         put?: never;
         /**
-         * Adds a tag to the team, for all its heaps. The name must be free among the team's tags and the tags of every
-         *     heap of the team.
+         * Adds a tag to the team, for all its heaps. The name must be free among the team's tags. Heap tags of the team's
+         *     heaps with that name are merged into it, in every heap, archived ones included; that needs `confirm_reach`, the
+         *     token of the reach a first attempt is refused with.
          */
         post: operations["create_team_tag"];
         delete?: never;
@@ -1554,7 +1555,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Renames a team's tag or changes its description, in every heap at once. Send the tag's `version` in `If-Match`. */
+        /**
+         * Renames a team's tag or changes its description, in every heap at once. Send the tag's `version` in `If-Match`.
+         *     A rename to a name heap tags of the team have merges them, and needs `confirm_reach` as making a team tag does.
+         */
         patch: operations["update_team_tag"];
         trace?: never;
     };
@@ -1936,7 +1940,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -3159,6 +3163,27 @@ export interface components {
         MemberPatchRequest: {
             role: components["schemas"]["Role"];
         };
+        /** @description What making or renaming a team tag into a name would merge: the heap tags of the team's heaps with that name. */
+        MergeReach: {
+            /** @description By heap name, then heap ID. */
+            heaps: components["schemas"]["MergeReachHeap"][];
+            /** @description Names exactly these heap tags and item counts; it changes when either does. */
+            token: string;
+        };
+        /** @description A heap tag a merge would take in. */
+        MergeReachHeap: {
+            archived: boolean;
+            heap: components["schemas"]["HeapSummary"];
+            /**
+             * Format: int32
+             * @description Items with an active link to the tag, open or closed.
+             */
+            items: number;
+            /** Format: uuid */
+            tag_id: string;
+            /** @description The heap tag's name as written. */
+            tag_name: string;
+        };
         /**
          * @description How much an item is needed: what happens if it never gets done, from least to most.
          *
@@ -3470,7 +3495,7 @@ export interface components {
             highest?: string | null;
             /**
              * @description A value of `field` that would be accepted, when the server can make one: the handle `invalid_handle` hints
-             *     at, such as `my-team` for `My-Team`.
+             *     at, such as `my-team` for `My-Team`, or a free username for a taken one on `handle_taken`, such as `sam-2`.
              */
             hint?: string | null;
             /**
@@ -3478,6 +3503,7 @@ export interface components {
              *     for `run_wrong_item`.
              */
             item_key?: string | null;
+            merge_reach?: null | components["schemas"]["MergeReach"];
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -4543,6 +4569,8 @@ export type MeAction = components['schemas']['MeAction'];
 export type MePatchRequest = components['schemas']['MePatchRequest'];
 export type MemberAction = components['schemas']['MemberAction'];
 export type MemberPatchRequest = components['schemas']['MemberPatchRequest'];
+export type MergeReach = components['schemas']['MergeReach'];
+export type MergeReachHeap = components['schemas']['MergeReachHeap'];
 export type Need = components['schemas']['Need'];
 export type OAuthApproval = components['schemas']['OAuthApproval'];
 export type OAuthAuthorizationRequest = components['schemas']['OAuthAuthorizationRequest'];
@@ -9630,7 +9658,13 @@ export interface operations {
     };
     create_team_tag: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the
+                 *     heap tags it would merge are still those, with the same item counts.
+                 */
+                confirm_reach?: string;
+            };
             header?: never;
             path: {
                 /**
@@ -9663,7 +9697,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_name_taken` */
+            /** @description `tag_name_taken` or `tag_merge_unconfirmed` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9684,7 +9718,13 @@ export interface operations {
     };
     update_team_tag: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the
+                 *     heap tags it would merge are still those, with the same item counts.
+                 */
+                confirm_reach?: string;
+            };
             header: {
                 /** @description The `version` of what is being edited, for example `"3"`. */
                 "If-Match": string;
@@ -9721,7 +9761,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_name_taken` or `version_conflict` */
+            /** @description `tag_name_taken`, `tag_merge_unconfirmed` or `version_conflict` */
             409: {
                 headers: {
                     [name: string]: unknown;

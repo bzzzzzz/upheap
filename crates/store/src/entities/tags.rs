@@ -11,6 +11,8 @@ pub struct Model {
     pub name: String,
     pub name_key: String,
     pub description: Option<String>,
+    /// The team tag a merged heap tag was merged into; `NULL` for a tag in use.
+    pub merged_into: Option<String>,
     pub created_at: i64,
     pub version: i32,
 }

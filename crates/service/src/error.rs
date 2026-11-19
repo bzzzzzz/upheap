@@ -1,4 +1,5 @@
 use domain::comment::CommentError;
+use domain::handle::Handle;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::{AuthorizationError, GrantError};
@@ -13,6 +14,8 @@ use domain::turn::TurnError;
 use domain::validation::Field;
 use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
+
+use crate::tags::MergeReach;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
 #[derive(Debug, thiserror::Error)]
@@ -48,9 +51,10 @@ pub enum ServiceError {
     TooManyResetRequests { retry_after: Duration },
     #[error("an account with this email already exists")]
     EmailTaken,
-    /// Another user or team has the username or team slug, or another heap of the team has the heap slug.
+    /// Another user or team has the username or team slug, or another heap of the team has the heap slug. `hint` is
+    /// a free one to offer instead, when the use case looked for one.
     #[error("this {field} is taken")]
-    HandleTaken { field: Field },
+    HandleTaken { field: Field, hint: Option<Handle> },
     /// An OAuth authorization request that can't be approved, found before anything was stored.
     #[error(transparent)]
     Authorization(#[from] AuthorizationError),
@@ -135,6 +139,12 @@ pub enum ServiceError {
     /// The name is a team tag of the heap's team; `name` is the team tag's, as stored.
     #[error("{name:?} is a team tag; use it instead")]
     TeamTagNameTaken { name: String },
+    /// A team tag write that would merge heap tags was not confirmed with the token of their current reach.
+    #[error(
+        "{name:?} merges {} into the team tag",
+        heap_tags(reach.entries.len())
+    )]
+    TagMergeUnconfirmed { name: String, reach: MergeReach },
     #[error(transparent)]
     Parameter(#[from] ParameterError),
     #[error("this heap already has a parameter called {name:?}")]
@@ -157,7 +167,7 @@ pub enum ServiceError {
 /// A duplicate-key failure on a write that sets a handle means another row has it.
 pub(crate) fn handle_taken_on_duplicate(err: StoreError, field: Field) -> ServiceError {
     match err {
-        StoreError::Duplicate(_) => ServiceError::HandleTaken { field },
+        StoreError::Duplicate(_) => ServiceError::HandleTaken { field, hint: None },
         other => ServiceError::Store(other),
     }
 }
@@ -167,5 +177,13 @@ fn in_minutes(wait: Duration) -> String {
     match wait.as_minutes_ceil() {
         1 => "1 minute".to_owned(),
         minutes => format!("{minutes} minutes"),
+    }
+}
+
+/// "1 heap tag", "3 heap tags".
+fn heap_tags(count: usize) -> String {
+    match count {
+        1 => "1 heap tag".to_owned(),
+        n => format!("{n} heap tags"),
     }
 }

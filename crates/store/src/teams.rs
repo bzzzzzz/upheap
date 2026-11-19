@@ -54,18 +54,6 @@ pub async fn lock_team(db: &impl ConnectionTrait, id: TeamId) -> Result<Option<T
     row.map(to_team).transpose()
 }
 
-/// Reads the team and takes a shared lock on its row until the transaction ends (`FOR SHARE`): it waits for a write
-/// that holds [`lock_team`], and holds one off, but not another shared lock or the key check an insert referencing the
-/// team makes. A heap tag write takes it, so it runs after a team tag write of the same team, never beside one, and
-/// doesn't hold off an item write of its heap whose audit entry references the team.
-pub async fn lock_team_shared(db: &impl ConnectionTrait, id: TeamId) -> Result<Option<Team>, StoreError> {
-    let row = teams::Entity::find_by_id(id_to_db(id.as_uuid()))
-        .lock_shared()
-        .one(db)
-        .await?;
-    row.map(to_team).transpose()
-}
-
 /// Writes the slug and name if the stored row still has version `expected`, and returns the team with its new
 /// version. Returns `None` when the stored version differs, and fails with [`StoreError::Duplicate`] when the slug
 /// is taken.

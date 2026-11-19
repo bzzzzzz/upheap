@@ -231,7 +231,7 @@ impl Services {
 
     /// Adds the names of the tags, parameters and options of `heap_id`.
     async fn insert_heap_vocabulary(&self, names: &mut Names, heap_id: HeapId) -> Result<(), ServiceError> {
-        for tag in store::tags::list_tags(&self.db, heap_id).await? {
+        for tag in store::tags::list_tags_for_history(&self.db, heap_id).await? {
             names.insert(*tag.id.as_uuid(), tag.name.as_str());
         }
         for parameter in store::parameters::list_parameters(&self.db, heap_id).await? {
@@ -421,7 +421,7 @@ fn present_page(
         .into_iter()
         .map(|entry| {
             let about_actor = entry.entity_id == *entry.actor.as_uuid();
-            let (phrase, names_entity) = describe_phrase(entry.action, about_actor, &entry.diff);
+            let (phrase, names_entity) = describe_phrase(entry.action, entry.entity_type, about_actor, &entry.diff);
             AuditEntryView {
                 id: entry.id,
                 created_at: entry.created_at,
@@ -444,8 +444,17 @@ fn present_page(
 }
 
 /// [`describe_action`], with the groups named for the two actions that come from the provider's groups.
-fn describe_phrase(action: AuditAction, about_actor: bool, diff: &Value) -> (Cow<'static, str>, bool) {
+fn describe_phrase(
+    action: AuditAction,
+    entity_type: EntityType,
+    about_actor: bool,
+    diff: &Value,
+) -> (Cow<'static, str>, bool) {
     let (phrase, names_entity) = describe_action(action, about_actor);
+    // A merge writes one entry on the team tag and one on each item it changed.
+    if action == AuditAction::TagMerged && entity_type == EntityType::Item {
+        return (Cow::Borrowed("merged a tag on"), names_entity);
+    }
     if action == AuditAction::ItemMoved {
         // A move across teams records one side of the heap change only (architecture.md, Audit log).
         let heap = diff.get(AuditField::Heap.code());
@@ -526,6 +535,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::TurnRedone, _) => ("asked for changes on", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
         (AuditAction::TagUpdated, _) => ("edited tag", true),
+        (AuditAction::TagMerged, _) => ("merged tags into", true),
         (AuditAction::SavedViewCreated, _) => ("saved view", true),
         (AuditAction::SavedViewUpdated, _) => ("changed view", true),
         (AuditAction::SavedViewArchived, _) => ("archived view", true),
@@ -598,6 +608,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::ReplyChanged
         | AuditAction::StepUpdated
         | AuditAction::TagUpdated
+        | AuditAction::TagMerged
         | AuditAction::SavedViewUpdated
         | AuditAction::SavedViewArchived
         | AuditAction::ParameterUpdated
@@ -791,7 +802,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::By => "By",
         AuditField::EndsAt => "Ends",
         // Never shown as one change of their own (see `reading`).
-        AuditField::ArchivedAt | AuditField::Parameters => field.code(),
+        AuditField::ArchivedAt | AuditField::Parameters | AuditField::Merged => field.code(),
     }
 }
 
@@ -844,6 +855,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
     match field {
         // `ends_at` is only on an invite link's creation, whose entries show no changes.
         AuditField::ArchivedAt | AuditField::EndsAt => Reading::Unshown,
+        // A tag's merge lists the heap tags it took in, for API clients; reading a tag's history shows them.
+        AuditField::Merged => Reading::Unshown,
         // Group membership entries say the groups in their phrase, and `by` is always the provider's groups.
         AuditField::Groups | AuditField::By => Reading::Unshown,
         // A heap priority change, the only entry about a user with a name, records the heap's for account history;
@@ -1464,7 +1477,12 @@ mod tests {
     #[gtest]
     fn a_group_membership_names_the_groups_in_its_phrase() {
         let phrase = |action, groups: Value| {
-            describe_phrase(action, true, &json!({ "groups": groups, "by": "provider_groups" }))
+            describe_phrase(
+                action,
+                EntityType::User,
+                true,
+                &json!({ "groups": groups, "by": "provider_groups" }),
+            )
         };
 
         expect_that!(
@@ -1486,11 +1504,16 @@ mod tests {
         let diff = json!({ "role": { "before": "member", "after": "admin" }, "made_by": "operator" });
 
         expect_that!(
-            describe_phrase(AuditAction::MemberRoleChanged, true, &diff),
+            describe_phrase(AuditAction::MemberRoleChanged, EntityType::User, true, &diff),
             eq(&(Cow::Borrowed("was made an admin by whoever runs the server"), false))
         );
         expect_that!(
-            describe_phrase(AuditAction::MemberRoleChanged, true, &json!({ "role": {} })),
+            describe_phrase(
+                AuditAction::MemberRoleChanged,
+                EntityType::User,
+                true,
+                &json!({ "role": {} })
+            ),
             eq(&(Cow::Borrowed("changed their own role"), false))
         );
     }
