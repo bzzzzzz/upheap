@@ -108,8 +108,12 @@ pub async fn run_list(args: ListArgs, app: &App, out: &mut Output) -> Result<(),
         } else {
             format!("{gone} items whose blocker was closed or moved")
         };
+        let place = only.as_ref().map_or_else(
+            || "--all-heaps".to_owned(),
+            |only| format!("--heap {}/{}", only.team, only.heap),
+        );
         out.line(&format!(
-            "Also waiting: {items}, listed by upheap item list --all-heaps --blocker gone."
+            "Also waiting: {items}, listed by upheap item list {place} --blocker gone."
         ))?;
     }
     let others = others - gone;

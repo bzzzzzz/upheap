@@ -803,6 +803,7 @@ async fn question_list_counts_a_gone_blocker_and_names_the_command_that_lists_it
 
     // Act
     let listed = cli.run(&["question", "list"]).await;
+    let in_heap = cli.run(&["question", "list", "--heap", HEAP]).await;
 
     // Assert
     expect_that!(
@@ -811,5 +812,38 @@ async fn question_list_counts_a_gone_blocker_and_names_the_command_that_lists_it
             "No questions wait for you.\nAlso waiting: 1 item whose blocker was closed or moved, listed by upheap item list --all-heaps --blocker gone.\n"
         )
     );
+    expect_that!(
+        in_heap.stdout,
+        contains_substring(format!("listed by upheap item list --heap {HEAP} --blocker gone.\n"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn blocker_gone_lists_a_reminder_to_come_whose_blocker_was_closed() -> Result<()> {
+    // Arrange: a reminder that joins the list later, blocked on an item then closed as won't do.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let reminder = cli
+        .run(&["item", "add", "Renew the domain", "--reminder", "2099-03-12", "-q"])
+        .await;
+    let reminder = reminder.stdout.trim();
+    server
+        .edit_item(
+            &ada,
+            HEAP,
+            reminder,
+            json!({ "state": "blocked", "blocked_by_item_id": items[0]["id"] }),
+        )
+        .await?;
+    cli.run(&["item", "wontdo", key(&items[0])?]).await;
+
+    // Act
+    let quiet = cli.run(&["item", "list", "--blocker", "gone", "-q"]).await;
+
+    // Assert
+    expect_that!(quiet.stdout, eq(format!("{reminder}\n").as_str()));
     Ok(())
 }

@@ -139,8 +139,8 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
         query.open = Some(StateModeDto::Hidden);
         query.in_progress = Some(StateModeDto::Hidden);
         query.blocked = Some(StateModeDto::Shown);
-        // The blocked items aren't reminders, and a search would otherwise ask for them.
-        query.reminders = None;
+        // A blocked reminder that hasn't arrived yet comes in the reminders, not with the blocked items.
+        query.reminders = Some(RemindersModeDto::Shown);
     }
     if query.sort == Some(SortDto::Parameter) && query.sort_parameter.is_none() {
         return Err(UsageError::SortWithoutParameter.into());
@@ -150,8 +150,10 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
         let rows = groups(&list.value)
             .into_iter()
             .flat_map(|(_, entries)| entries)
-            .filter(|entry| entry.item.blocker_gone.is_some() && keeps(&entry.item, args.text.as_deref()))
-            .map(|entry| (entry.item.key.clone(), &entry.item))
+            .map(|entry| &entry.item)
+            .chain(&list.value.reminders)
+            .filter(|item| item.blocker_gone.is_some() && keeps(item, args.text.as_deref()))
+            .map(|item| (item.key.clone(), item))
             .collect();
         return report_gone(rows, None, &list.body, out);
     }
@@ -205,10 +207,13 @@ async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Resu
         .await?;
     let text = args.text.as_deref();
     if gone {
-        let returned = across_groups(&list.value).iter().map(|(_, rows)| rows.len()).sum();
-        let rows = across_groups(&list.value)
+        let all: Vec<&AcrossHeapsItemDto> = across_groups(&list.value)
             .into_iter()
             .flat_map(|(_, rows)| rows)
+            .collect();
+        let returned = all.len();
+        let rows = all
+            .into_iter()
             .filter(|row| row.entry.item.blocker_gone.is_some() && keeps(&row.entry.item, text))
             .map(|row| {
                 (
@@ -426,6 +431,9 @@ fn report_gone(
         Mode::Human => {
             if rows.is_empty() {
                 out.line("No items wait on a closed blocker.")?;
+                if let Some(footer) = truncated {
+                    out.line_toned(&footer, Tone::Dim)?;
+                }
                 return Ok(());
             }
             let cells: Vec<Vec<Cell>> = rows
