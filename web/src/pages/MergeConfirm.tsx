@@ -1,5 +1,5 @@
 // The confirm before a team tag merges heap tags (design/ux.md, Tags): a dialog on a wide screen, a sheet on a phone.
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
@@ -64,6 +64,11 @@ export function MergeConfirm<V>({
   const { pending, error } = { pending: mutation.isPending, error: mutation.error };
   const phone = useMedia(PHONE);
   const bodyId = useId();
+  // A changed list moves focus to the band that says so, so a screen reader reads it before the button again.
+  const band = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (previous) band.current?.focus();
+  }, [previous]);
   const make = act.kind === "make";
   const name = make ? act.name : act.to;
   const title = make ? `Make “${name}” a team tag?` : `Rename “${act.from}” to “${act.to}”?`;
@@ -96,7 +101,7 @@ export function MergeConfirm<V>({
   const body: ReactNode = (
     <div id={bodyId} className="flex min-w-0 flex-col gap-3 text-sm text-ink-soft">
       {previous && (
-        <p role="status" className="rounded-lg bg-accent-soft px-3 py-2 text-accent-ink">
+        <p ref={band} tabIndex={-1} className="rounded-lg bg-accent-soft px-3 py-2 text-accent-ink outline-none">
           This changed while it was open. Check the list again; the button confirms this one.
         </p>
       )}
@@ -187,10 +192,10 @@ export function MergeConfirm<V>({
           </Heading>
           {body}
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" disabled={pending} onClick={cancel} className={compactButtonClass.quiet}>
+            <button type="button" autoFocus disabled={pending} onClick={cancel} className={compactButtonClass.quiet}>
               Cancel
             </button>
-            <button type="button" autoFocus disabled={pending} onClick={confirm} className={compactButtonClass.primary}>
+            <button type="button" disabled={pending} onClick={confirm} className={compactButtonClass.primary}>
               {actLabel}
             </button>
           </div>

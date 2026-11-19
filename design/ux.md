@@ -203,6 +203,7 @@ confirms the new list. Another failure shows above the buttons, with its request
 someone else changed meanwhile closes it and shows the form's version-conflict line. Success closes it with a toast,
 "“billing” is a team tag now: 2 items in 2 heaps carry it." (for a rename, "Renamed to “billing”: …"). Cancel changes
 nothing, and the form keeps what was typed.
+
 **Parameters** opens its add form from a New parameter button, and gives each parameter a
 card: the name with Rename, the weight, the options as a numbered list (↑ ↓ and Archive on each; Archive turns the
 row into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History
