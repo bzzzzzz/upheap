@@ -3,9 +3,10 @@
 //!
 //! The pushes are stored as the provider sent them ([`store::scim`]). Each write runs in one transaction that locks
 //! the mapped teams first, then the SCIM row being written, then (a write to users, for each linked person it touches)
-//! the person's personal team, writes the SCIM rows, then runs the group-teams sync for
-//! every touched person who is linked: a SCIM user is linked to an account when `user_identities` has the configured
-//! issuer and the SCIM user's `externalId`, the person's subject. Nothing stores the link.
+//! the person's personal team, found before the transaction so the lock comes before any read of the person's state,
+//! writes the SCIM rows, then runs the group-teams sync for every touched person who is linked: a SCIM user is linked
+//! to an account when `user_identities` has the configured issuer and the SCIM user's `externalId`, the person's
+//! subject. Nothing stores the link.
 //!
 //! Records may share an `externalId`, so a person's state is read from all of them at once ([`ScimPerson`]): inactive
 //! only when every record is, else in the groups of the active ones. A linked person who is left inactive, or whose
@@ -342,9 +343,11 @@ impl Services {
             created_at: now,
             updated_at: now,
         };
+        let subjects: BTreeSet<String> = user.external_id.iter().cloned().collect();
+        let personal_teams = self.personal_teams(&subjects).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
-        let subjects: BTreeSet<String> = user.external_id.iter().cloned().collect();
+        lock_teams(&txn, &personal_teams).await?;
         let was_off = self.off_subjects(&txn, &subjects).await?;
         store::scim::insert_user(&txn, &user)
             .await
@@ -382,9 +385,11 @@ impl Services {
         change: impl FnOnce(&ScimUser) -> Result<UserInput, ScimError>,
     ) -> Result<Value, ScimError> {
         let now = self.now();
+        let personal_teams = self.stored_users_personal_team(id).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
         let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
+        lock_teams(&txn, &personal_teams).await?;
         let input = change(&current)?;
         // The person the record was linked to before, if the write moves it to another.
         let subjects: BTreeSet<String> = [input.external_id.clone(), current.external_id.clone()]
@@ -415,9 +420,11 @@ impl Services {
     pub async fn scim_delete_user(&self, id: &str) -> Result<(), ScimError> {
         let id = parse_id(id)?;
         let now = self.now();
+        let personal_teams = self.stored_users_personal_team(id).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
         let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
+        lock_teams(&txn, &personal_teams).await?;
         let subjects: BTreeSet<String> = current.external_id.into_iter().collect();
         let was_off = self.off_subjects(&txn, &subjects).await?;
         store::scim::delete_user_memberships(&txn, id).await?;
@@ -652,12 +659,45 @@ impl Services {
         Ok(())
     }
 
-    /// Locks the personal team of `user_id`, where their account entries go, and returns it.
-    async fn lock_personal_team(&self, txn: &impl ConnectionTrait, user_id: UserId) -> Result<TeamId, ServiceError> {
-        let user = store::users::find_user(txn, user_id)
+    /// The personal teams of the people among `subjects` who are linked to an account, read before a write to users
+    /// begins its transaction. The write locks them right after the SCIM row and before it reads any person's state:
+    /// on MySQL a transaction's first plain read fixes its snapshot, so reading them inside it first would hide a
+    /// write to another record of the same person that committed while this one waited for the lock. Two writes to
+    /// records of one person then run one after the other, also when no mapped team's lock orders them.
+    async fn personal_teams(&self, subjects: &BTreeSet<String>) -> Result<BTreeSet<TeamId>, ServiceError> {
+        let mut teams = BTreeSet::new();
+        for subject in subjects {
+            if let Some(user_id) = self.linked_user(&self.db, subject).await? {
+                teams.insert(self.personal_team(&self.db, user_id).await?);
+            }
+        }
+        Ok(teams)
+    }
+
+    /// [`Self::personal_teams`] of the person the stored user `id` is linked to, if any. A user that isn't stored has
+    /// none; the write then finds it missing under its lock.
+    async fn stored_users_personal_team(&self, id: Uuid) -> Result<BTreeSet<TeamId>, ServiceError> {
+        let subjects = store::scim::find_user(&self.db, id)
+            .await?
+            .and_then(|user| user.external_id)
+            .into_iter()
+            .collect();
+        self.personal_teams(&subjects).await
+    }
+
+    /// The personal team of `user_id`, where their account entries go.
+    async fn personal_team(&self, db: &impl ConnectionTrait, user_id: UserId) -> Result<TeamId, ServiceError> {
+        let user = store::users::find_user(db, user_id)
             .await?
             .ok_or_else(|| StoreError::corrupt("users", &user_id.to_string(), "a linked identity has no user"))?;
-        let personal_team = self.load_personal_team(txn, &user).await?;
+        self.load_personal_team(db, &user).await
+    }
+
+    /// Locks the personal team of `user_id` and returns it. Usually the write locked it already, before reading the
+    /// person's state ([`Self::personal_teams`]); this covers a person the write's early read couldn't name, such as
+    /// one a replace moves the record to.
+    async fn lock_personal_team(&self, txn: &impl ConnectionTrait, user_id: UserId) -> Result<TeamId, ServiceError> {
+        let personal_team = self.personal_team(txn, user_id).await?;
         store::teams::lock_team(txn, personal_team).await?;
         Ok(personal_team)
     }
@@ -890,6 +930,14 @@ fn list_response(total: u64, start: u64, resources: Vec<Value>) -> Value {
 }
 
 /// A member that names no stored user is refused.
+/// Locks `teams`, in ID order, so two writes locking several never wait on each other in a cycle.
+async fn lock_teams(txn: &impl ConnectionTrait, teams: &BTreeSet<TeamId>) -> Result<(), ServiceError> {
+    for team in teams {
+        store::teams::lock_team(txn, *team).await?;
+    }
+    Ok(())
+}
+
 async fn check_members_exist(db: &impl ConnectionTrait, members: &BTreeSet<Uuid>) -> Result<(), ScimError> {
     if store::scim::existing_user_ids(db, members).await?.len() == members.len() {
         Ok(())
