@@ -1,7 +1,8 @@
 //! `upheap item list [<text>]`: the heap's ranked list as the web app shows it, its closed items with `--closed`, or
-//! every heap's items in one ranked list with `--all-heaps`.
+//! every heap's items in one ranked list with `--all-heaps`. With `--blocker gone` either one lists only the blocked
+//! items whose blocker was closed or moved away, filtered here on what the list carries.
 
-use api_types::common::{ClosedGroupDto, ItemDto, NeedDto, RankedItemDto, SizeDto};
+use api_types::common::{BlockerGoneHowDto, ClosedGroupDto, ItemDto, NeedDto, RankedItemDto, SizeDto};
 use api_types::items::{
     AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery, ClosedItemsDto, ClosedQuery, RankedListDto, RankedQuery,
 };
@@ -11,7 +12,7 @@ use api_types::tags::TagListDto;
 use api_types::turns::{AgentStateDto, GoalDto};
 use api_types::views::SavedViewListDto;
 use api_types::waiting::ItemHeapDto;
-use clap::Args;
+use clap::{Args, ValueEnum};
 
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, named_heap, resolve_heap_handle};
@@ -25,6 +26,13 @@ use super::common::{due_cell, kind_text, sizes_text, state_text, tags_text, with
 /// Titles longer than this are cut short in the table, so the columns after them stay on screen.
 const TITLE_WIDTH: usize = 60;
 const REASON_WIDTH: usize = 40;
+
+/// What `--blocker` keeps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum BlockerFilter {
+    /// Blocked items whose blocker was closed or moved away.
+    Gone,
+}
 
 #[derive(Args, Debug)]
 pub struct ListArgs {
@@ -41,7 +49,7 @@ pub struct ListArgs {
     /// Closed items, most recently closed first, in place of the ranked list
     #[arg(long, conflicts_with_all = [
         "view", "tag", "need", "effort", "impact", "agent", "going_to", "sort", "sort_parameter", "open", "in_progress", "blocked",
-        "blocked_layout", "reminders",
+        "blocked_layout", "reminders", "blocker",
     ])]
     pub closed: bool,
     /// A saved view of the heap, by name or ID. Flags given with it change what it shows
@@ -87,6 +95,10 @@ pub struct ListArgs {
     /// default, but a TEXT search always looks in them
     #[arg(long, value_name = "MODE", value_parser = parse_api_value::<RemindersModeDto>)]
     pub reminders: Option<RemindersModeDto>,
+    /// Only blocked items whose blocker was closed or moved away, which wait for you: gone. Unblock one with
+    /// `upheap item reopen`
+    #[arg(long, value_name = "WHICH", value_enum)]
+    pub blocker: Option<BlockerFilter>,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -122,11 +134,27 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
     if args.closed {
         return list_closed(&api, args.text.as_deref(), out).await;
     }
-    let query = build_query(&args, &api).await?;
+    let mut query = build_query(&args, &api).await?;
+    if args.blocker.is_some() {
+        query.open = Some(StateModeDto::Hidden);
+        query.in_progress = Some(StateModeDto::Hidden);
+        query.blocked = Some(StateModeDto::Shown);
+        // The blocked items aren't reminders, and a search would otherwise ask for them.
+        query.reminders = None;
+    }
     if query.sort == Some(SortDto::Parameter) && query.sort_parameter.is_none() {
         return Err(UsageError::SortWithoutParameter.into());
     }
     let list = api.get::<RankedListDto>(&["items"], &query).await?;
+    if args.blocker.is_some() {
+        let rows = groups(&list.value)
+            .into_iter()
+            .flat_map(|(_, entries)| entries)
+            .filter(|entry| entry.item.blocker_gone.is_some() && keeps(&entry.item, args.text.as_deref()))
+            .map(|entry| (entry.item.key.clone(), &entry.item))
+            .collect();
+        return report_gone(rows, None, &list.body, out);
+    }
     match out.mode() {
         Mode::Json => out.json(&list.body)?,
         Mode::Quiet => {
@@ -154,12 +182,17 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
 async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
+    let gone = args.blocker.is_some();
     let query = AcrossHeapsQuery {
         team: args.team.clone(),
         as_of: None,
-        open: args.open,
-        in_progress: args.in_progress,
-        blocked: args.blocked,
+        open: if gone { Some(StateModeDto::Hidden) } else { args.open },
+        in_progress: if gone {
+            Some(StateModeDto::Hidden)
+        } else {
+            args.in_progress
+        },
+        blocked: if gone { Some(StateModeDto::Shown) } else { args.blocked },
         blocked_layout: args.blocked_layout,
         effort: args.effort.clone(),
         impact: args.impact.clone(),
@@ -171,6 +204,21 @@ async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Resu
         .get::<AcrossHeapsListDto>(&["me", "items"], &query, &token)
         .await?;
     let text = args.text.as_deref();
+    if gone {
+        let returned = across_groups(&list.value).iter().map(|(_, rows)| rows.len()).sum();
+        let rows = across_groups(&list.value)
+            .into_iter()
+            .flat_map(|(_, rows)| rows)
+            .filter(|row| row.entry.item.blocker_gone.is_some() && keeps(&row.entry.item, text))
+            .map(|row| {
+                (
+                    format!("{}/{}", heap_label(&row.heap), row.entry.item.key),
+                    &row.entry.item,
+                )
+            })
+            .collect();
+        return report_gone(rows, showing_footer(returned, list.value.count), &list.body, out);
+    }
     match out.mode() {
         Mode::Json => out.json(&list.body)?,
         Mode::Quiet => {
@@ -349,13 +397,86 @@ fn render_across_heaps(
     };
     let view = query.to_view().ok().map(|view| ListViewDto::from(&view));
     let mut footers: Vec<String> = hidden_footer(list.hidden_count, view).into_iter().collect();
-    if usize::try_from(list.count).is_ok_and(|count| count > returned) {
-        footers.push(format!(
-            "Showing the first {returned} of {}; narrow it with --need, --effort or --impact.",
-            list.count
-        ));
-    }
+    footers.extend(showing_footer(returned, list.count));
     render_groups(shown, &[], &empty, &footers, out)
+}
+
+/// "Showing the first 50 of 80", when the server sent fewer rows than the list has.
+fn showing_footer(returned: usize, count: u32) -> Option<String> {
+    usize::try_from(count)
+        .is_ok_and(|count| count > returned)
+        .then(|| format!("Showing the first {returned} of {count}; narrow it with --need, --effort or --impact."))
+}
+
+/// `--blocker gone`: the kept `rows`, each a name and its item, as one table with the unblock footer, `--quiet`
+/// as the names, and `--json` as the server's `body`.
+fn report_gone(
+    rows: Vec<(String, &ItemDto)>,
+    truncated: Option<String>,
+    body: &str,
+    out: &mut Output,
+) -> Result<(), CliError> {
+    match out.mode() {
+        Mode::Json => out.json(body)?,
+        Mode::Quiet => {
+            for (name, _) in &rows {
+                out.line(name)?;
+            }
+        }
+        Mode::Human => {
+            if rows.is_empty() {
+                out.line("No items wait on a closed blocker.")?;
+                return Ok(());
+            }
+            let cells: Vec<Vec<Cell>> = rows
+                .iter()
+                .map(|(name, item)| {
+                    vec![
+                        Cell::toned(name.clone(), Tone::Strong),
+                        Cell::new(shorten(&item.title, TITLE_WIDTH)),
+                        Cell::new(gone_text(item)),
+                    ]
+                })
+                .collect();
+            for line in out.render_table(&cells) {
+                out.table_line("", &line)?;
+            }
+            out.line("")?;
+            out.line_toned("Unblock one with upheap item reopen <key>.", Tone::Dim)?;
+            if let Some(footer) = truncated {
+                out.line_toned(&footer, Tone::Dim)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// What the item waits for and what happened to it, in the web app's words.
+fn gone_text(item: &ItemDto) -> String {
+    let moved_to = item
+        .blocker_gone
+        .as_ref()
+        .and_then(|gone| gone.moved_to.as_ref())
+        .map(|heap| heap.name.as_str());
+    let how = item
+        .blocker_gone
+        .as_ref()
+        .map_or(BlockerGoneHowDto::Unknown, |gone| gone.how);
+    let words = match (how, moved_to) {
+        (BlockerGoneHowDto::Done, Some(heap)) => format!("closed as done in {heap}"),
+        (BlockerGoneHowDto::Done, None) => "closed as done".to_owned(),
+        (BlockerGoneHowDto::WontDo, Some(heap)) => format!("closed as won't do in {heap}"),
+        (BlockerGoneHowDto::WontDo, None) => "closed as won't do".to_owned(),
+        (BlockerGoneHowDto::Became, Some(heap)) => format!("became other items in {heap}"),
+        (BlockerGoneHowDto::Became, None) => "which became other items".to_owned(),
+        (BlockerGoneHowDto::Moved, Some(heap)) => format!("moved to {heap}"),
+        (BlockerGoneHowDto::Moved, None) => "moved to another team".to_owned(),
+        (BlockerGoneHowDto::Unknown, _) => "gone".to_owned(),
+    };
+    match &item.blocked_by {
+        Some(blocker) => format!("Waits for \"{}\", {words}", shorten(&blocker.title, TITLE_WIDTH)),
+        None => format!("Waits for an item that {words}"),
+    }
 }
 
 /// The table of `shown` groups under their headings, then the `reminders` to come under theirs, or `empty` when
@@ -560,7 +681,84 @@ fn closed_heading(group: Option<ClosedGroupDto>) -> &'static str {
 mod tests {
     use googletest::prelude::*;
 
+    use serde_json::{Value, json};
+    use uuid::Uuid;
+
     use super::*;
+
+    /// An item blocked on `blocker` (`null` for none), whose blocker is gone as `gone` says.
+    fn blocked_item(blocker: Value, gone: Value) -> ItemDto {
+        serde_json::from_value(json!({
+            "id": Uuid::new_v4(), "key": "k3x9a", "heap_id": Uuid::new_v4(), "title": "Ship it",
+            "description": null, "kind": "note", "stage": "as_written", "stage_choices": [], "state": "blocked",
+            "blocked_by": blocker, "blocker_gone": gone, "need": "expected", "effort": null, "impact": null,
+            "due": null, "tags": [], "parameters": [], "created_at": 0, "created_label": "today",
+            "created_by": null, "closed_at": null, "closed_label": null, "closed_by": null, "closed_group": null,
+            "steps": [], "step_progress": null, "version": 1, "allowed_actions": [],
+        }))
+        .expect("an item")
+    }
+
+    fn blocker() -> Value {
+        json!({ "id": Uuid::new_v4(), "key": "p4q7r", "title": "Fix the build", "kind": "note", "state": "wont_do" })
+    }
+
+    fn heap(name: &str) -> Value {
+        json!({ "id": Uuid::new_v4(), "team_id": Uuid::new_v4(), "slug": "other", "name": name, "archived": false })
+    }
+
+    #[gtest]
+    fn the_blocker_gone_text_says_what_happened_to_the_blocker() {
+        let text = |how: &str, moved_to: Value, blocker: Value| {
+            gone_text(&blocked_item(blocker, json!({ "how": how, "moved_to": moved_to })))
+        };
+        let other = || heap("Other");
+
+        expect_that!(
+            text("done", Value::Null, blocker()),
+            eq("Waits for \"Fix the build\", closed as done")
+        );
+        expect_that!(
+            text("done", other(), blocker()),
+            eq("Waits for \"Fix the build\", closed as done in Other")
+        );
+        expect_that!(
+            text("wont_do", Value::Null, blocker()),
+            eq("Waits for \"Fix the build\", closed as won't do")
+        );
+        expect_that!(
+            text("wont_do", other(), blocker()),
+            eq("Waits for \"Fix the build\", closed as won't do in Other")
+        );
+        expect_that!(
+            text("became", Value::Null, blocker()),
+            eq("Waits for \"Fix the build\", which became other items")
+        );
+        expect_that!(
+            text("became", other(), blocker()),
+            eq("Waits for \"Fix the build\", became other items in Other")
+        );
+        expect_that!(
+            text("moved", other(), blocker()),
+            eq("Waits for \"Fix the build\", moved to Other")
+        );
+        expect_that!(
+            text("moved", Value::Null, blocker()),
+            eq("Waits for \"Fix the build\", moved to another team")
+        );
+        expect_that!(
+            text("moved", Value::Null, Value::Null),
+            eq("Waits for an item that moved to another team")
+        );
+        expect_that!(
+            text("unknown", Value::Null, blocker()),
+            eq("Waits for \"Fix the build\", gone")
+        );
+        expect_that!(
+            text("unknown", other(), blocker()),
+            eq("Waits for \"Fix the build\", gone")
+        );
+    }
 
     #[gtest]
     fn the_footer_names_the_hidden_states_and_the_flags_that_show_them() {
