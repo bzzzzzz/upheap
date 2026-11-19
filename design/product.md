@@ -86,7 +86,7 @@ What it is not:
 3. Every new user gets a personal team, shown as "\<their name\>'s team", with a first heap called "Personal". The personal
    team is theirs alone: it holds as many heaps as they like, but it can't be shared. Anything shared lives in
    another team.
-4. A team owns its heaps, and can have more than one.
+4. A team owns its heaps, and can have more than one, and its own tags, used in all of them (Manage tags §2).
 5. A heap belongs to exactly one team, and only that team's members can access it. Everyone in the team sees the
    same items and ranking in its heaps, and can add and edit items.
 6. Users join a team in two ways: an admin picks an existing user, who is added directly, or the person comes
@@ -121,7 +121,8 @@ What it is not:
 
 ## Heaps
 
-1. A heap is a collection of items with its own ranking, tags and custom parameters.
+1. A heap is a collection of items with its own ranking, tags and custom parameters. Its team's tags work in it too
+   (Manage tags §2).
 2. Every heap is owned by a team (Teams §4–5). A personal heap is one in the user's personal team.
 3. A person can belong to several teams and heaps, and switches between them.
 4. Items have no assignee or owner. A shared heap has one ranking for the whole team, and "my plate" means the heaps I
@@ -238,8 +239,8 @@ What it is not:
 1. Team admins can define custom parameters for a heap. A parameter has a name and a list of options.
 2. The order of a parameter's options determines their relative priority within that parameter. Each parameter also
    has a weight controlling its influence relative to the heap's other factors (Priority §1).
-3. A custom parameter can be linked to one or more tags. When a user adds that tag to an item, the app suggests the
-   linked parameters.
+3. A custom parameter can be linked to one or more of its heap's tags, the team's included. When a user adds that
+   tag to an item in the heap, the app suggests the linked parameters.
 4. Effort and impact apply to every item. They share one weight: they count together as a single value-per-effort
    factor, so a small high-impact item ranks above a large item with the same impact. The exact combination is part
    of the formula.
@@ -305,13 +306,14 @@ The fastest path in the app.
 
 1. The user enters a title, picks how much the item is needed, and optionally adds a description, effort, impact, due
    time and tags. Everything except the title and the need is optional.
-2. Typing a tag that doesn't exist yet creates it.
+2. Typing a tag that doesn't exist yet creates it, as a tag of the heap (Manage tags §2).
 
 ### Edit item
 
 1. The user can change any field of an existing item, add or remove tags and parameters, and move it between states.
    They can move an item to another heap, in any team they may edit in, and it keeps its context, steps, questions
-   and history.
+   and history. Moved within its team, it keeps its team tags; its heap tags go to the target heap's tags of the
+   same name, and the rest are dropped.
 
 ### Manage tags
 
@@ -319,6 +321,18 @@ A supporting view.
 
 1. Any team member can create and rename tags and edit their descriptions. Tags can't be deleted, but a tag can be
    taken off any item.
+2. A tag belongs to a heap or to its team. A heap tag works in that heap only. A team tag can be put on items in
+   any heap of the team, and is one tag: renaming it or editing its description changes it in every heap at once.
+   Every team has team tags, a personal team too.
+3. In a heap, a tag name means one tag: no heap tag shares a name with a team tag of its team, ignoring case. Two
+   heaps can each have a heap tag of the same name.
+4. Making a team tag with a name that heap tags of the team have makes those heap tags into the team tag, in every
+   heap: each item that carried one carries the team tag, and keeps its history. This is how a heap tag becomes a
+   team tag. The person is shown which heaps and how many items it reaches before it happens, since it can't be
+   undone.
+5. In a heap, a team tag works wherever a heap tag does: on items, in the list's filter, in saved views, in the tag
+   order and in a parameter's links. A person needn't know which kind a tag is to use it, and can see which kind it
+   is.
 
 ### Manage parameters
 
@@ -350,7 +364,7 @@ A supporting view, for team admins only.
 | List own teams and heaps | ✓ | ✓ |
 | Leave a team | ✓ | ✓ (not the last admin) |
 | Add and edit items | ✓ | ✓ |
-| Add and edit tags | ✓ | ✓ |
+| Add and edit tags, a heap's and the team's, and make a heap tag a team tag | ✓ | ✓ |
 | Edit a heap's context | ✓ | ✓ |
 | Send an item to an agent, take it back, answer a question | ✓ | ✓ |
 | Set a heap so agents prepare what's added | | ✓ |
