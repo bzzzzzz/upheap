@@ -893,7 +893,7 @@ form. Create account has none. The invite page's Sign in side has it too.
 
 On a server with registration closed, the sign-in page has no switch and no Create account: the Sign in form shows
 alone, and under its button a footnote in Create account's style says "New accounts need an invite link from a team's
-admin." The invite page keeps its Create account, since the link makes the account. While the page doesn't know yet,
+admin." With a provider there is no footnote, since a first sign-in through it makes the account. The invite page keeps its Create account, since the link makes the account. While the page doesn't know yet,
 the card holds only what it holds while it waits for the provider; if the read fails, the switch shows. A sign-in the
 server throttles shows "Too many attempts. Try again in 12:40." in the line above the button, counting down once a
 second from the server's wait, and Sign in is disabled until it ends; editing a field doesn't clear it. When it

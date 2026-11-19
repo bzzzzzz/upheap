@@ -3811,7 +3811,10 @@ export interface components {
         };
         /** @description Whether this server lets anyone create an account. */
         RegistrationOptions: {
-            /** @description `true` when anyone may register. When `false`, only an invite link creates an account. */
+            /**
+             * @description `true` when anyone may register. When `false`, only an invite link, or a first sign-in through the server's
+             *     identity provider, creates an account.
+             */
             open: boolean;
         };
         /**

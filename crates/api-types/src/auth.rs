@@ -79,7 +79,8 @@ pub struct PasswordResetOptionsDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = RegistrationOptions)]
 pub struct RegistrationOptionsDto {
-    /// `true` when anyone may register. When `false`, only an invite link creates an account.
+    /// `true` when anyone may register. When `false`, only an invite link, or a first sign-in through the server's
+    /// identity provider, creates an account.
     pub open: bool,
 }
 

@@ -23,7 +23,7 @@ const FIELDS: Record<Mode, readonly FieldName[]> = {
 /** Create account's footnote, which the username step after a provider sign-in has too. */
 export const REGISTER_NOTE = "You'll start in your own heap. Teams come next.";
 
-/** Sign in's footnote on a server with registration closed. */
+/** Sign in's footnote on a server with registration closed and no provider. */
 const CLOSED_NOTE = "New accounts need an invite link from a team's admin.";
 
 /** The Username field's hint, as sign-up and the username step say it. */
@@ -95,8 +95,8 @@ export type RegisterRequest = {
  * setting is loading, it holds the header and the notice only.
  *
  * When the server has registration closed, the sign-in page (the one without a `register` request of its own) has no
- * switch and no Create account: the Sign in form shows alone, with a footnote that says accounts come with an invite
- * link. A failed read of the setting shows the switch. A sign-in the server throttles counts down in its error line
+ * switch and no Create account: the Sign in form shows alone, and without a provider (whose first sign-in makes an
+ * account) a footnote says accounts come with an invite link. A failed read of the setting shows the switch. A sign-in the server throttles counts down in its error line
  * and holds the button until the wait ends (`useRetryCountdown`).
  */
 export function AuthPage({
@@ -173,7 +173,8 @@ export function AuthPage({
       mode={formMode}
       mutation={formMode === "sign_in" ? signIn : register}
       submitLabel={formMode === "register" ? registerLabel : undefined}
-      note={formMode === "register" ? registerNote : registrationClosed ? CLOSED_NOTE : undefined}
+      // With a provider, its first sign-in makes an account even on a closed server, so the footnote would be wrong.
+      note={formMode === "register" ? registerNote : registrationClosed && !provider ? CLOSED_NOTE : undefined}
       focusPassword={focusPassword}
       onSignInInstead={() => {
         setFocusPassword(true);
@@ -207,8 +208,12 @@ export function AuthPage({
     </>
   );
   // Until the server says how it signs in and whether it takes registrations, neither the forms nor the button: a
-  // provider-only server mustn't flash the password form, nor a closed one the switch. A failed read isn't pending, so the forms show then, and the page is never left empty.
-  if (providerQuery.isPending || registrationQuery.isPending) return <AuthCard>{intro}</AuthCard>;
+  // provider-only server mustn't flash the password form, nor a closed one the switch. The invite page doesn't use
+  // the registration setting, so it doesn't wait for it. A failed read isn't pending, so the forms show then, and the
+  // page is never left empty.
+  if (providerQuery.isPending || (registerOverride === undefined && registrationQuery.isPending)) {
+    return <AuthCard>{intro}</AuthCard>;
+  }
   if (provider && !provider.password_sign_in) {
     return (
       <AuthCard>

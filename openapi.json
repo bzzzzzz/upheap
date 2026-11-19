@@ -13642,7 +13642,7 @@
         "properties": {
           "open": {
             "type": "boolean",
-            "description": "`true` when anyone may register. When `false`, only an invite link creates an account."
+            "description": "`true` when anyone may register. When `false`, only an invite link, or a first sign-in through the server's\nidentity provider, creates an account."
           }
         }
       },
