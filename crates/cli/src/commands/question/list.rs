@@ -2,14 +2,15 @@
 //! across their heaps or in one, most important first, each named so that `question reply` takes it as printed.
 //!
 //! One `GET /me/waiting`, and `GET /me` to check the heap `--heap` names, as the server can't filter by heap. Rows
-//! that carry no question (stuck turns, gone blockers, kinds this client doesn't know) are left out, and a footer
-//! counts them, since `question reply` can't act on them and the web app's Waiting for me page can. The default heap
+//! that carry no question (stuck turns, gone blockers, kinds this client doesn't know) are left out, since `question
+//! reply` can't act on them. A footer counts the gone blockers and names `item list --blocker gone`, which lists
+//! them, and another counts the rest, which the web app's Waiting for me page shows. The default heap
 //! is not applied: the point is the view across heaps. `--json` prints the server's body, so `--heap`, which filters
 //! it here, doesn't go with it.
 
 use api_types::common::QuestionDto;
 use api_types::me::MeDto;
-use api_types::waiting::{ItemHeapDto, WaitingDto, WaitingRowDto};
+use api_types::waiting::{ItemHeapDto, WaitingDto, WaitingRowDto, WaitingRowKindDto};
 use clap::Args;
 
 use crate::client::NO_QUERY;
@@ -92,6 +93,30 @@ pub async fn run_list(args: ListArgs, app: &App, out: &mut Output) -> Result<(),
         out.line(&format!("  {}", question.text.replace('\t', "    ")))?;
         out.line(&format!("  {}", how_to_reply(question)))?;
     }
+    let gone = in_heap
+        .iter()
+        .filter(|row| {
+            matches!(
+                row.kind,
+                WaitingRowKindDto::BlockerGone | WaitingRowKindDto::BlockerLeftTeam
+            )
+        })
+        .count();
+    if gone > 0 {
+        let items = if gone == 1 {
+            "1 item whose blocker was closed or moved".to_owned()
+        } else {
+            format!("{gone} items whose blocker was closed or moved")
+        };
+        let place = only.as_ref().map_or_else(
+            || "--all-heaps".to_owned(),
+            |only| format!("--heap {}/{}", only.team, only.heap),
+        );
+        out.line(&format!(
+            "Also waiting: {items}, listed by upheap item list {place} --blocker gone."
+        ))?;
+    }
+    let others = others - gone;
     if others > 0 {
         out.line(&format!(
             "Also waiting, on the web app's Waiting for me page: {others} more, such as stuck turns."

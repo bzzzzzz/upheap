@@ -695,3 +695,155 @@ async fn item_list_all_heaps_doesnt_go_with_the_one_heap_flags_and_sends_nothing
     }
     Ok(())
 }
+
+/// Blocks `items[1]` on `items[0]` and closes the blocker as won't do, leaving `items[2]` open.
+async fn with_a_gone_blocker() -> Result<(TestServer, common::TestUser, Vec<Value>, TestCli)> {
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    server
+        .edit_item(
+            &ada,
+            HEAP,
+            key(&items[1])?,
+            json!({ "state": "blocked", "blocked_by_item_id": items[0]["id"] }),
+        )
+        .await?;
+    cli.run(&["item", "wontdo", key(&items[0])?]).await;
+    Ok((server, ada, items, cli))
+}
+
+#[gtest]
+#[tokio::test]
+async fn blocker_gone_lists_the_items_whose_blocker_was_closed() -> Result<()> {
+    // Arrange: an item blocked on a won't-do blocker, one blocked on an open item, and an open one.
+    let (server, ada, items, cli) = with_a_gone_blocker().await?;
+    let extra = server
+        .add_item(&ada, HEAP, json!({ "title": "Update the runbook" }))
+        .await?;
+    server
+        .edit_item(
+            &ada,
+            HEAP,
+            key(&extra)?,
+            json!({ "state": "blocked", "blocked_by_item_id": items[2]["id"] }),
+        )
+        .await?;
+
+    // Act
+    let listed = cli.run(&["item", "list", "--blocker", "gone"]).await;
+    let quiet = cli.run(&["item", "list", "--blocker", "gone", "-q"]).await;
+
+    // Assert
+    let lines: Vec<&str> = listed.stdout.lines().collect();
+    expect_that!(lines.len(), eq(3));
+    expect_that!(
+        lines[0],
+        starts_with(format!(
+            "{}  Write the migration guide  Waits for \"Rotate the staging certs\", closed as won't do",
+            key(&items[1])?
+        ))
+    );
+    expect_that!(lines[1], eq(""));
+    expect_that!(lines[2], eq("Unblock one with upheap item reopen <key>."));
+    expect_that!(quiet.stdout, eq(format!("{}\n", key(&items[1])?).as_str()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn blocker_gone_across_heaps_names_the_heap_the_blocker_moved_to() -> Result<()> {
+    // Arrange
+    let (server, ada, items, cli) = with_a_gone_blocker().await?;
+    cli.run(&["item", "reopen", key(&items[0])?]).await;
+    server
+        .send(&ada, "POST", "/teams/ada/heaps", Some(json!({ "name": "Other" })))
+        .await?;
+    cli.run(&["item", "move", key(&items[0])?, "ada/other"]).await;
+
+    // Act
+    let listed = cli.run(&["item", "list", "--all-heaps", "--blocker", "gone"]).await;
+    let quiet = cli
+        .run(&["item", "list", "--all-heaps", "--blocker", "gone", "-q"])
+        .await;
+
+    // Assert
+    expect_that!(
+        listed.stdout,
+        starts_with(format!(
+            "ada/personal/{}  Write the migration guide  Waits for \"Rotate the staging certs\", moved to Other\n",
+            key(&items[1])?
+        ))
+    );
+    expect_that!(quiet.stdout, eq(format!("ada/personal/{}\n", key(&items[1])?).as_str()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn blocker_gone_says_so_when_nothing_waits() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let listed = cli.run(&["item", "list", "--blocker", "gone"]).await;
+
+    // Assert
+    expect_that!(listed.stdout, eq("No items wait on a closed blocker.\n"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn question_list_counts_a_gone_blocker_and_names_the_command_that_lists_it() -> Result<()> {
+    // Arrange
+    let (_server, _ada, _items, cli) = with_a_gone_blocker().await?;
+
+    // Act
+    let listed = cli.run(&["question", "list"]).await;
+    let in_heap = cli.run(&["question", "list", "--heap", HEAP]).await;
+
+    // Assert
+    expect_that!(
+        listed.stdout,
+        eq(
+            "No questions wait for you.\nAlso waiting: 1 item whose blocker was closed or moved, listed by upheap item list --all-heaps --blocker gone.\n"
+        )
+    );
+    expect_that!(
+        in_heap.stdout,
+        contains_substring(format!("listed by upheap item list --heap {HEAP} --blocker gone.\n"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn blocker_gone_lists_a_reminder_to_come_whose_blocker_was_closed() -> Result<()> {
+    // Arrange: a reminder that joins the list later, blocked on an item then closed as won't do.
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let reminder = cli
+        .run(&["item", "add", "Renew the domain", "--reminder", "2099-03-12", "-q"])
+        .await;
+    let reminder = reminder.stdout.trim();
+    server
+        .edit_item(
+            &ada,
+            HEAP,
+            reminder,
+            json!({ "state": "blocked", "blocked_by_item_id": items[0]["id"] }),
+        )
+        .await?;
+    cli.run(&["item", "wontdo", key(&items[0])?]).await;
+
+    // Act
+    let quiet = cli.run(&["item", "list", "--blocker", "gone", "-q"]).await;
+
+    // Assert
+    expect_that!(quiet.stdout, eq(format!("{reminder}\n").as_str()));
+    Ok(())
+}
