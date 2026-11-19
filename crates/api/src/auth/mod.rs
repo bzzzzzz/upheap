@@ -2,8 +2,9 @@
 
 mod oidc;
 
-use api_types::auth::{RegisterRequest, SignInRequest, SignedOut};
+use api_types::auth::{RegisterRequest, RegistrationOptionsDto, SignInRequest, SignedOut};
 use api_types::me::UserDto;
+use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -18,10 +19,23 @@ use crate::{ApiError, AppState, CookieSettings};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(registration_options))
         .routes(routes!(register))
         .routes(routes!(sign_in))
         .routes(routes!(sign_out))
         .merge(oidc::routes())
+}
+
+/// Whether the server lets anyone create an account. Needs no sign-in.
+///
+/// The sign-in page uses it to decide whether to offer Create account. An invite link still creates an account on a
+/// server where registration is closed.
+#[utoipa::path(get, path = "/auth/registration", tag = "auth",
+    responses((status = 200, description = "Whether registration is open", body = RegistrationOptionsDto)))]
+async fn registration_options(State(state): State<AppState>) -> Json<RegistrationOptionsDto> {
+    Json(RegistrationOptionsDto {
+        open: state.services.registration_open(),
+    })
 }
 
 /// Creates an account with a personal team and heap, and signs in.

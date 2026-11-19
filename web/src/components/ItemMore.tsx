@@ -346,10 +346,13 @@ export function ItemActions({
           onClose={closeChanging}
           placement="bottom end"
           size="narrow"
+          scrollBody
         >
           <BlockerSelect
             value={item.blocked_by}
             candidates={blockerCandidatesFor(candidates.data ?? [])(item.id)}
+            pending={candidates.isPending}
+            error={candidates.error}
             onChange={(blockerId) => {
               save({ blocked_by_item_id: blockerId });
               closeChanging();
