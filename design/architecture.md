@@ -588,7 +588,9 @@ a fixed time.
      don't and they are. The last-admin rule doesn't apply: the provider has already said the person is out, and
      the operator makes an admin with a command. Each change has an audit entry (`group_member_added`,
      `group_member_removed`) with the person as actor and the groups in the diff. A `group_member_removed` is not a
-     `member_removed`, so it doesn't void invite links made before it. A first sign-in has no user yet, so the
+     `member_removed`, so it doesn't void invite links made before it. Lock order where these meet: the mapped teams in
+     ID order, then a SCIM row, then a person's personal team; a write that locks several of a person's teams (a
+     display-name change) takes the mapped ones first. A first sign-in has no user yet, so the
      callback keeps the groups on the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step
      runs the sync after making the user. Password sign-in, invite registration and reset never sync.
    - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)

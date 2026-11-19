@@ -792,14 +792,7 @@ async fn deleting_a_linked_person_takes_them_out_of_their_teams_and_ends_their_s
     expect_that!(h.app.count_rows("scim_group_members").await?, eq(0));
     // The delete turned the person off, so the history says so.
     let user_id = user_id_of(&me(&h.app, &session).await?)?;
-    let actions: Vec<String> = h
-        .app
-        .audit_entries(&user_id)
-        .await?
-        .into_iter()
-        .map(|(action, _)| action)
-        .filter(|action| action.starts_with("account_"))
-        .collect();
+    let actions = provider_entries(&h, &user_id).await?;
     expect_that!(actions, elements_are![eq("account_deactivated")]);
     Ok(())
 }
@@ -823,14 +816,7 @@ async fn deleting_the_last_record_of_a_person_already_off_records_nothing_more()
     scim(&h, Method::DELETE, &format!("/scim/v2/Users/{scim_sam}"), None).await?;
 
     // Assert
-    let actions: Vec<String> = h
-        .app
-        .audit_entries(&user_id)
-        .await?
-        .into_iter()
-        .map(|(action, _)| action)
-        .filter(|action| action.starts_with("account_"))
-        .collect();
+    let actions = provider_entries(&h, &user_id).await?;
     expect_that!(actions, elements_are![eq("account_deactivated")]);
     Ok(())
 }
