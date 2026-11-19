@@ -1,6 +1,12 @@
 import { ApiProblem } from "../api/client";
 import { RequestId } from "./RequestId";
 
+/** What to tell the user when an edit didn't reach the server, by `code`. Shared with the item messages. */
+export const NETWORK_EDIT_MESSAGES: Record<string, string> = {
+  offline: "You're offline, so this wasn't saved.",
+  unreachable: "Couldn't reach the server, so this wasn't saved.",
+};
+
 /**
  * What to tell the user for problem codes they can act on, by `code`, or by `code.field` where the field changes the
  * words. Anything else shows the server's title.
@@ -51,7 +57,7 @@ const MESSAGES: Record<string, string> = {
   code_challenge_invalid: "This sign-in link is incomplete. Start the sign-in again from the terminal.",
   code_challenge_method_unsupported: "This sign-in link uses a check this server doesn't accept. Update the app.",
   state_missing: "This sign-in link is incomplete. Start the sign-in again from the terminal.",
-  unreachable: "Couldn't reach the server, so this wasn't saved.",
+  ...NETWORK_EDIT_MESSAGES,
 };
 
 export function problemMessage(error: Error): string {

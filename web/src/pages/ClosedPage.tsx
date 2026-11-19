@@ -6,7 +6,7 @@ import type { ClosedGroup, Item } from "../api/schema";
 import { useClosedItems, useReopenItem } from "../api/queries";
 import { becameWords, CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
 import { useUserName } from "../components/userName";
-import { NotFound } from "../components/NotFound";
+import { HeapNotFound } from "../components/NotFound";
 import { RequestId } from "../components/RequestId";
 
 /** A run of items next to each other with the same `closed_group`, as the server groups them. */
@@ -46,14 +46,13 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
   if (closed.isError) {
-    if (isNotFound(closed.error))
-      return <NotFound heading="This heap isn't here" line="It doesn't exist, or you're not in its team." teamsLink />;
+    if (isNotFound(closed.error)) return <HeapNotFound />;
     return (
       <>
         <p role="alert" className="py-16 text-center text-overdue-ink">
           {closed.error.message}
         </p>
-        <RequestId error={closed.error} />
+        <RequestId error={closed.error} className="justify-center" />
       </>
     );
   }

@@ -75,9 +75,9 @@ const SHOW_FOR_MS = 6000;
 
 /**
  * The toast after a change from the list (ux.md, The list §3): bottom centre, above the phone's tabs. It goes
- * after a few seconds, or when Undo or ✕ is pressed; one with a request ID stays until ✕. Over the open item (a phone's sheet is the item, and Send to an
- * agent offers Undo from inside it), under the Add dialog and the phone's other sheets, so a toast from the last item
- * added never covers the dialog's buttons.
+ * after a few seconds, or when Undo or ✕ is pressed; one with a request ID stays until ✕. Over the open item (a
+ * phone's sheet is the item, and Send to an agent offers Undo from inside it), under the Add dialog and the phone's
+ * other sheets, so a toast from the last item added never covers the dialog's buttons.
  */
 function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () => void }) {
   useEffect(() => {

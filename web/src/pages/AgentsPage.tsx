@@ -72,7 +72,7 @@ export function AgentsPage() {
           <p role="alert" className="py-16 text-center text-overdue-ink">
             {(decisions.error ?? results.error)?.message}
           </p>
-          <RequestId error={decisions.error ?? results.error} />
+          <RequestId error={decisions.error ?? results.error} className="justify-center" />
         </>
       ) : decisions.data.count === 0 && rows.length === 0 ? (
         <div className="py-16 text-center">

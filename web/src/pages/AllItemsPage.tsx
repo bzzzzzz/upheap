@@ -178,7 +178,7 @@ export function AllItemsPage({
               <p role="alert" className="py-16 text-center text-red-700 dark:text-red-400">
                 {unknownTeam ? "You're not in this team." : list.error?.message}
               </p>
-              <RequestId error={list.error} />
+              <RequestId error={list.error} className="justify-center" />
             </>
           ) : (
             <>

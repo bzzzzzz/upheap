@@ -22,8 +22,11 @@ export function RequestIdLine({ id, label, className = "" }: { id: string; label
   );
 }
 
-/** The request ID of a server error, under the error's words. Nothing for any other error. */
-export function RequestId({ error }: { error: Error | null }) {
+/**
+ * The request ID of a server error, under the error's words. Nothing for any other error. `className` adds to the
+ * line's layout, such as `justify-center` under a centred message.
+ */
+export function RequestId({ error, className = "" }: { error: Error | null; className?: string }) {
   if (!(error instanceof ApiProblem) || error.requestId === undefined) return null;
-  return <RequestIdLine id={error.requestId} label="Request ID:" className="text-muted" />;
+  return <RequestIdLine id={error.requestId} label="Request ID:" className={`text-muted ${className}`} />;
 }

@@ -65,7 +65,7 @@ test("a server error toast shows the request ID, stays until closed, and copies 
   if (browserName === "chromium") {
     await toast.getByRole("button", { name: "Copy" }).click();
     await expect(toast.getByRole("button", { name: "Copied" })).toBeVisible();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(id);
   }
 
   await page.clock.runFor(10_000);
@@ -102,4 +102,14 @@ test("when the server can't be reached the banner offers Try now", async ({ page
   await page.unroute("**/api/v1/**");
   await banner.getByRole("button", { name: "Try now" }).click();
   await expect(banner).toHaveCount(0);
+});
+
+test("a proxy's bare 502 reads as the server being out of reach", async ({ page }) => {
+  await addItem(page, "Water the plants");
+  await page.route("**/api/v1/**", (route) =>
+    route.fulfill({ status: 502, contentType: "text/plain", body: "Bad Gateway" }),
+  );
+
+  await markDoneFromList(page, "Water the plants");
+  await expect(page.getByRole("status").filter({ hasText: "Can't reach the server." })).toBeVisible();
 });

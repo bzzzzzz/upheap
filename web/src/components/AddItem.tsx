@@ -10,6 +10,7 @@ import { useAddAnother } from "./addAnother";
 import { ChoiceButtons, choiceButtonClass } from "./ChoiceButtons";
 import { DateField } from "./DateField";
 import { DuePicker } from "./DuePicker";
+import { RequestId } from "./RequestId";
 import { itemProblem } from "./itemProblems";
 import { SIZE_LABELS, SIZES } from "./labels";
 import { itemAddress, listQueryFor, matchesSearch, placeOf, splitList, type ListSearch } from "./listView";
@@ -237,7 +238,7 @@ export function AddItemDialog({
   const [round, setRound] = useState(0);
   const [added, setAdded] = useState<Added | null>(null);
   // The add that failed last, with what went wrong.
-  const [failed, setFailed] = useState<{ title: string; problem: string } | null>(null);
+  const [failed, setFailed] = useState<{ title: string; error: Error } | null>(null);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   // The item to open once the draft is discarded, when Open it asked first.
   const [openAfterDiscard, setOpenAfterDiscard] = useState<Added | null>(null);
@@ -434,13 +435,16 @@ export function AddItemDialog({
    * it before the server has the item; once the dialog is gone, a toast says so.
    */
   const onFailed = (error: Error, add: SentAdd) => {
-    const problem = itemProblem(error);
     if (!open.current) {
-      showToast({ message: `“${add.title}” wasn't added: ${problem}`, error: true, requestId: requestIdOf(error) });
+      showToast({
+        message: `“${add.title}” wasn't added: ${itemProblem(error)}`,
+        error: true,
+        requestId: requestIdOf(error),
+      });
       return;
     }
     setSent(null);
-    setFailed({ title: add.title, problem });
+    setFailed({ title: add.title, error });
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -535,9 +539,12 @@ export function AddItemDialog({
     );
 
   const error = failed && (
-    <p role="alert" className="text-sm text-overdue-ink">
-      “{failed.title}” wasn't added: {failed.problem}
-    </p>
+    <>
+      <p role="alert" className="text-sm text-overdue-ink">
+        “{failed.title}” wasn't added: {itemProblem(failed.error)}
+      </p>
+      <RequestId error={failed.error} />
+    </>
   );
 
   const buttonClass = "h-11 rounded-xl px-4 text-sm font-medium";

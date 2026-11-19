@@ -21,7 +21,7 @@ import { meQuery, useAuthorizationCheck, useHeap, useSignOut } from "./api/queri
 import { BASE } from "./basePath";
 import { leaveAfterSignOut, takeKeptPage } from "./signOutRedirect";
 import { parseAcrossSearch, parseListSearch } from "./components/listView";
-import { NotFound } from "./components/NotFound";
+import { HeapNotFound, NotFound } from "./components/NotFound";
 import { RequestId } from "./components/RequestId";
 import { AllItemsPage } from "./pages/AllItemsPage";
 import { AccountPage } from "./pages/AccountPage";
@@ -376,16 +376,13 @@ const heapSettingsRoute = createRoute({
     // A failed refetch keeps the heap it had, so the page stays; the error shows only when there's no heap to show.
     if (record.data) return <HeapSettingsLayout key={record.data.id} heap={{ team, heap }} />;
     if (record.isError) {
-      if (isNotFound(record.error))
-        return (
-          <NotFound heading="This heap isn't here" line="It doesn't exist, or you're not in its team." teamsLink />
-        );
+      if (isNotFound(record.error)) return <HeapNotFound />;
       return (
         <>
           <p role="alert" className="py-16 text-center text-overdue-ink">
             {record.error.message}
           </p>
-          <RequestId error={record.error} />
+          <RequestId error={record.error} className="justify-center" />
         </>
       );
     }

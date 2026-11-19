@@ -115,7 +115,7 @@ export function WaitingPage() {
           <p role="alert" className="py-16 text-center text-overdue-ink">
             {waiting.error?.message}
           </p>
-          <RequestId error={waiting.error} />
+          <RequestId error={waiting.error} className="justify-center" />
         </>
       ) : rows.length === 0 ? (
         <div className="py-16 text-center">

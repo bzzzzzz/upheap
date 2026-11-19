@@ -8,7 +8,7 @@ import { useMe, useTeamData } from "../api/queries";
 import { choiceButtonClass } from "../components/ChoiceButtons";
 import { DataChart, type DataSeries } from "../components/DataChart";
 import { usd } from "../components/labels";
-import { NotFound } from "../components/NotFound";
+import { TeamNotFound } from "../components/NotFound";
 import { PopoverSheet } from "../components/PopoverSheet";
 import { ProblemText } from "../components/ProblemText";
 import { SheetChoice } from "../components/Sheet";
@@ -58,8 +58,8 @@ export function DataPage({
   const days: DataDays = `${search.days ?? 30}` as DataDays;
   const data = useTeamData(slug, { heap: search.heap, days });
   const team = me?.teams.find((t) => t.slug === slug);
-  if (data.isError && !data.data && isNotFound(data.error))
-    return <NotFound heading="This team isn't here" line="It doesn't exist, or you're not in it." teamsLink />;
+  // A `heap` that isn't the team's answers `404` too, and the page keeps its filter then.
+  if (data.isError && !data.data && isNotFound(data.error) && search.heap === undefined) return <TeamNotFound />;
 
   return (
     <main>

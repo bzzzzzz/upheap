@@ -13,6 +13,7 @@ import {
   useTeam,
 } from "../api/queries";
 import { problemMessage } from "../components/ProblemText";
+import { RequestId } from "../components/RequestId";
 import { leaveAfterSignOut } from "../signOutRedirect";
 import { AuthCard, AuthPage, authButtonClass, type RegisterRequest } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
@@ -184,6 +185,7 @@ function Confirm({
           {problemMessage(error)}
         </p>
       )}
+      {error && <RequestId error={error} />}
       <button
         type="button"
         // Stays disabled once joined, until the landing replaces the page.

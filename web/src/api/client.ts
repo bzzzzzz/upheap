@@ -74,17 +74,28 @@ export const serverReachability = {
   get: () => unreachable,
 };
 
+/**
+ * A reverse proxy answers `502`, `503` or `504` itself, with no problem body, when the server process is down. That
+ * is the server being out of reach, not a server error.
+ */
+function isProxyFailure(response: Response): boolean {
+  return (
+    [502, 503, 504].includes(response.status) &&
+    !response.headers.get("content-type")?.startsWith("application/problem+json")
+  );
+}
+
 /** Turns a `fetch` that threw into a problem. Nothing in the app aborts a request, so every throw is a network failure. */
 const networkProblems: Middleware = {
   onError() {
     if (!navigator.onLine) {
-      return new ApiProblem(0, "offline", "You're offline, so this wasn't saved.");
+      return new ApiProblem(0, "offline", "You're offline.");
     }
     setUnreachable(true);
     return new ApiProblem(0, "unreachable", "Can't reach the server.");
   },
-  onResponse() {
-    setUnreachable(false);
+  onResponse({ response }) {
+    setUnreachable(isProxyFailure(response));
   },
 };
 
@@ -122,6 +133,9 @@ function toProblem(error: unknown, response: Response): ApiProblem {
       error.hint ?? undefined,
       requestId,
     );
+  }
+  if (isProxyFailure(response)) {
+    return new ApiProblem(response.status, "unreachable", "Can't reach the server.", undefined, undefined, requestId);
   }
   return new ApiProblem(
     response.status,

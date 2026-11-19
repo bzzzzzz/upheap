@@ -80,7 +80,7 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
           <p role="alert" className="py-16 text-center text-overdue-ink">
             {heap.error.message}
           </p>
-          <RequestId error={heap.error} />
+          <RequestId error={heap.error} className="justify-center" />
         </>
       );
     }
@@ -303,7 +303,7 @@ export function HeapContextSettings({ heap: heapRef }: { heap: HeapRef }) {
           <p role="alert" className="py-16 text-center text-overdue-ink">
             {heap.error.message}
           </p>
-          <RequestId error={heap.error} />
+          <RequestId error={heap.error} className="justify-center" />
         </>
       );
     }

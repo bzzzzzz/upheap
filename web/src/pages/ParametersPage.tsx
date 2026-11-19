@@ -50,7 +50,7 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
           <p role="alert" className="py-16 text-center text-overdue-ink">
             {parameters.error.message}
           </p>
-          <RequestId error={parameters.error} />
+          <RequestId error={parameters.error} className="justify-center" />
         </>
       );
     }

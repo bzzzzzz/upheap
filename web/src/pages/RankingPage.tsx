@@ -83,7 +83,7 @@ export function HeapRankingSettings({ heap: heapRef }: { heap: HeapRef }) {
         <p role="alert" className="py-16 text-center text-overdue-ink">
           {failure.message}
         </p>
-        <RequestId error={failure} />
+        <RequestId error={failure} className="justify-center" />
       </>
     );
   }

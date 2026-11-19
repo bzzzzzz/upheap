@@ -38,7 +38,7 @@ import {
   viewChanges,
   type ListSearch,
 } from "../components/listView";
-import { NotFound } from "../components/NotFound";
+import { HeapNotFound } from "../components/NotFound";
 import { RequestId } from "../components/RequestId";
 
 /**
@@ -130,7 +130,8 @@ export function HeapPage({
   // The rows on screen, top to bottom, the reminders to come last, for the pane's ↑ ↓.
   const onScreen = list.data ? rowsOnScreen(shownSections(list.data, search)) : [];
   const index = onScreen.findIndex((item) => item.key === itemKey);
-  const pane = itemKey && closeItem && (
+  // A link to an item in a missing heap shows only the heap's not-found page.
+  const pane = itemKey && closeItem && !(list.isError && isNotFound(list.error)) && (
     <ItemPane
       heapRef={heapRef}
       itemKey={itemKey}
@@ -282,8 +283,7 @@ function ListPage({
   );
 
   if (list.isError) {
-    if (isNotFound(list.error))
-      return <NotFound heading="This heap isn't here" line="It doesn't exist, or you're not in its team." teamsLink />;
+    if (isNotFound(list.error)) return <HeapNotFound />;
     // A view the server refuses (a stale tag in a bookmark, say) keeps the controls, so it can be changed or reset.
     const badView = list.error instanceof ApiProblem && (list.error.status === 400 || list.error.status === 422);
     return (
@@ -293,7 +293,7 @@ function ListPage({
           <p role="alert" className="text-red-700 dark:text-red-400">
             {badView ? `This view can't be shown: ${list.error.message}` : list.error.message}
           </p>
-          <RequestId error={list.error} />
+          <RequestId error={list.error} className="justify-center" />
           {badView && (
             <button
               type="button"

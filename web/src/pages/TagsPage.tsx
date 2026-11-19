@@ -29,7 +29,7 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
           <p role="alert" className="py-16 text-center text-overdue-ink">
             {tags.error.message}
           </p>
-          <RequestId error={tags.error} />
+          <RequestId error={tags.error} className="justify-center" />
         </>
       );
     }

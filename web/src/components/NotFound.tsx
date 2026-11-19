@@ -1,12 +1,13 @@
 import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
 import { buttonClass } from "./buttons";
 
 /**
  * A page for something that isn't there, or isn't the user's: the server answers both with `404`, so the words say
- * both (ux.md, Conflicts and errors). `teamsLink` adds the way to the user's teams, for a missing team or heap.
+ * both (ux.md, Conflicts and errors). `children` goes under the button.
  */
-export function NotFound({ heading, line, teamsLink }: { heading: string; line: string; teamsLink?: boolean }) {
+export function NotFound({ heading, line, children }: { heading: string; line: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-2 py-16 text-center">
       <p className="text-xs text-muted">Not found</p>
@@ -18,11 +19,33 @@ export function NotFound({ heading, line, teamsLink }: { heading: string; line: 
       >
         Go to Waiting for me
       </Link>
-      {teamsLink && (
-        <Link to="/teams" className="text-sm text-muted underline">
-          See your teams
-        </Link>
-      )}
+      {children}
     </div>
+  );
+}
+
+function TeamsLink() {
+  return (
+    <Link to="/teams" className="text-sm text-muted underline">
+      See your teams
+    </Link>
+  );
+}
+
+/** A team the API answers `404` for. */
+export function TeamNotFound() {
+  return (
+    <NotFound heading="This team isn't here" line="It doesn't exist, or you're not in it.">
+      <TeamsLink />
+    </NotFound>
+  );
+}
+
+/** A heap the API answers `404` for. */
+export function HeapNotFound() {
+  return (
+    <NotFound heading="This heap isn't here" line="It doesn't exist, or you're not in its team.">
+      <TeamsLink />
+    </NotFound>
   );
 }
