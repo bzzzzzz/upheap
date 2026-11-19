@@ -1,7 +1,7 @@
-// A server whose registration is closed, with three accounts that already exist: how a real server gets to the state
+// A server whose registration is closed, with four accounts that already exist: how a real server gets to the state
 // the invite page is for (design/ux.md, Invite page). The third is for the reset page's spec, which changes its
 // password; it can make reset links the way the operator does, with the server's own command (design/ux.md, Reset
-// page). The suite's main server (playwright.config.ts) has
+// page). The fourth is for the email change spec, which changes its address. The suite's main server (playwright.config.ts) has
 // registration open, and a golden path that must prove an invite link is the only way in needs one that doesn't.
 import { expect, test as base } from "@playwright/test";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
@@ -27,17 +27,23 @@ export type ClosedServer = {
   member: SeededUser;
   /** Mia Chen, whose password the reset spec changes, and puts back to `PASSWORD` when it is done. */
   forgetful: SeededUser;
+  /** Eli Park, whose email address the email change spec changes. It signs in by username, which stays. */
+  mover: SeededUser;
   /**
    * Makes a reset link for `login` (a username or an email address) by running the server's `user reset-link`
    * command against its database, and returns the link. Fails unless the command exits 0.
    */
   resetLink: (login: string) => Promise<string>;
   /**
-   * Waits for the newest mail to `email` that holds a reset link in the server's mail directory (its mail goes to
-   * files there), and returns the link. `after` is the time the person asked, so an earlier mail isn't taken.
+   * Waits for the newest mail to `email` that holds a link under `path` (`reset` or `change-email`) in the server's
+   * mail directory (its mail goes to files there), and returns the link. `after` is the time the person asked, so an
+   * earlier mail isn't taken.
    */
-  mailedResetLink: (email: string, after: Date) => Promise<string>;
+  mailedLink: (email: string, after: Date, path: MailedLinkPath) => Promise<string>;
 };
+
+/** What comes before the token in a link the server mails. */
+export type MailedLinkPath = "reset" | "change-email";
 
 /** The server binary `npm run e2e`'s web server has built by the time a worker starts (cargo's target directory). */
 const REPOSITORY_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -86,10 +92,15 @@ async function makeResetLink(baseURL: string, databaseUrl: string, login: string
 }
 
 /**
- * The reset link in the newest mail to `email` written after `after`, or `undefined` while there is none. The file
- * transport writes quoted-printable: soft line breaks and `=3D` are undone far enough to read a link.
+ * The link under `path` in the newest mail to `email` written after `after`, or `undefined` while there is none. The
+ * file transport writes quoted-printable: soft line breaks and `=3D` are undone far enough to read a link.
  */
-async function findMailedResetLink(mailDirectory: string, email: string, after: Date): Promise<string | undefined> {
+async function findMailedLink(
+  mailDirectory: string,
+  email: string,
+  after: Date,
+  path: MailedLinkPath,
+): Promise<string | undefined> {
   const mails: { text: string; written: number }[] = [];
   for (const name of await readdir(mailDirectory)) {
     const path = join(mailDirectory, name);
@@ -99,7 +110,7 @@ async function findMailedResetLink(mailDirectory: string, email: string, after: 
     if (text.includes(`To: ${email}`)) mails.push({ text, written });
   }
   const newest = mails.sort((a, b) => b.written - a.written)[0];
-  return newest?.text.match(/https?:\/\/\S+\/reset\/[A-Za-z0-9_-]+/)?.[0];
+  return newest?.text.match(new RegExp(`https?://\\S+/${path}/[A-Za-z0-9_-]+`))?.[0];
 }
 
 async function waitUntilReady(baseURL: string, server: ChildProcess) {
@@ -169,6 +180,7 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
         const admin = await register(baseURL, "Ana Ruiz");
         const member = await register(baseURL, "Sam Ortiz");
         const forgetful = await register(baseURL, "Mia Chen");
+        const mover = await register(baseURL, "Eli Park");
         await stop(server);
 
         server = start(baseURL, databaseUrl, false, mailDirectory);
@@ -178,10 +190,11 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
           admin,
           member,
           forgetful,
+          mover,
           resetLink: (login) => makeResetLink(baseURL, databaseUrl, login),
-          mailedResetLink: async (email, after) => {
-            await expect.poll(() => findMailedResetLink(mailDirectory, email, after)).toBeDefined();
-            return (await findMailedResetLink(mailDirectory, email, after)) ?? "";
+          mailedLink: async (email, after, path) => {
+            await expect.poll(() => findMailedLink(mailDirectory, email, after, path)).toBeDefined();
+            return (await findMailedLink(mailDirectory, email, after, path)) ?? "";
           },
         });
       } finally {

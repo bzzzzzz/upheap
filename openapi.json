@@ -493,6 +493,69 @@
         ]
       }
     },
+    "/api/v1/email-changes/{token}": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Changes the account's email address to the one the link was mailed to, and mails a notice to the old address. The\nlink works once, for a day. Anyone holding the token may; no sign-in is needed, a session cookie or bearer token is\nignored, and it doesn't sign anyone in. There is no read of a link: applying is a `POST`, so a mail scanner that\nopens the link changes nothing.",
+        "description": "The account's sessions and tokens are left alone. Its working password reset link is cancelled, since one mailed\nto the old address must not keep working. Not rate limited, as a token can't be guessed.",
+        "operationId": "apply_email_change",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The link's secret: the last part of the link, `{origin}/change-email/{token}`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Changed; the answer is the new address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailChanged"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link, or the server has no mail set up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`email_change_used`, `email_change_cancelled` or `email_change_ended`; or `email_taken` (`field` `email`): another account has the address by now, and the link keeps working",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invites/{token}": {
       "get": {
         "tags": [
@@ -884,6 +947,98 @@
           },
           "401": {
             "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/email-changes": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Asks to change the caller's email address: a link is mailed to the new address, and the address changes when the\nlink is applied (`POST /email-changes/{token}`). Takes the session cookie only, never a bearer token: it is the\nperson's decision in their browser, as a password change is.",
+        "description": "Answers `202` with no body whether or not another account has the new address, so it reveals nothing about\naccounts; the mail is sent after the answer. The link works once, for a day, and a newer ask cancels it. The\ncaller's own current address is treated like a free one.\n\nTries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password\nis checked. Unlike a password change, a success doesn't start the count over, so the limit, five in 15 minutes,\nalso limits the mails a session sends. A wrong current password also adds one to the account's sign-in attempts.",
+        "operationId": "request_email_change",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEmailChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted; if the address is free, a link is on its way to it"
+          },
+          "401": {
+            "description": "`unauthenticated`: no session cookie, or the request carried a bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`: the server has no mail set up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`wrong_password` (`field` `current_password`); `field_empty` (`field` `current_password` or `email`); `email_invalid` (`field` `email`). Not counted as an attempt, except `wrong_password`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_attempts`; `Retry-After` gives the seconds to wait",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "description": "Seconds until the session may try again"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -8779,7 +8934,9 @@
           "password_reset",
           "account_deactivated",
           "account_reactivated",
-          "heap_priority_changed"
+          "heap_priority_changed",
+          "email_change_asked",
+          "email_changed"
         ]
       },
       "AccountHistory": {
@@ -9161,7 +9318,9 @@
           "password_reset_link_made",
           "password_reset",
           "account_deactivated",
-          "account_reactivated"
+          "account_reactivated",
+          "email_change_asked",
+          "email_changed"
         ]
       },
       "AuditChange": {
@@ -10187,6 +10346,19 @@
           },
           "firm": {
             "type": "boolean"
+          }
+        }
+      },
+      "EmailChanged": {
+        "type": "object",
+        "description": "What applying an email change link did.",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The account's address now: the one the link was mailed to."
           }
         }
       },
@@ -12152,7 +12324,8 @@
           "sign_out",
           "create_team",
           "manage_sign_ins",
-          "change_password"
+          "change_password",
+          "change_email"
         ]
       },
       "MePatchRequest": {
@@ -13653,6 +13826,25 @@
           "hidden",
           "shown"
         ]
+      },
+      "RequestEmailChange": {
+        "type": "object",
+        "description": "What the signed-in user gives to ask for a change of their email address.",
+        "required": [
+          "email",
+          "current_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "description": "The password now in use, to show it is the user and not someone at their open browser."
+          },
+          "email": {
+            "type": "string",
+            "description": "The new address, which the link is mailed to. Trimmed and lowercased as at registration."
+          }
+        },
+        "additionalProperties": false
       },
       "RequestPasswordReset": {
         "type": "object",

@@ -56,6 +56,8 @@ coded_enum! {
         PasswordReset = "password_reset",
         AccountDeactivated = "account_deactivated",
         AccountReactivated = "account_reactivated",
+        EmailChangeAsked = "email_change_asked",
+        EmailChanged = "email_changed",
     }
 }
 
@@ -153,5 +155,6 @@ coded_enum! {
         By = "by",
         ArchivedAt = "archived_at",
         Merged = "merged",
+        Email = "email",
     }
 }

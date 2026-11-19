@@ -551,6 +551,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::PasswordReset, _) => ("set a new password with a reset link", false),
         (AuditAction::AccountDeactivated, _) => ("was turned off by the sign-in provider", false),
         (AuditAction::AccountReactivated, _) => ("was turned back on by the sign-in provider", false),
+        (AuditAction::EmailChangeAsked, _) => ("asked to change their email address", false),
+        (AuditAction::EmailChanged, _) => ("changed their email address", false),
     }
 }
 
@@ -591,7 +593,8 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::PasswordResetLinkMade
         | AuditAction::PasswordReset
         | AuditAction::AccountDeactivated
-        | AuditAction::AccountReactivated => DiffShape::Created,
+        | AuditAction::AccountReactivated
+        | AuditAction::EmailChangeAsked => DiffShape::Created,
         AuditAction::MemberRemoved | AuditAction::MemberLeft | AuditAction::GroupMemberRemoved => DiffShape::Ended,
         AuditAction::UserUpdated
         | AuditAction::TeamUpdated
@@ -614,7 +617,8 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::ParameterUpdated
         | AuditAction::ParameterArchived
         | AuditAction::OptionArchived
-        | AuditAction::InviteLinkRevoked => DiffShape::Changed,
+        | AuditAction::InviteLinkRevoked
+        | AuditAction::EmailChanged => DiffShape::Changed,
     }
 }
 
@@ -797,6 +801,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::Priority => "Priority",
         AuditField::HeapId => "Heap",
         AuditField::MadeBy => "Made by",
+        AuditField::Email => "Email",
         // Never shown as changes of their own (see `reading`): the phrase names the groups.
         AuditField::Groups => "Groups",
         AuditField::By => "By",
@@ -927,7 +932,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         | AuditField::AgentsPrepare
         | AuditField::Priority
         | AuditField::Slug
-        | AuditField::Username => shown(Form::Plain),
+        | AuditField::Username
+        | AuditField::Email => shown(Form::Plain),
     }
 }
 

@@ -76,7 +76,7 @@ function NotWorking({ state, moveFocus }: { state: Exclude<PasswordReset["state"
   return (
     <Notice moveFocus={moveFocus} heading={heading}>
       {state === "cancelled" && (
-        <p className="text-sm text-ink-soft">A newer one was made, or the password was changed since.</p>
+        <p className="text-sm text-ink-soft">A newer one was made, or the password or address was changed since.</p>
       )}
       <p className="text-sm text-ink-soft">Ask whoever runs this server for a new one.</p>
     </Notice>

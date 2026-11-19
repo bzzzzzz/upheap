@@ -7,6 +7,7 @@ pub mod audit;
 pub mod comment;
 pub mod data;
 pub mod due;
+pub mod email_change;
 pub mod handle;
 pub mod heap;
 pub mod ids;

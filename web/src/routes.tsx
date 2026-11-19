@@ -40,6 +40,7 @@ import { InvitePage } from "./pages/InvitePage";
 import { ParametersPage } from "./pages/ParametersPage";
 import { ProviderStepPage } from "./pages/ProviderStepPage";
 import { HeapRankingSettings } from "./pages/RankingPage";
+import { ChangeEmailPage } from "./pages/ChangeEmailPage";
 import { ResetPage } from "./pages/ResetPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
@@ -232,6 +233,18 @@ const resetRoute = createRoute({
   path: "/reset/$token",
   component: function ResetRoute() {
     return <ResetPage token={resetRoute.useParams().token} />;
+  },
+});
+
+/**
+ * The page an email change link opens (ux.md, Change-email page), outside the app's shell like sign-in. It has no
+ * guard: holding the link is the permission, whether signed in or not.
+ */
+const changeEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/change-email/$token",
+  component: function ChangeEmailRoute() {
+    return <ChangeEmailPage token={changeEmailRoute.useParams().token} />;
   },
 });
 
@@ -591,6 +604,7 @@ const routeTree = rootRoute.addChildren([
   providerStepRoute,
   inviteRoute,
   resetRoute,
+  changeEmailRoute,
   authorizeRoute,
   shortTeamRoute,
   shortHeapRoute,

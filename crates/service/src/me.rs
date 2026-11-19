@@ -17,6 +17,9 @@ pub struct MeView {
     pub user: User,
     /// Whether the user has a local password: not a user who signs in through an OpenID Connect provider.
     pub has_password: bool,
+    /// Whether the user may change their email address: they have a password to show, and the server has mail to
+    /// send the link with.
+    pub can_change_email: bool,
     pub teams: Vec<TeamView>,
 }
 
@@ -79,6 +82,7 @@ impl Services {
         Ok(MeView {
             user,
             has_password,
+            can_change_email: has_password && self.has_mail(),
             teams,
         })
     }

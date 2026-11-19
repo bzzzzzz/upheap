@@ -20,13 +20,13 @@ pub const RESET_TOKEN_LENGTH: usize = 43;
 pub enum ResetLinkError {
     #[error("this reset link was already used")]
     Used,
-    #[error("this reset link no longer works: a newer one was made, or the password was changed")]
+    #[error("this reset link no longer works: a newer one was made, or the password or address was changed")]
     Cancelled,
     #[error("this reset link has ended")]
     Ended,
 }
 
-/// The secret in a reset link. Never log it.
+/// The secret in a link mailed or handed to someone: a password reset link's, or an email change link's. Never log it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct ResetToken(String);
 
@@ -57,15 +57,16 @@ impl fmt::Debug for ResetToken {
     }
 }
 
-/// Where a link is in its life.
+/// Where a link is in its life, for a password reset link and an email change link alike.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResetLinkState {
     Working,
-    /// A password was set with it.
+    /// What it is for was done with it: a password set, or an address changed.
     Used,
-    /// A newer link was made for the user, or the user changed their password while it was working.
+    /// A newer link was made for the user, or something else the link no longer fits was done: a password change
+    /// cancels a reset link, and an applied address change cancels a reset link too.
     Cancelled,
-    /// Its hour passed.
+    /// Its lifetime passed.
     Ended,
 }
 

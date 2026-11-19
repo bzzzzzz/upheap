@@ -1,5 +1,6 @@
 //! The signed-in user, their teams and heaps.
 
+pub(crate) mod email;
 pub(crate) mod history;
 pub(crate) mod password;
 pub(crate) mod personal_tokens;
@@ -55,6 +56,9 @@ fn to_me_dto(me: MeView) -> MeDto {
     ];
     if me.has_password {
         allowed_actions.push(MeActionDto::ChangePassword);
+    }
+    if me.can_change_email {
+        allowed_actions.push(MeActionDto::ChangeEmail);
     }
     let team = |view: TeamView| TeamDto {
         id: *view.team.id.as_uuid(),

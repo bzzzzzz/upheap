@@ -103,6 +103,14 @@ pub struct SetPasswordRequestDto {
     pub password: String,
 }
 
+/// What applying an email change link did.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[schema(as = EmailChanged)]
+pub struct EmailChangedDto {
+    /// The account's address now: the one the link was mailed to.
+    pub email: String,
+}
+
 /// Where to send the browser to end the person's session at the identity provider too.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SignedOut {

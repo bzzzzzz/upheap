@@ -78,6 +78,20 @@ pub enum MeActionDto {
     ManageSignIns,
     /// Change the password (`POST /me/password`). Not for a user who signs in through a provider, who has none.
     ChangePassword,
+    /// Change the email address (`POST /me/email-changes`). Only for a user with a password, on a server that has
+    /// mail set up.
+    ChangeEmail,
+}
+
+/// What the signed-in user gives to ask for a change of their email address.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = RequestEmailChange)]
+pub struct RequestEmailChangeDto {
+    /// The new address, which the link is mailed to. Trimmed and lowercased as at registration.
+    pub email: String,
+    /// The password now in use, to show it is the user and not someone at their open browser.
+    pub current_password: String,
 }
 
 /// What the signed-in user gives to change their password.
@@ -128,6 +142,10 @@ pub enum AccountEventKindDto {
     AccountReactivated,
     /// The user changed their own priority for a heap.
     HeapPriorityChanged,
+    /// The user asked to change their address, and a link was mailed to the new one.
+    EmailChangeAsked,
+    /// The address was changed with the link.
+    EmailChanged,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]

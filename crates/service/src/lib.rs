@@ -12,6 +12,7 @@ pub mod audit_log;
 pub mod auth;
 mod clock;
 pub mod comments;
+pub mod email_change;
 mod error;
 mod figures;
 pub mod group_teams;
@@ -102,6 +103,15 @@ struct MailSettings {
     base_url: String,
 }
 
+impl MailSettings {
+    /// The server's host as mail names it: `BASE_URL` without its scheme.
+    fn host(&self) -> &str {
+        self.base_url
+            .split_once("://")
+            .map_or(self.base_url.as_str(), |(_, rest)| rest)
+    }
+}
+
 /// Entry point to every use case. Cheap to clone.
 #[derive(Clone)]
 pub struct Services {
@@ -142,9 +152,21 @@ impl Services {
         self
     }
 
-    /// Whether this server mails password reset links.
-    pub fn mails_reset_links(&self) -> bool {
+    /// Whether this server has mail set up: it mails password reset links, and email change links.
+    pub fn has_mail(&self) -> bool {
         self.mail.is_some()
+    }
+
+    /// Sends `mail` in a task of its own, so the answer never waits for the provider. A failure is logged once, with
+    /// the user it was for and never the mail, which holds a link. `kind` names the mail in the log.
+    pub(crate) fn send_later(&self, settings: &MailSettings, mail: mail::Mail, user_id: UserId, kind: &'static str) {
+        let mailer = Arc::clone(&settings.mailer);
+        tokio::spawn(async move {
+            match mailer.send(mail).await {
+                Ok(()) => tracing::info!(%user_id, kind, "mail sent"),
+                Err(error) => tracing::warn!(%user_id, kind, ?error, "can't send mail"),
+            }
+        });
     }
 
     /// Whether anyone may register (`ALLOW_REGISTRATION`).

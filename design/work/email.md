@@ -352,7 +352,6 @@ If it wasn't you, ignore this mail. Your password stays as it is.
 
 ### Stage 2
 
-- **Change an address:** the Email card, the change link, the notice to the old address. Commitments 18–20.
 - **Confirm an address:** Check your mail, the confirm page, sign-in refusing a waiting account, the
   confirm command. Commitments 13–17.
 
@@ -360,5 +359,5 @@ If it wasn't you, ignore this mail. Your password stays as it is.
 
 Below this design's level; for the pieces' specs.
 
-- Where confirm and change links live: one new table with a purpose column for both, or one each.
+- Where confirm links live: one new table with a purpose column, or one of their own.
 - The address state as an `email_confirmed_at` column, filled for every existing account by the migration.

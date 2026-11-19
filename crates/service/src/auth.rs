@@ -278,7 +278,7 @@ impl Services {
     }
 
     /// Adds one to the address's sign-in count without refusing, for a wrong password that wasn't a sign-in.
-    async fn add_to_sign_in_count(&self, key: &str) -> Result<(), ServiceError> {
+    pub(crate) async fn add_to_sign_in_count(&self, key: &str) -> Result<(), ServiceError> {
         let now = self.now();
         let window_end = self
             .settings
@@ -539,7 +539,7 @@ pub(crate) fn hash_password(password: &str) -> Result<String, ServiceError> {
 }
 
 /// `false` both for a wrong password and for a stored hash that doesn't parse.
-fn verify_password(password: &str, stored: &str) -> bool {
+pub(crate) fn verify_password(password: &str, stored: &str) -> bool {
     PasswordHash::new(stored)
         .is_ok_and(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
 }

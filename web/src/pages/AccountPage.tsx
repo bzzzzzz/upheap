@@ -7,6 +7,7 @@ import { useMe, useUpdateMe } from "../api/queries/me";
 import { HistoryCard } from "../components/AccountHistory";
 import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";
+import { EmailCard } from "../components/EmailCard";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { NoPasswordCard, PasswordCard } from "../components/PasswordCard";
 import { ProblemText } from "../components/ProblemText";
@@ -29,7 +30,7 @@ const themes: readonly { id: Theme; label: string }[] = [
 ];
 
 /**
- * The signed-in user's display name, which teammates see, their password, this browser's theme and where the CLI is
+ * The signed-in user's display name, which teammates see, their email address, their password, this browser's theme and where the CLI is
  * signed in as them, and the history of their account.
  * Sign out is here rather than in the navigation, at the bottom, where the server allows it.
  */
@@ -41,6 +42,7 @@ export function AccountPage() {
   if (!me) return null;
 
   const { user } = me;
+  const canChangeEmail = me.allowed_actions.includes("change_email");
   return (
     <main>
       <h1 className="mt-6 mb-4 text-[22px] font-semibold tracking-[-0.015em]">Account</h1>
@@ -63,12 +65,15 @@ export function AccountPage() {
                 />
               </dd>
             </div>
-            <div>
-              <dt className="mb-1 text-sm font-medium text-ink">Email</dt>
-              <dd className="text-sm break-words text-ink-soft">{user.email}</dd>
-            </div>
+            {!canChangeEmail && (
+              <div>
+                <dt className="mb-1 text-sm font-medium text-ink">Email</dt>
+                <dd className="text-sm break-words text-ink-soft">{user.email}</dd>
+              </div>
+            )}
           </dl>
         </section>
+        {canChangeEmail && <EmailCard email={user.email} inputClass={nameFormClasses.input} />}
         {me.allowed_actions.includes("change_password") ? (
           <PasswordCard inputClass={nameFormClasses.input} />
         ) : (
