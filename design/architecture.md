@@ -911,8 +911,8 @@ section is how it maps onto this API.
 
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
    task's steps (add, tick, drop, edit), an item's questions (ask, request, review, propose-done) and comments (add, list), tags
-   (list, add, edit, promote; a heap's, or the team's with `--team`), parameters (list, add, edit, archive, and their options), heaps (list, pick a default) and
-   signing in. Teams, members, heap settings and saved-view editing stay in the web app. `parameter edit` sends one
+   (list, add, edit, promote; a heap's, or the team's with `--team`), parameters (list, add, edit, archive, and
+   their options), heaps (list, pick a default) and signing in. Teams, members, heap settings and saved-view editing stay in the web app. `parameter edit` sends one
    write per kind of change (name and weight, tags, option order), each at the version the last returned, because
    the API has no single endpoint for them; a failure midway leaves the earlier ones saved and the CLI says which.
    A tag write that would merge heap tags is refused (exit 3) with the reach and the exact command that confirms it,
@@ -937,8 +937,8 @@ section is how it maps onto this API.
 5. **Lists.** `item list` takes the list's query parameters as flags with the same names and values. `--view` loads
    a saved view and sends its settings, with any flag given replacing that setting. The optional text narrows the
    result on the client, as the web app's search does ([Search](#search)). `--tag` takes names, resolved against
-   the heap's tags, its own and its team's: in a heap a name is one tag, so a name needs no kind. With `--create-tags`, the names the heap doesn't have are added as heap tags first, right before
-   the item is written, and they stay if that write fails. `item add` reads the list once more to say where the item
+   the heap's tags, its own and its team's: in a heap a name is one tag, so a name needs no kind. With
+   `--create-tags`, the names the heap doesn't have are added as heap tags first, right before the item is written, and they stay if that write fails. `item add` reads the list once more to say where the item
    landed, a read `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` is
    sent as one step add per step after the create, so a failure leaves the item with the steps sent so far, and the
    CLI says which: a note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
