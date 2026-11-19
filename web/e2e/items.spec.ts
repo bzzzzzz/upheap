@@ -690,7 +690,7 @@ test("tags are edited in place in the Tags row, which closes on leaving it, Esca
 
   // Each new tag saves, and the strip stays for the next one. The chips come from the server's answer.
   await box.fill("travel");
-  await page.getByRole("option", { name: "Create tag “travel”" }).click();
+  await page.getByRole("option", { name: "Create heap tag “travel”" }).click();
   await expect(pane.getByRole("button", { name: "Remove tag travel" })).toBeVisible();
   await box.fill("packing");
   await box.press("Enter");
@@ -790,7 +790,7 @@ test("on a phone, need, effort and impact open sheets, and the bar holds the mai
   // A new tag in the Tags row, in place in the item's sheet, its offer in view under the field.
   await fieldButton(page, "Tags").click();
   await pane.getByLabel("Add a tag").fill("travel");
-  await pane.getByRole("option", { name: "Create tag “travel”" }).click();
+  await pane.getByRole("option", { name: "Create heap tag “travel”" }).click();
   await expect(pane.getByRole("button", { name: "Remove tag travel" })).toBeVisible();
   await pane.getByLabel("Add a tag").press("Escape");
   await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: travel");

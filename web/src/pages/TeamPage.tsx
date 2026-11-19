@@ -8,6 +8,7 @@ import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
 import { useOidcProvider } from "../api/queries/auth";
 import { useCreateHeap, useUpdateHeap } from "../api/queries/heaps";
 import { useMe } from "../api/queries/me";
+import { useCreateTeamTag, useTeamTags, useUpdateTeamTag } from "../api/queries/tags";
 import {
   isUserQuery,
   useAddMember,
@@ -32,6 +33,7 @@ import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
 import { canManageInviteLinks, InviteLinkButton, InviteLinks, useMakeInviteLink } from "./InviteLinks";
+import { NewTagForm, TagRow, tagCardClass, type TagSettings } from "./TagSettings";
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass, sectionTitleClass } from "./teamStyles";
 import { TeamNotFound } from "../components/NotFound";
 import { RequestId } from "../components/RequestId";
@@ -45,7 +47,7 @@ const nameFormClasses: NameFormClasses = {
 };
 
 /**
- * A team's heaps and members, by its slug `team` (S-team: WideTeam, PhoneTeam). What each person can change comes from
+ * A team's heaps, tags and members, by its slug `team` (S-team: WideTeam, PhoneTeam). What each person can change comes from
  * `allowed_actions`, so a personal team shows no member controls, no link name and no Rename.
  */
 export function TeamPage({ team: slug }: { team: string }) {
@@ -72,6 +74,7 @@ export function TeamPage({ team: slug }: { team: string }) {
     <main className="flex flex-col gap-7 pt-6 text-sm max-sm:gap-6 max-sm:pt-2 max-sm:text-[15px]">
       <TeamHeader team={data} />
       <HeapsSection team={data} phone={phone} />
+      <TagsSection team={data} />
       <MembersSection team={data} phone={phone} />
       <LeaveTeam team={data} />
     </main>
@@ -261,6 +264,60 @@ function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The team's own tags, used in every heap of the team. Any member makes and edits them, as `allowed_actions` says; they
+ * can't be deleted. Loading and failing show in the section, and the rest of the page as usual.
+ */
+function TagsSection({ team }: { team: Team }) {
+  const tags = useTeamTags(team.slug);
+  const create = useCreateTeamTag(team.slug);
+  const update = useUpdateTeamTag(team.slug);
+  const name = useTeamName(team);
+  const settings: TagSettings = { create, update, teamName: name, team: true };
+
+  let body;
+  if (!tags.data) {
+    body = tags.isError ? (
+      <>
+        <p role="alert" className="text-sm text-overdue-ink">
+          {tags.error.message}
+        </p>
+        <RequestId error={tags.error} />
+      </>
+    ) : (
+      <p className="text-sm text-muted">Loading tags…</p>
+    );
+  } else {
+    body = (
+      <>
+        {tags.data.allowed_actions.includes("create") && <NewTagForm settings={settings} />}
+        {tags.data.tags.length === 0 ? (
+          <p className="text-sm break-words text-muted">
+            No team tags yet. A team tag can be used in every heap of {name}.
+          </p>
+        ) : (
+          <div className={tagCardClass}>
+            <ul className="divide-y divide-line">
+              {tags.data.tags.map((tag) => (
+                <TagRow key={tag.id} tag={tag} settings={settings} />
+              ))}
+            </ul>
+          </div>
+        )}
+      </>
+    );
+  }
+  return (
+    <section aria-labelledby="team-tags" className="flex flex-col gap-2 max-sm:gap-2.5">
+      <h2 id="team-tags" className={sectionTitleClass}>
+        Tags
+      </h2>
+      <p className="text-[13px] break-words text-muted max-sm:text-sm">Used in every heap of {name}.</p>
+      {body}
+    </section>
   );
 }
 

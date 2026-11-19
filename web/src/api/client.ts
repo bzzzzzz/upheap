@@ -2,7 +2,7 @@
 // imported from `./schema` under their own names.
 import createClient, { type Middleware } from "openapi-fetch";
 
-import type { paths, Problem } from "./schema";
+import type { MergeReach, paths, Problem } from "./schema";
 
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
@@ -28,14 +28,25 @@ export class ApiProblem extends Error {
   readonly hint: string | undefined;
   /** The server's request ID, on a `5xx`, for whoever runs the server to look up. */
   readonly requestId: string | undefined;
+  /** What a team tag's name would merge, on `tag_merge_unconfirmed`. */
+  readonly mergeReach: MergeReach | undefined;
 
-  constructor(status: number, code: string, message: string, field?: string, hint?: string, requestId?: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    field?: string,
+    hint?: string,
+    requestId?: string,
+    mergeReach?: MergeReach,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
     this.field = field;
     this.hint = hint;
     this.requestId = requestId;
+    this.mergeReach = mergeReach;
   }
 }
 
@@ -132,6 +143,7 @@ function toProblem(error: unknown, response: Response): ApiProblem {
       error.field ?? undefined,
       error.hint ?? undefined,
       requestId,
+      error.merge_reach ?? undefined,
     );
   }
   if (isProxyFailure(response)) {

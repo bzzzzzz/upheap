@@ -10,7 +10,7 @@ import {
   useCreateParameter,
   useParameters,
 } from "../api/queries/parameters";
-import { useTags } from "../api/queries/tags";
+import { heapTags, useTags } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { NameForm } from "../components/NameForm";
@@ -608,7 +608,7 @@ function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; hea
       </div>
     );
   }
-  const linked: ItemTag[] = tags.data.tags
+  const linked: ItemTag[] = heapTags(tags.data)
     .filter((tag) => parameter.tag_ids.includes(tag.id))
     .map((tag) => ({ id: tag.id, name: tag.name }));
 

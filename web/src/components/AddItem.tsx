@@ -9,7 +9,7 @@ import { useCreateItem } from "../api/queries/items";
 import { useRefetchRankedList } from "../api/queries/lists";
 import { useMe } from "../api/queries/me";
 import { useParameters } from "../api/queries/parameters";
-import { useTags } from "../api/queries/tags";
+import { heapTags, useTags } from "../api/queries/tags";
 import { useAddAnother } from "./addAnother";
 import { ChoiceButtons, choiceButtonClass } from "./ChoiceButtons";
 import { DateField } from "./DateField";
@@ -788,7 +788,9 @@ function usePrefill(heapRef: HeapRef, view: ListSearch | undefined): Partial<Dra
   return {
     ...(effort && { effort }),
     ...(impact && { impact }),
-    tags: (tags.data?.tags ?? []).filter((tag) => tagIds.includes(tag.id)).map(({ id, name }) => ({ id, name })),
+    tags: (tags.data ? heapTags(tags.data) : [])
+      .filter((tag) => tagIds.includes(tag.id))
+      .map(({ id, name }) => ({ id, name })),
     values,
   };
 }

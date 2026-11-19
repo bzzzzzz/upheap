@@ -13,7 +13,7 @@ import {
   type RankingPreviewDraft,
 } from "../api/queries/heaps";
 import { useParameters } from "../api/queries/parameters";
-import { useTags } from "../api/queries/tags";
+import { heapTags, useTags } from "../api/queries/tags";
 import { compactButtonClass } from "../components/buttons";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { useFocusAfterRender } from "../components/useFocusAfterRender";
@@ -91,7 +91,12 @@ export function HeapRankingSettings({ heap: heapRef }: { heap: HeapRef }) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
   return (
-    <RankingForm heapRef={heapRef} heap={heap.data} parameters={parameters.data.parameters} tags={tags.data.tags} />
+    <RankingForm
+      heapRef={heapRef}
+      heap={heap.data}
+      parameters={parameters.data.parameters}
+      tags={heapTags(tags.data)}
+    />
   );
 }
 
