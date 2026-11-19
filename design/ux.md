@@ -188,8 +188,8 @@ heap). A second card, "{n} tags of the team {team}", with a Team page link in it
 team's tags the same way, with History, and edits them in place: the form adds "Changes in every heap of {team}."
 and saves through the team's tag (an archived heap too, as the server allows). A team tag's History reads its made,
 edited and merged entries, each naming the tag, and a merge lists each heap's tag and its items: "Launch's “billing”
-(12 items), Support's “Billing” (3 items)". Adding or renaming a heap tag to a team
-tag's name is refused under the field: "“security” is a team tag of Acme. Use it on items here instead."
+(12 items), Support's “Billing” (3 items)". Adding or renaming a heap tag to a team tag's name is refused under the
+field: "“security” is a team tag of Acme. Use it on items here instead."
 
 **The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, Make a team tag, or a
 rename into a name heap tags have) is refused by the server with the list of what it would merge, and the app asks
@@ -903,9 +903,9 @@ follow a display-name change. Activity entries name the team as stored.
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
 Activity, Data) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
 Archive or Unarchive, History), then Tags, the team's own, used in every heap of the team (a New team tag card, and
-rows that are edited in place, with "Changes in every heap of {team}." under the form and the same History; a name that heap tags of the team
-have opens the merge confirm, see Tags), then Members with a search whose results are a listbox under it (arrows move, Enter
-adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
+rows that are edited in place, with "Changes in every heap of {team}." under the form and the same History; a name
+that heap tags of the team have opens the merge confirm, see Tags), then Members with a search whose results are a
+listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
 line saying why the only admin can't leave. Removing a member says what happens: "They lose access to Launch and
 Support. Their items stay." It's confirmed inline on a wide screen and in the member's actions sheet on a phone,
 where heap rows are 52 px and open the heap, and a member's ⋯ opens a sheet headed "Sam Ortiz · @sam · Member".
