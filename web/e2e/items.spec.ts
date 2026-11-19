@@ -7,6 +7,7 @@ import {
   changeState,
   closeField,
   closeItem,
+  createTeam,
   dayFromToday,
   editContext,
   expect,
@@ -852,6 +853,62 @@ test("an item is moved to another heap of its team from ⋯, after a confirm ste
   await expect(page).toHaveURL(/\/teams\/[^/]+\/heaps\/garden\/items\/[^/]+$/);
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
   await expect(page.getByRole("status").filter({ hasText: "Moved to Garden." })).toBeVisible();
+});
+
+test("an item is moved to a heap of another team from ⋯", async ({ page, heapPath }) => {
+  await createTeam(page, "Acme");
+  const acme = new URL(page.url()).pathname.split("/")[2] ?? "";
+  const made = await page.request.post(`/api/v1/teams/${acme}/heaps`, {
+    headers: { "x-csrf-protection": "1" },
+    data: { name: "Roadmap" },
+  });
+  expect(made.status()).toBe(201);
+  await page.goto(heapPath);
+  await addItem(page, "Water the plants");
+  await openItem(page, "Water the plants");
+
+  await moreEntry(page, await openMore(page), "Move to another heap…").click();
+  const picker = page.getByRole("dialog", { name: "Move to", exact: true });
+  await expect(picker.getByText("Acme", { exact: true })).toBeVisible();
+  await picker.getByRole("menuitem", { name: "Roadmap" }).click();
+  await expect(picker.getByRole("heading", { name: "Move to Roadmap in Acme?" })).toBeVisible();
+  await expect(picker).toContainText("Tags and values Acme doesn't have are dropped.");
+  await expect(picker).toContainText("Its history stays in");
+  await expect(picker).not.toContainText("sent it to an agent");
+  await picker.getByRole("button", { name: "Move", exact: true }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/teams/${acme}/heaps/roadmap/items/[^/]+$`));
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
+  await expect(page.getByRole("status").filter({ hasText: "Moved to Roadmap in Acme." })).toBeVisible();
+});
+
+test("a note heaps were made from moves only within its team", async ({ page, heapPath }) => {
+  await createTeam(page, "Acme");
+  const acme = new URL(page.url()).pathname.split("/")[2] ?? "";
+  const headers = { "x-csrf-protection": "1" };
+  const made = await page.request.post(`/api/v1/teams/${acme}/heaps`, { headers, data: { name: "Roadmap" } });
+  expect(made.status()).toBe(201);
+  await page.goto(heapPath);
+  await addItem(page, "Plan the garden");
+  await openItem(page, "Plan the garden");
+  const key = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+  const note = await page.request.get(`/api/v1${heapPath}/items/${key}`);
+  const { id } = (await note.json()) as { id: string };
+  const team = /\/teams\/([^/]+)\//.exec(heapPath)?.[1] ?? "";
+  for (const name of ["Garden", "Beds"]) {
+    const created = await page.request.post(`/api/v1/teams/${team}/heaps`, {
+      headers,
+      data: name === "Garden" ? { name, origin_id: id } : { name },
+    });
+    expect(created.status()).toBe(201);
+  }
+  await page.goto(`${heapPath}/items/${key}`);
+
+  await moreEntry(page, await openMore(page), "Move to another heap…").click();
+  const picker = page.getByRole("dialog", { name: "Move to", exact: true });
+  await expect(picker.getByRole("menuitem", { name: "Beds" })).toBeVisible();
+  await expect(picker.getByRole("menuitem", { name: "Roadmap" })).toHaveCount(0);
+  await expect(picker).toContainText(/Heaps were made from this note, so it moves only within .+'s team\./);
 });
 
 test("several items are selected in the list and moved to another heap at once", async ({ page }) => {

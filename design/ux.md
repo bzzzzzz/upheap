@@ -355,7 +355,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     selected" and Select all (Clear all when all are), and a bar over the tabs has Move to… across its width. The
     count is announced. Only rows the list shows stay selected: a row a filter or the search hides is dropped from the
     selection and doesn't come back when the filter is taken off.
-    Move to… opens the item's Move picker (The item §6) for the selection. Picking a heap asks first, "Move 3 items to
+    Move to… opens the item's Move picker (The item §6) for the selection, which moves within its team only. Picking a heap asks first, "Move 3 items to
     Marketing?" and "Tags they don't have there are dropped.", with Cancel and "Move 3". When every item moves, the
     picker closes, select mode ends and the list stays where it is, with the moved rows gone; the toast says "Moved 3
     items to Marketing." (and "2 got new keys." when some keys changed) and offers **Open Marketing**. There is no
@@ -398,15 +398,23 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    be. A reader, an archived heap or a closed item that can't be reopened has no main button. ⋯ is named More, is
    there whenever it holds something, and holds, each only when the server allows it and in this order: the other state
    changes, Won't do, Make it a task…, Split… on a note, Change blocker… and Add reason… (Change reason… once one is
-   set) on a blocked item, the Stage choices, and last, in a section of its own, Move to another heap…, when the team
-   has another heap that isn't archived. With none of them, as for a reader's item, an archived heap's or a closed
+   set) on a blocked item, the Stage choices, and last, in a section of its own, Move to another heap…, when any of the
+   person's teams has a heap the item can move to. With none of them, as for a reader's item, an archived heap's or a closed
    item, there is no ⋯.
-   Move to another heap… opens "Move to" under ⋯ (a sheet on a phone): the item's own team's heaps that aren't
-   archived, the item's own marked "(here)" and disabled, with a search field from 8 heaps and no New heap. A pick
-   asks first, "Move to <Heap>?" and "Tags it doesn't have there are dropped.", with Cancel and Move; it can't be
-   closed while it saves. The item then opens in its new heap with the address replaced, so Back doesn't return to the
-   old one, also from All items, and a toast says "Moved to <Heap>." and, when the new heap already had its key, the
-   key it got. There's no Undo, as the tags can't come back. A refusal shows in the picker, above the buttons.
+   Move to another heap… opens "Move to" under ⋯ (a sheet on a phone): the heaps that aren't archived of every team the
+   person is in, in groups under the team's name, the item's own team first and the others in the order of Teams, a
+   team with none left out, the item's own heap marked "(here)" and disabled, with a search field from 8 heaps in all
+   (a group whose heaps all miss it goes) and no New heap. A note heaps were made from lists only its own team's, with
+   "Heaps were made from this note, so it moves only within <Team>." under the list. A pick asks first, "Move to
+   <Heap>?" and "Tags it doesn't have there are dropped.", with Cancel and Move; in another team it asks "Move to
+   <Heap> in <Team>?" and says "Tags and values <Team> doesn't have are dropped.", "Its history stays in <Old team>.
+   People in <Team> see it from now on, and don't see its links to <Old team>." and, when someone else sent it to an
+   agent, "<Name> sent it to an agent. If <Name> isn't in <Team>, the turn is taken back." It can't be closed while it
+   saves. The item then opens in its new heap with the address replaced, so Back doesn't return to the old one, also
+   from All items, and a toast says "Moved to <Heap>." ("Moved to <Heap> in <Team>." across teams) and, when the new
+   heap already had its key, the key it got. There's no Undo, as the tags can't come back. A refusal shows in the
+   picker, above the buttons; a note heaps were made from says it moves only within its team, and a heap the person
+   can't move to any more says "You can't move items to that heap any more."
    Block saves the state at once; the blocker is named after, with Change blocker…, which opens the list of items in
    a popover (a sheet on a phone) and saves on a pick. Make it a task asks first, naming the item, since a task can't
    go back to a note (or to a reminder). **Split…** on an open note opens a dialog (a sheet on a phone) with three
