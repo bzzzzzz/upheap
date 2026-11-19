@@ -243,7 +243,9 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
   const [name, setName] = useState(tag.name);
   const [description, setDescription] = useState(tag.description ?? "");
   const [shownVersion, setShownVersion] = useState(tag.version);
-  const [reach, setReach] = useState<MergeReach | null>(null);
+  // The refused write, as it was sent: a refetch behind the confirm resets the fields, and the confirm must send, and
+  // name, what the person asked for, so a newer version is refused as a conflict.
+  const [asked, setAsked] = useState<{ reach: MergeReach; variables: typeof variables } | null>(null);
   const showToast = useToast();
   if (shownVersion !== tag.version) {
     setShownVersion(tag.version);
@@ -266,7 +268,10 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
     }
     update.mutate(variables, {
       onSuccess: onClose,
-      onError: (error) => setReach(mergeReachOf(error) ?? null),
+      onError: (error) => {
+        const reach = mergeReachOf(error);
+        setAsked(reach ? { reach, variables } : null);
+      },
     });
   };
 
@@ -309,23 +314,25 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
           </button>
         </div>
         {team && <p className="basis-full text-[13px] text-muted">Changes in every heap of {teamName}.</p>}
-        {!reach && <TagProblem error={update.error} typed={name} settings={settings} />}
+        {!asked && <TagProblem error={update.error} typed={name} settings={settings} />}
       </form>
-      {reach && (
+      {asked && (
         <MergeConfirm
           mutation={update}
-          variables={variables}
-          act={{ kind: "rename", from: tag.name, to: name }}
-          reach={reach}
+          variables={asked.variables}
+          act={{ kind: "rename", from: asked.variables.tag.name, to: asked.variables.patch.name ?? "" }}
+          reach={asked.reach}
           description={
-            variables.patch.description === undefined ? (tag.description ?? null) : variables.patch.description
+            asked.variables.patch.description === undefined
+              ? (asked.variables.tag.description ?? null)
+              : asked.variables.patch.description
           }
           settings={settings}
           onDone={(confirmed) => {
-            showToast({ message: `Renamed to “${name}”: ${carriedBy(confirmed)}` });
+            showToast({ message: `Renamed to “${asked.variables.patch.name ?? ""}”: ${carriedBy(confirmed)}` });
             onClose();
           }}
-          onClose={() => setReach(null)}
+          onClose={() => setAsked(null)}
         />
       )}
     </>

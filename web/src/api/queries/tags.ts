@@ -42,7 +42,7 @@ export function useCreateTagIn(scope: TagScope) {
     onSettled: (_data, _error, { confirm }) =>
       scope.kind === "heap"
         ? queryClient.invalidateQueries({ queryKey: tagsKey(scope.heap) })
-        : invalidateTeamTags(queryClient, scope.team, Boolean(confirm)),
+        : invalidateTeamTags(queryClient, scope.team, Boolean(confirm), Boolean(confirm)),
   });
 }
 
@@ -69,13 +69,13 @@ export function useUpdateTagIn(scope: TagScope) {
       );
     },
     // Items show tag names, so a rename refreshes them too.
-    onSettled: () =>
+    onSettled: (_data, _error, { confirm }) =>
       scope.kind === "heap"
         ? Promise.all([
             queryClient.invalidateQueries({ queryKey: tagsKey(scope.heap) }),
             invalidateHeap(queryClient, scope.heap),
           ])
-        : invalidateTeamTags(queryClient, scope.team, true),
+        : invalidateTeamTags(queryClient, scope.team, true, Boolean(confirm)),
   });
 }
 

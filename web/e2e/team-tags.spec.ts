@@ -128,12 +128,16 @@ test("a heap tag is made a team tag after the merge is confirmed, and both heaps
   await expect(page.getByRole("region", { name: /^1 tag of the team / })).toContainText("billing");
   await expect(page.getByText("No tags of this heap yet.")).toBeVisible();
 
-  // Beta's item carries the team tag now, and Beta's Tags tab lists it in the team's card.
-  await page.goto(heapB);
-  await openItem(page, "Beta invoice");
-  await fieldButton(page, "Tags").click();
-  await expect(itemPane(page).getByRole("button", { name: "Remove tag billing" })).toBeVisible();
-  await closeItem(page);
+  // Each heap's item carries the team tag now: filtering by the team tag finds it. Beta's Tags tab lists it in the
+  // team's card.
+  for (const [path, tagged, plain] of [
+    [heapA, "Alpha invoice", "Alpha plain"],
+    [heapB, "Beta invoice", "Beta plain"],
+  ] as const) {
+    await page.goto(path);
+    await addItem(page, plain);
+    await filterByTeamTag(page, "billing", tagged, plain);
+  }
   await goTo(page, "Tags");
   await expect(page.getByRole("region", { name: /^1 tag of the team / })).toContainText("billing");
   await expect(page.getByText("No tags of this heap yet.")).toBeVisible();
