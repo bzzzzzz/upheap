@@ -275,6 +275,19 @@ test("sign-in shows the forms when the provider settings can't be read", async (
   await expect(page.getByRole("link", { name: /^Sign in with/ })).toHaveCount(0);
 });
 
+test("a closed server with a provider hides Create account and doesn't send people for an invite", async ({ page }) => {
+  await page.route("**/api/v1/auth/registration", (route) => route.fulfill({ json: { open: false } }));
+  await page.route("**/api/v1/auth/oidc", (route) =>
+    route.fulfill({ json: { label: "Acme SSO", password_sign_in: true } }),
+  );
+  await page.goto("/login");
+  await expect(page.getByRole("link", { name: "Sign in with Acme SSO" })).toBeVisible();
+  await expect(page.getByLabel("Password")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Create account" })).toHaveCount(0);
+  // A first sign-in through the provider makes the account, so the invite-link footnote would be wrong.
+  await expect(page.getByText("New accounts need an invite link from a team's admin.")).toHaveCount(0);
+});
+
 test("a throttled sign-in counts down the wait and then lets the user try again", async ({ page }) => {
   await page.clock.install();
   await page.route("**/api/v1/auth/login", (route) =>

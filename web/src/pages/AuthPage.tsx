@@ -96,8 +96,9 @@ export type RegisterRequest = {
  *
  * When the server has registration closed, the sign-in page (the one without a `register` request of its own) has no
  * switch and no Create account: the Sign in form shows alone, and without a provider (whose first sign-in makes an
- * account) a footnote says accounts come with an invite link. A failed read of the setting shows the switch. A sign-in the server throttles counts down in its error line
- * and holds the button until the wait ends (`useRetryCountdown`).
+ * account) a footnote says accounts come with an invite link. A failed read of the setting shows the switch. A
+ * sign-in the server throttles counts down in its error line and holds the button until the wait ends
+ * (`useRetryCountdown`).
  */
 export function AuthPage({
   notice,

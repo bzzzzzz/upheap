@@ -147,7 +147,7 @@ impl Services {
         self.mail.is_some()
     }
 
-    /// Whether anyone may create an account without an invite link.
+    /// Whether anyone may register (`ALLOW_REGISTRATION`).
     pub fn registration_open(&self) -> bool {
         self.settings.allow_registration
     }

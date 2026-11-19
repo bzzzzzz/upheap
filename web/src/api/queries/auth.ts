@@ -44,7 +44,10 @@ export function useOidcProvider() {
   });
 }
 
-/** Whether anyone may create an account on this server. Read once: the operator sets it with the server's configuration. */
+/**
+ * Whether anyone may create an account on this server. Read once: the operator sets it with the server's
+ * configuration.
+ */
 export function useRegistrationOptions() {
   return useQuery({
     queryKey: registrationOptionsKey,
