@@ -2,15 +2,16 @@
 //! teams follow at once.
 //!
 //! The pushes are stored as the provider sent them ([`store::scim`]). Each write runs in one transaction that locks
-//! the mapped teams first, then the SCIM row being written, writes the SCIM rows, then runs the group-teams sync for
+//! the mapped teams first, then the SCIM row being written, then (a write to users, for each linked person it touches)
+//! the person's personal team, writes the SCIM rows, then runs the group-teams sync for
 //! every touched person who is linked: a SCIM user is linked to an account when `user_identities` has the configured
 //! issuer and the SCIM user's `externalId`, the person's subject. Nothing stores the link.
 //!
 //! Records may share an `externalId`, so a person's state is read from all of them at once ([`ScimPerson`]): inactive
 //! only when every record is, else in the groups of the active ones. A linked person who is left inactive, or whose
-//! last record is deleted, also loses every session and token, and a write to users that turns a linked person off
-//! or back on records it in their personal team's audit log, and [`Services::open_session`] refuses an inactive
-//! person until the provider turns them back on.
+//! last record is deleted, also loses every session and token, and [`Services::open_session`] refuses an inactive
+//! person until the provider turns them back on. A write to users that turns a linked person off or back on records
+//! it in their personal team, where their own account history reads it.
 //!
 //! Resources are JSON as in RFC 7643, built and read here; the HTTP side is in `api`.
 
@@ -607,17 +608,33 @@ impl Services {
             };
             if let Some(was_off) = was_off {
                 let off_before = was_off.contains(subject);
+                // Before the sign-ins: password changes and resets lock the personal team, then end sign-ins.
+                let personal_team = self.lock_personal_team(txn, user_id).await?;
                 if !person.active {
                     let ended_sign_ins = self.end_sign_ins(txn, user_id, None, now).await?;
                     tracing::info!(%user_id, ended_sign_ins, "ended the sign-ins of a person the provider deactivated");
                     if !off_before {
                         let diff = json!({ AuditField::EndedSignIns.code(): ended_sign_ins });
-                        self.record_account_change(txn, user_id, AuditAction::AccountDeactivated, diff, now)
-                            .await?;
+                        self.record_account_change(
+                            txn,
+                            user_id,
+                            personal_team,
+                            AuditAction::AccountDeactivated,
+                            diff,
+                            now,
+                        )
+                        .await?;
                     }
                 } else if off_before {
-                    self.record_account_change(txn, user_id, AuditAction::AccountReactivated, json!({}), now)
-                        .await?;
+                    self.record_account_change(
+                        txn,
+                        user_id,
+                        personal_team,
+                        AuditAction::AccountReactivated,
+                        json!({}),
+                        now,
+                    )
+                    .await?;
                 }
             }
             if !self.settings.group_teams.is_empty() {
@@ -635,21 +652,27 @@ impl Services {
         Ok(())
     }
 
+    /// Locks the personal team of `user_id`, where their account entries go, and returns it.
+    async fn lock_personal_team(&self, txn: &impl ConnectionTrait, user_id: UserId) -> Result<TeamId, ServiceError> {
+        let user = store::users::find_user(txn, user_id)
+            .await?
+            .ok_or_else(|| StoreError::corrupt("users", &user_id.to_string(), "a linked identity has no user"))?;
+        let personal_team = self.load_personal_team(txn, &user).await?;
+        store::teams::lock_team(txn, personal_team).await?;
+        Ok(personal_team)
+    }
+
     /// Writes an account entry for a change the provider made, in the person's personal team, with the person as the
-    /// actor: no account did it. The personal team isn't locked: the write already holds the mapped teams and the SCIM
-    /// row, and an insert needs no lock.
+    /// actor: no account did it.
     async fn record_account_change(
         &self,
         txn: &impl ConnectionTrait,
         user_id: UserId,
+        personal_team: TeamId,
         action: AuditAction,
         diff: Value,
         now: Timestamp,
     ) -> Result<(), ServiceError> {
-        let user = store::users::find_user(txn, user_id)
-            .await?
-            .ok_or(ServiceError::Unauthenticated)?;
-        let personal_team = self.load_personal_team(txn, &user).await?;
         let entry = self.team_audit_entry(
             Principal { user_id, run: None },
             personal_team,

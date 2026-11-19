@@ -924,6 +924,17 @@ async fn groups_are_left_alone_until_a_mapped_group_has_been_pushed() -> Result<
     Ok(())
 }
 
+/// The provider's account entries about the user, oldest first.
+async fn provider_entries(h: &Harness, user_id: &str) -> Result<Vec<String>> {
+    Ok(h.app
+        .audit_entries(user_id)
+        .await?
+        .into_iter()
+        .map(|(action, _)| action)
+        .filter(|action| action.starts_with("account_"))
+        .collect())
+}
+
 #[gtest]
 #[tokio::test]
 async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_are() -> Result<()> {
@@ -935,6 +946,7 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
 
     // Act: Sam signs in with a token that lists no groups.
     let session = first_sign_in(&h, sam()).await?;
+    let user_id = user_id_of(&me(&h.app, &session).await?)?;
     let signed_in = in_ops(&me(&h.app, &session).await?);
     // The inactive record is written again: Sam is still active through the other.
     patch(
@@ -944,6 +956,7 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
     )
     .await?;
     let still_in = in_ops(&me(&h.app, &session).await?);
+    let turned_off_then = provider_entries(&h, &user_id).await?;
     // The active one is deactivated too.
     patch(
         &h,
@@ -952,11 +965,14 @@ async fn records_sharing_an_external_id_are_one_person_inactive_only_when_all_ar
     )
     .await?;
     let ended = me(&h.app, &session).await?;
+    let turned_off_after = provider_entries(&h, &user_id).await?;
     let (refused, _) = sign_in(&h, sam()).await?;
 
     // Assert
     expect_that!(signed_in, eq(true));
     expect_that!(still_in, eq(true));
+    expect_that!(turned_off_then, len(eq(0)));
+    expect_that!(turned_off_after, elements_are![eq("account_deactivated")]);
     expect_that!(ended.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(refused.status, eq(StatusCode::FORBIDDEN));
     Ok(())

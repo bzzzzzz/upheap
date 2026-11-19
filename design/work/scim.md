@@ -118,8 +118,9 @@ at sign-in:
 - A user with no `externalId`, or one no identity has, changes no team. The server logs the second at `info`.
 
 Lock order: the mapped teams in ID order, as the sync already locks them (the caller locks them before it syncs), then
-the SCIM row being written, with a locking read, so two writes of one resource run one after the other. A group write
-that touches many members syncs each in the same transaction.
+the SCIM row being written, with a locking read, so two writes of one resource run one after the other. A write to
+users then locks the personal team of each linked person it touches, before it ends any sign-in, as a password change
+does. A group write that touches many members syncs each in the same transaction.
 
 ### Deactivation
 
@@ -129,14 +130,16 @@ every sign-in of their account in the same transaction: their web sessions are d
 revoked, their authorization codes expired and their personal tokens revoked. The write reads whether the person
 was off before it (they have records and every one is inactive). A change from on to off records `account_deactivated`
 in the person's personal team, with the number of sign-ins ended; from off to on, `account_reactivated`. A repeated
-push ends nothing more and records nothing. It is logged at `info` with the number of sign-ins ended.
+push ends nothing more and records nothing. It is logged at `info` with the number of sign-ins ended. A person with
+no record is not off, so a delete of the last record records a turn-off only when they weren't off already, and a new
+active record after it records no turn-on: they could sign in again from the delete.
 
 The refusal sits where every sign-in, registration and password reset opens a session: while SCIM is set up and the
 person is inactive, opening one fails with `account_deactivated` (`403`) and the surrounding
 transaction rolls back, so a password reset then changes nothing. The provider itself normally refuses a deactivated
 person's sign-in, so this is the backstop; a password reset can give a provider-made account a password, which is why
-it is there. Reactivating is `active` true again, which records `account_reactivated` and nothing else. A person with no record is
-no longer refused; the provider won't authenticate a person it deleted, and their sessions and tokens ended at the
+it is there. Reactivating is `active` true again, which records `account_reactivated` and nothing else. A person
+with no record is no longer refused; the provider won't authenticate a person it deleted, and their sessions and tokens ended at the
 delete.
 
 ### Sign-in

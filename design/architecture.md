@@ -658,8 +658,8 @@ a fixed time.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
      go: a password change, a reset link made for them (actor: the user, for the reason above), a password set with
      one, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
-     reset link made for them), and their own heap priority change (recorded here and not in the heap's team, since the value is private to
-     them). `GET /me/history` reads exactly those six actions for the caller, with no way to name another user or
+     reset link made for them), and their own heap priority change (recorded here and not in the heap's team, since
+     the value is private to them). `GET /me/history` reads exactly those six actions for the caller, with no way to name another user or
      team, so only the user sees them and team admins never do. It is not the team log: the server words each entry
      as one sentence with no actor ("Password changed. 2 other sign-ins ended.", "You changed your priority for Work
      from 1 to 3.") from the entry's diff, and the sentence is made on reading, so a wording fix reaches old entries.
