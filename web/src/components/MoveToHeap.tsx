@@ -1,10 +1,11 @@
-import { Check, Search, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
-import { Autocomplete, Button, Input, Label, Menu, MenuItem, MenuSection, SearchField } from "react-aria-components";
+import { Autocomplete, Menu, MenuItem, MenuSection } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { compactButtonClass } from "./buttons";
+import { FindField } from "./FindField";
 import { currentRowClass, LONG_LIST, rowClass, SectionTitle } from "./HeapSwitcher";
 import { itemProblem } from "./itemProblems";
 import { teamName } from "./teamName";
@@ -169,22 +170,7 @@ export function MoveToHeap({
 
   return long ? (
     <Autocomplete inputValue={text} onInputChange={setText}>
-      <SearchField autoFocus className="relative flex shrink-0 items-center">
-        <Label className="sr-only">Find a heap</Label>
-        <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 size-4 text-muted" />
-        <Input
-          placeholder="Find a heap"
-          className="h-12 w-full rounded-xl border-2 border-transparent bg-sunken pr-11 pl-10 text-base outline-none placeholder:text-muted focus:border-accent sm:h-10 sm:rounded-[9px] sm:pr-10 sm:pl-9 sm:text-sm [&::-webkit-search-cancel-button]:hidden"
-        />
-        {text !== "" && (
-          <Button
-            aria-label="Clear"
-            className="absolute right-0 flex size-12 items-center justify-center rounded-xl text-ink-soft outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-accent sm:size-10"
-          >
-            <X aria-hidden="true" className="size-4" />
-          </Button>
-        )}
-      </SearchField>
+      <FindField label="Find a heap" text={text} />
       {menu}
       {noteLine}
     </Autocomplete>

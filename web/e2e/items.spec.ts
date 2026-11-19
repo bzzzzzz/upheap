@@ -468,7 +468,9 @@ test("an item is blocked by another and unblocked", async ({ page }) => {
   await openItem(page, "Get approval");
   await changeState(page, "Block", "more");
   const blocker = await changeBlocker();
-  await expect(blocker.getByRole("menu", { name: "Waiting for" }).getByRole("menuitem")).toHaveText(["Nothing picked"]);
+  await expect(blocker.getByRole("menu", { name: "Waiting for" }).getByRole("menuitem")).toHaveText([
+    "Nothing picked (current)",
+  ]);
   await closeField(page);
   await changeState(page, "Unblock", "main");
   await expect(status()).not.toContainText("Blocked");
@@ -500,7 +502,7 @@ test("the blocker is found by typing part of its title, and picked with the keyb
 
   // Typing keeps the titles that hold the text, in any case, and Enter picks the first.
   let picker = await changeBlocker();
-  await expect(rows(picker)).toHaveText(["Nothing picked", "Get approval", "Get budget", "Write docs"]);
+  await expect(rows(picker)).toHaveText(["Nothing picked (current)", "Get approval", "Get budget", "Write docs"]);
   await picker.getByLabel("Find an item").fill("BUDG");
   await expect(rows(picker)).toHaveText(["Get budget"]);
   await page.keyboard.press("Enter");
@@ -511,7 +513,7 @@ test("the blocker is found by typing part of its title, and picked with the keyb
   await expect(rows(picker).filter({ hasText: "Get budget" })).toBeDisabled();
   await picker.getByLabel("Find an item").fill("get");
   // In list order, where the blocker now ranks first for what it blocks.
-  await expect(rows(picker)).toHaveText(["Get budget", "Get approval"]);
+  await expect(rows(picker)).toHaveText(["Get budget (current)", "Get approval"]);
   await picker.getByLabel("Find an item").fill("nothing like it");
   await expect(rows(picker)).toHaveText(["No item matches “nothing like it”"]);
   await picker.getByLabel("Find an item").fill("docs");
