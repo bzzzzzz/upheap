@@ -91,7 +91,7 @@ struct CallbackQuery {
 /// Always answers `303`. A known person is signed in and sent to the page the sign-in started from, or `/`. A new
 /// one is sent to `/login/provider` to pick a username. A refusal is sent to `/login?sign_in_error=<code>`, with
 /// `redirect` when the sign-in started from a page, and `login` for `email_taken`. The codes are `email_taken`,
-/// `email_unverified`, `provider_refused`, `sign_in_expired` and `provider_unreachable`.
+/// `email_unverified`, `provider_refused`, `sign_in_expired`, `provider_unreachable` and `account_deactivated`.
 #[utoipa::path(get, path = "/auth/oidc/callback", tag = "auth", params(CallbackQuery),
     responses(
         (status = 303, description = "Signed in (sets the session cookie), to the username step, or to the sign-in page with the reason",

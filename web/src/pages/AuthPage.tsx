@@ -7,7 +7,7 @@ import { usePasswordResetOptions, useRequestPasswordReset } from "../api/queries
 import { BASE } from "../basePath";
 import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";
-import { problemMessage } from "../components/ProblemText";
+import { ACCOUNT_DEACTIVATED, problemMessage } from "../components/ProblemText";
 import { RequestId } from "../components/RequestId";
 
 export type Mode = "sign_in" | "register";
@@ -53,6 +53,8 @@ function refusalLine(
       return "That sign-in took too long. Try again.";
     case "provider_unreachable":
       return `${label} can't be reached right now. Try again in a minute.`;
+    case "account_deactivated":
+      return ACCOUNT_DEACTIVATED;
     default:
       return undefined;
   }
