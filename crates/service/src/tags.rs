@@ -51,7 +51,8 @@ pub struct TeamTagList {
     pub allowed_actions: Vec<TagListAction>,
 }
 
-/// The heap tags in use that a team tag's name would merge, and what they hold: the confirm of rule 9.
+/// The heap tags in use that a team tag's name would merge, and what they hold: what the caller confirms before a merge
+/// (architecture.md, API §11).
 #[derive(Clone, Debug)]
 pub struct MergeReach {
     /// Names this reach: a client that confirms with it has seen exactly these heap tags and counts.

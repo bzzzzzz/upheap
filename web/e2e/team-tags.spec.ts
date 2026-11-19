@@ -2,7 +2,20 @@
 // place, and listed on a heap's Tags tab.
 import type { Page } from "@playwright/test";
 
-import { addHeaps, addItem, closeItem, expect, fieldButton, goTo, itemPane, openItem, row, test } from "./fixtures";
+import {
+  addHeaps,
+  addItem,
+  closeItem,
+  expect,
+  fieldButton,
+  goTo,
+  itemPane,
+  moreEntry,
+  openItem,
+  openMore,
+  row,
+  test,
+} from "./fixtures";
 
 /** Puts the team tag `name` on the item `title` through the item's Tags field, picking it from what `typed` finds. */
 async function tagWith(page: Page, title: string, typed: string, name: string) {
@@ -83,6 +96,108 @@ test("a team tag is made on the Team page, used and filtered in two heaps, and r
   // Alpha, opened afresh, shows it too.
   await page.goto(heapA);
   await expect(row(page, "Alpha work").getByRole("button", { name: "Filter by tag security-review" })).toBeVisible();
+});
+
+/** Makes the heap tag `name` in the heap at `path` through the API. */
+async function addHeapTag(page: Page, path: string, name: string) {
+  const made = await page.request.post(`/api/v1${path}/tags`, {
+    headers: { "x-csrf-protection": "1" },
+    data: { name },
+  });
+  expect(made.status()).toBe(201);
+}
+
+test("the team tags path: made once, used in two heaps, renamed, moved, and heap tags promoted for a third", async ({
+  page,
+  heapPath,
+}) => {
+  // Arrange: heaps A (the personal one), B and C of one team. B has a heap tag infra, as A will.
+  const heapA = heapPath;
+  const team = /\/teams\/([^/]+)\//.exec(heapA)?.[1] ?? "";
+  await addHeaps(page, ["Beta", "Gamma"]);
+  const heapB = `/teams/${team}/heaps/beta`;
+  const heapC = `/teams/${team}/heaps/gamma`;
+  await addHeapTag(page, heapB, "infra");
+
+  // Step 1: the team tag is made on the Team page.
+  await page.goto(`/teams/${team}`);
+  const tags = page.getByRole("region", { name: "Tags", exact: true });
+  await tags.getByLabel("New team tag name").fill("security");
+  await tags.getByLabel("New team tag description").fill("Anything about access");
+  await tags.getByRole("button", { name: "Add tag" }).click();
+  await expect(tags.getByRole("button", { name: "Edit security" })).toBeVisible();
+
+  // Step 2: in A, an item takes the team tag from what "sec" finds, and a heap tag infra made on it.
+  await page.goto(heapA);
+  await addItem(page, "Rotate the certs");
+  await addItem(page, "Alpha plain");
+  await tagWith(page, "Rotate the certs", "sec", "security");
+  await itemPane(page).getByRole("combobox", { name: "Add a tag" }).fill("infra");
+  await page.getByRole("option", { name: "Create heap tag “infra”" }).click();
+  await expect(itemPane(page).getByRole("button", { name: "Remove tag infra" })).toBeVisible();
+  await closeItem(page);
+
+  // Step 3: in B, which never made a tag of that name, another item takes it.
+  await page.goto(heapB);
+  await addItem(page, "Review the VPN");
+  await addItem(page, "Beta plain");
+  await tagWith(page, "Review the VPN", "sec", "security");
+  await closeItem(page);
+
+  // Step 4: B's list and A's, filtered by it, each show their own item.
+  await filterByTeamTag(page, "security", "Review the VPN", "Beta plain");
+  await page.goto(heapA);
+  await filterByTeamTag(page, "security", "Rotate the certs", "Alpha plain");
+
+  // Step 5: renamed once on the Team page, it shows the new name in both heaps.
+  await page.goto(`/teams/${team}`);
+  await tags.getByRole("button", { name: "Edit security" }).click();
+  await tags.getByLabel("Name of tag security").fill("security-review");
+  await tags.getByRole("button", { name: "Save" }).click();
+  await expect(tags.getByRole("button", { name: "Edit security-review" })).toBeVisible();
+  for (const [path, title] of [
+    [heapA, "Rotate the certs"],
+    [heapB, "Review the VPN"],
+  ] as const) {
+    await page.goto(path);
+    await expect(row(page, title).getByRole("button", { name: "Filter by tag security-review" })).toBeVisible();
+  }
+
+  // Step 6: A's item, moved to B, keeps the team tag, and its heap tag infra lands on B's infra.
+  await page.goto(heapA);
+  await openItem(page, "Rotate the certs");
+  await moreEntry(page, await openMore(page), "Move to another heap…").click();
+  const picker = page.getByRole("dialog", { name: "Move to", exact: true });
+  await picker.getByRole("menuitem", { name: "Beta" }).click();
+  await picker.getByRole("button", { name: "Move", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Moved to Beta." })).toBeVisible();
+  await expect(fieldButton(page, "Tags")).toHaveAccessibleName("Tags: infra, security-review");
+  await closeItem(page);
+  await filterByTeamTag(page, "security-review", "Rotate the certs", "Beta plain");
+  await expect(row(page, "Review the VPN")).toBeVisible();
+
+  // Step 7: A and B each have a heap tag billing on an item. Promoted from A's Tags tab once the merge is confirmed,
+  // it's the one team tag on both items, and C, which had none, can use it.
+  await heapTagOnNewItem(page, heapA, "Send the invoices", "billing");
+  await heapTagOnNewItem(page, heapB, "Chase the payments", "billing");
+  await page.goto(heapA);
+  await goTo(page, "Tags");
+  await page.getByRole("button", { name: "More for billing" }).click();
+  await page.getByRole("menuitem", { name: "Make a team tag" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Make “billing” a team tag?" });
+  await expect(confirm).toContainText("2 items in 2 heaps will carry the team tag.");
+  await confirm.getByRole("button", { name: "Make team tag" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "is a team tag now" })).toBeVisible();
+  for (const [path, tagged, plain] of [
+    [heapA, "Send the invoices", "Alpha plain"],
+    [heapB, "Chase the payments", "Beta plain"],
+  ] as const) {
+    await page.goto(path);
+    await filterByTeamTag(page, "billing", tagged, plain);
+  }
+  await page.goto(heapC);
+  await addItem(page, "Reconcile the accounts");
+  await tagWith(page, "Reconcile the accounts", "bill", "billing");
 });
 
 /** In the heap at `path`, makes the heap tag `name` through the item's Tags field and puts it on a new item `title`. */

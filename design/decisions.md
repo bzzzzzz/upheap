@@ -583,3 +583,24 @@ them, per reader. A name shown in a team's log is the item's current one only wh
 that resolve a link to an item (a blocker, an origin, Became) check that the reader may view its heap now, not that
 it is in the same team. The checks that a move stays in its team go: the target heap is one the caller may edit
 items in, and a heap they can't see is refused as missing.
+
+## 44. Team tags belong to the team: one row, used by every heap
+
+**Context.** A team with several heaps made the same tag again in each, and the copies drifted apart in name and
+meaning. Until then every resource resolved to its team through a heap, and a tag was one heap's.
+
+**Decision.** A tag is owned by a heap or by its team. A team tag is one row in `tags` with `team_id` set, put on
+items in any heap of the team, and renamed or described once for all of them. In a heap, a name is one tag: no heap
+tag shares a name with a team tag of its team. A team tag that takes a name heap tags of the team have merges them
+into it, in every heap, archived ones and closed items included, once the caller has confirmed what it reaches. A
+merged heap tag keeps its row, marked merged, so history from before reads as it was. A team tag is the first
+resource a team owns beside its heaps and members.
+
+**Instead of.** Copying a tag into each heap and keeping the copies in step, which multiplies every rename and still
+lets them drift. Tags owned by the team alone, with no heap tags, which takes from a heap the tags only it needs.
+Refusing a team tag whose name heap tags have, which leaves a team that already drifted no way back to one tag.
+
+**Consequences.** Resource scoping has a team-level resource: a tag ID is checked against the heap's tags, its own
+and its team's. A team tag write locks every heap of the team, and a merge writes items, parameter links, saved
+views and tag orders in all of them in one transaction. A team tag's history is the team's, not a heap's. A merge
+can't be undone: there is no demoting a team tag back to heap tags.
