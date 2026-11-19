@@ -519,10 +519,9 @@ a fixed time.
 3. Paths name things by handle: `{team}` and `{heap}` are slugs, `{item}` a key, `{username}` a username. Tags,
    parameters, options and views keep their IDs, checked against the heap in the path (a team tag's in any heap of
    its team). A team's own tags are listed, made and edited under `/teams/{team}/tags`, and a heap's tags list holds
-   both kinds apart. A handle that's malformed or
-   names nothing the caller can see is `404`. Responses carry both the `id` and the handle; request bodies refer to
-   other things by ID, since clients have the objects in hand. Creating a team or heap takes an optional slug,
-   derived from the name when left out.
+   both kinds apart. A handle that's malformed or names nothing the caller can see is `404`. Responses carry both
+   the `id` and the handle; request bodies refer to other things by ID, since clients have the objects in hand.
+   Creating a team or heap takes an optional slug, derived from the name when left out.
 4. Updates are `PATCH` with partial bodies and the expected `version` in `If-Match`. Endpoints that say what
    something should end up as (archive, unarchive) take no `If-Match`, so repeating or racing them is safe, and a
    write that is already applied succeeds (adding a member who is one, removing someone who isn't). Request bodies
@@ -910,11 +909,12 @@ principles; the exit codes are in `crates/cli/src/error.rs`, and the commands an
 section is how it maps onto this API.
 
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
-   task's steps (add, tick, drop, edit), an item's questions (ask, request, review, propose-done) and comments (add, list), tags
-   (list, add, edit, promote; a heap's, or the team's with `--team`), parameters (list, add, edit, archive, and
-   their options), heaps (list, pick a default) and signing in. Teams, members, heap settings and saved-view editing stay in the web app. `parameter edit` sends one
-   write per kind of change (name and weight, tags, option order), each at the version the last returned, because
-   the API has no single endpoint for them; a failure midway leaves the earlier ones saved and the CLI says which.
+   task's steps (add, tick, drop, edit), an item's questions (ask, request, review, propose-done) and comments (add,
+   list), tags (list, add, edit, promote; a heap's, or the team's with `--team`), parameters (list, add, edit,
+   archive, and their options), heaps (list, pick a default) and signing in. Teams, members, heap settings and
+   saved-view editing stay in the web app. `parameter edit` sends one write per kind of change (name and weight,
+   tags, option order), each at the version the last returned, because the API has no single endpoint for them; a
+   failure midway leaves the earlier ones saved and the CLI says which.
    A tag write that would merge heap tags is refused (exit 3) with the reach and the exact command that confirms it,
    with `--confirm <token>` ([API](#api) §11): the CLI has no prompts, and the command names the reach shown.
 2. **Naming.** Items are named by key ([Handles](#handles)), or by `team/heap/key` for another heap, which is a short
@@ -938,10 +938,11 @@ section is how it maps onto this API.
    a saved view and sends its settings, with any flag given replacing that setting. The optional text narrows the
    result on the client, as the web app's search does ([Search](#search)). `--tag` takes names, resolved against
    the heap's tags, its own and its team's: in a heap a name is one tag, so a name needs no kind. With
-   `--create-tags`, the names the heap doesn't have are added as heap tags first, right before the item is written, and they stay if that write fails. `item add` reads the list once more to say where the item
-   landed, a read `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` is
-   sent as one step add per step after the create, so a failure leaves the item with the steps sent so far, and the
-   CLI says which: a note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
+   `--create-tags`, the names the heap doesn't have are added as heap tags first, right before the item is written,
+   and they stay if that write fails. `item add` reads the list once more to say where the item landed, a read
+   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` is sent as one step
+   add per step after the create, so a failure leaves the item with the steps sent so far, and the CLI says which: a
+   note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
 6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens), with the machine's hostname as the
    device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
    answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,
