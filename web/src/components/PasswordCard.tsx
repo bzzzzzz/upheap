@@ -4,7 +4,8 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiProblem } from "../api/client";
-import { useChangePassword, useOidcProvider } from "../api/queries";
+import { useOidcProvider } from "../api/queries/auth";
+import { useChangePassword } from "../api/queries/signIns";
 import { compactButtonClass } from "./buttons";
 import { problemMessage, ProblemText } from "./ProblemText";
 import { useReturnFocus } from "./useConfirmation";

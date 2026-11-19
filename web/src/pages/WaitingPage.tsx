@@ -3,7 +3,9 @@ import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 import type { HeapRef } from "../api/client";
 import type { Question, WaitingRow } from "../api/schema";
-import { useHeap, useItem, useMe, useWaiting } from "../api/queries";
+import { useHeap } from "../api/queries/heaps";
+import { useItem } from "../api/queries/items";
+import { useMe, useWaiting } from "../api/queries/me";
 import { BlockerGoneRow, blockerGoneWord, type GoneBlocker } from "../components/BlockerGoneRow";
 import { kindWord, QuestionRow } from "../components/ItemQuestions";
 import { proposalSummary } from "../components/proposalSummary";

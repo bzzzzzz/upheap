@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Item } from "../api/schema";
-import { useMe, useMoveItems } from "../api/queries";
+import { useMe } from "../api/queries/me";
+import { useMoveItems } from "../api/queries/moves";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { MoveToHeap } from "./MoveToHeap";

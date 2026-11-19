@@ -3,7 +3,7 @@ import { useRef, useState, type FormEvent } from "react";
 
 import { ApiProblem } from "../api/client";
 import type { PasswordReset, PasswordResetAccount } from "../api/schema";
-import { usePasswordReset, useResetPassword } from "../api/queries";
+import { usePasswordReset, useResetPassword } from "../api/queries/passwordReset";
 import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard, authButtonClass } from "./AuthPage";

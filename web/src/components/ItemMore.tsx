@@ -17,7 +17,10 @@ import {
 
 import type { HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemState, Stage } from "../api/schema";
-import { useBlockerCandidates, useMe, useMoveItem, useUpdateItem } from "../api/queries";
+import { useUpdateItem } from "../api/queries/items";
+import { useBlockerCandidates } from "../api/queries/lists";
+import { useMe } from "../api/queries/me";
+import { useMoveItem } from "../api/queries/moves";
 import { BlockerSelect } from "./BlockerSelect";
 import { BlockReasonEditor } from "./BlockReasonEditor";
 import { blockerCandidatesFor } from "./blockerCandidates";

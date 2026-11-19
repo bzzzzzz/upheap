@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { HeapRef } from "../api/client";
 import type { AcrossHeapsItem, AcrossHeapsList, RankedList } from "../api/schema";
-import { useAcrossHeapsList, useMe } from "../api/queries";
+import { useAcrossHeapsList, useMe } from "../api/queries/me";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
 import { focusFirstRow, ItemRow, useRefocusStartedRow } from "../components/ItemRow";

@@ -3,7 +3,8 @@ import { useId } from "react";
 
 import type { HeapRef } from "../api/client";
 import type { ClosedGroup, Item } from "../api/schema";
-import { useClosedItems, useReopenItem } from "../api/queries";
+import { useReopenItem } from "../api/queries/items";
+import { useClosedItems } from "../api/queries/lists";
 import { becameWords, CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
 import { useUserName } from "../components/userName";
 

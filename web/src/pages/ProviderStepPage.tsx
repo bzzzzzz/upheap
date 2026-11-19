@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ApiProblem } from "../api/client";
-import { useOidcPending, useOidcProvider, useRegisterOidc } from "../api/queries";
+import { useOidcPending, useOidcProvider, useRegisterOidc } from "../api/queries/auth";
 import { Field } from "../components/Field";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard, authButtonClass, REGISTER_NOTE, USERNAME_HINT } from "./AuthPage";

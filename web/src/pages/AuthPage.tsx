@@ -2,13 +2,8 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Tab, TabList, TabPanel, Tabs, type Key } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
-import {
-  useOidcProvider,
-  usePasswordResetOptions,
-  useRegister,
-  useRequestPasswordReset,
-  useSignIn,
-} from "../api/queries";
+import { useOidcProvider, useRegister, useSignIn } from "../api/queries/auth";
+import { usePasswordResetOptions, useRequestPasswordReset } from "../api/queries/passwordReset";
 import { BASE } from "../basePath";
 import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";

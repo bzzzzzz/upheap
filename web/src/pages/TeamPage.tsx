@@ -5,20 +5,19 @@ import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
 import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
+import { useOidcProvider } from "../api/queries/auth";
+import { useCreateHeap, useUpdateHeap } from "../api/queries/heaps";
+import { useMe } from "../api/queries/me";
 import {
   isUserQuery,
   useAddMember,
-  useCreateHeap,
   useFindUsers,
   useLeaveTeam,
-  useMe,
-  useOidcProvider,
   useRemoveMember,
   useSetMemberRole,
   useTeam,
-  useUpdateHeap,
   useUpdateTeam,
-} from "../api/queries";
+} from "../api/queries/teams";
 import { useArchiveHeap } from "../components/archiveHeap";
 import { AuditHistory } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";

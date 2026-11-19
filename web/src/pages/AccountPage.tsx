@@ -2,7 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useId } from "react";
 import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
-import { useMe, useSignOut, useUpdateMe } from "../api/queries";
+import { useSignOut } from "../api/queries/auth";
+import { useMe, useUpdateMe } from "../api/queries/me";
 import { HistoryCard } from "../components/AccountHistory";
 import { compactButtonClass } from "../components/buttons";
 import { choiceButtonClass } from "../components/ChoiceButtons";

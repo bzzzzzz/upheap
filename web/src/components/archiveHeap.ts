@@ -1,5 +1,5 @@
 import type { Heap } from "../api/schema";
-import { useSetHeapArchived } from "../api/queries";
+import { useSetHeapArchived } from "../api/queries/heaps";
 import { problemMessage } from "./ProblemText";
 import { useToast } from "./UndoToast";
 

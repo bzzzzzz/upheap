@@ -4,7 +4,7 @@ import { Button, Checkbox, CheckboxGroup, Label, Radio, RadioGroup, TextArea, Te
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Item, Question, QuestionReplyRequest, WaitingStuck } from "../api/schema";
-import { useAskQuestion, useReplyToQuestion } from "../api/queries";
+import { useAskQuestion, useReplyToQuestion } from "../api/queries/questions";
 import { AskQuestion } from "./AskQuestion";
 import { BlockerGoneRow, blockerGoneWord, type GoneBlocker } from "./BlockerGoneRow";
 import { compactButtonClass } from "./buttons";

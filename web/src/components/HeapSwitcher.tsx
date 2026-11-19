@@ -16,7 +16,8 @@ import {
 
 import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
-import { useCreateHeap, useTeam } from "../api/queries";
+import { useCreateHeap } from "../api/queries/heaps";
+import { useTeam } from "../api/queries/teams";
 import { readFoldedTeams, readRecentHeaps, writeFoldedTeams } from "./heapSwitcherStorage";
 import { PHONE, TOUCH, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";

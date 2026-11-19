@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ApiProblem } from "../api/client";
 import type { Me } from "../api/schema";
-import { useCreateTeam, useMe } from "../api/queries";
+import { useMe } from "../api/queries/me";
+import { useCreateTeam } from "../api/queries/teams";
 import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";
 import { ProblemText, problemMessage } from "../components/ProblemText";
