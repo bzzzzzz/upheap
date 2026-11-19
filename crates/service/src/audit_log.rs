@@ -806,8 +806,9 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::Groups => "Groups",
         AuditField::By => "By",
         AuditField::EndsAt => "Ends",
+        AuditField::Merged => "Merged",
         // Never shown as one change of their own (see `reading`).
-        AuditField::ArchivedAt | AuditField::Parameters | AuditField::Merged => field.code(),
+        AuditField::ArchivedAt | AuditField::Parameters => field.code(),
     }
 }
 
@@ -848,6 +849,8 @@ enum Form {
     OptionLabels,
     /// A count of items: "1 item", "2 items".
     ItemCount,
+    /// Heap tags merged into a team tag: each heap's tag as it wrote it, and its items.
+    MergedTags,
     /// No short form, as a whole list view: the label says it changed.
     NoShort,
 }
@@ -860,8 +863,6 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
     match field {
         // `ends_at` is only on an invite link's creation, whose entries show no changes.
         AuditField::ArchivedAt | AuditField::EndsAt => Reading::Unshown,
-        // A tag's merge lists the heap tags it took in, for API clients; reading a tag's history shows them.
-        AuditField::Merged => Reading::Unshown,
         // Group membership entries say the groups in their phrase, and `by` is always the provider's groups.
         AuditField::Groups | AuditField::By => Reading::Unshown,
         // A heap priority change, the only entry about a user with a name, records the heap's for account history;
@@ -895,6 +896,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::Tags | AuditField::TagOrder => shown(Form::Tags),
         AuditField::Options | AuditField::ArchivedOptions => shown(Form::OptionLabels),
         AuditField::ItemsSwitched => shown(Form::ItemCount),
+        // Only on a tag's `TagMerged` entry: the heap tags it took in.
+        AuditField::Merged => shown(Form::MergedTags),
         AuditField::ListView => shown(Form::NoShort),
         AuditField::Title | AuditField::Description | AuditField::StepTitle | AuditField::StepContext => {
             Reading::Shown {
@@ -972,13 +975,23 @@ fn describe_value(form: Form, value: &Value, names: &Names, tz: &TimeZone) -> Op
                 .filter_map(|option| option.get("label").and_then(Value::as_str))
                 .map(str::to_owned),
         )?,
-        Form::ItemCount => match value.as_array()?.len() {
-            1 => "1 item".to_owned(),
-            n => format!("{n} items"),
-        },
+        Form::ItemCount => count_items(value.as_array()?.len()),
+        Form::MergedTags => join(value.as_array()?.iter().map(|merged| {
+            let heap = names.of_value(&merged["heap"], "Unknown heap");
+            let name = merged["name"].as_str().unwrap_or_default();
+            let items = merged["items"].as_u64().unwrap_or_default();
+            format!("{heap}'s \u{201c}{name}\u{201d} ({})", count_items(items as usize))
+        }))?,
         Form::NoShort => return None,
     };
     Some(text)
+}
+
+fn count_items(count: usize) -> String {
+    match count {
+        1 => "1 item".to_owned(),
+        n => format!("{n} items"),
+    }
 }
 
 fn join(values: impl Iterator<Item = String>) -> Option<String> {
@@ -1400,6 +1413,33 @@ mod tests {
 
         expect_that!(changes, len(eq(6)));
         expect_that!(changes, each(field!(AuditChange.text_diff, none())));
+    }
+
+    #[gtest]
+    fn a_tag_merge_shows_the_heap_tags_it_took_in() {
+        let launch = Uuid::from_u128(20);
+        let mut names = Names::default();
+        names.insert(launch, "Launch");
+        let merged = json!({ "merged": [
+            { "heap": launch.to_string(), "tag": Uuid::from_u128(21).to_string(), "name": "billing", "description": null, "items": 1 },
+            { "heap": Uuid::from_u128(22).to_string(), "tag": Uuid::from_u128(23).to_string(), "name": "Billing", "description": null, "items": 3 },
+        ] });
+
+        let changes = describe_changes(
+            &entry(AuditAction::TagMerged, EntityType::Tag, merged),
+            &names,
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![eq(&change(
+                "merged",
+                "Merged",
+                None,
+                Some("Launch's \u{201c}billing\u{201d} (1 item), Unknown heap's \u{201c}Billing\u{201d} (3 items)")
+            ))]
+        );
     }
 
     #[gtest]

@@ -6,6 +6,7 @@ import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
 import type { HeapSummary, MergeReach, Tag } from "../api/schema";
+import { type AuditScope } from "../api/queries/audit";
 import { useCreateTagIn, useUpdateTagIn, type TagScope } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
@@ -123,11 +124,13 @@ export function NewTagForm({ settings }: { settings: TagSettings }) {
 
 /**
  * A tag as a row: its name, its description and, for those who may edit it, an edit button that turns the row into
- * the form. Those who may not still find a heap tag's history in the row; editors find it in the form. In a heap, an
+ * the form. Those who may not still find the tag's history in the row; editors find it in the form. In a heap, an
  * editor's row also has a ⋯ with Make a team tag; `heap` is the heap the row is in.
  */
 export function TagRow({ tag, settings, heap }: { tag: Tag; settings: TagSettings; heap?: HeapSummary }) {
-  const historyHeap = settings.scope.kind === "heap" ? settings.scope.heap : undefined;
+  const historyScope: AuditScope =
+    settings.scope.kind === "heap" ? { heap: settings.scope.heap } : { team: settings.scope.team };
+  const showEntity = settings.scope.kind === "team";
   const canEdit = tag.allowed_actions.includes("edit");
   const [editing, setEditing] = useState(false);
   const { ref: editButton, returnFocus } = useReturnFocus<HTMLButtonElement>(editing);
@@ -140,7 +143,7 @@ export function TagRow({ tag, settings, heap }: { tag: Tag; settings: TagSetting
     return (
       <li className="bg-accent-soft p-3.5 sm:px-4 sm:pb-4">
         <TagForm tag={tag} settings={settings} onClose={close} />
-        {historyHeap && <HistoryDisclosure scope={{ heap: historyHeap }} entityId={tag.id} className="mt-2" />}
+        <HistoryDisclosure scope={historyScope} entityId={tag.id} showEntity={showEntity} className="mt-2" />
       </li>
     );
   }
@@ -170,7 +173,7 @@ export function TagRow({ tag, settings, heap }: { tag: Tag; settings: TagSetting
           </button>
         )}
       </div>
-      {!canEdit && historyHeap && <HistoryDisclosure scope={{ heap: historyHeap }} entityId={tag.id} />}
+      {!canEdit && <HistoryDisclosure scope={historyScope} entityId={tag.id} showEntity={showEntity} />}
     </li>
   );
 }
