@@ -443,7 +443,7 @@ team's tags (the team in the sidebar, then Tags).
 W1 · TAG PICKER (Add item, item's Tags field)            constant · core
 ┌──────────────────────────────┐
 │ [sec_                      ] │  typing filters
-│ security          team       │  heap's and team's tags together,
+│ security  [users icon]       │  heap's and team's tags together,
 │ secrets                      │  one list in name order, each team tag marked
 │ + Create heap tag "sec"      │  only when no tag has the name (rule 14)
 └──────────────────────────────┘
@@ -452,14 +452,14 @@ failed (the pick is undone, and why).
 Next likely action: pick, then close or pick another.
 ```
 
-The mark says which kind a tag is (rule 13). Nothing else differs: a team tag picked in heap A is picked and
+The mark, the users icon after the name, says which kind a tag is (rule 13). Nothing else differs: a team tag picked in heap A is picked and
 saved as a heap tag is. "Create" says it makes a heap tag, because the team's tags are made on the team.
 
 ```
 W2 · LIST: TAG FILTER, ROW CHIP                           daily · core
-Filter ▸ Tags:  [ ] billing   team
+Filter ▸ Tags:  [ ] billing   [users icon]
                 [ ] infra
-                [x] security  team
+                [x] security  [users icon]
 Row:  Rotate the certs        [security] [infra]
 States: a saved view names the tag, not its name, so after a rename it shows the new name (rule 10).
 Next likely action: pick another tag, or clear.

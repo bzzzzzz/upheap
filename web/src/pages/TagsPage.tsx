@@ -1,25 +1,23 @@
-import { Pencil } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
 
-import { ApiProblem, type HeapRef } from "../api/client";
-import type { Tag } from "../api/schema";
-import { useCreateTag, useTags, useUpdateTag } from "../api/queries/tags";
-import { HistoryDisclosure } from "../components/AuditHistory";
-import { compactButtonClass } from "../components/buttons";
-import { useReturnFocus } from "../components/useConfirmation";
+import type { HeapRef } from "../api/client";
+import { useMe } from "../api/queries/me";
+import { useTags } from "../api/queries/tags";
 import { RequestId } from "../components/RequestId";
+import { teamName } from "../components/teamName";
 import { plural } from "../components/words";
-import { cardClass, cardTitleClass, inputClass, introClass } from "./settingsForm";
-
-const chipClass =
-  "inline-flex h-6 max-w-full shrink-0 items-center truncate rounded-full border border-line bg-sunken px-[9px] text-[13px] font-medium text-ink max-sm:h-[26px] max-sm:px-2.5 max-sm:text-sm";
+import { cardTitleClass, introClass } from "./settingsForm";
+import { NewTagForm, TagRow, tagCardClass, type TagSettings } from "./TagSettings";
 
 /**
- * Any member can add tags, rename them and edit their descriptions, as `allowed_actions` says (not in an archived
- * heap). Tags can't be deleted. Each tag reads as a row; its edit button turns the row into a form.
+ * Any member can add tags, rename them and edit their descriptions, as `allowed_actions` says (a heap's tags not in an
+ * archived heap). Tags can't be deleted. Each tag reads as a row; its edit button turns the row into a form. Under
+ * the heap's tags, a card lists the team's, which follow their own `allowed_actions` (these allow editing from an
+ * archived heap), and links to the Team page, where they are made.
  */
 export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
   const tags = useTags(heapRef);
+  const { data: me } = useMe();
 
   // A failed refetch keeps the data, so what is on screen (and any draft in it) stays; the error shows only without it.
   if (!tags.data) {
@@ -36,228 +34,72 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
 
-  const { heap, allowed_actions } = tags.data;
+  const { heap, allowed_actions, team_tags: teamTags } = tags.data;
   const count = tags.data.tags.length;
+  const team = me?.teams.find((t) => t.slug === heapRef.team);
+  const name = me && team ? teamName(team, me) : heapRef.team;
+  const heapSettings: TagSettings = { scope: { kind: "heap", heap: heapRef }, teamName: name };
+  const teamSettings: TagSettings = { scope: { kind: "team", team: heapRef.team }, teamName: name };
   return (
     <section className="flex flex-col gap-4 sm:gap-6">
       <h2 className="sr-only">Tags</h2>
       <p className={introClass}>Tags group similar items in {heap.name}. They can be renamed but not deleted.</p>
-      {allowed_actions.includes("create") && <NewTagForm heapRef={heapRef} />}
+      {allowed_actions.includes("create") && <NewTagForm settings={heapSettings} />}
       {count === 0 ? (
-        <p className="py-12 text-center text-muted">No tags yet.</p>
+        <p className="py-12 text-center text-muted">No tags of this heap yet.</p>
       ) : (
-        <section aria-labelledby="all-tags" className="overflow-hidden rounded-[14px] border border-line bg-surface">
+        <section aria-labelledby="all-tags" className={tagCardClass}>
           <h3
             id="all-tags"
             className={`${cardTitleClass} border-b border-line px-3.5 pt-3.5 pb-2.5 sm:px-4 sm:pt-4 sm:pb-3`}
           >
-            {plural(count, "tag")}
+            {plural(count, "tag")} of this heap
           </h3>
           <ul className="divide-y divide-line">
             {tags.data.tags.map((tag) => (
-              <TagRow key={tag.id} tag={tag} heapRef={heapRef} />
+              <TagRow key={tag.id} tag={tag} settings={heapSettings} />
             ))}
           </ul>
         </section>
       )}
-    </section>
-  );
-}
-
-function NewTagForm({ heapRef }: { heapRef: HeapRef }) {
-  const create = useCreateTag(heapRef);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (name.trim() === "") return;
-    create.mutate(
-      { name, description: description || null },
-      {
-        onSuccess: () => {
-          setName("");
-          setDescription("");
-        },
-      },
-    );
-  };
-
-  return (
-    <section aria-labelledby="new-tag" className={cardClass}>
-      <h3 id="new-tag" className={`${cardTitleClass} mb-3`}>
-        New tag
-      </h3>
-      <form onSubmit={submit} className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-end">
-        <label className="flex flex-col gap-1.5 text-sm font-medium sm:max-w-[220px] sm:flex-[1_1_180px]">
-          <span className="max-sm:sr-only">Name</span>
-          <input
-            aria-label="New tag name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. compliance"
-            maxLength={50}
-            className={`${inputClass} font-normal`}
-          />
-        </label>
-        <label className="flex flex-col gap-1.5 text-sm font-medium sm:flex-[999_1_240px]">
-          <span className="max-sm:sr-only">Description</span>
-          <input
-            aria-label="New tag description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional: what belongs under this tag"
-            className={`${inputClass} font-normal`}
-          />
-        </label>
-        <button type="submit" disabled={create.isPending || name.trim() === ""} className={compactButtonClass.primary}>
-          Add tag
-        </button>
-        <TagProblem error={create.error} />
-      </form>
-    </section>
-  );
-}
-
-/**
- * A tag as a row: its name, its description and, for those who may edit it, an edit button that turns the row into
- * the form. Those who may not still find its history in the row; editors find it in the form.
- */
-function TagRow({ tag, heapRef }: { tag: Tag; heapRef: HeapRef }) {
-  const canEdit = tag.allowed_actions.includes("edit");
-  const [editing, setEditing] = useState(false);
-  const { ref: editButton, returnFocus } = useReturnFocus<HTMLButtonElement>(editing);
-  const close = () => {
-    returnFocus();
-    setEditing(false);
-  };
-
-  if (editing && canEdit) {
-    return (
-      <li className="bg-accent-soft p-3.5 sm:px-4 sm:pb-4">
-        <TagForm tag={tag} heapRef={heapRef} onClose={close} />
-        <HistoryDisclosure scope={{ heap: heapRef }} entityId={tag.id} className="mt-2" />
-      </li>
-    );
-  }
-  return (
-    <li className="py-2.5 pr-1 pl-3.5 sm:px-4 sm:py-3.5">
-      <div className="flex items-center gap-2 sm:gap-4">
-        <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-4">
-          <span className={chipClass}>{tag.name}</span>
-          {tag.description ? (
-            <span className="min-w-0 text-sm text-ink-soft">{tag.description}</span>
-          ) : (
-            <span className="text-sm text-muted italic">No description</span>
+      <section aria-labelledby="team-tags-card" className={tagCardClass}>
+        <div className="flex items-baseline justify-between gap-3 px-3.5 pt-3.5 pb-2.5 sm:px-4 sm:pt-4 sm:pb-3">
+          <h3 id="team-tags-card" className={cardTitleClass}>
+            {plural(teamTags.length, "tag")} of the team {name}
+          </h3>
+          {/* With no team tags, the line below links there instead. */}
+          {teamTags.length > 0 && (
+            <Link
+              to="/teams/$team"
+              params={{ team: heapRef.team }}
+              hash="team-tags"
+              className="shrink-0 text-sm text-ink-soft hover:text-ink hover:underline"
+            >
+              Team page
+            </Link>
           )}
         </div>
-        {canEdit && (
-          <button
-            ref={editButton}
-            type="button"
-            onClick={() => setEditing(true)}
-            aria-label={`Edit ${tag.name}`}
-            className={compactButtonClass.icon}
-          >
-            <Pencil aria-hidden="true" className="size-4" />
-          </button>
+        {teamTags.length === 0 ? (
+          <p className="border-t border-line px-3.5 py-3 text-sm text-muted sm:px-4">
+            {name} has no team tags yet. Make them on the{" "}
+            <Link
+              to="/teams/$team"
+              params={{ team: heapRef.team }}
+              hash="team-tags"
+              className="text-ink-soft underline hover:text-ink"
+            >
+              Team page
+            </Link>
+            .
+          </p>
+        ) : (
+          <ul className="divide-y divide-line border-t border-line">
+            {teamTags.map((tag) => (
+              <TagRow key={tag.id} tag={tag} settings={teamSettings} />
+            ))}
+          </ul>
         )}
-      </div>
-      {!canEdit && <HistoryDisclosure scope={{ heap: heapRef }} entityId={tag.id} />}
-    </li>
-  );
-}
-
-/**
- * The tag's name and description, saved together. Saving, Cancel or Escape close the form; Save with nothing changed
- * just closes it. A newer version from the server (someone else's edit) replaces what's typed.
- */
-function TagForm({ tag, heapRef, onClose }: { tag: Tag; heapRef: HeapRef; onClose: () => void }) {
-  const update = useUpdateTag(heapRef);
-  const [name, setName] = useState(tag.name);
-  const [description, setDescription] = useState(tag.description ?? "");
-  const [shownVersion, setShownVersion] = useState(tag.version);
-  if (shownVersion !== tag.version) {
-    setShownVersion(tag.version);
-    setName(tag.name);
-    setDescription(tag.description ?? "");
-  }
-  const changed = name !== tag.name || description !== (tag.description ?? "");
-
-  const save = (event: FormEvent) => {
-    event.preventDefault();
-    if (!changed) {
-      onClose();
-      return;
-    }
-    update.mutate(
-      {
-        tag,
-        patch: {
-          ...(name !== tag.name && { name }),
-          ...(description !== (tag.description ?? "") && { description: description || null }),
-        },
-      },
-      { onSuccess: onClose },
-    );
-  };
-
-  return (
-    <form
-      onSubmit={save}
-      onKeyDown={(e) => {
-        if (e.key !== "Escape") return;
-        e.preventDefault();
-        onClose();
-      }}
-      className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
-    >
-      <input
-        aria-label={`Name of tag ${tag.name}`}
-        value={name}
-        autoFocus
-        onChange={(e) => setName(e.target.value)}
-        maxLength={50}
-        className={`${inputClass} font-medium sm:max-w-[200px] sm:flex-[1_1_160px]`}
-      />
-      <input
-        aria-label={`Description of tag ${tag.name}`}
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder="No description"
-        className={`${inputClass} sm:flex-[999_1_240px]`}
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={update.isPending || name.trim() === ""}
-          className={`${compactButtonClass.primary} max-sm:flex-1`}
-        >
-          Save
-        </button>
-        <button type="button" onClick={onClose} className={compactButtonClass.quiet}>
-          Cancel
-        </button>
-      </div>
-      <TagProblem error={update.error} />
-    </form>
-  );
-}
-
-function TagProblem({ error }: { error: Error | null }) {
-  if (!error) return null;
-  const message =
-    error instanceof ApiProblem && error.code === "tag_name_taken"
-      ? "This heap already has a tag with that name."
-      : error instanceof ApiProblem && error.code === "version_conflict"
-        ? "Someone else changed this tag. It now shows their version."
-        : error.message;
-  return (
-    <>
-      <p role="alert" className="basis-full text-sm text-overdue-ink">
-        {message}
-      </p>
-      <RequestId error={error} />
-    </>
+      </section>
+    </section>
   );
 }

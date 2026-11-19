@@ -181,9 +181,13 @@ another can't be saved until that save ends. Everyone who can open Settings may 
 archived heaps too; an error shows under the card.
 
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
-Description, Add tag) and a card headed "{n} tags" whose rows read as the tag's name in a chip and its description
+Description, Add tag) and a card headed "{n} tags of this heap" whose rows read as the tag's name in a chip and its description
 (or "No description"); an edit button on the row turns it into the form (name, description, Save, Cancel, History),
-highlighted in the accent. **Parameters** opens its add form from a New parameter button, and gives each parameter a
+highlighted in the accent. A second card, "{n} tags of the team {team}", with a Team page link in its header, lists the
+team's tags the same way, without History, and edits them in place: the form adds "Changes in every heap of {team}."
+and saves through the team's tag (an archived heap too, as the server allows). Adding or renaming a heap tag to a team
+tag's name is refused under the field: "“security” is a team tag of Acme. Use it on items here instead."
+**Parameters** opens its add form from a New parameter button, and gives each parameter a
 card: the name with Rename, the weight, the options as a numbered list (↑ ↓ and Archive on each; Archive turns the
 row into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History
 and Archive parameter. Archived parameters are listed last. On a phone everything stacks in one column, main
@@ -291,7 +295,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    return, "Save as view…" goes in the Filters panel.
 7. One Filters panel holds what the list shows and its filters: Show (Open, In progress, Blocked as Pinned, Shown or
    Hidden, a dot on a changed one; shown blocked items in their own group or mixed in; Reminders to come, Hidden or
-   Shown, point 16), then Narrow down (tags, need,
+   Shown, point 16), then Narrow down (tags, with the team's tags beside the heap's and marked with the team icon, need,
    effort, impact, parameters, agent state, going to), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
    on a phone. The toolbar is search, Sort by, Filters and Select (point 19); on a phone it's search and an icon Filters button, with Select in the top bar, and the
    sheet, "Filters & sort", starts with the sort and ends with "Show 6 items". The Filters button counts the filters
@@ -549,7 +553,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     picked one clears it), the due choices (staying open while an exact date is chosen), the date or the parameter's
     options. A pick saves at once and closes it, and focus goes back to the value. Tags are the exception, as the one
     field with many values: a click turns the row itself into the tag picker, on every screen, its box focused, with
-    no popover or sheet. Its matches float under it on a wide screen and a tablet, and sit in the flow in a phone's
+    no popover or sheet. It offers the team's tags beside the heap's, marked with the team icon, and Create makes a heap
+    tag. Its matches float under it on a wide screen and a tablet, and sit in the flow in a phone's
     item sheet. Each add, create or remove saves at once and keeps it open for the next; it has no Done. Escape or
     Enter in the empty box closes it with focus back on the value (Escape with text only clears it), and so does
     leaving it, with focus left where it went. Without `edit` (a reader, an archived heap, a closed item) the values
@@ -852,7 +857,9 @@ follow a display-name change. Activity entries name the team as stored.
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
 Activity, Data) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
-Archive or Unarchive, History), then Members with a search whose results are a listbox under it (arrows move, Enter
+Archive or Unarchive, History), then Tags, the team's own, used in every heap of the team (a New team tag card, and
+rows that are edited in place, with "Changes in every heap of {team}." under the form; a name that heap tags of the team
+have is refused and names those heaps, as merging them isn't in the web app), then Members with a search whose results are a listbox under it (arrows move, Enter
 adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
 line saying why the only admin can't leave. Removing a member says what happens: "They lose access to Launch and
 Support. Their items stay." It's confirmed inline on a wide screen and in the member's actions sheet on a phone,

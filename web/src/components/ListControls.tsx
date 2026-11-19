@@ -4,7 +4,8 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import type { HeapRef } from "../api/client";
 import type { BlockedLayout, Me, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/schema";
 import { useParameters } from "../api/queries/parameters";
-import { useTags } from "../api/queries/tags";
+import { heapTags, useTags } from "../api/queries/tags";
+import { TeamTagMark } from "./TeamTagMark";
 import {
   AGENT_STATE_LABELS,
   AGENT_STATES,
@@ -237,7 +238,7 @@ export function FilterChips({
   const filters = [
     ...splitList(view.tag).map((id) => ({
       key: `tag:${id}`,
-      label: tags.data?.tags.find((tag) => tag.id === id)?.name ?? "A tag",
+      label: (tags.data && heapTags(tags.data).find((tag) => tag.id === id)?.name) ?? "A tag",
       remove: () => onChange({ ...view, tag: toggled(view.tag, id) }),
     })),
     ...splitList(view.need).map((need) => ({
@@ -426,6 +427,7 @@ function NarrowSection({
   const tags = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
   const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
   const chosenTags = splitList(view.tag);
+  const heapTagList = tags.data ? heapTags(tags.data) : [];
   const chosenNeeds = splitList(view.need);
   const chosenOptions = splitList(view.param);
   return (
@@ -446,14 +448,17 @@ function NarrowSection({
       )}
       {heapRef && (
         <PanelRow label="Tags (any)">
-          {tags.data?.tags.length === 0 && <span className="text-sm text-muted">This heap has no tags yet.</span>}
-          {tags.data?.tags.map((tag) => (
+          {tags.data && heapTagList.length === 0 && (
+            <span className="text-sm text-muted">This heap has no tags yet.</span>
+          )}
+          {heapTagList.map((tag) => (
             <Toggle
               key={tag.id}
               pressed={chosenTags.includes(tag.id)}
               onClick={() => onChange({ ...view, tag: toggled(view.tag, tag.id) })}
             >
               {tag.name}
+              {tag.kind === "team" && <TeamTagMark />}
             </Toggle>
           ))}
         </PanelRow>

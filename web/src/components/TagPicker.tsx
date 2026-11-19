@@ -3,14 +3,17 @@ import { Popover } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { ItemTag } from "../api/schema";
-import { useCreateTag, useTags } from "../api/queries/tags";
+import { useMe } from "../api/queries/me";
+import { heapTags, useCreateTagIn, useTags } from "../api/queries/tags";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 import { RequestId } from "./RequestId";
+import { teamName } from "./teamName";
+import { TeamTagMark } from "./TeamTagMark";
 
 const MAX_SUGGESTIONS = 6;
 
 /**
- * Picks tags for an item. Typing filters the heap's tags; Enter adds the highlighted one, or creates a new tag
+ * Picks tags for an item. Typing filters the heap's tags and its team's; Enter adds the highlighted one, or creates a new tag
  * when nothing matches the typed name exactly. Backspace in the empty input removes the last tag.
  *
  * Unless `inline`, the matches float in a popover under the field, or above it when there's no room below, outside
@@ -39,7 +42,8 @@ export function TagPicker({
   inputLabel?: string;
 }) {
   const tags = useTags(heapRef);
-  const create = useCreateTag(heapRef);
+  const create = useCreateTagIn({ kind: "heap", heap: heapRef });
+  const { data: me } = useMe();
   const listId = useId();
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -59,7 +63,7 @@ export function TagPicker({
   // Matching typed text against names the client already has is search, which stays on the client.
   const needle = query.toLowerCase();
   const chosen = new Set(value.map((tag) => tag.id));
-  const available = (tags.data?.tags ?? []).filter((tag) => !chosen.has(tag.id));
+  const available = (tags.data ? heapTags(tags.data) : []).filter((tag) => !chosen.has(tag.id));
   const exact = available.find((tag) => tag.name.toLowerCase() === needle);
   // The exact match comes first, so Enter on a full name picks that tag.
   const partial = available.filter((tag) => tag !== exact && tag.name.toLowerCase().includes(needle));
@@ -113,6 +117,16 @@ export function TagPicker({
     }
   };
 
+  const team = me?.teams.find((t) => t.slug === heapRef.team);
+  const createCode = create.error instanceof ApiProblem ? create.error.code : undefined;
+  let createProblem = create.error?.message;
+  if (createCode === "tag_name_taken") {
+    createProblem = "A tag with that name already exists.";
+  } else if (createCode === "tag_name_taken_by_team_tag") {
+    const name = me && team ? teamName(team, me) : heapRef.team;
+    createProblem = `“${query}” is a team tag of ${name}. Use it on items here instead.`;
+  }
+
   const optionId = (index: number) => `${listId}-${index}`;
 
   const list = (
@@ -135,6 +149,7 @@ export function TagPicker({
           className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
         >
           {tag.name}
+          {tag.kind === "team" && <TeamTagMark />}
           {tag.description && <span className="ml-2 text-xs text-muted">{tag.description}</span>}
         </li>
       ))}
@@ -149,7 +164,7 @@ export function TagPicker({
           }}
           className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
         >
-          Create tag “{query}”
+          Create heap tag “{query}”
         </li>
       )}
     </ul>
@@ -226,9 +241,7 @@ export function TagPicker({
       {create.error && (
         <>
           <p role="alert" className="text-xs text-overdue-ink">
-            {create.error instanceof ApiProblem && create.error.code === "tag_name_taken"
-              ? "A tag with that name already exists."
-              : create.error.message}
+            {createProblem}
           </p>
           <RequestId error={create.error} />
         </>

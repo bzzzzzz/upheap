@@ -16,6 +16,8 @@ export const tagsKey = (heap: HeapRef) => ["tags", heap.team, heap.heap] as cons
 export const parametersKey = (heap: HeapRef) => ["parameters", heap.team, heap.heap] as const;
 export const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.heap, key] as const;
 export const teamKey = (team: string) => ["team", team] as const;
+/** The team's own tags, under its key, so invalidating the team refreshes them too. */
+export const teamTagsKey = (team: string) => [...teamKey(team), "tags"] as const;
 /** Under the team's key, so invalidating the team refreshes its links too. */
 export const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 export const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
@@ -43,6 +45,26 @@ export function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: waitingKey }),
     // Starting, closing or sending on an item takes it off Your decision.
     queryClient.invalidateQueries({ queryKey: decisionsKey }),
+  ]);
+}
+
+/**
+ * After a team tag is made (`renamed` false) or edited: the team's tag list and every heap's tag list of the team,
+ * and after an edit also everything that shows tag names in the team's heaps.
+ */
+export function invalidateTeamTags(queryClient: QueryClient, team: string, renamed: boolean) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: teamTagsKey(team) }),
+    queryClient.invalidateQueries({ queryKey: ["tags", team] }),
+    ...(renamed
+      ? [
+          queryClient.invalidateQueries({ queryKey: ["ranked", team] }),
+          queryClient.invalidateQueries({ queryKey: ["closed", team] }),
+          queryClient.invalidateQueries({ queryKey: ["item"] }),
+          queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
+          queryClient.invalidateQueries({ queryKey: waitingKey }),
+        ]
+      : []),
   ]);
 }
 

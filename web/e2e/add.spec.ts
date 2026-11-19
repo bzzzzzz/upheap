@@ -39,7 +39,7 @@ async function addNewTag(page: Page, name: string) {
   const scope = phone ? page.getByRole("dialog", { name: "Tags", exact: true }) : addDialog(page);
   await scope.getByLabel("Add a tag").fill(name);
   // On a wider screen the matches float in a popover outside the dialog.
-  await (phone ? scope : page).getByRole("option", { name: `Create tag “${name}”` }).click();
+  await (phone ? scope : page).getByRole("option", { name: `Create heap tag “${name}”` }).click();
   if (phone) await scope.getByRole("button", { name: "Close", exact: true }).click();
   await expect(addDialog(page).getByRole("button", { name: `Remove tag ${name}` })).toBeVisible();
 }
