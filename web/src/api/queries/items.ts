@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
-import type { CreateItemRequest, Item, ItemPatchRequest } from "../schema";
+import type { CreateItemRequest, Item, ItemPatchRequest, ItemState } from "../schema";
 import {
   itemKey,
   invalidateHeap,
@@ -54,6 +54,25 @@ export function useCreateItem() {
 }
 
 /**
+ * Saves `patch` to `item` at the newest version known: its own, or the one an earlier save brought into the cache.
+ * Callers run it in the item edits' scope, so saves go one at a time.
+ */
+async function patchAtNewestVersion(
+  queryClient: QueryClient,
+  heap: HeapRef,
+  item: Pick<Item, "key" | "version">,
+  patch: ItemPatchRequest,
+) {
+  const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
+  return unwrap(
+    await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}", {
+      params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${version}"` } },
+      body: patch,
+    }),
+  );
+}
+
+/**
  * Saves one change to an item. The item pane saves each change as it's made, so two can follow each other before
  * the first is back: edits run one at a time (one `scope`), and each sends the newest version it knows of, its own
  * item's or the one the previous edit brought back. A change by someone else still fails with a conflict.
@@ -62,19 +81,43 @@ export function useUpdateItem(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: itemEditsScope,
-    mutationFn: async ({ item, patch }: { item: Item; patch: ItemPatchRequest }) => {
-      const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
-      return unwrap(
-        await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}", {
-          params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${version}"` } },
-          body: patch,
-        }),
-      );
-    },
+    mutationFn: ({ item, patch }: { item: Item; patch: ItemPatchRequest }) =>
+      patchAtNewestVersion(queryClient, heap, item, patch),
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     // Always re-render from the server, also after a conflict, so the row shows the latest version.
     onSettled: (_saved, _error, { patch }) => {
       if (patch.state !== undefined) invalidateOpenCounts(queryClient);
+      return invalidateHeap(queryClient, heap);
+    },
+  });
+}
+
+/**
+ * Moves several items to `state`, one after another in the order given, each as `useUpdateItem` saves one: in the item
+ * edits' scope, at the newest version known. An item the server refuses, or a request that fails, is listed with its
+ * error and the run goes on. Each saved item is written into the cache; the lists and open counts are fetched again
+ * once, after the last.
+ */
+export function useChangeStates(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    scope: itemEditsScope,
+    mutationFn: async ({ items, state }: { items: Item[]; state: ItemState }) => {
+      const changed: Item[] = [];
+      const refused: { item: Item; error: Error }[] = [];
+      for (const item of items) {
+        try {
+          const saved = await patchAtNewestVersion(queryClient, heap, item, { state });
+          queryClient.setQueryData(itemKey(heap, saved.key), saved);
+          changed.push(saved);
+        } catch (error) {
+          refused.push({ item, error: error instanceof Error ? error : new Error(String(error)) });
+        }
+      }
+      return { changed, refused };
+    },
+    onSettled: () => {
+      invalidateOpenCounts(queryClient);
       return invalidateHeap(queryClient, heap);
     },
   });
@@ -96,15 +139,8 @@ export function useUnblock(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: itemEditsScope,
-    mutationFn: async (item: Pick<Item, "key" | "version">) => {
-      const version = Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
-      return unwrap(
-        await api.PATCH("/api/v1/teams/{team}/heaps/{heap}/items/{item}", {
-          params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${version}"` } },
-          body: { state: "open" },
-        }),
-      );
-    },
+    mutationFn: (item: Pick<Item, "key" | "version">) =>
+      patchAtNewestVersion(queryClient, heap, item, { state: "open" }),
     onSuccess: (saved) => {
       queryClient.setQueryData(itemKey(heap, saved.key), saved);
       replaceListedItem(queryClient, heap, saved);

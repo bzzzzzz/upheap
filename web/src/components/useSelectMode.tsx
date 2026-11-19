@@ -33,7 +33,8 @@ export function useSelectMode(heapRef: HeapRef | undefined) {
       void go();
     },
     leave: () => {
-      if (selecting) router.history.back();
+      // Read when called: a run that was going when select mode was left must not go back a second time.
+      if (router.state.location.state.selecting) router.history.back();
     },
   };
 }

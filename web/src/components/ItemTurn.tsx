@@ -18,12 +18,12 @@ import { useConfirmation } from "./useConfirmation";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { RequestId } from "./RequestId";
 
-const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
+export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 const pickClass = `group flex min-h-9 items-center gap-2 text-sm ${focusClass} pointer-coarse:min-h-11`;
 const pickBoxClass =
   "flex size-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-accent group-data-[selected]:border-ink group-data-[selected]:bg-ink";
-const labelClass = "text-xs font-medium text-ink-soft";
-const fieldClass =
+export const labelClass = "text-xs font-medium text-ink-soft";
+export const fieldClass =
   "field-sizing-content min-h-20 w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-base outline-none focus:border-accent";
 
 /**
@@ -329,7 +329,7 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
 }
 
 /** One choice of how far, in the form's radio group. */
-function HowFar({ value, children }: { value: string; children: ReactNode }) {
+export function HowFar({ value, children }: { value: string; children: ReactNode }) {
   return (
     <Radio value={value} className={pickClass}>
       {({ isSelected }) => (

@@ -995,6 +995,159 @@ test("several items are selected in the list and moved to another heap at once",
   await expect(page.getByRole("link", { name: /^Pull the weeds/ })).toBeVisible();
 });
 
+/** Goes into select mode on a heap that has another heap, with the items titled `titles` selected. */
+async function selectItems(page: Page, titles: string[]) {
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  for (const title of titles) await page.getByRole("checkbox", { name: new RegExp(`^${title}`) }).click();
+  await expect(page.getByRole("status").filter({ hasText: `${titles.length} selected` })).toBeVisible();
+}
+
+/** Adds an item through the API and returns its key and version. */
+async function seedItem(page: Page, heapPath: string, title: string) {
+  const created = await page.request.post(`/api/v1${heapPath}/items`, {
+    headers: { "x-csrf-protection": "1" },
+    data: { title, need: "expected" },
+  });
+  expect(created.status()).toBe(201);
+  return (await created.json()) as { key: string; version: number };
+}
+
+const bulkButton = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
+const toastWith = (page: Page, text: string) => page.getByRole("status").filter({ hasText: text });
+
+test("selected items are marked done at once, after asking", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  for (const title of ["Water the plants", "Pull the weeds", "Rotate the certs"]) await addItem(page, title);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  await bulkButton(page, "Done").click();
+  const question = page.getByRole("alertdialog", { name: "Mark 2 items done?" });
+  await expect(question).toContainText("There is no Undo.");
+  await question.getByRole("button", { name: "Cancel" }).click();
+  await expect(bulkButton(page, "Done")).toBeFocused();
+
+  await bulkButton(page, "Done").click();
+  await question.getByRole("button", { name: "Mark 2 done", exact: true }).click();
+  await expect(toastWith(page, "Marked 2 items done.")).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Water the plants/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^Pull the weeds/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^Rotate the certs/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select", exact: true })).toBeVisible();
+});
+
+test("selected items are closed as won't do at once, after asking", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  for (const title of ["Water the plants", "Pull the weeds"]) await addItem(page, title);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  await bulkButton(page, "Won't do").click();
+  const question = page.getByRole("alertdialog", { name: "Close 2 items as won't do?" });
+  await question.getByRole("button", { name: "Close 2", exact: true }).click();
+  await expect(toastWith(page, "Closed 2 items as won't do.")).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Water the plants/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Select", exact: true })).toBeVisible();
+});
+
+test("selected items are started and paused at once, and stay selected", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  for (const title of ["Water the plants", "Pull the weeds"]) await addItem(page, title);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  await bulkButton(page, "Start").click();
+  await expect(toastWith(page, "Started 2 items.")).toBeVisible();
+  await expect(bulkButton(page, "Pause")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+
+  await bulkButton(page, "Pause").click();
+  await expect(toastWith(page, "Paused 2 items.")).toBeVisible();
+  await expect(bulkButton(page, "Start")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+});
+
+test("a blocked item starts with the others, without a question", async ({ page, heapPath }) => {
+  await addHeaps(page, ["Garden"]);
+  const blocked = await seedItem(page, heapPath, "Water the plants");
+  await seedItem(page, heapPath, "Pull the weeds");
+  const patched = await page.request.patch(`/api/v1${heapPath}/items/${blocked.key}`, {
+    headers: { "x-csrf-protection": "1", "if-match": `"${blocked.version}"` },
+    data: { state: "blocked", blocked_reason: "Waiting for the hose" },
+  });
+  expect(patched.status()).toBe(200);
+  await page.goto(heapPath);
+  await page.getByRole("button", { name: "Show it" }).click();
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  await bulkButton(page, "Start").click();
+  await expect(toastWith(page, "Started 2 items.")).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+});
+
+test("an item the server refuses is listed and stays selected", async ({ page, heapPath }) => {
+  await addHeaps(page, ["Garden"]);
+  await seedItem(page, heapPath, "Water the plants");
+  const stale = await seedItem(page, heapPath, "Pull the weeds");
+  await page.goto(heapPath);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  // Another edit makes the page's copy of one item stale.
+  const edited = await page.request.patch(`/api/v1${heapPath}/items/${stale.key}`, {
+    headers: { "x-csrf-protection": "1", "if-match": `"${stale.version}"` },
+    data: { effort: "l" },
+  });
+  expect(edited.status()).toBe(200);
+
+  await bulkButton(page, "Done").click();
+  await page
+    .getByRole("alertdialog", { name: "Mark 2 items done?" })
+    .getByRole("button", { name: "Mark 2 done" })
+    .click();
+  const panel = page.getByRole("dialog", { name: "Not changed", exact: true });
+  await expect(panel.getByRole("heading", { name: "Marked 1 of 2 items done." })).toBeVisible();
+  await expect(panel).toContainText("Not marked done:");
+  await expect(panel).toContainText("Pull the weeds — ");
+  await panel.getByRole("button", { name: "Close" }).filter({ hasText: "Close" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "1 selected" })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /^Pull the weeds/ })).toBeChecked();
+});
+
+test("selected items are sent to an agent at once", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  for (const title of ["Water the plants", "Pull the weeds"]) await addItem(page, title);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  await bulkButton(page, "Send to an agent…").click();
+  const form = page.getByRole("dialog", { name: "Send to an agent", exact: true });
+  await expect(form.getByRole("radio", { name: "One step" })).toBeChecked();
+  await form.locator("label").filter({ hasText: "All the way" }).click();
+  await form.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(toastWith(page, "Sent 2 items to an agent.")).toBeVisible();
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+});
+
+test("Start on a selection where an agent has an item asks first, and confirming starts them", async ({
+  page,
+  heapPath,
+}) => {
+  await addHeaps(page, ["Garden"]);
+  const held = await seedItem(page, heapPath, "Water the plants");
+  await seedItem(page, heapPath, "Pull the weeds");
+  const sent = await page.request.post(`/api/v1${heapPath}/items/${held.key}/turn`, {
+    headers: { "x-csrf-protection": "1" },
+    data: { reach: "one", line: null },
+  });
+  expect(sent.status()).toBe(201);
+  await page.goto(heapPath);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+
+  await bulkButton(page, "Start").click();
+  const question = page.getByRole("alertdialog", { name: "Start 2 items?" });
+  await expect(question).toContainText("An agent has 1 of them. This takes them back.");
+  await question.getByRole("button", { name: "Start 2", exact: true }).click();
+  await expect(toastWith(page, "Started 2 items.")).toBeVisible();
+  await expect(bulkButton(page, "Pause")).toBeVisible();
+});
+
 test("selecting from an open item leaves on the list, not on the item, after a move", async ({ page }) => {
   test.skip(
     page.viewportSize()?.width !== 1280,
