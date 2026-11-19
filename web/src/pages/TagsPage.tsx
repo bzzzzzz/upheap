@@ -75,14 +75,17 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
           <h3 id="team-tags-card" className={cardTitleClass}>
             {plural(teamTags.length, "tag")} of the team {name}
           </h3>
-          <Link
-            to="/teams/$team"
-            params={{ team: heapRef.team }}
-            hash="team-tags"
-            className="shrink-0 text-sm text-ink-soft hover:text-ink hover:underline"
-          >
-            Team page
-          </Link>
+          {/* With no team tags, the line below links there instead. */}
+          {teamTags.length > 0 && (
+            <Link
+              to="/teams/$team"
+              params={{ team: heapRef.team }}
+              hash="team-tags"
+              className="shrink-0 text-sm text-ink-soft hover:text-ink hover:underline"
+            >
+              Team page
+            </Link>
+          )}
         </div>
         {teamTags.length === 0 ? (
           <p className="border-t border-line px-3.5 py-3 text-sm text-muted sm:px-4">

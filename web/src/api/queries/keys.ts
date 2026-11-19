@@ -16,9 +16,9 @@ export const tagsKey = (heap: HeapRef) => ["tags", heap.team, heap.heap] as cons
 export const parametersKey = (heap: HeapRef) => ["parameters", heap.team, heap.heap] as const;
 export const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.heap, key] as const;
 export const teamKey = (team: string) => ["team", team] as const;
-/** Under the team's key, so invalidating the team refreshes its links too. */
 /** The team's own tags, under its key, so invalidating the team refreshes them too. */
 export const teamTagsKey = (team: string) => [...teamKey(team), "tags"] as const;
+/** Under the team's key, so invalidating the team refreshes its links too. */
 export const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 export const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
 export const waitingKey = ["waiting"] as const;

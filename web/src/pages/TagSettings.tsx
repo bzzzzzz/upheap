@@ -27,7 +27,7 @@ export type TagSettings = {
   teamName: string;
   /** Present for heap tags, which have History in this heap; a team tag has none. */
   historyHeap?: HeapRef;
-  /** Present for team tags: the edit form says the change reaches every heap of the team. */
+  /** True for team tags: the edit form says the change reaches every heap of the team. */
   team: boolean;
 };
 
