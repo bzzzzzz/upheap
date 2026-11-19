@@ -153,7 +153,7 @@ closed("a newer link cancels the earlier one", async ({ browser, closedServer },
     const page = await context.newPage();
     await page.goto(first);
     await expect(page.getByRole("heading", { name: "This reset link no longer works." })).toBeVisible();
-    await expect(page.getByText("A newer one was made, or the password was changed since.")).toBeVisible();
+    await expect(page.getByText("A newer one was made, or the password or address was changed since.")).toBeVisible();
     await expect(page.getByText("Ask whoever runs this server for a new one.")).toBeVisible();
     await expect(page.getByRole("link", { name: "Open Upheap" })).toHaveAttribute("href", "/");
     await expectFitsWidth(page, "The cancelled reset page");

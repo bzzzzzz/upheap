@@ -80,7 +80,7 @@ impl Services {
             return Ok(());
         };
         let made = self.make_reset_link(user, "mail").await?;
-        self.send_later(reset_mail(&made.user, mail, &made.token), made.user.id, "reset");
+        self.send_later(mail, reset_mail(&made.user, mail, &made.token), made.user.id, "reset");
         Ok(())
     }
 

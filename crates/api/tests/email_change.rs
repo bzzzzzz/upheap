@@ -266,6 +266,26 @@ async fn the_action_needs_mail_a_session_and_a_password() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn an_ask_for_a_taken_address_cancels_the_earlier_link() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let (app, session) = start(dir.path()).await?;
+    app.register("grace@example.test").await?;
+    ask_as(&app, &session, "hopper@example.test", PASSWORD).await?;
+    let first = token_in(&common::wait_for_mails(dir.path(), 1).await?[0])?;
+    ask_as(&app, &session, NEW_EMAIL, PASSWORD).await?;
+
+    // Act
+    let applied = apply(&app, &first).await?;
+
+    // Assert
+    expect_that!(applied.status, eq(StatusCode::CONFLICT));
+    expect_that!(problem_code(&applied), eq("email_change_cancelled"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_newer_ask_cancels_the_earlier_link() -> Result<()> {
     // Arrange
     let dir = tempfile::tempdir()?;

@@ -20,7 +20,7 @@ pub const RESET_TOKEN_LENGTH: usize = 43;
 pub enum ResetLinkError {
     #[error("this reset link was already used")]
     Used,
-    #[error("this reset link no longer works: a newer one was made, or the password was changed")]
+    #[error("this reset link no longer works: a newer one was made, or the password or address was changed")]
     Cancelled,
     #[error("this reset link has ended")]
     Ended,
@@ -66,7 +66,7 @@ pub enum ResetLinkState {
     /// A newer link was made for the user, or something else the link no longer fits was done: a password change
     /// cancels a reset link, and an applied address change cancels a reset link too.
     Cancelled,
-    /// Its hour passed.
+    /// Its lifetime passed.
     Ended,
 }
 

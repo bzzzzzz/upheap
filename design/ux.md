@@ -968,8 +968,8 @@ the state, and the page only shows it:
 - **Checking the link…** while it loads.
 - **Not a reset link** for any token the server doesn't know: "This isn't a reset link.", "Check that the whole link
   was copied, or ask whoever runs this server for a new one."
-- **Used**, **cancelled** (a newer link was made, or the password was changed: "A newer one was made, or the password
-  was changed since.") and **ended** say which, in a heading ("This reset link was already used.", "… no longer
+- **Used**, **cancelled** (a newer link was made, or the password or address was changed: "A newer one was made, or
+  the password or address was changed since.") and **ended** say which, in a heading ("This reset link was already used.", "… no longer
   works.", "… has ended."), then "Ask whoever runs this server for a new one."
 - **Working:** "Set a new password", "for Sam Ortiz (@sam)", the **New password** input (focused, hint "At least 10
   characters."), **Set password and sign in**, and under it "This signs you out everywhere else."
@@ -1000,8 +1000,8 @@ account?" and has one button, **Use this address**, disabled while it is pending
 - **Used**, **cancelled** (a newer link was asked for) and **ended** show the server's words as the heading ("This link
   was already used.", "This link no longer works: a newer one was asked for.", "This link has ended."), with **Go to
   your account**.
-- **Address taken** since it was asked for: the server's words as the heading, and no button. The link keeps working
-  until it ends.
+- **Address taken** since it was asked for: "Another account uses this address now, so your address stays the same."
+  as the heading, and no button. The link keeps working until it ends.
 
 Anything else is the server's message above the button. When the page changes state, focus moves to its heading.
 

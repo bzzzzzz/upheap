@@ -44,6 +44,16 @@ export function ChangeEmailPage({ token }: { token: string }) {
       </AuthCard>
     );
   }
+  if (error instanceof ApiProblem && error.code === "email_taken") {
+    return (
+      <AuthCard>
+        <Notice
+          moveFocus={moveFocus}
+          heading="Another account uses this address now, so your address stays the same."
+        />
+      </AuthCard>
+    );
+  }
   if (error instanceof ApiProblem && error.status === 409) {
     return (
       <AuthCard>

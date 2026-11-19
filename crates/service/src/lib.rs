@@ -159,10 +159,7 @@ impl Services {
 
     /// Sends `mail` in a task of its own, so the answer never waits for the provider. A failure is logged once, with
     /// the user it was for and never the mail, which holds a link. `kind` names the mail in the log.
-    pub(crate) fn send_later(&self, mail: mail::Mail, user_id: UserId, kind: &'static str) {
-        let Some(settings) = &self.mail else {
-            return;
-        };
+    pub(crate) fn send_later(&self, settings: &MailSettings, mail: mail::Mail, user_id: UserId, kind: &'static str) {
         let mailer = Arc::clone(&settings.mailer);
         tokio::spawn(async move {
             match mailer.send(mail).await {

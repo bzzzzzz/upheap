@@ -29,10 +29,10 @@ impl Services {
     /// with [`ServiceError::WrongPassword`], changes nothing and adds one to the account's sign-in count.
     ///
     /// With the right password the answer is the same whether another account has the address or not, so it
-    /// reveals nothing about accounts, and so is the history entry. For a free address, in one transaction, the
-    /// user's working email change links are cancelled and a new one made; after it commits the mail is sent in a
-    /// task of its own. For an address another account has, nothing is written to links and no mail is sent. The
-    /// user's own current address is treated as a free one.
+    /// reveals nothing about accounts, and so is the history entry. Either way, in one transaction, the user's
+    /// working email change links are cancelled. For a free address a new one is made, and after the transaction
+    /// commits the mail is sent in a task of its own. For an address another account has, no link is made and no
+    /// mail is sent. The user's own current address is treated as a free one.
     pub async fn request_email_change(
         &self,
         principal: Principal,
@@ -80,9 +80,9 @@ impl Services {
 
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         store::teams::lock_team(&txn, personal_team).await?;
-        let mut cancelled = 0;
+        // Cancelled for a taken address too, so the earlier link can't tell a taken address from a free one.
+        let cancelled = store::email_changes::cancel_working_email_change_links(&txn, user.id, now).await?;
         if !taken {
-            cancelled = store::email_changes::cancel_working_email_change_links(&txn, user.id, now).await?;
             let link = EmailChangeLink {
                 user_id: user.id,
                 new_email: new_email.clone(),
@@ -106,7 +106,12 @@ impl Services {
         txn.commit().await.map_err(StoreError::from)?;
 
         if !taken {
-            self.send_later(change_mail(&user, mail, &new_email, &token), user.id, "email change");
+            self.send_later(
+                mail,
+                change_mail(&user, mail, &new_email, &token),
+                user.id,
+                "email change",
+            );
         }
         tracing::info!(user_id = %user.id, cancelled_earlier = cancelled > 0, taken, "email change asked");
         Ok(())
@@ -175,7 +180,12 @@ impl Services {
         store::audit::insert_audit_entry(&txn, &entry).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        self.send_later(changed_mail(&user, mail, &link.new_email), user.id, "email changed");
+        self.send_later(
+            mail,
+            changed_mail(&user, mail, &link.new_email),
+            user.id,
+            "email changed",
+        );
         tracing::info!(user_id = %user.id, "email changed with a link");
         Ok(link.new_email)
     }
