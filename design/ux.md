@@ -358,9 +358,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Move to… opens the item's Move picker (The item §6) for the selection, with its own team's heaps only. Picking a
     heap asks first, "Move 3 items to Marketing?" and "Tags they don't have there are dropped.", with Cancel and
     "Move 3". When every item moves, the picker closes, select mode ends and the list stays where it is, with the
-    moved rows gone; the toast says "Moved 3
-    items to Marketing." (and "2 got new keys." when some keys changed) and offers **Open Marketing**. There is no
-    Undo. Each item moves on its own, so when some are refused (changed by someone else meanwhile, closed, the heap
+    moved rows gone; the toast says "Moved 3 items to Marketing." (and "2 got new keys." when some keys changed) and
+    offers **Open Marketing**. There is no Undo. Each item moves on its own, so when some are refused (changed by someone else meanwhile, closed, the heap
     archived) the picker shows "Moved 2 of 3 items to Marketing." (or "None of the 3 items moved."), then "Not
     moved:" and a line for each, "Title — reason", with **Close**; Close keeps select mode with only the refused
     rows selected, so Move can be tried again. A request that fails as a whole shows its error above the buttons, and
@@ -410,9 +409,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    <Heap>?" and "Tags it doesn't have there are dropped.", with Cancel and Move; in another team it asks "Move to
    <Heap> in <Team>?" and says "Tags and values <Team> doesn't have are dropped.", "Its history stays in <Old team>.
    People in <Team> see it from now on, and don't see its links to <Old team>." and, when someone else sent it to an
-   agent, "<Name> sent it to an agent. If <Name> isn't in <Team>, the turn is taken back." It can't be closed while it
-   saves. The item then opens in its new heap with the address replaced, so Back doesn't return to the old one, also
-   from All items, and a toast says "Moved to <Heap>." ("Moved to <Heap> in <Team>." across teams) and, when the new
+   agent, "<Name> sent it to an agent. If <Name> isn't in <Team>, the turn is taken back." (a turn nobody can be
+   traced for: "Its turn with an agent is taken back."). It can't be closed while it saves. The item then opens in
+   its new heap with the address replaced, so Back doesn't return to the old one, also from All items, and a toast says "Moved to <Heap>." ("Moved to <Heap> in <Team>." across teams) and, when the new
    heap already had its key, the key it got. There's no Undo, as the tags can't come back. A refusal shows in the
    picker, above the buttons; a note heaps were made from says it moves only within its team, and a heap the person
    can't move to any more says "You can't move items to that heap any more."

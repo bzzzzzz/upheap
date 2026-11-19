@@ -17,11 +17,11 @@ type MoveHeap = MoveTeam["heaps"][number];
  * The body of "Move to" (ux.md, The item §6): the heaps that aren't archived of each of `teams`, the first being the
  * item's own, one group per team that has any, the item's own heap marked and disabled, with a search field from
  * `LONG_LIST` heaps in all. A pick asks first, since tags the other heap lacks are dropped, and a pick in another team
- * says what else changes, and names `turnBy`, whose turn on the item may be taken back; Move calls `onMove` with the
- * picked heap and the label for the toast. With `teamOnly`, for a note heaps were made from, a line under the list
- * says why only its team is listed. A refusal shows in `error`, above the buttons,
- * and Cancel clears it. With `count`, it moves that many items, as the list's selection does (ux.md, The list §19), and
- * the confirm says so.
+ * says what else changes. `turnBy` names whoever else sent the item to an agent, whose turn may be taken back there;
+ * `null` is a turn nobody can be traced for, which is always taken back. Move calls `onMove` with the picked heap and
+ * the label for the toast. With `teamOnly`, for a note heaps were made from, a line under the list says why only its
+ * team is listed. A refusal shows in `error`, above the buttons, and Cancel clears it. With `count`, it moves that
+ * many items, as the list's selection does (ux.md, The list §19), and the confirm says so.
  */
 export function MoveToHeap({
   me,
@@ -42,7 +42,7 @@ export function MoveToHeap({
   error: Error | null;
   count?: number;
   teamOnly?: boolean;
-  turnBy?: string;
+  turnBy?: string | null;
   onMove: (to: HeapRef & { id: string }, label: string) => void;
   onReset: () => void;
 }) {
@@ -64,11 +64,7 @@ export function MoveToHeap({
     const to = teamName(picked.team, me);
     const across = count === undefined && picked.team.slug !== heapRef.team;
     const problem =
-      error instanceof ApiProblem && error.code === "note_has_heaps"
-        ? teamOnlyLine
-        : error instanceof ApiProblem && error.code === "heap_not_in_team"
-          ? "You can't move items to that heap any more."
-          : error && itemProblem(error);
+      error instanceof ApiProblem && error.code === "note_has_heaps" ? teamOnlyLine : error && itemProblem(error);
     return (
       <div className="flex flex-col gap-3">
         <h3 className="text-base font-semibold break-words">
@@ -84,7 +80,9 @@ export function MoveToHeap({
             </p>
             {turnBy !== undefined && (
               <p className="text-sm text-ink-soft">
-                {`${turnBy} sent it to an agent. If ${turnBy} isn't in ${to}, the turn is taken back.`}
+                {turnBy === null
+                  ? "Its turn with an agent is taken back."
+                  : `${turnBy} sent it to an agent. If ${turnBy} isn't in ${to}, the turn is taken back.`}
               </p>
             )}
           </>

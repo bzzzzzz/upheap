@@ -373,7 +373,9 @@ export function ItemActions({
             pending={move.isPending}
             error={move.error}
             teamOnly={noteTeamOnly}
-            turnBy={opener && opener.id !== me.user.id ? opener.display_name : undefined}
+            turnBy={
+              !item.turn ? undefined : !opener ? null : opener.id !== me.user.id ? opener.display_name : undefined
+            }
             onMove={(to, label) => void moveTo(to, label)}
             onReset={move.reset}
           />

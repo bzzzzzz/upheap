@@ -35,8 +35,8 @@ export function useBecame(heap: HeapRef) {
 }
 
 /**
- * Moves an item to another heap, `to`, of any team the person is in. It runs in the item edits' scope and sends the newest version it
- * knows of, as `useUpdateItem` does. The saved item is written under its new heap's key (it may have a new key there),
+ * Moves an item to another heap, `to`, of any team the person is in. It runs in the item edits' scope and sends the
+ * newest version it knows of, as `useUpdateItem` does. The saved item is written under its new heap's key (it may have a new key there),
  * and both heaps and the open counts are fetched again, whatever the outcome. Nothing waits for those fetches, so the
  * app can go to the item's new address at once; after a move the old address isn't fetched again, as its pane is
  * still open until then and would say the item doesn't exist.
