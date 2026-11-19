@@ -25,6 +25,8 @@ fn to_kind_dto(kind: AccountEventKind) -> AccountEventKindDto {
         AccountEventKind::AccountDeactivated => AccountEventKindDto::AccountDeactivated,
         AccountEventKind::AccountReactivated => AccountEventKindDto::AccountReactivated,
         AccountEventKind::HeapPriorityChanged => AccountEventKindDto::HeapPriorityChanged,
+        AccountEventKind::EmailChangeAsked => AccountEventKindDto::EmailChangeAsked,
+        AccountEventKind::EmailChanged => AccountEventKindDto::EmailChanged,
     }
 }
 

@@ -11,6 +11,7 @@ mod comments;
 mod data;
 mod dto;
 mod due_choices;
+mod email_changes;
 mod error;
 mod extract;
 mod health;
@@ -157,8 +158,10 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(users::routes())
         .merge(invites::routes())
         .merge(password_resets::routes())
+        .merge(email_changes::routes())
         .merge(me::sign_ins::routes())
         .merge(me::password::routes())
+        .merge(me::email::routes())
         .merge(me::personal_tokens::routes())
         .merge(me::history::routes());
     let v1 = v1.merge(turns::routes()).merge(work::routes());

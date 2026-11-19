@@ -177,7 +177,9 @@ export function PasswordCard({ inputClass }: { inputClass: string }) {
   );
 }
 
-function PasswordInput({
+/** `id` tells two forms' inputs apart when both are open; by default it comes from `autoComplete`. */
+export function PasswordInput({
+  id: givenId,
   label,
   inputRef,
   value,
@@ -188,6 +190,7 @@ function PasswordInput({
   error,
   inputClass,
 }: {
+  id?: string;
   label: string;
   inputRef: React.RefObject<HTMLInputElement | null>;
   value: string;
@@ -198,7 +201,7 @@ function PasswordInput({
   error: string | undefined;
   inputClass: string;
 }) {
-  const id = `${autoComplete}-input`;
+  const id = givenId ?? `${autoComplete}-input`;
   const noteId = `${id}-note`;
   const note = error ?? hint;
   return (

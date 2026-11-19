@@ -1,4 +1,5 @@
 use domain::comment::CommentError;
+use domain::email_change::EmailChangeLinkError;
 use domain::handle::Handle;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
@@ -128,6 +129,9 @@ pub enum ServiceError {
     /// A password reset link that can't be used to set a password.
     #[error(transparent)]
     ResetLink(#[from] ResetLinkError),
+    /// An email change link that can't be used to change an address.
+    #[error(transparent)]
+    EmailChangeLink(#[from] EmailChangeLinkError),
     /// The user to add to a team doesn't exist.
     #[error("there is no user {user_id}")]
     UserNotFound { user_id: UserId },

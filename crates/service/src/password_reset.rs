@@ -10,13 +10,11 @@ use domain::user::{Email, User, validate_new_password};
 use domain::validation::{Field, ValidationError};
 use domain::{Timestamp, UserId};
 use mail::Mail;
-use std::sync::Arc;
-
 use serde_json::json;
 use store::{StoreError, TransactionTrait};
 
 use crate::auth::{Login, SessionGrant, hash_password, random_token, run_blocking, sha256_hex};
-use crate::{Principal, ServiceError, Services};
+use crate::{MailSettings, Principal, ServiceError, Services};
 
 /// A reset link just made. It holds the only copy of the token.
 #[derive(Debug)]
@@ -82,15 +80,7 @@ impl Services {
             return Ok(());
         };
         let made = self.make_reset_link(user, "mail").await?;
-        let mail_to_send = reset_mail(&made.user, &mail.base_url, &made.token);
-        let mailer = Arc::clone(&mail.mailer);
-        let user_id = made.user.id;
-        tokio::spawn(async move {
-            match mailer.send(mail_to_send).await {
-                Ok(()) => tracing::info!(%user_id, "reset mail sent"),
-                Err(error) => tracing::warn!(%user_id, ?error, "can't send reset mail"),
-            }
-        });
+        self.send_later(reset_mail(&made.user, mail, &made.token), made.user.id, "reset");
         Ok(())
     }
 
@@ -245,9 +235,9 @@ fn corrupt_link(user_id: UserId, problem: &'static str) -> StoreError {
     StoreError::corrupt("password_reset_links", &user_id.to_string(), problem)
 }
 
-/// The mail with a reset link in it. `base_url` has no trailing slash.
-fn reset_mail(user: &User, base_url: &str, token: &ResetToken) -> Mail {
-    let host = base_url.split_once("://").map_or(base_url, |(_, rest)| rest);
+/// The mail with a reset link in it.
+fn reset_mail(user: &User, mail: &MailSettings, token: &ResetToken) -> Mail {
+    let (host, base_url) = (mail.host(), &mail.base_url);
     Mail {
         to: user.email.as_str().to_owned(),
         subject: "Reset your Upheap password".to_owned(),

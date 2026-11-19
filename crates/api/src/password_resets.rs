@@ -60,7 +60,7 @@ fn to_password_reset_dto(view: ResetLinkView) -> PasswordResetDto {
     responses((status = 200, description = "Whether reset links are mailed", body = PasswordResetOptionsDto)))]
 async fn password_reset_options(State(state): State<AppState>) -> Json<PasswordResetOptionsDto> {
     Json(PasswordResetOptionsDto {
-        by_mail: state.services.mails_reset_links(),
+        by_mail: state.services.has_mail(),
     })
 }
 

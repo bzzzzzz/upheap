@@ -1,5 +1,5 @@
-//! A user's account history: the password changes, reset links and resets recorded about them, the sign-in
-//! provider's turn-offs and turn-ons, and their own heap priority changes (architecture.md, Authentication and
+//! A user's account history: the password changes, reset links and resets recorded about them, the address changes
+//! asked and made, the sign-in provider's turn-offs and turn-ons, and their own heap priority changes (architecture.md, Authentication and
 //! authorization).
 //!
 //! The entries are the audit log's, in the user's personal team where their account entries go. The history is
@@ -38,17 +38,21 @@ pub enum AccountEventKind {
     AccountDeactivated,
     AccountReactivated,
     HeapPriorityChanged,
+    EmailChangeAsked,
+    EmailChanged,
 }
 
 impl AccountEventKind {
     /// Every kind. The actions the history reads are derived from it, so a new kind is read as soon as it's listed.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::PasswordChanged,
         Self::PasswordResetLinkMade,
         Self::PasswordReset,
         Self::AccountDeactivated,
         Self::AccountReactivated,
         Self::HeapPriorityChanged,
+        Self::EmailChangeAsked,
+        Self::EmailChanged,
     ];
 
     /// The audit action a kind is recorded as.
@@ -60,6 +64,8 @@ impl AccountEventKind {
             Self::AccountDeactivated => AuditAction::AccountDeactivated,
             Self::AccountReactivated => AuditAction::AccountReactivated,
             Self::HeapPriorityChanged => AuditAction::HeapPriorityChanged,
+            Self::EmailChangeAsked => AuditAction::EmailChangeAsked,
+            Self::EmailChanged => AuditAction::EmailChanged,
         }
     }
 
@@ -90,8 +96,8 @@ pub struct AccountEvent {
 }
 
 impl Services {
-    /// The caller's own password changes, reset links made for them, passwords set with one, the sign-in provider's
-    /// turn-offs and turn-ons, and heap priority changes, newest first.
+    /// The caller's own password changes, reset links made for them, passwords set with one, address changes asked
+    /// and made, the sign-in provider's turn-offs and turn-ons, and heap priority changes, newest first.
     /// `limit` is clamped to 1..=[`crate::audit_log::MAX_AUDIT_PAGE`].
     pub async fn list_account_history(
         &self,
@@ -210,6 +216,21 @@ fn describe_account_event(kind: AccountEventKind, diff: &Value, heap_name: Optio
                 _ => format!("You changed your priority for {heap}."),
             }
         }
+        (AccountEventKind::EmailChangeAsked, _) => {
+            let email = diff.get(AuditField::Email.code()).and_then(Value::as_str);
+            match email {
+                Some(email) => format!("Address change to {email} asked. A link was mailed there."),
+                None => "Address change asked. A link was mailed to the new address.".to_owned(),
+            }
+        }
+        (AccountEventKind::EmailChanged, _) => {
+            let email = diff.get(AuditField::Email.code());
+            let side = |side: &str| email.and_then(|email| email.get(side)).and_then(Value::as_str);
+            match (side("before"), side("after")) {
+                (Some(before), Some(after)) => format!("Address changed from {before} to {after}."),
+                _ => "Address changed.".to_owned(),
+            }
+        }
         (AccountEventKind::PasswordResetLinkMade, _) => {
             match diff.get(AuditField::MadeBy.code()).and_then(Value::as_str) {
                 Some("mail") => "Reset link sent by mail, as asked on the sign-in page.".to_owned(),
@@ -325,6 +346,33 @@ mod tests {
             ),
             "Reset link made by whoever runs the server."
         );
+    }
+
+    #[test]
+    fn an_address_change_asked_names_the_new_address() {
+        assert_eq!(
+            describe(
+                AccountEventKind::EmailChangeAsked,
+                json!({ "email": "new@example.com" })
+            ),
+            "Address change to new@example.com asked. A link was mailed there."
+        );
+        assert_eq!(
+            describe(AccountEventKind::EmailChangeAsked, json!({})),
+            "Address change asked. A link was mailed to the new address."
+        );
+    }
+
+    #[test]
+    fn an_address_changed_names_both_addresses() {
+        assert_eq!(
+            describe(
+                AccountEventKind::EmailChanged,
+                json!({ "email": { "before": "old@example.com", "after": "new@example.com" } })
+            ),
+            "Address changed from old@example.com to new@example.com."
+        );
+        assert_eq!(describe(AccountEventKind::EmailChanged, json!({})), "Address changed.");
     }
 
     #[test]

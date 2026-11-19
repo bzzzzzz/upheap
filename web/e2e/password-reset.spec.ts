@@ -114,7 +114,7 @@ closed(
 closed(
   "someone who forgot their password asks for a link by mail, sets a new one and is signed in",
   async ({ browser, closedServer }, testInfo) => {
-    const { forgetful, resetLink, mailedResetLink } = closedServer;
+    const { forgetful, resetLink, mailedLink } = closedServer;
     const context = await visitor(browser, testInfo, closedServer);
     try {
       const page = await context.newPage();
@@ -129,7 +129,7 @@ closed(
       );
       await expectFitsWidth(page, "Sign in with the reset form open");
 
-      const link = await mailedResetLink(forgetful.email, asked);
+      const link = await mailedLink(forgetful.email, asked, "reset");
       await page.goto(link);
       await page.getByLabel("New password").fill(NEW_PASSWORD);
       await page.getByRole("button", { name: "Set password and sign in" }).click();

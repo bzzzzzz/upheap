@@ -106,7 +106,7 @@ Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 | Wide, 1024 px and up | Sidebar: Waiting for me, Agents and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
 **More** on a phone holds Closed, Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
-its cards, which are Profile, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
+its cards, which are Profile, Email, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
 the Add button beside the heap name shows only from a tablet up.
 
 The sidebar and the rail list the heap's views (Open, Closed, Activity, Data, Settings) and, below them at the bottom,
@@ -986,9 +986,48 @@ Setting the password signs the browser in as the link's user, whoever it was sig
 sign-in of that user. It lands on `/`, which goes to the user's heap, replacing the reset page in the history, with
 the toast "Password changed. You're signed in.", shown once like the invite page's.
 
+## Change-email page
+
+`/change-email/{token}` is where an email change link leads, outside the app's shell in the Reset page's card, the same
+way at every width, and needs no sign-in: holding the link is the permission. Nothing is read when it opens, so a mail
+scanner that fetches the link changes nothing: the page asks "Use the address this link was mailed to for your Upheap
+account?" and has one button, **Use this address**, disabled while it is pending. What the server answers is the state:
+
+- **Changed:** "Your address is now sam@example.com." and **Go to your account**, which leads to `/account` and so to
+  sign-in when signed out. A signed-in tab reads `me` again for the new address.
+- **Not a working link** for a token the server doesn't know: "This isn't a working link.", "Check that the whole
+  link was copied."
+- **Used**, **cancelled** (a newer link was asked for) and **ended** show the server's words as the heading ("This link
+  was already used.", "This link no longer works: a newer one was asked for.", "This link has ended."), with **Go to
+  your account**.
+- **Address taken** since it was asked for: the server's words as the heading, and no button. The link keeps working
+  until it ends.
+
+Anything else is the server's message above the button. When the page changes state, focus moves to its heading.
+
+## Email
+
+Account's Email card sits between Profile and Password, and replaces Profile's Email row. It is there when the server's
+`change_email` action is: the user has a password and the server has mail set up. Without it the address stays a
+read-only row in Profile. Closed, it is the heading "Email" and a **Change** button on one row (wrapping on a narrow
+phone), and under them the address, which wraps. Pressing the button replaces it with a form: **New address**
+(focused) and **Current password**, then **Send link** and **Cancel**. Enter submits, and both buttons are disabled
+while it is pending. The password is sent as typed.
+
+Errors sit under their input, which is marked invalid and described by them, and focus moves there: "Enter your email
+address.", "That doesn't look like an email address.", "Enter your current password." and "That isn't your current
+password." Typed values stay, except Current password after a wrong one, which is cleared and focused. Too many tries,
+or anything else, is the server's message above the buttons. Cancel and Escape close the form, clear it and give focus
+back to Change.
+
+A success closes the form and shows a status line under the address, "Check sam@new.example. Your address changes when
+you open the link. It works for a day.", until the form is opened again or the page is left. Focus goes to Change. The
+address in the card stays the old one until the link is applied ([Change-email page](#change-email-page)); asking for an
+address another account has looks the same, and no mail comes.
+
 ## Password
 
-Account's Password card sits between Profile and Appearance. Closed, it is the heading "Password"
+Account's Password card sits between Email (or Profile, without one) and Appearance. Closed, it is the heading "Password"
 and a **Change password** button on one row (wrapping on a narrow phone). Pressing the button replaces it with a
 form: **Current password** (focused) and **New password** with the hint "At least 10 characters.", then **Change
 password** and **Cancel**, and under them "This signs you out of your other browsers and the command line." Enter in
@@ -1037,13 +1076,13 @@ Make a token. The secret lives only in the page's state, so leaving the page dro
 
 Account's last card, after Command line and before Sign out, is headed "History" and holds one collapsed disclosure,
 "Changes to your account", like the ones on a tag or a member, with the same chevron and touch target. It loads only
-when opened, and lists the user's password events, the sign-in provider turning the account off and back on, and
+when opened, and lists the user's password events, their address changes, the sign-in provider turning the account off and back on, and
 their own heap priority changes, newest first, each a sentence from the server and its time: "Password changed. 2
 other sign-ins ended.", "Reset link made by whoever runs the server.", "Reset link sent by mail, as asked on the
-sign-in page.", "Password set with a reset link. 3 sign-ins ended.", "Turned off by your sign-in provider. 3 sign-ins
+sign-in page.", "Password set with a reset link. 3 sign-ins ended.", "Address change to sam@new.example asked. A link was mailed there.", "Address changed from sam@old.example to sam@new.example.", "Turned off by your sign-in provider. 3 sign-ins
 ended.", "Turned back on by your sign-in provider." and "You changed your priority for Work from 1 to 3." It names no actor, since it is the user's own account, and holds
 nothing else of the account (not sign-ups or profile changes). Empty, it says "No account changes yet."; an error
-shows the server's message; **Load more** fetches the next page. A password change or a priority change adds its entry
+shows the server's message; **Load more** fetches the next page. A password change, an address change asked or a priority change adds its entry
 to an open History at once, and to a closed one by the time it is opened.
 
 ## Conflicts and errors

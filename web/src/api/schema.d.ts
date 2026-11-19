@@ -185,6 +185,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/email-changes/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Changes the account's email address to the one the link was mailed to, and mails a notice to the old address. The
+         *     link works once, for a day. Anyone holding the token may; no sign-in is needed, a session cookie or bearer token is
+         *     ignored, and it doesn't sign anyone in. There is no read of a link: applying is a `POST`, so a mail scanner that
+         *     opens the link changes nothing.
+         * @description The account's sessions and tokens are left alone. Its working password reset link is cancelled, since one mailed
+         *     to the old address must not keep working. Not rate limited, as a token can't be guessed.
+         */
+        post: operations["apply_email_change"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invites/{token}": {
         parameters: {
             query?: never;
@@ -288,6 +312,34 @@ export interface paths {
         get: operations["get_decisions"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/email-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Asks to change the caller's email address: a link is mailed to the new address, and the address changes when the
+         *     link is applied (`POST /email-changes/{token}`). Takes the session cookie only, never a bearer token: it is the
+         *     person's decision in their browser, as a password change is.
+         * @description Answers `202` with no body whether or not another account has the new address, so it reveals nothing about
+         *     accounts; the mail is sent after the answer. The link works once, for a day, and a newer ask cancels it. The
+         *     caller's own current address is treated like a free one.
+         *
+         *     Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
+         *     is checked. Unlike a password change, a success doesn't start the count over, so the limit, five in 15 minutes,
+         *     also limits the mails a session sends. A wrong current password also adds one to the account's sign-in attempts.
+         */
+        post: operations["request_email_change"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1767,7 +1819,7 @@ export interface components {
          * @description What happened to the account.
          * @enum {string}
          */
-        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "heap_priority_changed";
+        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "heap_priority_changed" | "email_change_asked" | "email_changed";
         /** @description A page of the caller's account history, newest first. */
         AccountHistory: {
             entries: components["schemas"]["AccountEvent"][];
@@ -1940,7 +1992,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2342,6 +2394,11 @@ export interface components {
              */
             date: string;
             firm: boolean;
+        };
+        /** @description What applying an email change link did. */
+        EmailChanged: {
+            /** @description The account's address now: the one the link was mailed to. */
+            email: string;
         };
         /** @enum {string} */
         Factor: "need" | "age" | "deadline" | "value" | "parameter" | "tags" | "blocks";
@@ -3150,7 +3207,7 @@ export interface components {
          * @description An action the caller can take on their account.
          * @enum {string}
          */
-        MeAction: "sign_out" | "create_team" | "manage_sign_ins" | "change_password";
+        MeAction: "sign_out" | "create_team" | "manage_sign_ins" | "change_password" | "change_email";
         MePatchRequest: {
             /** @description 1 to 100 characters. */
             display_name: string;
@@ -3793,6 +3850,13 @@ export interface components {
          * @enum {string}
          */
         RemindersMode: "hidden" | "shown";
+        /** @description What the signed-in user gives to ask for a change of their email address. */
+        RequestEmailChange: {
+            /** @description The password now in use, to show it is the user and not someone at their open browser. */
+            current_password: string;
+            /** @description The new address, which the link is mailed to. Trimmed and lowercased as at registration. */
+            email: string;
+        };
         /** @description The address a signed-out user asks a reset link for. */
         RequestPasswordReset: {
             /** @description The email address of the account. Any case. */
@@ -4515,6 +4579,7 @@ export type Due = components['schemas']['Due'];
 export type DueChoice = components['schemas']['DueChoice'];
 export type DueChoices = components['schemas']['DueChoices'];
 export type DueInput = components['schemas']['DueInput'];
+export type EmailChanged = components['schemas']['EmailChanged'];
 export type Factor = components['schemas']['Factor'];
 export type FinishRequest = components['schemas']['FinishRequest'];
 export type Goal = components['schemas']['Goal'];
@@ -4622,6 +4687,7 @@ export type ReachedRequest = components['schemas']['ReachedRequest'];
 export type RedoTurnRequest = components['schemas']['RedoTurnRequest'];
 export type RegisterRequest = components['schemas']['RegisterRequest'];
 export type RemindersMode = components['schemas']['RemindersMode'];
+export type RequestEmailChange = components['schemas']['RequestEmailChange'];
 export type RequestPasswordReset = components['schemas']['RequestPasswordReset'];
 export type ResultRow = components['schemas']['ResultRow'];
 export type Results = components['schemas']['Results'];
@@ -5030,6 +5096,56 @@ export interface operations {
             };
         };
     };
+    apply_email_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The link's secret: the last part of the link, `{origin}/change-email/{token}`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Changed; the answer is the new address */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailChanged"];
+                };
+            };
+            /** @description `csrf_header_missing` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such link, or the server has no mail set up */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `email_change_used`, `email_change_cancelled` or `email_change_ended`; or `email_taken` (`field` `email`): another account has the address by now, and the link keeps working */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     open_invite: {
         parameters: {
             query?: never;
@@ -5313,6 +5429,75 @@ export interface operations {
             /** @description `unauthenticated` */
             401: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    request_email_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestEmailChange"];
+            };
+        };
+        responses: {
+            /** @description Accepted; if the address is free, a link is on its way to it */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated`: no session cookie, or the request carried a bearer token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf_header_missing` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found`: the server has no mail set up */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_password` (`field` `current_password`); `field_empty` (`field` `current_password` or `email`); `email_invalid` (`field` `email`). Not counted as an attempt, except `wrong_password` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
+            429: {
+                headers: {
+                    /** @description Seconds until the session may try again */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {

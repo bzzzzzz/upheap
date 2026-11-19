@@ -10,6 +10,7 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use domain::ValidationError;
 use domain::comment::CommentError;
+use domain::email_change::EmailChangeLinkError;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
 use domain::oauth::AuthorizationError;
@@ -389,6 +390,15 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::ResetLink(ResetLinkError::Ended) => {
             simple(StatusCode::CONFLICT, "reset_link_ended", Category::Conflict)
+        }
+        ServiceError::EmailChangeLink(EmailChangeLinkError::Used) => {
+            simple(StatusCode::CONFLICT, "email_change_used", Category::Conflict)
+        }
+        ServiceError::EmailChangeLink(EmailChangeLinkError::Cancelled) => {
+            simple(StatusCode::CONFLICT, "email_change_cancelled", Category::Conflict)
+        }
+        ServiceError::EmailChangeLink(EmailChangeLinkError::Ended) => {
+            simple(StatusCode::CONFLICT, "email_change_ended", Category::Conflict)
         }
         ServiceError::UserNotFound { .. } => Classified {
             field: Some("user_id"),

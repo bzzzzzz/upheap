@@ -675,11 +675,30 @@ a fixed time.
      an unknown address get the same `202`, and the mail is sent after commit in a spawned task, so the answer
      doesn't wait for the provider. A send that fails is logged once and not retried; in-flight sends aren't drained
      at shutdown, and the user asks again. Without mail the endpoint is `404`.
+   - With mail set up and a local password, a user changes their **email address** from Account
+     (`POST /me/email-changes`, the session cookie only, as a password change is: it is the person's decision in their
+     browser). It takes the current password and the new address; the address changes only when a link mailed to the
+     new one is applied. Tries are counted per session in the password change's count with its limit, and unlike a
+     password change a success doesn't clear it, so it also limits the mails a session sends (five asks per 15
+     minutes); a wrong password adds one to the account's sign-in count. An address another account has gets the same
+     `202` and the same history entry as a free one, with no link and no mail, so the answer reveals nothing about
+     accounts. A free one is a row in `email_change_links` (a token's SHA-256, the user, the new address, an expiry a
+     day on), made in one transaction with the cancelling of the user's earlier working one. The table is apart from
+     `password_reset_links` because a link carries the address it changes to and has its own lifetime; the state and
+     the token are the reset link's (`domain::email_change`). Applying is `POST /email-changes/{token}`, no sign-in,
+     and there is no read of a link: mail scanners and previews fetch every link in a mail, so the link opens a page
+     with a button, and only the press, a `POST`, changes anything. Applying uses the link conditionally, sets the
+     address and bumps the user's version, and cancels the user's working reset link, since one mailed to the old
+     address must not keep working (a password change cancels it too, above), all in one transaction with its audit
+     entry; a unique-index refusal, the address taken since the ask, is `409 email_taken` and rolls the use back, so
+     the link keeps working. Sessions and tokens stay, and it signs no one in. After commit a notice goes to the old
+     address, in a spawned task like the other mails. Sign-in counts are keyed by address, so the new address starts
+     fresh. A password change or reset doesn't cancel a working email change link.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
      go: a password change, a reset link made for them (actor: the user, for the reason above), a password set with
-     one, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
+     one, an email change asked and one made, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
      reset link made for them), and their own heap priority change (recorded here and not in the heap's team, since
-     the value is private to them). `GET /me/history` reads exactly those six actions for the caller, with no way to name another user or
+     the value is private to them). `GET /me/history` reads exactly those eight actions for the caller, with no way to name another user or
      team, so only the user sees them and team admins never do. It is not the team log: the server words each entry
      as one sentence with no actor ("Password changed. 2 other sign-ins ended.", "You changed your priority for Work
      from 1 to 3.") from the entry's diff, and the sentence is made on reading, so a wording fix reaches old entries.
@@ -857,7 +876,7 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
 6. **Mail** is optional. The `mail` crate builds the mailer at startup from `MAIL_URL` and `MAIL_FROM` (lettre with
    rustls, no connection pool). SMTP always uses TLS, implicit or STARTTLS. `file://` and `log:` are the development
    transports, and the only places a mail's text is recorded. A failed send isn't retried. `service` sends the mail
-   it needs through that mailer (the reset mail, see Authentication).
+   it needs through that mailer (the reset mail, the email change link and the notice of a change, see Authentication).
 7. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. The database gets time first: a database that scales to zero (Neon) can
    take longer to wake than one try's 10 s timeout, so the connect is retried with backoff, every error alike, until

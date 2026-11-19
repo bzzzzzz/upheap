@@ -169,7 +169,9 @@ mod tests {
                 "password_reset_link_made",
                 "password_reset",
                 "account_deactivated",
-                "account_reactivated"
+                "account_reactivated",
+                "email_change_asked",
+                "email_changed"
             ]
         );
         pinned!(
@@ -245,7 +247,8 @@ mod tests {
                 "groups",
                 "by",
                 "archived_at",
-                "merged"
+                "merged",
+                "email"
             ]
         );
         pinned!(

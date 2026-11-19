@@ -49,6 +49,7 @@ mod m20261214_000043_scim;
 mod m20261215_000044_provider_logout;
 mod m20261216_000045_item_former_handles;
 mod m20261217_000046_tag_merges;
+mod m20261218_000047_email_change_links;
 
 pub struct Migrator;
 
@@ -102,6 +103,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261215_000044_provider_logout::Migration),
             Box::new(m20261216_000045_item_former_handles::Migration),
             Box::new(m20261217_000046_tag_merges::Migration),
+            Box::new(m20261218_000047_email_change_links::Migration),
         ]
     }
 }

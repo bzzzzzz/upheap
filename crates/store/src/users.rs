@@ -149,6 +149,18 @@ pub async fn update_user(
     Ok((result.rows_affected == 1).then_some(saved))
 }
 
+/// Sets the user's email and bumps their version, so an edit made from the old value fails with a conflict. Fails
+/// with [`StoreError::Duplicate`] when another user has the email.
+pub async fn set_email(db: &impl ConnectionTrait, user_id: UserId, email: &Email) -> Result<(), StoreError> {
+    users::Entity::update_many()
+        .col_expr(users::Column::Email, email.as_str().into())
+        .col_expr(users::Column::Version, Expr::col(users::Column::Version).add(1))
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .exec(db)
+        .await?;
+    Ok(())
+}
+
 /// Makes `%`, `_` and the escape character itself match literally in a `LIKE` pattern.
 fn escape_like(text: &str) -> String {
     text.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
