@@ -1049,7 +1049,8 @@ to an open History at once, and to a closed one by the time it is opened.
 6. **A banner when the connection is down.** A strip at the top of the shell, above everything, in the page flow.
    Offline says "You're offline. Changes won't save until the connection is back." Online but unable to reach the
    server says "Can't reach the server. Changes won't save until it's back." with **Try now**, which refetches what
-   is on screen. Offline wins when both hold. A phone gets the short "Won't save." The banner is a `status`, and says
+   is on screen. A proxy's own `502`, `503` or `504` (no problem body: the server process is down) counts as unable
+   to reach the server. Offline wins when both hold. A phone gets the short "Won't save." The banner is a `status`, and says
    nothing when it goes: the page refetches when the connection returns, on focus and on Try now. There is no queue:
    an edit while offline fails at once with "You're offline, so this wasn't saved.", and one that can't reach the
    server with "Couldn't reach the server, so this wasn't saved."; the draft stays where it was typed. Loaded data
