@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 
 import type { HeapRef } from "../api/client";
 import { useMe } from "../api/queries/me";
-import { useCreateTag, useCreateTeamTag, useTags, useUpdateTag, useUpdateTeamTag } from "../api/queries/tags";
+import { useTags } from "../api/queries/tags";
 import { RequestId } from "../components/RequestId";
 import { teamName } from "../components/teamName";
 import { plural } from "../components/words";
@@ -10,16 +10,14 @@ import { cardTitleClass, introClass } from "./settingsForm";
 import { NewTagForm, TagRow, tagCardClass, type TagSettings } from "./TagSettings";
 
 /**
- * Any member can add tags, rename them and edit their descriptions, as `allowed_actions` says (not in an archived
- * heap). Tags can't be deleted. Each tag reads as a row; its edit button turns the row into a form.
+ * Any member can add tags, rename them and edit their descriptions, as `allowed_actions` says (a heap's tags not in an
+ * archived heap). Tags can't be deleted. Each tag reads as a row; its edit button turns the row into a form. Under
+ * the heap's tags, a card lists the team's, which follow their own `allowed_actions` (these allow editing from an
+ * archived heap), and links to the Team page, where they are made.
  */
 export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
   const tags = useTags(heapRef);
   const { data: me } = useMe();
-  const createTag = useCreateTag(heapRef);
-  const updateTag = useUpdateTag(heapRef);
-  const createTeamTag = useCreateTeamTag(heapRef.team);
-  const updateTeamTag = useUpdateTeamTag(heapRef.team);
 
   // A failed refetch keeps the data, so what is on screen (and any draft in it) stays; the error shows only without it.
   if (!tags.data) {
@@ -40,14 +38,8 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
   const count = tags.data.tags.length;
   const team = me?.teams.find((t) => t.slug === heapRef.team);
   const name = me && team ? teamName(team, me) : heapRef.team;
-  const heapSettings: TagSettings = {
-    create: createTag,
-    update: updateTag,
-    teamName: name,
-    historyHeap: heapRef,
-    team: false,
-  };
-  const teamSettings: TagSettings = { create: createTeamTag, update: updateTeamTag, teamName: name, team: true };
+  const heapSettings: TagSettings = { scope: { kind: "heap", heap: heapRef }, teamName: name };
+  const teamSettings: TagSettings = { scope: { kind: "team", team: heapRef.team }, teamName: name };
   return (
     <section className="flex flex-col gap-4 sm:gap-6">
       <h2 className="sr-only">Tags</h2>

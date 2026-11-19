@@ -3,9 +3,11 @@ import { Popover } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { ItemTag } from "../api/schema";
-import { heapTags, useCreateTag, useTags } from "../api/queries/tags";
+import { useMe } from "../api/queries/me";
+import { heapTags, useCreateTagIn, useTags } from "../api/queries/tags";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 import { RequestId } from "./RequestId";
+import { teamName } from "./teamName";
 import { TeamTagMark } from "./TeamTagMark";
 
 const MAX_SUGGESTIONS = 6;
@@ -40,7 +42,8 @@ export function TagPicker({
   inputLabel?: string;
 }) {
   const tags = useTags(heapRef);
-  const create = useCreateTag(heapRef);
+  const create = useCreateTagIn({ kind: "heap", heap: heapRef });
+  const { data: me } = useMe();
   const listId = useId();
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -113,6 +116,16 @@ export function TagPicker({
       setText("");
     }
   };
+
+  const team = me?.teams.find((t) => t.slug === heapRef.team);
+  const createCode = create.error instanceof ApiProblem ? create.error.code : undefined;
+  let createProblem = create.error?.message;
+  if (createCode === "tag_name_taken") {
+    createProblem = "A tag with that name already exists.";
+  } else if (createCode === "tag_name_taken_by_team_tag") {
+    const name = me && team ? teamName(team, me) : heapRef.team;
+    createProblem = `“${query}” is a team tag of ${name}. Use it on items here instead.`;
+  }
 
   const optionId = (index: number) => `${listId}-${index}`;
 
@@ -228,9 +241,7 @@ export function TagPicker({
       {create.error && (
         <>
           <p role="alert" className="text-xs text-overdue-ink">
-            {create.error instanceof ApiProblem && create.error.code === "tag_name_taken"
-              ? "A tag with that name already exists."
-              : create.error.message}
+            {createProblem}
           </p>
           <RequestId error={create.error} />
         </>

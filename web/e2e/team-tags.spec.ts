@@ -2,7 +2,7 @@
 // place, and listed on a heap's Tags tab.
 import type { Page } from "@playwright/test";
 
-import { addHeaps, addItem, closeItem, expect, fieldButton, itemPane, openItem, row, test } from "./fixtures";
+import { addHeaps, addItem, closeItem, expect, fieldButton, goTo, itemPane, openItem, row, test } from "./fixtures";
 
 /** Puts the team tag `name` on the item `title` through the item's Tags field, picking it from what `typed` finds. */
 async function tagWith(page: Page, title: string, typed: string, name: string) {
@@ -60,23 +60,27 @@ test("a team tag is made on the Team page, used and filtered in two heaps, and r
     await filterByTeamTag(page, "security", tagged, plain);
   }
 
-  // Renaming it on the Team page says where it reaches.
-  await page.goto(`/teams/${team}`);
+  // Renaming it on the Team page says where it reaches. The page is reached from Beta's Tags tab, in the app, so
+  // what Beta's list already holds is kept, and only the rename's cache refresh can bring the new name to it.
+  await goTo(page, "Tags");
+  await page.getByRole("link", { name: "Team page" }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/teams/${team}#team-tags$`));
   await tags.getByRole("button", { name: "Edit security" }).click();
   await expect(tags.getByText(/^Changes in every heap of /)).toBeVisible();
   await tags.getByLabel("Name of tag security").fill("security-review");
   await tags.getByRole("button", { name: "Save" }).click();
   await expect(tags.getByRole("button", { name: "Edit security-review" })).toBeVisible();
 
-  for (const [path, tagged] of [
-    [heapA, "Alpha work"],
-    [heapB, "Beta work"],
-  ] as const) {
-    await page.goto(path);
-    await expect(row(page, tagged).getByRole("button", { name: "Filter by tag security-review" })).toBeVisible();
-  }
+  // Back in Beta through the Team page's link (its name differs on a phone, where the whole row is the link).
+  await page.getByRole("link", { name: /^(Open )?Beta\b/ }).click();
+  await expect(page).toHaveURL(new RegExp(`${heapB}$`));
+  await expect(row(page, "Beta work").getByRole("button", { name: "Filter by tag security-review" })).toBeVisible();
 
   // The heap's Tags tab lists it in the team's card.
-  await page.goto(`${heapB}/settings/tags`);
+  await goTo(page, "Tags");
   await expect(page.getByRole("region", { name: /^1 tag of the team / })).toContainText("security-review");
+
+  // Alpha, opened afresh, shows it too.
+  await page.goto(heapA);
+  await expect(row(page, "Alpha work").getByRole("button", { name: "Filter by tag security-review" })).toBeVisible();
 });

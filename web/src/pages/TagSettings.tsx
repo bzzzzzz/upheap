@@ -3,9 +3,9 @@
 import { Pencil } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
-import { ApiProblem, type HeapRef } from "../api/client";
+import { ApiProblem } from "../api/client";
 import type { Tag } from "../api/schema";
-import type { useCreateTag, useUpdateTag } from "../api/queries/tags";
+import { useCreateTagIn, useUpdateTagIn, type TagScope } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { useReturnFocus } from "../components/useConfirmation";
@@ -21,19 +21,15 @@ export const tagCardClass = "overflow-hidden rounded-[14px] border border-line b
 
 /** What differs between a heap's tags and a team's. */
 export type TagSettings = {
-  create: ReturnType<typeof useCreateTag>;
-  update: ReturnType<typeof useUpdateTag>;
+  scope: TagScope;
   /** The team's name as the page shows it, for the messages. */
   teamName: string;
-  /** Present for heap tags, which have History in this heap; a team tag has none. */
-  historyHeap?: HeapRef;
-  /** True for team tags: the edit form says the change reaches every heap of the team. */
-  team: boolean;
 };
 
 /** "New tag" for a heap's tags, "New team tag" for a team's; the inputs' names follow it. */
 export function NewTagForm({ settings }: { settings: TagSettings }) {
-  const { create, team } = settings;
+  const create = useCreateTagIn(settings.scope);
+  const team = settings.scope.kind === "team";
   const title = team ? "New team tag" : "New tag";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -93,7 +89,7 @@ export function NewTagForm({ settings }: { settings: TagSettings }) {
  * the form. Those who may not still find a heap tag's history in the row; editors find it in the form.
  */
 export function TagRow({ tag, settings }: { tag: Tag; settings: TagSettings }) {
-  const { historyHeap } = settings;
+  const historyHeap = settings.scope.kind === "heap" ? settings.scope.heap : undefined;
   const canEdit = tag.allowed_actions.includes("edit");
   const [editing, setEditing] = useState(false);
   const { ref: editButton, returnFocus } = useReturnFocus<HTMLButtonElement>(editing);
@@ -143,7 +139,9 @@ export function TagRow({ tag, settings }: { tag: Tag; settings: TagSettings }) {
  * just closes it. A newer version from the server (someone else's edit) replaces what's typed.
  */
 function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; onClose: () => void }) {
-  const { update, teamName, team } = settings;
+  const update = useUpdateTagIn(settings.scope);
+  const { teamName } = settings;
+  const team = settings.scope.kind === "team";
   const [name, setName] = useState(tag.name);
   const [description, setDescription] = useState(tag.description ?? "");
   const [shownVersion, setShownVersion] = useState(tag.version);
@@ -153,16 +151,10 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
     setDescription(tag.description ?? "");
   }
   const changed = name !== tag.name || description !== (tag.description ?? "");
-  // The mutation is the section's, shared by its rows: what a closed form left behind isn't shown in the next.
-  const close = () => {
-    update.reset();
-    onClose();
-  };
-
   const save = (event: FormEvent) => {
     event.preventDefault();
     if (!changed) {
-      close();
+      onClose();
       return;
     }
     update.mutate(
@@ -173,7 +165,7 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
           ...(description !== (tag.description ?? "") && { description: description || null }),
         },
       },
-      { onSuccess: close },
+      { onSuccess: onClose },
     );
   };
 
@@ -183,7 +175,7 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
         e.preventDefault();
-        close();
+        onClose();
       }}
       className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
     >
@@ -210,7 +202,7 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
         >
           Save
         </button>
-        <button type="button" onClick={close} className={compactButtonClass.quiet}>
+        <button type="button" onClick={onClose} className={compactButtonClass.quiet}>
           Cancel
         </button>
       </div>
@@ -223,7 +215,8 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
 /** Why a write was refused, under the field. `typed` is the name in the field. */
 function TagProblem({ error, typed, settings }: { error: Error | null; typed: string; settings: TagSettings }) {
   if (!error) return null;
-  const { team, teamName } = settings;
+  const { teamName } = settings;
+  const team = settings.scope.kind === "team";
   const code = error instanceof ApiProblem ? error.code : undefined;
   let message = error.message;
   if (code === "version_conflict") {

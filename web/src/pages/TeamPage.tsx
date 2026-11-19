@@ -8,7 +8,7 @@ import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
 import { useOidcProvider } from "../api/queries/auth";
 import { useCreateHeap, useUpdateHeap } from "../api/queries/heaps";
 import { useMe } from "../api/queries/me";
-import { useCreateTeamTag, useTeamTags, useUpdateTeamTag } from "../api/queries/tags";
+import { useTeamTags } from "../api/queries/tags";
 import {
   isUserQuery,
   useAddMember,
@@ -273,10 +273,8 @@ function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
  */
 function TagsSection({ team }: { team: Team }) {
   const tags = useTeamTags(team.slug);
-  const create = useCreateTeamTag(team.slug);
-  const update = useUpdateTeamTag(team.slug);
   const name = useTeamName(team);
-  const settings: TagSettings = { create, update, teamName: name, team: true };
+  const settings: TagSettings = { scope: { kind: "team", team: team.slug }, teamName: name };
 
   let body;
   if (!tags.data) {
