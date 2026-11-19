@@ -24,6 +24,7 @@ import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { Markdown } from "./Markdown";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { useOverListLink } from "./overList";
+import { RequestId } from "./RequestId";
 
 /**
  * A task's steps (ux.md, The item point 11): a checklist, inline at every width, each step saving as it's changed. An
@@ -150,9 +151,12 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
         />
       )}
       {failed?.error && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(failed.error)}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(failed.error)}
+          </p>
+          <RequestId error={failed.error} />
+        </>
       )}
     </section>
   );

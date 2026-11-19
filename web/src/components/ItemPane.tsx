@@ -3,12 +3,13 @@ import { Check, ChevronDown, ChevronUp, Link as LinkIcon, X } from "lucide-react
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
-import { ApiProblem, type HeapRef } from "../api/client";
+import { isNotFound, type HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemState, RankedItem } from "../api/schema";
 import { useItem, useUpdateItem } from "../api/queries/items";
 import { useMe } from "../api/queries/me";
 import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
+import { borderedClass, buttonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";
 import { ContextDraft, type FlushDraft } from "./contextDraft";
 import { shortLink, useCopyText } from "./copyLink";
@@ -31,6 +32,7 @@ import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useUserName } from "./userName";
+import { RequestId } from "./RequestId";
 
 /** How far the sheet (down) or the panel (right) is dragged by its top bar before letting go closes it. */
 const CLOSE_DISTANCE = 120;
@@ -54,6 +56,7 @@ export function ItemPane({
   previousKey,
   nextKey,
   walkLink,
+  listName,
   onClose,
 }: {
   heapRef: HeapRef;
@@ -64,6 +67,8 @@ export function ItemPane({
   previousKey: string | undefined;
   nextKey: string | undefined;
   walkLink?: (key: string) => LinkProps;
+  /** The name of the list behind the pane, for the button that closes a missing item; none where it's All items. */
+  listName?: string | undefined;
   onClose: () => void;
 }) {
   const item = useItem(heapRef, itemKey);
@@ -104,11 +109,26 @@ export function ItemPane({
   if (item.isPending) {
     body = <p className="py-12 text-center text-muted">Loading…</p>;
   } else if (item.isError) {
-    const missing = item.error instanceof ApiProblem && item.error.status === 404;
-    body = (
-      <p role="alert" className="py-12 text-center text-overdue-ink">
-        {missing ? "This item doesn't exist, or it's in a heap you can't see." : item.error.message}
-      </p>
+    body = isNotFound(item.error) ? (
+      <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+        <p className="text-xs text-muted">Not found</p>
+        <p className="font-semibold">This item isn't here</p>
+        <p className="text-sm text-ink-soft">It doesn't exist, or it's in a heap you can't see.</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className={`${buttonClass} ${borderedClass} mt-3 min-h-9 rounded-[9px] px-3.5`}
+        >
+          Back to {listName ?? "the list"}
+        </button>
+      </div>
+    ) : (
+      <>
+        <p role="alert" className="py-12 text-center text-overdue-ink">
+          {item.error.message}
+        </p>
+        <RequestId error={item.error} />
+      </>
     );
   } else {
     body = <ItemFields key={item.data.id} heapRef={heapRef} item={item.data} entry={entry} />;
@@ -429,9 +449,12 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
 
       <ItemFieldList heapRef={heapRef} item={item} entry={entry} canEdit={canEdit} save={save} />
       {update.error && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(update.error)}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(update.error)}
+          </p>
+          <RequestId error={update.error} />
+        </>
       )}
 
       <ContextDraft.Provider value={setFlushDraft}>

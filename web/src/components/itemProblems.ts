@@ -1,4 +1,5 @@
 import { ApiProblem } from "../api/client";
+import { NETWORK_EDIT_MESSAGES } from "./ProblemText";
 
 /** Messages for the errors a change to an item can bring back, by code. */
 const PROBLEM_MESSAGES: Record<string, string> = {
@@ -26,6 +27,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   pick_invalid: "That pick doesn't fit this question. Pick again.",
   heap_archived: "That heap was archived meanwhile.",
   heap_not_in_team: "That heap isn't in this item's team any more.",
+  ...NETWORK_EDIT_MESSAGES,
   reopen_window_expired: "This item was closed more than a week ago, so it can't be reopened.",
 };
 

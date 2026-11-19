@@ -3,11 +3,13 @@ import { useMe } from "../api/queries/me";
 import { useTeam } from "../api/queries/teams";
 import { AuditHistory } from "../components/AuditHistory";
 import { teamName } from "../components/teamName";
-import type { HeapRef } from "../api/client";
+import { isNotFound, type HeapRef } from "../api/client";
+import { HeapNotFound, TeamNotFound } from "../components/NotFound";
 
 /** Everything that happened in a heap that the caller may see, newest first. */
 export function HeapActivityPage({ heap: heapRef }: { heap: HeapRef }) {
   const heap = useHeap(heapRef);
+  if (heap.isError && isNotFound(heap.error)) return <HeapNotFound />;
   return (
     <ActivityLayout
       title="Activity"
@@ -22,6 +24,7 @@ export function HeapActivityPage({ heap: heapRef }: { heap: HeapRef }) {
 export function TeamActivityPage({ team: slug }: { team: string }) {
   const team = useTeam(slug);
   const { data: me } = useMe();
+  if (team.isError && isNotFound(team.error)) return <TeamNotFound />;
   return (
     <ActivityLayout
       title="Team activity"

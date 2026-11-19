@@ -10,6 +10,7 @@ import { compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
 import { useConfirmation } from "./useConfirmation";
+import { RequestId } from "./RequestId";
 
 const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 
@@ -100,9 +101,12 @@ export function StuckRow({
         )
       )}
       {error && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(error)}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(error)}
+          </p>
+          <RequestId error={error} />
+        </>
       )}
     </li>
   );

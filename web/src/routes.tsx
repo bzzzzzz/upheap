@@ -15,7 +15,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 
-import { isUnauthenticated } from "./api/client";
+import { isNotFound, isUnauthenticated } from "./api/client";
 import type { OAuthAuthorizationRequest } from "./api/schema";
 import { useAuthorizationCheck, useSignOut } from "./api/queries/auth";
 import { useHeap } from "./api/queries/heaps";
@@ -23,6 +23,8 @@ import { meQuery } from "./api/queries/me";
 import { BASE } from "./basePath";
 import { leaveAfterSignOut, takeKeptPage } from "./signOutRedirect";
 import { parseAcrossSearch, parseListSearch } from "./components/listView";
+import { HeapNotFound, NotFound } from "./components/NotFound";
+import { RequestId } from "./components/RequestId";
 import { AllItemsPage } from "./pages/AllItemsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
@@ -376,10 +378,14 @@ const heapSettingsRoute = createRoute({
     // A failed refetch keeps the heap it had, so the page stays; the error shows only when there's no heap to show.
     if (record.data) return <HeapSettingsLayout key={record.data.id} heap={{ team, heap }} />;
     if (record.isError) {
+      if (isNotFound(record.error)) return <HeapNotFound />;
       return (
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {record.error.message}
-        </p>
+        <>
+          <p role="alert" className="py-16 text-center text-overdue-ink">
+            {record.error.message}
+          </p>
+          <RequestId error={record.error} className="justify-center" />
+        </>
       );
     }
     return <p className="py-16 text-center text-muted">Loading…</p>;
@@ -568,6 +574,18 @@ const allRoute = createRoute({
 
 const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/account", component: AccountPage });
 
+/** Any address nothing else answers. Under the app, so it signs in first and shows inside the shell. */
+const notFoundRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "$",
+  component: () => (
+    <NotFound
+      heading="Page not found"
+      line="There's nothing at this address. Check the link, or start again from Waiting for me."
+    />
+  ),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   providerStepRoute,
@@ -599,6 +617,7 @@ const routeTree = rootRoute.addChildren([
     agentsRoute,
     allRoute,
     accountRoute,
+    notFoundRoute,
   ]),
 ]);
 

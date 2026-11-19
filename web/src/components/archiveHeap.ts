@@ -1,3 +1,4 @@
+import { requestIdOf } from "../api/client";
 import type { Heap } from "../api/schema";
 import { useSetHeapArchived } from "../api/queries/heaps";
 import { problemMessage } from "./ProblemText";
@@ -25,7 +26,7 @@ export function useArchiveHeap(team: string) {
             mutation.mutateAsync({ heap: archived, archived: false }).then(undefined, (error: Error) => {
               // Said once, in the toast: not again under the button the archive came from.
               mutation.reset();
-              setToast({ message: problemMessage(error), error: true });
+              setToast({ message: problemMessage(error), error: true, requestId: requestIdOf(error) });
             }),
         }),
       // The error shows under the button, from `mutation.error`.

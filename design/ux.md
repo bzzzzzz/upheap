@@ -1041,6 +1041,24 @@ to an open History at once, and to a closed one by the time it is opened.
    last user's cached data; signing in returns them to the page.
 4. Other item errors show inline in the pane with the server's message: a closed item only changes state, a reopen
    past its week, an option archived meanwhile.
+5. **Not found.** An address nothing answers, a team, or a heap the server answers `404` for shows a page in the
+   content column, inside the shell: a muted "Not found", a heading ("Page not found", "This team isn't here",
+   "This heap isn't here"), one line, and **Go to Waiting for me**; a team or heap also gets a quiet **See your teams**
+   link. A missing and a not-yours team or heap read the same, as the server's `404` does. A missing item stays in
+   the item pane ("This item isn't here", "It doesn't exist, or it's in a heap you can't see.") with a button back to
+   the list, named for the heap ("Back to Work"; "Back to the list" on All items), and the list behind stays.
+6. **A banner when the connection is down.** A strip at the top of the shell, above everything, in the page flow.
+   Offline says "You're offline. Changes won't save until the connection is back." Online but unable to reach the
+   server says "Can't reach the server. Changes won't save until it's back." with **Try now**, which refetches what
+   is on screen. A proxy's own `502`, `503` or `504` (no problem body: the server process is down) counts as unable
+   to reach the server. Offline wins when both hold. A phone gets the short "Won't save." The banner is a `status`, and says
+   nothing when it goes: the page refetches when the connection returns, on focus and on Try now. There is no queue:
+   an edit while offline fails at once with "You're offline, so this wasn't saved.", and one that can't reach the
+   server with "Couldn't reach the server, so this wasn't saved."; the draft stays where it was typed. Loaded data
+   stays on screen; a page not visited yet waits while offline.
+7. **A server error shows its request ID** under its words, for every `5xx` the server sent one with: the ID in
+   monospace, never cut (it wraps on a phone), plain text to select, and a **Copy** button that reads "Copied" for two
+   seconds. A toast with an ID stays until it is closed. Offline and unreachable errors have no ID.
 
 ## Rules
 

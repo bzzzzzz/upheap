@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 
-import { ApiProblem } from "../api/client";
+import { ApiProblem, requestIdOf } from "../api/client";
 import type { Item } from "../api/schema";
 import { compactButtonClass } from "./buttons";
 import { useRegisterDraft, type FlushDraft } from "./contextDraft";
@@ -8,6 +8,7 @@ import { itemProblem } from "./itemProblems";
 import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
 import { Markdown } from "./Markdown";
 import { PHONE, useMedia } from "./media";
+import { RequestId } from "./RequestId";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
@@ -72,6 +73,7 @@ export function ItemContext({
               ? `Your context for “${item.title}” wasn't saved: someone else changed it meanwhile.`
               : `Your context for “${item.title}” wasn't saved${e instanceof ApiProblem && e.status === 409 ? ": someone else changed the item meanwhile." : `. ${itemProblem(e)}`}`,
           error: true,
+          requestId: e ? requestIdOf(e) : undefined,
         })
       }
       onSaver={setSaver}
@@ -165,7 +167,7 @@ function ContextForm({
   // The saved text the draft was started from, or last saved over: what a different saved text is compared with.
   const [opened, setOpened] = useState(context);
   const [conflict, setConflict] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
   const [pending, setPending] = useState(false);
   // What the cleanup and the registered save read, as they outlive the render they were made in.
   const latest = useRef({ text, opened, context, canEdit, onSave, onLeaveFailed, pending: false, settled: false });
@@ -202,7 +204,7 @@ function ContextForm({
     try {
       await now.onSave(sent);
     } catch (e) {
-      setError(itemProblem(e instanceof Error ? e : new Error(String(e))));
+      setError(e instanceof Error ? e : new Error(String(e)));
       return false;
     } finally {
       now.pending = false;
@@ -331,9 +333,10 @@ function ContextForm({
       )}
       {error !== null && (
         <p role="alert" className="text-sm text-overdue-ink">
-          {error}
+          {itemProblem(error)}
         </p>
       )}
+      <RequestId error={error} />
     </div>
   );
 }
