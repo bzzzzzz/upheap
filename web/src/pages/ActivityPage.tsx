@@ -1,11 +1,14 @@
 import { useHeap, useMe, useTeam } from "../api/queries";
 import { AuditHistory } from "../components/AuditHistory";
 import { teamName } from "../components/teamName";
-import type { HeapRef } from "../api/client";
+import { isNotFound, type HeapRef } from "../api/client";
+import { NotFound } from "../components/NotFound";
 
 /** Everything that happened in a heap that the caller may see, newest first. */
 export function HeapActivityPage({ heap: heapRef }: { heap: HeapRef }) {
   const heap = useHeap(heapRef);
+  if (heap.isError && isNotFound(heap.error))
+    return <NotFound heading="This heap isn't here" line="It doesn't exist, or you're not in its team." teamsLink />;
   return (
     <ActivityLayout
       title="Activity"
@@ -20,6 +23,8 @@ export function HeapActivityPage({ heap: heapRef }: { heap: HeapRef }) {
 export function TeamActivityPage({ team: slug }: { team: string }) {
   const team = useTeam(slug);
   const { data: me } = useMe();
+  if (team.isError && isNotFound(team.error))
+    return <NotFound heading="This team isn't here" line="It doesn't exist, or you're not in it." teamsLink />;
   return (
     <ActivityLayout
       title="Team activity"

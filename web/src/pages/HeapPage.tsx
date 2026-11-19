@@ -2,7 +2,7 @@ import { type NavigateOptions } from "@tanstack/react-router";
 import { AnimatePresence } from "motion/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { ApiProblem, type HeapRef } from "../api/client";
+import { ApiProblem, isNotFound, requestIdOf, type HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, RankedItem, RankedList } from "../api/schema";
 import { useMe, useRankedList, useUpdateItem } from "../api/queries";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
@@ -38,6 +38,8 @@ import {
   viewChanges,
   type ListSearch,
 } from "../components/listView";
+import { NotFound } from "../components/NotFound";
+import { RequestId } from "../components/RequestId";
 
 /**
  * The main view: what to work on, highest priority first. The server applies the view (`view`, from the URL); the
@@ -137,6 +139,7 @@ export function HeapPage({
       listed={index >= 0}
       previousKey={index > 0 ? onScreen[index - 1]?.key : undefined}
       nextKey={index >= 0 ? onScreen[index + 1]?.key : undefined}
+      listName={list.data?.heap.name}
       onClose={closeItem}
     />
   );
@@ -177,7 +180,8 @@ export function HeapPage({
 export function useChangeState(heapRef: HeapRef, list: RankedList | undefined) {
   const update = useUpdateItem(heapRef);
   const setToast = useToast();
-  const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
+  const failed = (error: Error) =>
+    setToast({ message: itemProblem(error), error: true, requestId: requestIdOf(error) });
 
   const run: ChangeState = (item, state, onError) => {
     const next = state === "done" && list ? nextToStart(list, item) : undefined;
@@ -278,6 +282,8 @@ function ListPage({
   );
 
   if (list.isError) {
+    if (isNotFound(list.error))
+      return <NotFound heading="This heap isn't here" line="It doesn't exist, or you're not in its team." teamsLink />;
     // A view the server refuses (a stale tag in a bookmark, say) keeps the controls, so it can be changed or reset.
     const badView = list.error instanceof ApiProblem && (list.error.status === 400 || list.error.status === 422);
     return (
@@ -287,6 +293,7 @@ function ListPage({
           <p role="alert" className="text-red-700 dark:text-red-400">
             {badView ? `This view can't be shown: ${list.error.message}` : list.error.message}
           </p>
+          <RequestId error={list.error} />
           {badView && (
             <button
               type="button"

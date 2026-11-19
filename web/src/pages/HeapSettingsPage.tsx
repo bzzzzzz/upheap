@@ -15,6 +15,7 @@ import { Markdown } from "../components/Markdown";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
+import { RequestId } from "../components/RequestId";
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
@@ -75,9 +76,12 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   if (!heap.data) {
     if (heap.isError) {
       return (
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {heap.error.message}
-        </p>
+        <>
+          <p role="alert" className="py-16 text-center text-overdue-ink">
+            {heap.error.message}
+          </p>
+          <RequestId error={heap.error} />
+        </>
       );
     }
     return <p className="py-16 text-center text-muted">Loading…</p>;
@@ -295,9 +299,12 @@ export function HeapContextSettings({ heap: heapRef }: { heap: HeapRef }) {
   if (!heap.data) {
     if (heap.isError) {
       return (
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {heap.error.message}
-        </p>
+        <>
+          <p role="alert" className="py-16 text-center text-overdue-ink">
+            {heap.error.message}
+          </p>
+          <RequestId error={heap.error} />
+        </>
       );
     }
     return <p className="py-16 text-center text-muted">Loading…</p>;

@@ -7,6 +7,7 @@ import { useCreateTag, useTags, useUpdateTag } from "../api/queries";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { useReturnFocus } from "../components/useConfirmation";
+import { RequestId } from "../components/RequestId";
 import { plural } from "../components/words";
 import { cardClass, cardTitleClass, inputClass, introClass } from "./settingsForm";
 
@@ -24,9 +25,12 @@ export function TagsPage({ heap: heapRef }: { heap: HeapRef }) {
   if (!tags.data) {
     if (tags.isError) {
       return (
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {tags.error.message}
-        </p>
+        <>
+          <p role="alert" className="py-16 text-center text-overdue-ink">
+            {tags.error.message}
+          </p>
+          <RequestId error={tags.error} />
+        </>
       );
     }
     return <p className="py-16 text-center text-muted">Loading…</p>;
@@ -249,8 +253,11 @@ function TagProblem({ error }: { error: Error | null }) {
         ? "Someone else changed this tag. It now shows their version."
         : error.message;
   return (
-    <p role="alert" className="basis-full text-sm text-overdue-ink">
-      {message}
-    </p>
+    <>
+      <p role="alert" className="basis-full text-sm text-overdue-ink">
+        {message}
+      </p>
+      <RequestId error={error} />
+    </>
   );
 }

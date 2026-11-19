@@ -5,6 +5,7 @@ import { ApiProblem, type HeapRef } from "../api/client";
 import type { ItemTag } from "../api/schema";
 import { useCreateTag, useTags } from "../api/queries";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
+import { RequestId } from "./RequestId";
 
 const MAX_SUGGESTIONS = 6;
 
@@ -223,11 +224,14 @@ export function TagPicker({
           </Popover>
         ))}
       {create.error && (
-        <p role="alert" className="text-xs text-overdue-ink">
-          {create.error instanceof ApiProblem && create.error.code === "tag_name_taken"
-            ? "A tag with that name already exists."
-            : create.error.message}
-        </p>
+        <>
+          <p role="alert" className="text-xs text-overdue-ink">
+            {create.error instanceof ApiProblem && create.error.code === "tag_name_taken"
+              ? "A tag with that name already exists."
+              : create.error.message}
+          </p>
+          <RequestId error={create.error} />
+        </>
       )}
     </FieldFrame>
   );

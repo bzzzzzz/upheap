@@ -31,6 +31,7 @@ import { labelClass } from "./ItemQuestions";
 import { PHONE, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { problemMessage } from "./ProblemText";
+import { RequestId } from "./RequestId";
 import { inputClass } from "../pages/settingsForm";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useToast } from "./UndoToast";
@@ -63,7 +64,7 @@ type Row = {
   age: Age | null;
   kind: RowKind;
   made: boolean;
-  error: string | null;
+  error: Error | null;
 };
 
 const newRow = (id: number): Row => ({ id, title: "", need: null, age: null, kind: "task", made: false, error: null });
@@ -130,11 +131,11 @@ function SplitNote({
   const [name, setName] = useState(initialName);
   const [context, setContext] = useState(initialContext);
   const [madeHeap, setMadeHeap] = useState<Heap | null>(null);
-  const [heapError, setHeapError] = useState<string | null>(null);
+  const [heapError, setHeapError] = useState<Error | null>(null);
   const [filter, setFilter] = useState("");
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [stepError, setStepError] = useState<string | null>(null);
-  const [becameError, setBecameError] = useState<string | null>(null);
+  const [stepError, setStepError] = useState<Error | null>(null);
+  const [becameError, setBecameError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
   const [closedMeanwhile, setClosedMeanwhile] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
@@ -198,10 +199,10 @@ function SplitNote({
           setClosedMeanwhile(true);
         } else {
           setTaskId(null);
-          setStepError("That task was closed meanwhile. Pick another.");
+          setStepError(new Error("That task was closed meanwhile. Pick another."));
         }
       } else {
-        setStepError(itemProblem(error as Error));
+        setStepError(error as Error);
       }
     }
   };
@@ -217,7 +218,7 @@ function SplitNote({
           heap = await createHeap.mutateAsync({ name: name.trim(), context, origin_id: item.id });
         } catch (error) {
           if (isProblem(error, "origin_closed")) setClosedMeanwhile(true);
-          else setHeapError(problemMessage(error as Error));
+          else setHeapError(error as Error);
           return;
         }
         setMadeHeap(heap);
@@ -239,7 +240,7 @@ function SplitNote({
         });
       } catch (error) {
         if (isProblem(error, "origin_closed")) setClosedMeanwhile(true);
-        else patchRow(row.id, { error: itemProblem(error as Error) });
+        else patchRow(row.id, { error: error as Error });
         return;
       }
       patchRow(row.id, { made: true });
@@ -248,7 +249,7 @@ function SplitNote({
       await became.mutateAsync(item.key);
     } catch (error) {
       if (noteClosed(error)) setClosedMeanwhile(true);
-      else setBecameError(itemProblem(error as Error));
+      else setBecameError(error as Error);
       return;
     }
     done(outcome === "heap" ? "became a heap." : `became ${rows.length === 1 ? "1 task" : `${rows.length} tasks`}.`);
@@ -347,9 +348,10 @@ function SplitNote({
       </ListBox>
       {stepError && (
         <p role="alert" className="text-sm text-overdue-ink">
-          {stepError}
+          {itemProblem(stepError)}
         </p>
       )}
+      <RequestId error={stepError} />
       <p className="text-xs text-muted">
         The note's title and context become the step's, at the end of the task's steps.
       </p>
@@ -374,9 +376,10 @@ function SplitNote({
         </label>
         {heapError && (
           <p role="alert" className="text-sm text-overdue-ink">
-            {heapError}
+            {problemMessage(heapError)}
           </p>
         )}
+        <RequestId error={heapError} />
       </div>
       <label className="flex flex-col gap-1.5">
         <span className={labelClass}>Context</span>
@@ -489,9 +492,10 @@ function SplitNote({
             <div className="flex shrink-0 flex-col gap-2 border-t border-line px-4 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)] sm:px-6 sm:pb-5">
               {becameError && !confirmingDiscard && !closedMeanwhile && (
                 <p role="alert" className="text-sm text-overdue-ink">
-                  {becameError}
+                  {itemProblem(becameError)}
                 </p>
               )}
+              {!confirmingDiscard && !closedMeanwhile && <RequestId error={becameError} />}
               <div className="flex items-center justify-end gap-2.5">{footer}</div>
             </div>
           </form>
@@ -599,9 +603,10 @@ function RowFields({
       </div>
       {row.error && (
         <p role="alert" className="text-sm text-overdue-ink">
-          {row.error}
+          {itemProblem(row.error)}
         </p>
       )}
+      <RequestId error={row.error} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useApproveAuthorization, useAuthorizationCheck, useMe } from "../api/qu
 import { borderedClass } from "../components/buttons";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard } from "./AuthPage";
+import { RequestId } from "../components/RequestId";
 
 const primaryClass =
   "h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
@@ -48,6 +49,7 @@ export function AuthorizePage({
         <p role="alert" className="text-sm text-overdue-ink">
           {problemMessage(check.error)}
         </p>
+        <RequestId error={check.error} />
       </AuthCard>
     );
   }
@@ -82,9 +84,12 @@ export function AuthorizePage({
         <>
           <p className="text-sm text-ink-soft">It can see and change everything you can, until you sign it out.</p>
           {approve.error && (
-            <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
-              {problemMessage(approve.error)}
-            </p>
+            <>
+              <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
+                {problemMessage(approve.error)}
+              </p>
+              <RequestId error={approve.error} />
+            </>
           )}
           <div className="flex flex-col gap-2">
             <button type="button" className={primaryClass} disabled={approve.isPending} onClick={allow}>

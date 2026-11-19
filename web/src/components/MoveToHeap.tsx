@@ -8,6 +8,7 @@ import { compactButtonClass } from "./buttons";
 import { currentRowClass, LONG_LIST, rowClass, SectionTitle } from "./HeapSwitcher";
 import { itemProblem } from "./itemProblems";
 import { teamName } from "./teamName";
+import { RequestId } from "./RequestId";
 
 type MoveTeam = Me["teams"][number];
 type MoveHeap = MoveTeam["heaps"][number];
@@ -57,9 +58,12 @@ export function MoveToHeap({
           {count === undefined ? "Tags it doesn't have there are dropped." : "Tags they don't have there are dropped."}
         </p>
         {error && (
-          <p role="alert" className="text-sm text-overdue-ink">
-            {itemProblem(error)}
-          </p>
+          <>
+            <p role="alert" className="text-sm text-overdue-ink">
+              {itemProblem(error)}
+            </p>
+            <RequestId error={error} />
+          </>
         )}
         <div className="flex items-center justify-end gap-2">
           <button

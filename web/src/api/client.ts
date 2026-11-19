@@ -26,13 +26,16 @@ export class ApiProblem extends Error {
   readonly field: string | undefined;
   /** A value of `field` the server would accept, such as `my-team` for `My-Team` (`invalid_handle`). */
   readonly hint: string | undefined;
+  /** The server's request ID, on a `5xx`, for whoever runs the server to look up. */
+  readonly requestId: string | undefined;
 
-  constructor(status: number, code: string, message: string, field?: string, hint?: string) {
+  constructor(status: number, code: string, message: string, field?: string, hint?: string, requestId?: string) {
     super(message);
     this.status = status;
     this.code = code;
     this.field = field;
     this.hint = hint;
+    this.requestId = requestId;
   }
 }
 
@@ -50,13 +53,48 @@ const standardHeaders: Middleware = {
   },
 };
 
+let unreachable = false;
+const reachabilityListeners = new Set<() => void>();
+
+function setUnreachable(value: boolean) {
+  if (unreachable === value) return;
+  unreachable = value;
+  reachabilityListeners.forEach((listener) => listener());
+}
+
+/**
+ * Whether the last call couldn't reach the server: set by a call that fails with `unreachable`, cleared by any response,
+ * error statuses included. For `useSyncExternalStore`.
+ */
+export const serverReachability = {
+  subscribe(listener: () => void) {
+    reachabilityListeners.add(listener);
+    return () => void reachabilityListeners.delete(listener);
+  },
+  get: () => unreachable,
+};
+
+/** Turns a `fetch` that threw into a problem. Nothing in the app aborts a request, so every throw is a network failure. */
+const networkProblems: Middleware = {
+  onError() {
+    if (!navigator.onLine) {
+      return new ApiProblem(0, "offline", "You're offline, so this wasn't saved.");
+    }
+    setUnreachable(true);
+    return new ApiProblem(0, "unreachable", "Can't reach the server.");
+  },
+  onResponse() {
+    setUnreachable(false);
+  },
+};
+
 export const api = createClient<paths>({
   baseUrl: window.location.origin,
   credentials: "same-origin",
   // List parameters are comma-separated (`tag=a,b`), as the spec declares with `explode: false`.
   querySerializer: { array: { style: "form", explode: false } },
 });
-api.use(standardHeaders);
+api.use(standardHeaders, networkProblems);
 
 /** Returns the response data, or throws an `ApiProblem`. */
 export function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
@@ -74,10 +112,25 @@ export function ensureOk(result: { error?: unknown; response: Response }): void 
 }
 
 function toProblem(error: unknown, response: Response): ApiProblem {
+  const requestId = response.status >= 500 ? (response.headers.get("x-request-id") ?? undefined) : undefined;
   if (isProblem(error)) {
-    return new ApiProblem(error.status, error.code, error.title, error.field ?? undefined, error.hint ?? undefined);
+    return new ApiProblem(
+      error.status,
+      error.code,
+      error.title,
+      error.field ?? undefined,
+      error.hint ?? undefined,
+      requestId,
+    );
   }
-  return new ApiProblem(response.status, "unexpected_response", `The server answered ${response.status}.`);
+  return new ApiProblem(
+    response.status,
+    "unexpected_response",
+    `The server answered ${response.status}.`,
+    undefined,
+    undefined,
+    requestId,
+  );
 }
 
 /**
@@ -86,4 +139,14 @@ function toProblem(error: unknown, response: Response): ApiProblem {
  */
 export function isUnauthenticated(error: unknown): boolean {
   return error instanceof ApiProblem && error.code === "unauthenticated";
+}
+
+/** Whether the server answered `404`: the team, heap or item isn't there, or isn't the user's. */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiProblem && error.status === 404;
+}
+
+/** The request ID of a failed call, if the server sent one. */
+export function requestIdOf(error: Error): string | undefined {
+  return error instanceof ApiProblem ? error.requestId : undefined;
 }

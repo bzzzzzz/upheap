@@ -8,6 +8,7 @@ import { useUnblock } from "../api/queries";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { useOverListLink } from "./overList";
+import { RequestId } from "./RequestId";
 
 /** A gone blocker as a row shows it: no `item` when it moved to another team, which is never named. */
 export type GoneBlocker = Omit<WaitingBlocker, "item"> & { item: WaitingBlocker["item"] | null };
@@ -125,9 +126,12 @@ export function BlockerGoneRow({
         </div>
       )}
       {error && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(error)}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(error)}
+          </p>
+          <RequestId error={error} />
+        </>
       )}
     </li>
   );

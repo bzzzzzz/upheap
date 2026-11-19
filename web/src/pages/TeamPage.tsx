@@ -3,7 +3,7 @@ import { ChevronRight, Ellipsis, History, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type Ref } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
-import { ApiProblem } from "../api/client";
+import { ApiProblem, isNotFound } from "../api/client";
 import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
 import {
   isUserQuery,
@@ -34,6 +34,8 @@ import { useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
 import { canManageInviteLinks, InviteLinkButton, InviteLinks, useMakeInviteLink } from "./InviteLinks";
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass, sectionTitleClass } from "./teamStyles";
+import { NotFound } from "../components/NotFound";
+import { RequestId } from "../components/RequestId";
 
 /** Name and link name forms in the design tokens, as on Account. */
 const nameFormClasses: NameFormClasses = {
@@ -55,10 +57,15 @@ export function TeamPage({ team: slug }: { team: string }) {
     return <p className="py-16 text-center text-muted">Loading…</p>;
   }
   if (team.isError) {
+    if (isNotFound(team.error))
+      return <NotFound heading="This team isn't here" line="It doesn't exist, or you're not in it." teamsLink />;
     return (
-      <p role="alert" className="py-16 text-center text-overdue-ink">
-        {team.error.message}
-      </p>
+      <>
+        <p role="alert" className="py-16 text-center text-overdue-ink">
+          {team.error.message}
+        </p>
+        <RequestId error={team.error} />
+      </>
     );
   }
 

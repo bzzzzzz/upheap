@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { HeapRef } from "../api/client";
+import { RequestIdLine } from "./RequestId";
 
 /**
  * A message about a change just made, with a way to take it back, and sometimes the likely next step as `action`.
@@ -14,6 +15,8 @@ export type Toast = {
   undo?: () => void;
   action?: { label: string; run: () => void } | undefined;
   error?: boolean;
+  /** The server's request ID for an error toast. A toast with one stays until it is closed. */
+  requestId?: string | undefined;
 };
 
 /**
@@ -72,13 +75,13 @@ const SHOW_FOR_MS = 6000;
 
 /**
  * The toast after a change from the list (ux.md, The list §3): bottom centre, above the phone's tabs. It goes
- * after a few seconds, or when Undo or ✕ is pressed. Over the open item (a phone's sheet is the item, and Send to an
+ * after a few seconds, or when Undo or ✕ is pressed; one with a request ID stays until ✕. Over the open item (a phone's sheet is the item, and Send to an
  * agent offers Undo from inside it), under the Add dialog and the phone's other sheets, so a toast from the last item
  * added never covers the dialog's buttons.
  */
 function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () => void }) {
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || toast.requestId !== undefined) return;
     const timer = window.setTimeout(onDismiss, SHOW_FOR_MS);
     return () => window.clearTimeout(timer);
   }, [toast, onDismiss]);
@@ -95,7 +98,12 @@ function UndoToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () =>
             toast.error ? "bg-overdue-soft text-overdue-ink" : "bg-ink text-canvas"
           }`}
         >
-          <span className="mr-2 min-w-0 flex-1">{toast.message}</span>
+          <div className="mr-2 min-w-0 flex-1">
+            {toast.message}
+            {toast.requestId !== undefined && (
+              <RequestIdLine id={toast.requestId} label="Request ID" className="mt-1" />
+            )}
+          </div>
           {toast.undo && (
             <button
               type="button"

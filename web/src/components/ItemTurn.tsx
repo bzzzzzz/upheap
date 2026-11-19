@@ -2,7 +2,7 @@ import { Bot } from "lucide-react";
 import { useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { Button, Label, Radio, RadioGroup, TextArea, TextField } from "react-aria-components";
 
-import { ApiProblem, type HeapRef } from "../api/client";
+import { ApiProblem, requestIdOf, type HeapRef } from "../api/client";
 import type { Goal, Item, Reach, Turn } from "../api/schema";
 import { useRedoTurn, useSendToAgent, useTakeBack } from "../api/queries";
 import { TAKE_BACK_QUESTION } from "./agentConfirm";
@@ -16,6 +16,7 @@ import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useConfirmation } from "./useConfirmation";
 import { useFocusAfterRender } from "./useFocusAfterRender";
+import { RequestId } from "./RequestId";
 
 const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 const pickClass = `group flex min-h-9 items-center gap-2 text-sm ${focusClass} pointer-coarse:min-h-11`;
@@ -154,9 +155,12 @@ export function AgentChip({ heapRef, item, onTakenBack }: { heapRef: HeapRef; it
               Cancel
             </button>
             {takeBack.error && (
-              <p role="alert" className="text-sm text-overdue-ink">
-                {itemProblem(takeBack.error)}
-              </p>
+              <>
+                <p role="alert" className="text-sm text-overdue-ink">
+                  {itemProblem(takeBack.error)}
+                </p>
+                <RequestId error={takeBack.error} />
+              </>
             )}
           </div>
         </Sheet>
@@ -176,7 +180,8 @@ export function useSendWithUndo(heapRef: HeapRef, toastErrors = true) {
   const send = useSendToAgent(heapRef);
   const takeBack = useTakeBack(heapRef);
   const setToast = useToast();
-  const failed = (error: Error) => setToast({ message: itemProblem(error), error: true });
+  const failed = (error: Error) =>
+    setToast({ message: itemProblem(error), error: true, requestId: requestIdOf(error) });
   const sendWithUndo = (item: Item, reach: Reach, line: string | null, goal?: Goal) =>
     send.mutateAsync({ item, body: goal ? { reach, goal, line } : { reach, line } }).then(
       (saved) => {
@@ -294,9 +299,12 @@ function SendToAgent({
         onCancel={() => onClose(false)}
       />
       {error && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(error)}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(error)}
+          </p>
+          <RequestId error={error} />
+        </>
       )}
     </PopoverSheet>
   );
@@ -434,7 +442,7 @@ export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef
         // for now, and on to the agent chip once the new turn renders, as after a send (`onSent`).
         if (error instanceof ApiProblem && error.code === "nothing_to_redo") {
           setOpen(false);
-          setToast({ message: itemProblem(error), error: true });
+          setToast({ message: itemProblem(error), error: true, requestId: requestIdOf(error) });
           focusAfterRender(() => document.querySelector<HTMLElement>("[data-item-pane]"));
           onSent();
         }
@@ -519,9 +527,12 @@ function ChangesAskedForm({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          {itemProblem(error)}
-        </p>
+        <>
+          <p role="alert" className="text-sm text-overdue-ink">
+            {itemProblem(error)}
+          </p>
+          <RequestId error={error} />
+        </>
       )}
     </form>
   );

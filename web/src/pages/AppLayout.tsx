@@ -35,6 +35,7 @@ import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useHeap, useMe, useDecisions, useSetHeapArchived, useWaiting } from "../api/queries";
 import { AddItemDialog } from "../components/AddItem";
+import { ConnectionBanner } from "../components/ConnectionBanner";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
 import { HeapSwitcher, openItemCount } from "../components/HeapSwitcher";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
@@ -74,6 +75,7 @@ export function AppLayout() {
     // right-hand padding.
     <ToastProvider>
       <NoticeLine />
+      <ConnectionBanner />
       <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : onAll ? "all" : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">

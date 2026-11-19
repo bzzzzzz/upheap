@@ -8,6 +8,7 @@ import { useDecisions, useMe, useResults } from "../api/queries";
 import { readDecisionsFolded, writeDecisionsFolded } from "../components/agentsStorage";
 import { KIND_LABELS, STAGE_LABELS } from "../components/labels";
 import { titleTeam } from "../components/teamName";
+import { RequestId } from "../components/RequestId";
 
 /** How many Your decision rows show before "Show N more". */
 const FIRST_DECISIONS = 5;
@@ -67,9 +68,12 @@ export function AgentsPage() {
       {pending ? (
         <p className="py-16 text-center text-muted">Loading…</p>
       ) : failed ? (
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {(decisions.error ?? results.error)?.message}
-        </p>
+        <>
+          <p role="alert" className="py-16 text-center text-overdue-ink">
+            {(decisions.error ?? results.error)?.message}
+          </p>
+          <RequestId error={decisions.error ?? results.error} />
+        </>
       ) : decisions.data.count === 0 && rows.length === 0 ? (
         <div className="py-16 text-center">
           <p>No agent has finished anything yet.</p>

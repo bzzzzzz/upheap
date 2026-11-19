@@ -3,7 +3,7 @@ import { Check, ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { Dialog, Modal, ModalOverlay, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
-import type { HeapRef } from "../api/client";
+import { requestIdOf, type HeapRef } from "../api/client";
 import type { DueInput, Item, ItemTag, Me, Need, Parameter, Size } from "../api/schema";
 import { useCreateItem, useRefetchRankedList, useMe, useParameters, useTags } from "../api/queries";
 import { useAddAnother } from "./addAnother";
@@ -436,7 +436,7 @@ export function AddItemDialog({
   const onFailed = (error: Error, add: SentAdd) => {
     const problem = itemProblem(error);
     if (!open.current) {
-      showToast({ message: `“${add.title}” wasn't added: ${problem}`, error: true });
+      showToast({ message: `“${add.title}” wasn't added: ${problem}`, error: true, requestId: requestIdOf(error) });
       return;
     }
     setSent(null);
