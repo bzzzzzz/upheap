@@ -31,7 +31,6 @@ import { MoveToHeap } from "./MoveToHeap";
 import { PopoverSheet } from "./PopoverSheet";
 import { isToCome } from "./reminders";
 import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
-import { teamName } from "./teamName";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
@@ -373,9 +372,7 @@ export function ItemActions({
             heapRef={heapRef}
             pending={move.isPending}
             error={move.error}
-            note={
-              noteTeamOnly ? `Heaps were made from this note, so it moves only within ${teamName(own, me)}.` : undefined
-            }
+            teamOnly={noteTeamOnly}
             turnBy={opener && opener.id !== me.user.id ? opener.display_name : undefined}
             onMove={(to, label) => void moveTo(to, label)}
             onReset={move.reset}

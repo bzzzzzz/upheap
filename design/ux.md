@@ -355,9 +355,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     selected" and Select all (Clear all when all are), and a bar over the tabs has Move to… across its width. The
     count is announced. Only rows the list shows stay selected: a row a filter or the search hides is dropped from the
     selection and doesn't come back when the filter is taken off.
-    Move to… opens the item's Move picker (The item §6) for the selection, which moves within its team only. Picking a heap asks first, "Move 3 items to
-    Marketing?" and "Tags they don't have there are dropped.", with Cancel and "Move 3". When every item moves, the
-    picker closes, select mode ends and the list stays where it is, with the moved rows gone; the toast says "Moved 3
+    Move to… opens the item's Move picker (The item §6) for the selection, with its own team's heaps only. Picking a
+    heap asks first, "Move 3 items to Marketing?" and "Tags they don't have there are dropped.", with Cancel and
+    "Move 3". When every item moves, the picker closes, select mode ends and the list stays where it is, with the
+    moved rows gone; the toast says "Moved 3
     items to Marketing." (and "2 got new keys." when some keys changed) and offers **Open Marketing**. There is no
     Undo. Each item moves on its own, so when some are refused (changed by someone else meanwhile, closed, the heap
     archived) the picker shows "Moved 2 of 3 items to Marketing." (or "None of the 3 items moved."), then "Not
@@ -399,8 +400,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    there whenever it holds something, and holds, each only when the server allows it and in this order: the other state
    changes, Won't do, Make it a task…, Split… on a note, Change blocker… and Add reason… (Change reason… once one is
    set) on a blocked item, the Stage choices, and last, in a section of its own, Move to another heap…, when any of the
-   person's teams has a heap the item can move to. With none of them, as for a reader's item, an archived heap's or a closed
-   item, there is no ⋯.
+   person's teams has a heap the item can move to. With none of them, as for a reader's item, an archived heap's or a
+   closed item, there is no ⋯.
    Move to another heap… opens "Move to" under ⋯ (a sheet on a phone): the heaps that aren't archived of every team the
    person is in, in groups under the team's name, the item's own team first and the others in the order of Teams, a
    team with none left out, the item's own heap marked "(here)" and disabled, with a search field from 8 heaps in all

@@ -18,7 +18,8 @@ type MoveHeap = MoveTeam["heaps"][number];
  * item's own, one group per team that has any, the item's own heap marked and disabled, with a search field from
  * `LONG_LIST` heaps in all. A pick asks first, since tags the other heap lacks are dropped, and a pick in another team
  * says what else changes, and names `turnBy`, whose turn on the item may be taken back; Move calls `onMove` with the
- * picked heap and the label for the toast. `note` shows under the list. A refusal shows in `error`, above the buttons,
+ * picked heap and the label for the toast. With `teamOnly`, for a note heaps were made from, a line under the list
+ * says why only its team is listed. A refusal shows in `error`, above the buttons,
  * and Cancel clears it. With `count`, it moves that many items, as the list's selection does (ux.md, The list §19), and
  * the confirm says so.
  */
@@ -29,7 +30,7 @@ export function MoveToHeap({
   pending,
   error,
   count,
-  note,
+  teamOnly,
   turnBy,
   onMove,
   onReset,
@@ -40,7 +41,7 @@ export function MoveToHeap({
   pending: boolean;
   error: Error | null;
   count?: number;
-  note?: string;
+  teamOnly?: boolean;
   turnBy?: string;
   onMove: (to: HeapRef & { id: string }, label: string) => void;
   onReset: () => void;
@@ -57,13 +58,14 @@ export function MoveToHeap({
     .filter((group) => group.heaps.length > 0);
   const [first] = teams;
   const own = first ? teamName(first, me) : "";
+  const teamOnlyLine = `Heaps were made from this note, so it moves only within ${own}.`;
 
   if (picked) {
     const to = teamName(picked.team, me);
     const across = count === undefined && picked.team.slug !== heapRef.team;
     const problem =
       error instanceof ApiProblem && error.code === "note_has_heaps"
-        ? `Heaps were made from this note, so it moves only within ${own}.`
+        ? teamOnlyLine
         : error instanceof ApiProblem && error.code === "heap_not_in_team"
           ? "You can't move items to that heap any more."
           : error && itemProblem(error);
@@ -165,7 +167,7 @@ export function MoveToHeap({
       })}
     </Menu>
   );
-  const noteLine = note && <p className="mt-3 text-sm text-ink-soft">{note}</p>;
+  const noteLine = teamOnly && <p className="mt-3 text-sm text-ink-soft">{teamOnlyLine}</p>;
 
   return long ? (
     <Autocomplete inputValue={text} onInputChange={setText}>
