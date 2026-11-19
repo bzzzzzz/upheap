@@ -165,6 +165,8 @@ pub enum OidcRefusal {
     ProviderRefused,
     SignInExpired,
     ProviderUnreachable,
+    /// The provider deactivated the person over SCIM, but its sign-in still let them through.
+    AccountDeactivated,
 }
 
 impl OidcRefusal {
@@ -176,6 +178,7 @@ impl OidcRefusal {
             Self::ProviderRefused => "provider_refused",
             Self::SignInExpired => "sign_in_expired",
             Self::ProviderUnreachable => "provider_unreachable",
+            Self::AccountDeactivated => "account_deactivated",
         }
     }
 }
@@ -385,7 +388,19 @@ impl Services {
             self.lock_group_teams(&txn).await?;
             self.sync_sign_in_groups(&txn, user.id, &claims.subject, claims.groups.clone(), now)
                 .await?;
-            let grant = self.open_session(&txn, user, now, id_token_to_keep.as_deref()).await?;
+            let grant = match self.open_session(&txn, user, now, id_token_to_keep.as_deref()).await {
+                Err(ServiceError::AccountDeactivated) => {
+                    // Nothing of this sign-in is kept, not even the groups it brought.
+                    txn.rollback().await.map_err(StoreError::from)?;
+                    return refuse(
+                        OidcRefusal::AccountDeactivated,
+                        "the provider deactivated the account",
+                        None,
+                    )
+                    .await;
+                }
+                opened => opened?,
+            };
             store::oidc_sign_ins::delete_oidc_sign_in(&txn, state_hash).await?;
             txn.commit().await.map_err(StoreError::from)?;
             tracing::info!(user_id = %grant.user.id, "user signed in through the provider");

@@ -7,6 +7,10 @@ export const NETWORK_EDIT_MESSAGES: Record<string, string> = {
   unreachable: "Couldn't reach the server, so this wasn't saved.",
 };
 
+/** What a person the organisation's provider has deactivated is told, signing in with a password or the provider. */
+export const ACCOUNT_DEACTIVATED =
+  "Your organisation has turned off your access to Upheap. Ask your administrator to turn it back on.";
+
 /**
  * What to tell the user for problem codes they can act on, by `code`, or by `code.field` where the field changes the
  * words. Anything else shows the server's title.
@@ -41,8 +45,7 @@ const MESSAGES: Record<string, string> = {
   password_too_long: "That password is too long.",
   invalid_credentials: "That email or username and password don't match an account.",
   registration_closed: "This server isn't taking new accounts.",
-  account_deactivated:
-    "Your organisation has turned off your access to Upheap. Ask your administrator to turn it back on.",
+  account_deactivated: ACCOUNT_DEACTIVATED,
   // The Password card on Account. An empty new password has its own words in the card.
   "field_empty.current_password": "Enter your current password.",
   wrong_password: "That isn't your current password.",

@@ -234,6 +234,16 @@ test("a provider-only server never shows the password form, even while it loads"
   await expect(page.getByLabel("Password")).toHaveCount(0);
 });
 
+test("a person the provider deactivated is told so on the sign-in page", async ({ page }) => {
+  await page.route("**/api/v1/auth/oidc", (route) =>
+    route.fulfill({ json: { label: "Acme SSO", password_sign_in: true } }),
+  );
+  // Where the server's callback sends a sign-in it refused because the provider turned the account off.
+  await page.goto("/login?sign_in_error=account_deactivated");
+  await expect(page.getByText("Your organisation has turned off your access to Upheap.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in with Acme SSO" })).toBeVisible();
+});
+
 test("sign-in shows the forms when the provider settings can't be read", async ({ page }) => {
   await page.route("**/api/v1/auth/oidc", (route) =>
     route.fulfill({
