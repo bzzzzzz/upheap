@@ -13,7 +13,7 @@ use store::{StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
 use crate::audit::{diff_moved, diff_moved_in, diff_moved_out};
-use crate::items::{ItemChildren, ItemView, build_item_view, new_item_key};
+use crate::items::{ItemChildren, ItemView, build_item_view, ensure_tags_in_use, new_item_key};
 use crate::{Principal, ServiceError, Services};
 
 impl Services {
@@ -116,6 +116,8 @@ impl Services {
             (&source_tags, &source_parameters),
             (&target_tags, &target_parameters),
         );
+
+        ensure_tags_in_use(&txn, &carried.tags).await?;
 
         let now = self.now();
         if across_teams {

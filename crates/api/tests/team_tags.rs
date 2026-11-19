@@ -213,7 +213,7 @@ async fn a_heap_tag_cannot_take_the_name_of_a_team_tag() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_team_tag_cannot_take_a_name_a_heap_tag_of_the_team_has() -> Result<()> {
+async fn a_team_tag_taking_a_name_a_heap_tag_of_the_team_has_needs_the_merge_confirmed() -> Result<()> {
     // Arrange
     let w = world().await?;
     w.app.new_tag_id(&w.session, &w.second, "Docs").await?;
@@ -229,7 +229,7 @@ async fn a_team_tag_cannot_take_a_name_a_heap_tag_of_the_team_has() -> Result<()
     // Assert
     for refused in [&made, &renamed] {
         expect_that!(refused.status, eq(StatusCode::CONFLICT));
-        expect_that!(refused.body["code"], eq(&json!("tag_name_taken")));
+        expect_that!(refused.body["code"], eq(&json!("tag_merge_unconfirmed")));
     }
     expect_that!(other_teams_name.status, eq(StatusCode::CREATED));
     Ok(())

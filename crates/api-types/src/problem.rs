@@ -2,6 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
+
+use crate::common::HeapSummaryDto;
 
 /// An error response body (RFC 9457 problem details).
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -25,7 +28,34 @@ pub struct Problem {
     /// The highest need code a run may give, for `run_need_above_origin`: the need of the note it splits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highest: Option<String>,
+    /// The heap tags a team tag write would merge, for `tag_merge_unconfirmed`: repeat the write with `token` as
+    /// `confirm_reach` to merge them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_reach: Option<MergeReachDto>,
     /// Present on unexpected errors, so the operator can find the details in the log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+}
+
+/// What making or renaming a team tag into a name would merge: the heap tags of the team's heaps with that name.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = MergeReach)]
+pub struct MergeReachDto {
+    /// Names exactly these heap tags and item counts; it changes when either does.
+    pub token: String,
+    /// By heap name, then heap ID.
+    pub heaps: Vec<MergeReachHeapDto>,
+}
+
+/// A heap tag a merge would take in.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = MergeReachHeap)]
+pub struct MergeReachHeapDto {
+    pub heap: HeapSummaryDto,
+    pub archived: bool,
+    pub tag_id: Uuid,
+    /// The heap tag's name as written.
+    pub tag_name: String,
+    /// Items with an active link to the tag, open or closed.
+    pub items: u32,
 }
