@@ -163,8 +163,9 @@ impl Services {
     /// sign-in it started at any later time.
     ///
     /// The code's person's personal team is locked first, as a sign-in locks it, so the exchange and a SCIM
-    /// deactivation of the person's last record go one after the other: a code the deactivation expired is refused,
-    /// and a family issued before it is revoked by it.
+    /// deactivation of the person's last record go one after the other: a code the deactivation expired, or any code
+    /// of a person the provider has deactivated, is refused as expired, and a family issued before it is revoked by
+    /// it.
     ///
     /// A successful exchange also removes a few codes and sign-ins that ended over [`KEEP_ENDED_GRANTS_FOR`] ago.
     pub async fn exchange_authorization_code(&self, exchange: CodeExchange<'_>) -> Result<TokenPair, ServiceError> {
@@ -202,6 +203,12 @@ impl Services {
             && code.code_challenge.is_met_by(&s256_challenge(exchange.code_verifier));
         if !verified {
             return Err(GrantError::VerifierMismatch.into());
+        }
+        // A deactivation expired the code at its own `now`, which another server's clock may put after this one's, so
+        // the person's state is checked too. Refused as the expired code it is, in the token endpoint's own format.
+        match self.refuse_deactivated(&txn, code.user_id).await {
+            Err(ServiceError::AccountDeactivated) => return Err(GrantError::CodeExpired.into()),
+            other => other?,
         }
         let family_id = TokenFamilyId::from_uuid(self.new_id(now));
         store::oauth::insert_token_family(
