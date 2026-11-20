@@ -102,9 +102,14 @@ fn to_weights_change(body: &HeapWeightsPatchDto) -> Result<WeightsChange, Servic
 }
 
 fn to_weights_dto(view: HeapWeightsView) -> HeapWeightsResultDto {
+    let heap_id = view.heap.heap.id;
     HeapWeightsResultDto {
         heap: to_heap_dto(view.heap),
-        parameters: view.parameters.into_iter().map(to_parameter_dto).collect(),
+        parameters: view
+            .parameters
+            .into_iter()
+            .map(|entry| to_parameter_dto(entry, heap_id))
+            .collect(),
     }
 }
 

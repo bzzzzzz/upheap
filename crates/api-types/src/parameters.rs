@@ -1,5 +1,5 @@
-//! A heap's custom parameters, their options and their tag links. Parameters and options are archived, never
-//! deleted.
+//! A heap's custom parameters and its team's, their options and their tag links. Parameters and options are
+//! archived, never deleted.
 
 use domain::permission::{ParameterAction, ParameterListAction};
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,8 @@ pub enum ParameterActionDto {
     /// Rename it, change its weight, change its options and link it to tags.
     Edit,
     Archive,
+    /// A team parameter in a heap: stop the heap using it.
+    StopUsing,
     ViewHistory,
 }
 
@@ -24,6 +26,7 @@ impl From<ParameterAction> for ParameterActionDto {
         match action {
             ParameterAction::Edit => Self::Edit,
             ParameterAction::Archive => Self::Archive,
+            ParameterAction::StopUsing => Self::StopUsing,
             ParameterAction::ViewHistory => Self::ViewHistory,
         }
     }
@@ -35,12 +38,15 @@ impl From<ParameterAction> for ParameterActionDto {
 #[schema(as = ParameterListAction)]
 pub enum ParameterListActionDto {
     Create,
+    /// Make the heap use one of its team's parameters.
+    UseTeamParameter,
 }
 
 impl From<ParameterListAction> for ParameterListActionDto {
     fn from(action: ParameterListAction) -> Self {
         match action {
             ParameterListAction::Create => Self::Create,
+            ParameterListAction::UseTeamParameter => Self::UseTeamParameter,
         }
     }
 }
@@ -65,13 +71,36 @@ pub struct ArchivedOptionDto {
     pub replaced_by_option_id: Uuid,
 }
 
+/// Who owns a parameter.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ParameterKind)]
+pub enum ParameterKindDto {
+    /// One heap's parameter.
+    // The default, for a server older than team parameters, which has only these.
+    #[default]
+    Heap,
+    /// A parameter of the heap's team, which the heap uses.
+    Team,
+    /// An owner this client doesn't know: one the server added later. Only read, never sent, so it isn't in the
+    /// API's schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = Parameter)]
 pub struct ParameterDto {
     pub id: Uuid,
+    #[serde(default)]
+    #[schema(required = true)]
+    pub kind: ParameterKindDto,
+    /// The heap the parameter is listed for: its owner for a heap parameter, and the heap that uses it for a team
+    /// parameter. A team parameter's owner is its team, named by its `team` kind.
     pub heap_id: Uuid,
     pub name: String,
-    /// Influence on the ranking next to the heap's other weights, 0 to 100.
+    /// Influence on the ranking next to the heap's other weights, 0 to 100. For a team parameter, the heap's weight
+    /// for it.
     pub weight: u16,
     /// The options in use, highest priority first.
     pub options: Vec<OptionDto>,
@@ -93,10 +122,69 @@ pub struct ParameterListDto {
     pub heap: HeapSummaryDto,
     /// The parameters in use, by name.
     pub parameters: Vec<ParameterDto>,
-    /// Archived parameters, by name. Closed items may still show their values.
+    /// Archived parameters, by name. Closed items may still show their values. A team parameter the heap stopped
+    /// using is here too.
     pub archived: Vec<ParameterDto>,
+    /// The team's other parameters in use, which the heap doesn't use, by name.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub team_available: Vec<TeamParameterDto>,
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<ParameterListActionDto>,
+}
+
+/// A team's parameter, with the heaps that use it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = TeamParameter)]
+pub struct TeamParameterDto {
+    pub id: Uuid,
+    pub team_id: Uuid,
+    pub name: String,
+    /// The options in use, highest priority first.
+    pub options: Vec<OptionDto>,
+    /// Archived options, in the order they were archived.
+    pub archived_options: Vec<ArchivedOptionDto>,
+    /// Always empty for now.
+    pub tag_ids: Vec<Uuid>,
+    /// UTC milliseconds; `null` while the parameter is in use.
+    pub archived_at: Option<i64>,
+    /// Send back in `If-Match` when editing.
+    pub version: u32,
+    /// The heaps of the team that use the parameter now, by name.
+    pub heaps: Vec<HeapSummaryDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<ParameterActionDto>,
+}
+
+/// A team's parameters.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = TeamParameterList)]
+pub struct TeamParameterListDto {
+    /// The parameters in use, by name.
+    pub parameters: Vec<TeamParameterDto>,
+    /// Archived parameters, by name.
+    pub archived: Vec<TeamParameterDto>,
+    #[serde(deserialize_with = "crate::common::known_values")]
+    pub allowed_actions: Vec<ParameterListActionDto>,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = CreateTeamParameterRequest)]
+pub struct CreateTeamParameterDto {
+    /// 1 to 50 characters, unique among the parameters in use of the team and of its heaps ignoring case.
+    pub name: String,
+    /// Option labels, highest priority first: at most 50, unique ignoring case.
+    #[serde(default)]
+    pub options: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = TeamParameterPatchRequest)]
+pub struct TeamParameterPatchDto {
+    /// 1 to 50 characters.
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]

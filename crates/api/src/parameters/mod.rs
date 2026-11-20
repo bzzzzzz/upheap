@@ -1,5 +1,5 @@
-//! A heap's custom parameters: listing them, and the admin's changes to them, their options and their tag links.
-//! Parameters and options are archived, never deleted.
+//! A heap's custom parameters and its team's: listing them, and the admin's changes to them, their options and their
+//! tag links, and which of the team's a heap uses. Parameters and options are archived, never deleted.
 //!
 //! Every endpoint returns the whole parameter, options and tag links included, so a client re-renders it from one
 //! response. Changes take the parameter's `version` in `If-Match`; archiving says what the parameter or option
@@ -9,18 +9,21 @@ use std::collections::BTreeSet;
 
 use api_types::common::HeapSummaryDto;
 use api_types::parameters::{
-    AddOptionDto, ArchiveOptionDto, ArchivedOptionDto, ArrangeOptionsDto, CreateParameterDto, LinkTagsDto, OptionDto,
-    ParameterDto, ParameterListDto, ParameterPatchDto,
+    AddOptionDto, ArchiveOptionDto, ArchivedOptionDto, ArrangeOptionsDto, CreateParameterDto, CreateTeamParameterDto,
+    LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto, ParameterPatchDto, TeamParameterDto,
+    TeamParameterListDto, TeamParameterPatchDto,
 };
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use domain::parameter::{OptionLabel, Parameter, ParameterName, ParameterOption, ParameterPatch, Weight};
+use domain::parameter::{
+    OptionLabel, Parameter, ParameterName, ParameterOption, ParameterOwner, ParameterPatch, Weight,
+};
 use domain::tag::parse_tag_set;
-use domain::{OptionId, ParameterId, TagId, Timestamp, ValidationError};
+use domain::{HeapId, OptionId, ParameterId, TagId, Timestamp, ValidationError};
 use serde::Deserialize;
 use service::ServiceError;
-use service::parameters::{ParameterDraft, ParameterEntry};
+use service::parameters::{ParameterDraft, ParameterEntry, TeamParameterDraft, TeamParameterEntry};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
@@ -28,7 +31,7 @@ use uuid::Uuid;
 use crate::dto::IfMatchHeader;
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, IfMatch};
-use crate::paths::{HeapParams, HeapPath};
+use crate::paths::{HeapParams, HeapPath, TeamParams, TeamPath};
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -39,6 +42,13 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(add_option, arrange_options))
         .routes(routes!(archive_option))
         .routes(routes!(link_tags))
+        .routes(routes!(use_team_parameter))
+        .routes(routes!(stop_using_team_parameter))
+        .routes(routes!(list_team_parameters, create_team_parameter))
+        .routes(routes!(update_team_parameter))
+        .routes(routes!(archive_team_parameter))
+        .routes(routes!(add_team_option, arrange_team_options))
+        .routes(routes!(archive_team_option))
 }
 
 /// `{parameter_id}` in a path below the heap's.
@@ -53,10 +63,11 @@ struct OptionPathId {
     option_id: Uuid,
 }
 
-pub(crate) fn to_parameter_dto(entry: ParameterEntry) -> ParameterDto {
+/// The parameter as `heap_id` lists it.
+pub(crate) fn to_parameter_dto(entry: ParameterEntry, heap_id: HeapId) -> ParameterDto {
     let Parameter {
         id,
-        heap_id,
+        owner,
         name,
         weight,
         options,
@@ -66,31 +77,88 @@ pub(crate) fn to_parameter_dto(entry: ParameterEntry) -> ParameterDto {
         version,
         ..
     } = entry.parameter;
+    let kind = match owner {
+        ParameterOwner::Heap(_) => ParameterKindDto::Heap,
+        ParameterOwner::Team(_) => ParameterKindDto::Team,
+    };
     ParameterDto {
         id: *id.as_uuid(),
+        kind,
         heap_id: *heap_id.as_uuid(),
         name: name.as_str().to_owned(),
         weight: weight.get(),
-        options: options
-            .into_iter()
-            .map(|o| OptionDto {
-                id: *o.id.as_uuid(),
-                label: o.label.as_str().to_owned(),
-            })
-            .collect(),
-        archived_options: archived_options
-            .into_iter()
-            .map(|o| ArchivedOptionDto {
-                id: *o.id.as_uuid(),
-                label: o.label.as_str().to_owned(),
-                archived_at: o.archived_at.as_millis(),
-                replaced_by_option_id: *o.replaced_by.as_uuid(),
-            })
-            .collect(),
+        options: to_option_dtos(options),
+        archived_options: to_archived_option_dtos(archived_options),
         tag_ids: tags.iter().map(|t| *t.as_uuid()).collect(),
         archived_at: archived_at.map(Timestamp::as_millis),
         version: version.get(),
         allowed_actions: entry.allowed_actions.into_iter().map(Into::into).collect(),
+    }
+}
+
+fn to_option_dtos(options: Vec<ParameterOption>) -> Vec<OptionDto> {
+    options
+        .into_iter()
+        .map(|o| OptionDto {
+            id: *o.id.as_uuid(),
+            label: o.label.as_str().to_owned(),
+        })
+        .collect()
+}
+
+fn to_archived_option_dtos(options: Vec<domain::parameter::ArchivedOption>) -> Vec<ArchivedOptionDto> {
+    options
+        .into_iter()
+        .map(|o| ArchivedOptionDto {
+            id: *o.id.as_uuid(),
+            label: o.label.as_str().to_owned(),
+            archived_at: o.archived_at.as_millis(),
+            replaced_by_option_id: *o.replaced_by.as_uuid(),
+        })
+        .collect()
+}
+
+fn to_team_parameter_dto(entry: TeamParameterEntry) -> TeamParameterDto {
+    let Parameter {
+        id,
+        name,
+        options,
+        archived_options,
+        tags,
+        archived_at,
+        version,
+        ..
+    } = entry.parameter;
+    TeamParameterDto {
+        id: *id.as_uuid(),
+        team_id: *entry.team_id.as_uuid(),
+        name: name.as_str().to_owned(),
+        options: to_option_dtos(options),
+        archived_options: to_archived_option_dtos(archived_options),
+        tag_ids: tags.iter().map(|t| *t.as_uuid()).collect(),
+        archived_at: archived_at.map(Timestamp::as_millis),
+        version: version.get(),
+        heaps: entry.heaps.iter().map(HeapSummaryDto::from).collect(),
+        allowed_actions: entry.allowed_actions.into_iter().map(Into::into).collect(),
+    }
+}
+
+fn to_parameter_list_dto(list: service::parameters::ParameterList) -> ParameterListDto {
+    let heap_id = list.heap.id;
+    ParameterListDto {
+        heap: HeapSummaryDto::from(&list.heap),
+        parameters: list
+            .parameters
+            .into_iter()
+            .map(|e| to_parameter_dto(e, heap_id))
+            .collect(),
+        archived: list
+            .archived
+            .into_iter()
+            .map(|e| to_parameter_dto(e, heap_id))
+            .collect(),
+        team_available: list.team_available.into_iter().map(to_team_parameter_dto).collect(),
+        allowed_actions: list.allowed_actions.into_iter().map(Into::into).collect(),
     }
 }
 
@@ -103,12 +171,7 @@ async fn list_parameters(State(state): State<AppState>, path: HeapPath) -> Resul
         .services
         .list_parameters(path.principal, path.heap.heap_id)
         .await?;
-    Ok(Json(ParameterListDto {
-        heap: HeapSummaryDto::from(&list.heap),
-        parameters: list.parameters.into_iter().map(to_parameter_dto).collect(),
-        archived: list.archived.into_iter().map(to_parameter_dto).collect(),
-        allowed_actions: list.allowed_actions.into_iter().map(Into::into).collect(),
-    }))
+    Ok(Json(to_parameter_list_dto(list)))
 }
 
 /// Adds a parameter to the heap. Admins only.
@@ -131,7 +194,7 @@ async fn create_parameter(
         .services
         .create_parameter(path.principal, path.heap.heap_id, draft)
         .await?;
-    Ok((StatusCode::CREATED, Json(to_parameter_dto(entry))))
+    Ok((StatusCode::CREATED, Json(to_parameter_dto(entry, path.heap.heap_id))))
 }
 
 /// Renames a parameter or changes its weight. Admins only; send the parameter's `version` in `If-Match`.
@@ -171,7 +234,7 @@ async fn update_parameter(
             expected,
         )
         .await?;
-    Ok(Json(to_parameter_dto(entry)))
+    Ok(Json(to_parameter_dto(entry, path.heap.heap_id)))
 }
 
 /// Archives a parameter, once no open item has a value for it. Admins only. Archiving an archived parameter
@@ -193,7 +256,7 @@ async fn archive_parameter(
         .services
         .archive_parameter(path.principal, path.heap.heap_id, ParameterId::from_uuid(parameter_id))
         .await?;
-    Ok(Json(to_parameter_dto(entry)))
+    Ok(Json(to_parameter_dto(entry, path.heap.heap_id)))
 }
 
 /// Adds an option as the parameter's lowest priority. Admins only; send the parameter's `version` in `If-Match`.
@@ -225,13 +288,8 @@ async fn add_option(
             expected,
         )
         .await
-        .map_err(|error| match error {
-            ServiceError::Parameter(domain::parameter::ParameterError::OptionLabelTaken { .. }) => {
-                ApiError::InField { error, field: "label" }
-            }
-            other => other.into(),
-        })?;
-    Ok(Json(to_parameter_dto(entry)))
+        .map_err(label_taken_in_label)?;
+    Ok(Json(to_parameter_dto(entry, path.heap.heap_id)))
 }
 
 /// Puts the options in use in a new order, highest priority first, and relabels them. Admins only; send the
@@ -253,17 +311,7 @@ async fn arrange_options(
     ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
     ApiJson(body): ApiJson<ArrangeOptionsDto>,
 ) -> Result<Json<ParameterDto>, ApiError> {
-    let options = body
-        .options
-        .iter()
-        .map(|option| {
-            OptionLabel::parse(&option.label).map(|label| ParameterOption {
-                id: OptionId::from_uuid(option.id),
-                label,
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| in_options(error.into()))?;
+    let options = to_arranged_options(&body)?;
     let entry = state
         .services
         .arrange_options(
@@ -274,7 +322,7 @@ async fn arrange_options(
             expected,
         )
         .await?;
-    Ok(Json(to_parameter_dto(entry)))
+    Ok(Json(to_parameter_dto(entry, path.heap.heap_id)))
 }
 
 /// Archives an option. Open items with it switch to the replacement, and their versions go up; closed items keep
@@ -303,7 +351,7 @@ async fn archive_option(
             body.replacement_option_id.map(OptionId::from_uuid),
         )
         .await?;
-    Ok(Json(to_parameter_dto(entry)))
+    Ok(Json(to_parameter_dto(entry, path.heap.heap_id)))
 }
 
 /// Sets the tags the parameter is suggested for. Admins only; send the parameter's `version` in `If-Match`.
@@ -335,7 +383,279 @@ async fn link_tags(
             expected,
         )
         .await?;
-    Ok(Json(to_parameter_dto(entry)))
+    Ok(Json(to_parameter_dto(entry, path.heap.heap_id)))
+}
+
+/// Makes the heap use one of its team's parameters. Admins only. The first use gives it the default weight, and
+/// using it again after stopping restores the weight it had. Using one that is used already succeeds.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path)),
+    responses(
+        (status = 200, body = ParameterListDto),
+        (status = 403, body = Problem),
+        (status = 404, description = "Not a parameter of the heap's team", body = Problem),
+        (status = 409, description = "`parameter_archived` or `heap_archived`", body = Problem),
+    ))]
+async fn use_team_parameter(
+    State(state): State<AppState>,
+    path: HeapPath,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+) -> Result<Json<ParameterListDto>, ApiError> {
+    let list = state
+        .services
+        .use_team_parameter(path.principal, path.heap.heap_id, ParameterId::from_uuid(parameter_id))
+        .await?;
+    Ok(Json(to_parameter_list_dto(list)))
+}
+
+/// Makes the heap stop using a team parameter, once no open item of the heap has a value for it. Admins only. Its
+/// weight is kept. Stopping one the heap doesn't use succeeds.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/stop-using", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path)),
+    responses(
+        (status = 200, body = ParameterListDto),
+        (status = 403, body = Problem),
+        (status = 404, description = "Not a parameter of the heap's team", body = Problem),
+        (status = 409, description = "`parameter_in_use` or `heap_archived`", body = Problem),
+    ))]
+async fn stop_using_team_parameter(
+    State(state): State<AppState>,
+    path: HeapPath,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+) -> Result<Json<ParameterListDto>, ApiError> {
+    let list = state
+        .services
+        .stop_using_team_parameter(path.principal, path.heap.heap_id, ParameterId::from_uuid(parameter_id))
+        .await?;
+    Ok(Json(to_parameter_list_dto(list)))
+}
+
+/// The team's parameters, by name. Any member may list them; the heaps of the team choose which to use.
+#[utoipa::path(get, path = "/teams/{team}/parameters", tag = "parameters", security(("session" = [])),
+    params(TeamParams),
+    responses((status = 200, body = TeamParameterListDto), (status = 404, body = Problem)))]
+async fn list_team_parameters(
+    State(state): State<AppState>,
+    path: TeamPath,
+) -> Result<Json<TeamParameterListDto>, ApiError> {
+    let list = state
+        .services
+        .list_team_parameters(path.principal, path.team_id)
+        .await?;
+    Ok(Json(TeamParameterListDto {
+        parameters: list.parameters.into_iter().map(to_team_parameter_dto).collect(),
+        archived: list.archived.into_iter().map(to_team_parameter_dto).collect(),
+        allowed_actions: list.allowed_actions.into_iter().map(Into::into).collect(),
+    }))
+}
+
+/// Adds a parameter to the team, for its heaps to use. Admins only. The name must be free among the parameters in
+/// use of the team and of all its heaps.
+#[utoipa::path(post, path = "/teams/{team}/parameters", tag = "parameters", security(("session" = [])),
+    params(TeamParams), request_body = CreateTeamParameterDto,
+    responses(
+        (status = 201, body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`parameter_name_taken` or `option_label_taken`", body = Problem),
+        (status = 422, description = "Invalid fields or `too_many_options`", body = Problem),
+    ))]
+async fn create_team_parameter(
+    State(state): State<AppState>,
+    path: TeamPath,
+    ApiJson(body): ApiJson<CreateTeamParameterDto>,
+) -> Result<(StatusCode, Json<TeamParameterDto>), ApiError> {
+    let draft = to_team_draft(&body).map_err(|error| in_options(error.into()))?;
+    let entry = state
+        .services
+        .create_team_parameter(path.principal, path.team_id, draft)
+        .await?;
+    Ok((StatusCode::CREATED, Json(to_team_parameter_dto(entry))))
+}
+
+/// Renames a team's parameter, in every heap that uses it. Admins only; send the parameter's `version` in
+/// `If-Match`.
+#[utoipa::path(patch, path = "/teams/{team}/parameters/{parameter_id}", tag = "parameters", security(("session" = [])),
+    params(TeamParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = TeamParameterPatchDto,
+    responses(
+        (status = 200, body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`parameter_name_taken`, `parameter_archived` or `version_conflict`", body = Problem),
+        (status = 422, body = Problem),
+        (status = 428, description = "`version_required`", body = Problem),
+    ))]
+async fn update_team_parameter(
+    State(state): State<AppState>,
+    path: TeamPath,
+    IfMatch(expected): IfMatch,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+    ApiJson(body): ApiJson<TeamParameterPatchDto>,
+) -> Result<Json<TeamParameterDto>, ApiError> {
+    let name = ParameterName::parse(&body.name).map_err(ServiceError::from)?;
+    let entry = state
+        .services
+        .update_team_parameter(
+            path.principal,
+            path.team_id,
+            ParameterId::from_uuid(parameter_id),
+            name,
+            expected,
+        )
+        .await?;
+    Ok(Json(to_team_parameter_dto(entry)))
+}
+
+/// Archives a team's parameter, once no open item in any heap of the team has a value for it. Admins only.
+/// Archiving an archived parameter succeeds.
+#[utoipa::path(post, path = "/teams/{team}/parameters/{parameter_id}/archive", tag = "parameters", security(("session" = [])),
+    params(TeamParams, ("parameter_id" = Uuid, Path)),
+    responses(
+        (status = 200, body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`parameter_in_use`", body = Problem),
+    ))]
+async fn archive_team_parameter(
+    State(state): State<AppState>,
+    path: TeamPath,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+) -> Result<Json<TeamParameterDto>, ApiError> {
+    let entry = state
+        .services
+        .archive_team_parameter(path.principal, path.team_id, ParameterId::from_uuid(parameter_id))
+        .await?;
+    Ok(Json(to_team_parameter_dto(entry)))
+}
+
+/// Adds an option to a team's parameter as its lowest priority. Admins only; send the parameter's `version` in
+/// `If-Match`.
+#[utoipa::path(post, path = "/teams/{team}/parameters/{parameter_id}/options", tag = "parameters", security(("session" = [])),
+    params(TeamParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = AddOptionDto,
+    responses(
+        (status = 200, body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`option_label_taken` (`field` `label`), `parameter_archived` or `version_conflict`", body = Problem),
+        (status = 422, description = "An invalid label or `too_many_options`", body = Problem),
+        (status = 428, description = "`version_required`", body = Problem),
+    ))]
+async fn add_team_option(
+    State(state): State<AppState>,
+    path: TeamPath,
+    IfMatch(expected): IfMatch,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+    ApiJson(body): ApiJson<AddOptionDto>,
+) -> Result<Json<TeamParameterDto>, ApiError> {
+    let label = OptionLabel::parse(&body.label).map_err(ServiceError::from)?;
+    let entry = state
+        .services
+        .add_team_option(
+            path.principal,
+            path.team_id,
+            ParameterId::from_uuid(parameter_id),
+            label,
+            expected,
+        )
+        .await
+        .map_err(label_taken_in_label)?;
+    Ok(Json(to_team_parameter_dto(entry)))
+}
+
+/// Puts a team parameter's options in use in a new order, highest priority first, and relabels them. Admins only;
+/// send the parameter's `version` in `If-Match`.
+#[utoipa::path(patch, path = "/teams/{team}/parameters/{parameter_id}/options", tag = "parameters", security(("session" = [])),
+    params(TeamParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = ArrangeOptionsDto,
+    responses(
+        (status = 200, body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`option_label_taken`, `parameter_archived` or `version_conflict`", body = Problem),
+        (status = 422, description = "An invalid label, or `options_mismatch` when the list isn't every option in use exactly once", body = Problem),
+        (status = 428, description = "`version_required`", body = Problem),
+    ))]
+async fn arrange_team_options(
+    State(state): State<AppState>,
+    path: TeamPath,
+    IfMatch(expected): IfMatch,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+    ApiJson(body): ApiJson<ArrangeOptionsDto>,
+) -> Result<Json<TeamParameterDto>, ApiError> {
+    let options = to_arranged_options(&body)?;
+    let entry = state
+        .services
+        .arrange_team_options(
+            path.principal,
+            path.team_id,
+            ParameterId::from_uuid(parameter_id),
+            options,
+            expected,
+        )
+        .await?;
+    Ok(Json(to_team_parameter_dto(entry)))
+}
+
+/// Archives an option of a team's parameter. Open items with it, in every heap of the team, switch to the
+/// replacement, and their versions go up; closed items keep it. Admins only. Archiving an archived option succeeds.
+#[utoipa::path(post, path = "/teams/{team}/options/{option_id}/archive", tag = "parameters", security(("session" = [])),
+    params(TeamParams, ("option_id" = Uuid, Path)), request_body = ArchiveOptionDto,
+    responses(
+        (status = 200, description = "The option's parameter", body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`parameter_archived`", body = Problem),
+        (status = 422, description = "`replacement_required`", body = Problem),
+    ))]
+async fn archive_team_option(
+    State(state): State<AppState>,
+    path: TeamPath,
+    ApiPath(OptionPathId { option_id }): ApiPath<OptionPathId>,
+    ApiJson(body): ApiJson<ArchiveOptionDto>,
+) -> Result<Json<TeamParameterDto>, ApiError> {
+    let entry = state
+        .services
+        .archive_team_option(
+            path.principal,
+            path.team_id,
+            OptionId::from_uuid(option_id),
+            body.replacement_option_id.map(OptionId::from_uuid),
+        )
+        .await?;
+    Ok(Json(to_team_parameter_dto(entry)))
+}
+
+fn to_team_draft(body: &CreateTeamParameterDto) -> Result<TeamParameterDraft, ValidationError> {
+    Ok(TeamParameterDraft {
+        name: ParameterName::parse(&body.name)?,
+        options: body
+            .options
+            .iter()
+            .map(|label| OptionLabel::parse(label))
+            .collect::<Result<_, _>>()?,
+    })
+}
+
+fn to_arranged_options(body: &ArrangeOptionsDto) -> Result<Vec<ParameterOption>, ApiError> {
+    body.options
+        .iter()
+        .map(|option| {
+            OptionLabel::parse(&option.label).map(|label| ParameterOption {
+                id: OptionId::from_uuid(option.id),
+                label,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| in_options(error.into()))
+}
+
+/// A taken label is about the `label` field of the request that added it.
+fn label_taken_in_label(error: ServiceError) -> ApiError {
+    match error {
+        ServiceError::Parameter(domain::parameter::ParameterError::OptionLabelTaken { .. }) => {
+            ApiError::InField { error, field: "label" }
+        }
+        other => other.into(),
+    }
 }
 
 fn to_draft(body: &CreateParameterDto) -> Result<ParameterDraft, ValidationError> {

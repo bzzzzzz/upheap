@@ -6265,6 +6265,96 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/stop-using": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Makes the heap stop using a team parameter, once no open item of the heap has a value for it. Admins only. Its\nweight is kept. Stopping one the heap doesn't use succeeds.",
+        "operationId": "stop_using_team_parameter",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterList"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a parameter of the heap's team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_in_use` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/tags": {
       "put": {
         "tags": [
@@ -6375,6 +6465,96 @@
           },
           "428": {
             "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Makes the heap use one of its team's parameters. Admins only. The first use gives it the default weight, and\nusing it again after stopping restores the weight it had. Using one that is used already succeeds.",
+        "operationId": "use_team_parameter",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterList"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a parameter of the heap's team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_archived` or `heap_archived`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8033,6 +8213,681 @@
           },
           "409": {
             "description": "`last_admin`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/options/{option_id}/archive": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Archives an option of a team's parameter. Open items with it, in every heap of the team, switch to the\nreplacement, and their versions go up; closed items keep it. Admins only. Archiving an archived option succeeds.",
+        "operationId": "archive_team_option",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "option_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveOptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The option's parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`replacement_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/parameters": {
+      "get": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "The team's parameters, by name. Any member may list them; the heaps of the team choose which to use.",
+        "operationId": "list_team_parameters",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameterList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Adds a parameter to the team, for its heaps to use. Admins only. The name must be free among the parameters in\nuse of the team and of all its heaps.",
+        "operationId": "create_team_parameter",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTeamParameterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_name_taken` or `option_label_taken`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields or `too_many_options`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/parameters/{parameter_id}": {
+      "patch": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Renames a team's parameter, in every heap that uses it. Admins only; send the parameter's `version` in\n`If-Match`.",
+        "operationId": "update_team_parameter",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamParameterPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_name_taken`, `parameter_archived` or `version_conflict`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/parameters/{parameter_id}/archive": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Archives a team's parameter, once no open item in any heap of the team has a value for it. Admins only.\nArchiving an archived parameter succeeds.",
+        "operationId": "archive_team_parameter",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_in_use`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/parameters/{parameter_id}/options": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Adds an option to a team's parameter as its lowest priority. Admins only; send the parameter's `version` in\n`If-Match`.",
+        "operationId": "add_team_option",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddOptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`option_label_taken` (`field` `label`), `parameter_archived` or `version_conflict`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An invalid label or `too_many_options`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Puts a team parameter's options in use in a new order, highest priority first, and relabels them. Admins only;\nsend the parameter's `version` in `If-Match`.",
+        "operationId": "arrange_team_options",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArrangeOptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`option_label_taken`, `parameter_archived` or `version_conflict`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "An invalid label, or `options_mismatch` when the list isn't every option in use exactly once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -10455,6 +11310,26 @@
             "description": "1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case."
           }
         }
+      },
+      "CreateTeamParameterRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1 to 50 characters, unique among the parameters in use of the team and of its heaps ignoring case."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Option labels, highest priority first: at most 50, unique ignoring case."
+          }
+        },
+        "additionalProperties": false
       },
       "DataBucket": {
         "allOf": [
@@ -13109,6 +13984,7 @@
         "type": "object",
         "required": [
           "id",
+          "kind",
           "heap_id",
           "name",
           "weight",
@@ -13142,11 +14018,15 @@
           },
           "heap_id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "The heap the parameter is listed for: its owner for a heap parameter, and the heap that uses it for a team\nparameter. A team parameter's owner is its team, named by its `team` kind."
           },
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ParameterKind"
           },
           "name": {
             "type": "string"
@@ -13175,7 +14055,7 @@
           "weight": {
             "type": "integer",
             "format": "int32",
-            "description": "Influence on the ranking next to the heap's other weights, 0 to 100.",
+            "description": "Influence on the ranking next to the heap's other weights, 0 to 100. For a team parameter, the heap's weight\nfor it.",
             "minimum": 0
           }
         }
@@ -13186,7 +14066,16 @@
         "enum": [
           "edit",
           "archive",
+          "stop_using",
           "view_history"
+        ]
+      },
+      "ParameterKind": {
+        "type": "string",
+        "description": "Who owns a parameter.",
+        "enum": [
+          "heap",
+          "team"
         ]
       },
       "ParameterList": {
@@ -13195,6 +14084,7 @@
           "heap",
           "parameters",
           "archived",
+          "team_available",
           "allowed_actions"
         ],
         "properties": {
@@ -13209,7 +14099,7 @@
             "items": {
               "$ref": "#/components/schemas/Parameter"
             },
-            "description": "Archived parameters, by name. Closed items may still show their values."
+            "description": "Archived parameters, by name. Closed items may still show their values. A team parameter the heap stopped\nusing is here too."
           },
           "heap": {
             "$ref": "#/components/schemas/HeapSummary"
@@ -13220,6 +14110,13 @@
               "$ref": "#/components/schemas/Parameter"
             },
             "description": "The parameters in use, by name."
+          },
+          "team_available": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamParameter"
+            },
+            "description": "The team's other parameters in use, which the heap doesn't use, by name."
           }
         }
       },
@@ -13227,7 +14124,8 @@
         "type": "string",
         "description": "An action the caller can take on a heap's parameters.",
         "enum": [
-          "create"
+          "create",
+          "use_team_parameter"
         ]
       },
       "ParameterOption": {
@@ -15136,6 +16034,127 @@
             "description": "The member's path is `/teams/{team}/members/{username}`."
           }
         }
+      },
+      "TeamParameter": {
+        "type": "object",
+        "description": "A team's parameter, with the heaps that use it.",
+        "required": [
+          "id",
+          "team_id",
+          "name",
+          "options",
+          "archived_options",
+          "tag_ids",
+          "version",
+          "heaps",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterAction"
+            }
+          },
+          "archived_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds; `null` while the parameter is in use."
+          },
+          "archived_options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArchivedOption"
+            },
+            "description": "Archived options, in the order they were archived."
+          },
+          "heaps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeapSummary"
+            },
+            "description": "The heaps of the team that use the parameter now, by name."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterOption"
+            },
+            "description": "The options in use, highest priority first."
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Always empty for now."
+          },
+          "team_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Send back in `If-Match` when editing.",
+            "minimum": 0
+          }
+        }
+      },
+      "TeamParameterList": {
+        "type": "object",
+        "description": "A team's parameters.",
+        "required": [
+          "parameters",
+          "archived",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterListAction"
+            }
+          },
+          "archived": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamParameter"
+            },
+            "description": "Archived parameters, by name."
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamParameter"
+            },
+            "description": "The parameters in use, by name."
+          }
+        }
+      },
+      "TeamParameterPatchRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1 to 50 characters."
+          }
+        },
+        "additionalProperties": false
       },
       "TeamPatchRequest": {
         "type": "object",
