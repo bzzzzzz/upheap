@@ -123,7 +123,7 @@ test("the list keeps its place through full screen", async ({ page, heapPath }) 
   await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(before);
 });
 
-test("All items goes full screen with the item kept, and Escape leaves it", async ({ page }) => {
+test("All items goes full screen with the item kept, and Escape and ✕ leave it", async ({ page }) => {
   test.skip(isPhone(page), "a phone has no full screen button");
   await addItem(page, "Plan the launch");
   await page.goto("/all");
@@ -133,6 +133,12 @@ test("All items goes full screen with the item kept, and Escape leaves it", asyn
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/item=[^&]+$/);
   await expect(itemPane(page)).toBeVisible();
+
+  // ✕ from a full link goes to the list without full screen.
+  await page.goto(`${page.url()}&full=1`);
+  await expect(exitButton(page)).toBeVisible();
+  await closeItem(page);
+  await expect(page).not.toHaveURL(/item=|full=/);
 });
 
 test("on a phone, the sheet has no full screen button, and a full link opens it full height", async ({ page }) => {

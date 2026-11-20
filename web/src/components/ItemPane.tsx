@@ -143,7 +143,7 @@ export function ItemPane({
       <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-40 bg-black/40 sm:hidden" />
       {/* Full screen takes the pane out of the row beside the list; its slot stays, so the list keeps its width, its
           height and so its scroll position. */}
-      {full && <div aria-hidden="true" className="hidden w-[26rem] shrink-0 lg:block" />}
+      {full && <div aria-hidden="true" className="hidden h-dvh w-[26rem] shrink-0 lg:block" />}
       <motion.section
         ref={paneRef}
         tabIndex={-1}
