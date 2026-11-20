@@ -5,7 +5,8 @@
 //! table that names a parameter by ID keeps working. Each heap of the team chooses whether to use it, and weights it
 //! on its own: `heap_parameters` holds that choice, one row per heap and team parameter, with the heap's weight.
 //! Nothing is deleted: stopping sets `stopped_at`, and using again clears it, so the weight survives (as
-//! `item_tags.removed_at` does). Only team parameters get rows.
+//! `item_tags.removed_at` does). `used_at` records when the heap first used it, for the record; nothing reads it.
+//! Only team parameters get rows.
 //!
 //! A team parameter's own `parameters.weight` holds `0` and is never read: the weight belongs to the heap.
 //!

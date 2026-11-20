@@ -317,7 +317,8 @@ impl Services {
     ///
     /// Weights equal to the stored ones are skipped. The heap's version moves on whenever any weight changes, with a
     /// `heap_updated` entry only when one of its own weights changes; each parameter whose weight changes gets a
-    /// `parameter_updated` entry and its next version. A request that changes nothing succeeds and writes nothing.
+    /// `parameter_updated` entry, and a heap parameter its next version. A team parameter's weight is the heap's, in
+    /// its use row, so the team parameter's own version doesn't move. A request that changes nothing succeeds and writes nothing.
     pub async fn update_weights(
         &self,
         principal: Principal,

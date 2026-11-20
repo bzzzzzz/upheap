@@ -101,6 +101,18 @@ pub async fn lock_parameter(db: &impl ConnectionTrait, id: ParameterId) -> Resul
     load_one(db, id, Lock::Update).await
 }
 
+/// Reads the parameter with a shared lock until the transaction ends, so it can't change under the caller, but other
+/// readers aren't held off. For a heap's writes about a team parameter (use, stop, its weight in the heap), which
+/// need the parameter not to be archived under them and write nothing to it. An exclusive lock there would deadlock
+/// on MySQL with an item write in another heap of the team, which holds gap locks on `heap_parameters` and asks for
+/// this row shared. Team parameter writes still lock it exclusively, after every heap of the team.
+pub async fn lock_parameter_shared(
+    db: &impl ConnectionTrait,
+    id: ParameterId,
+) -> Result<Option<Parameter>, StoreError> {
+    load_one(db, id, Lock::Share).await
+}
+
 /// The parameter an option belongs to, or `None` for an unknown option.
 pub async fn find_option_parameter(
     db: &impl ConnectionTrait,
@@ -233,7 +245,9 @@ pub async fn list_heap_uses(
 }
 
 /// The heap's use row for `parameter_id`, read with a lock until the transaction ends, so a use or a stop that
-/// waited for the heap lock reads what the last one wrote.
+/// waited for the heap lock reads what the last one wrote. It has to be a locking read: on MySQL the plain reads that
+/// authorize the write come before the heap lock and fix the transaction's snapshot, so a plain read here could miss
+/// a use committed while this write waited.
 pub async fn lock_heap_use(
     db: &impl ConnectionTrait,
     heap_id: HeapId,

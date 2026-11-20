@@ -1014,13 +1014,17 @@ pub(crate) async fn lock_listed(
         ParameterOwner::Heap(heap_id) => heap_id == heap.id,
         ParameterOwner::Team(team_id) => team_id == heap.team_id,
     };
-    store::parameters::find_parameter(txn, parameter_id)
+    let found = store::parameters::find_parameter(txn, parameter_id)
         .await?
         .filter(belongs)
         .ok_or_else(|| not_in_heap.clone())?;
-    let mut current = store::parameters::lock_parameter(txn, parameter_id)
-        .await?
-        .ok_or_else(|| not_in_heap.clone())?;
+    // A team parameter is only read here, so it is locked shared (see `store::parameters::lock_parameter_shared`).
+    let locked = if found.is_team_owned() {
+        store::parameters::lock_parameter_shared(txn, parameter_id).await?
+    } else {
+        store::parameters::lock_parameter(txn, parameter_id).await?
+    };
+    let mut current = locked.ok_or_else(|| not_in_heap.clone())?;
     if current.is_archived() {
         return Err(ParameterError::Archived { parameter_id }.into());
     }
@@ -1040,14 +1044,15 @@ pub(crate) async fn lock_listed(
     Ok(current)
 }
 
-/// Reads a parameter of the heap's team under its own lock, after the caller locked the heap. Any other parameter is
+/// Reads a parameter of the heap's team under a shared lock, after the caller locked the heap (see
+/// `store::parameters::lock_parameter_shared` for why not exclusive). Any other parameter is
 /// [`ServiceError::NotFound`].
 async fn lock_team_parameter_of(
     txn: &DatabaseTransaction,
     heap: &Heap,
     parameter_id: ParameterId,
 ) -> Result<Parameter, ServiceError> {
-    store::parameters::lock_parameter(txn, parameter_id)
+    store::parameters::lock_parameter_shared(txn, parameter_id)
         .await?
         .filter(|parameter| parameter.owner == ParameterOwner::Team(heap.team_id))
         .ok_or(ServiceError::NotFound)

@@ -137,9 +137,9 @@ function RankingForm({
     description:
       parameter.options.length > 0 ? <OptionLinks heapRef={heapRef} parameter={parameter} /> : "No options yet",
     saved: parameter.weight,
-    // A team parameter's weight in this heap is set here, not on the Parameters tab, so Stop using allows it too.
-    editable:
-      canEdit && (parameter.allowed_actions.includes("edit") || parameter.allowed_actions.includes("stop_using")),
+    // A team parameter's weight in this heap is the heap's, saved with its other weights, so the heap's own
+    // permission to change its weights decides; a heap parameter also needs its own `edit`.
+    editable: canEdit && (parameter.kind === "team" || parameter.allowed_actions.includes("edit")),
     parameter,
   }));
   const factors = [...builtIn, tagsFactor, ...custom];
