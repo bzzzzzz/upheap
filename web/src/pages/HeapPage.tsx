@@ -18,7 +18,7 @@ import {
   type RowFilters,
 } from "../components/ItemRow";
 import { STATE_LABELS } from "../components/labels";
-import { ItemPane } from "../components/ItemPane";
+import { ItemPane, useFullScreenShown } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
@@ -67,10 +67,12 @@ export function HeapPage({
   // A change to an item an agent has asks first: every way of changing a state in the list goes through it.
   const agentConfirm = useConfirmAgentStateChange(changeState.run);
   const listPage = useMemo<NavigateOptions>(
-    () => ({ to: "/teams/$team/heaps/$heap", params: heapRef, search: true }),
+    // Without full screen (ux.md, The item §23), which would carry on to the next item opened from the list.
+    () => ({ to: "/teams/$team/heaps/$heap", params: heapRef, search: (prev) => ({ ...prev, full: undefined }) }),
     [heapRef],
   );
   const closeItem = useCloseItem(listPage, itemKey);
+  const full = useFullScreenShown() && itemKey !== undefined;
   useRefocusStartedRow(list.data);
 
   // Select mode (ux.md, The list §19): the location's state says it is on, the selected items are kept here, and the
@@ -150,7 +152,8 @@ export function HeapPage({
   return (
     // On a wide screen the item pane sits beside the list; narrower, it's fixed over it.
     <div className="lg:flex lg:items-start">
-      <div className="min-w-0 flex-1 lg:has-[~[data-item-pane]]:pr-6">
+      {/* Under a full-screen item the list stays, keeping its place, but out of reach of the keyboard. */}
+      <div inert={full} className="min-w-0 flex-1 lg:has-[~[data-item-pane]]:pr-6">
         <ListPage
           heapRef={heapRef}
           itemKey={itemKey}

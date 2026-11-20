@@ -367,7 +367,13 @@ const heapRoute = createRoute({
 });
 
 /** An item, by its key, open over its heap's list (ux.md, The item). `HeapPage` shows it. */
-const itemRoute = createRoute({ getParentRoute: () => heapRoute, path: "items/$item" });
+const itemRoute = createRoute({
+  getParentRoute: () => heapRoute,
+  path: "items/$item",
+  // `full=1` shows the item full screen (ux.md, The item); any other value means nothing.
+  validateSearch: (search: Record<string, unknown>): { full?: 1 } =>
+    search.full === 1 || search.full === "1" ? { full: 1 } : {},
+});
 
 const closedRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -662,6 +668,8 @@ declare module "@tanstack/history" {
   interface HistoryState {
     /** Set on the way into an item from a page of the app, so closing the item goes back there. */
     closesBack?: boolean;
+    /** Set on the way from an item's pane to its full screen, so leaving full screen goes back to the pane. */
+    fullBack?: boolean;
     /** Set on the entry of a heap's list in select mode, so Back leaves select mode. */
     selecting?: boolean;
     /** Set on each click of an agent's mark in a history, so a second click on the same run is a new location. */

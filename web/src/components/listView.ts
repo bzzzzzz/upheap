@@ -159,6 +159,8 @@ export type AcrossSearch = Pick<
   /** The slug of the team whose heaps the list is limited to. */
   team?: string;
   item?: string;
+  /** The open item is shown full screen (ux.md, The item). Only with an item. */
+  full?: 1;
 };
 
 /** Keeps only what the page across heaps has of [`parseListSearch`], and the open item. */
@@ -176,6 +178,7 @@ export function parseAcrossSearch(raw: Record<string, unknown>): AcrossSearch {
     going_to,
     team: list(raw.team),
     item: list(raw.item),
+    full: list(raw.item) !== undefined && (raw.full === 1 || raw.full === "1") ? 1 : undefined,
   };
   return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined)) as AcrossSearch;
 }

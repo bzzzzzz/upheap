@@ -8,7 +8,7 @@ import { useAcrossHeapsList, useMe } from "../api/queries/me";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
 import { focusFirstRow, ItemRow, useRefocusStartedRow } from "../components/ItemRow";
-import { ItemPane } from "../components/ItemPane";
+import { ItemPane, useFullScreenShown } from "../components/ItemPane";
 import { FilterChips, ListControls, type Panel, type TeamScope } from "../components/ListControls";
 import { useListSearch } from "../components/listSearch";
 import {
@@ -28,7 +28,8 @@ import { HiddenNote, Section, useChangeState } from "./HeapPage";
 import { RequestId } from "../components/RequestId";
 
 /** The list the open item closes to: this page, without the item. */
-const ALL_ITEMS: NavigateOptions = { to: "/all", search: (prev) => ({ ...prev, item: undefined }) };
+/** Without the item, and without full screen (ux.md, The item §23), which would carry on to the next item opened. */
+const ALL_ITEMS: NavigateOptions = { to: "/all", search: (prev) => ({ ...prev, item: undefined, full: undefined }) };
 
 /** What Add is for while the person has no heap: it is disabled then, and never opens. */
 const NO_HEAP: HeapRef = { team: "", heap: "" };
@@ -54,6 +55,7 @@ export function AllItemsPage({
   const [panel, setPanel] = useState<Panel>(null);
   const open = parseItemAddress(view.item);
   const closeItem = useCloseItem(ALL_ITEMS, open?.key);
+  const full = useFullScreenShown() && open !== undefined;
   // The rows' entries, as the heap list's are, for the refocus after a row is started.
   const entries = useMemo<Pick<RankedList, "pinned" | "ranked" | "blocked"> | undefined>(
     () =>
@@ -147,7 +149,8 @@ export function AllItemsPage({
   return (
     // On a wide screen the item pane sits beside the list; narrower, it's fixed over it.
     <div className="lg:flex lg:items-start">
-      <div className="min-w-0 flex-1 lg:has-[~[data-item-pane]]:pr-6">
+      {/* Under a full-screen item the list stays, keeping its place, but out of reach of the keyboard. */}
+      <div inert={full} className="min-w-0 flex-1 lg:has-[~[data-item-pane]]:pr-6">
         <main>
           <div className="mt-6 flex items-center justify-between gap-4 sm:mb-4">
             <div className="flex min-w-0 flex-col gap-1">

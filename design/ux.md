@@ -664,6 +664,15 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     spacing changed beside a word edit shows as the new spacing. Where there is nothing to diff (set from nothing,
     cleared, any other field) or under 40% of the longer version's words stayed the same, the change shows as before:
     the old value struck through, an arrow, the new one.
+23. **Full screen** gives a long item room to read. On a tablet or wide screen the header has a button between the
+    key and ✕, "Full screen" (⤢), which becomes "Exit full screen" (⤡). Full screen is the item's address with
+    `full=1` in the query (`/all?item=…&full=1` in All items), so a reload or a shared link opens it the same way. It
+    covers the area beside the sidebar or the rail. The header spans it, and the item's content is the pane's, in a
+    column at most 720 px wide. Going full screen from the pane is a step in the history. Escape or ⤡ goes back
+    to the pane, ✕ goes to the list, and Back goes one step back. ↑ and ↓ keep walking the list in full screen, and
+    leaving after a walk shows the pane of the item walked to. The list stays under it, so it keeps its scroll
+    position and selection. A phone has no button, as the sheet already fills most of the screen. A full link opened
+    on a phone shows the sheet at full height.
 
 ## Adding an item
 
