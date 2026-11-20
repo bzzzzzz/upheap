@@ -30,25 +30,39 @@ test("Escape leaves full screen for the pane, and Back then closes the item", as
 test("✕ in full screen goes to the list, and Back goes to the pane", async ({ page }) => {
   test.skip(isPhone(page), "a phone has no full screen button");
   await addItem(page, "Plan the launch");
-  await addItem(page, "Water the plants");
   await openItem(page, "Plan the launch");
   await fullButton(page).click();
   await expect(exitButton(page)).toBeVisible();
-
-  // In full screen, the next item keeps full screen.
-  await itemPane(page).getByRole("link", { name: "Next item", exact: true }).click();
-  await expect(page).toHaveURL(/\?full=1$/);
-  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
-
-  // Walking replaced the full screen entry, so Back is the pane of the first item.
   await page.goBack();
   await expect(page).not.toHaveURL(/full=/);
-  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Plan the launch");
+  await expect(fullButton(page)).toBeVisible();
 
   await fullButton(page).click();
   await closeItem(page);
   await expect(page).not.toHaveURL(/items|full=/);
   await expect(row(page, "Plan the launch").getByRole("link").first()).toBeFocused();
+});
+
+test("walking in full screen keeps it, and Escape leaves for the pane of the item walked to", async ({ page }) => {
+  test.skip(isPhone(page), "a phone has no full screen button");
+  await addItem(page, "Plan the launch");
+  await addItem(page, "Water the plants");
+  await openItem(page, "Plan the launch");
+  await fullButton(page).click();
+  await expect(exitButton(page)).toBeVisible();
+
+  await itemPane(page).getByRole("link", { name: "Next item", exact: true }).click();
+  await expect(page).toHaveURL(/\?full=1$/);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
+
+  await page.keyboard.press("Escape");
+  await expect(fullButton(page)).toBeVisible();
+  await expect(page).not.toHaveURL(/full=/);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
+
+  // The walk ended in the pane as a walk there does, so Back closes the item.
+  await page.goBack();
+  await expect(itemPane(page)).toHaveCount(0);
 });
 
 test("a full link opens full screen, and leaves for the pane, then the list", async ({ page }) => {
@@ -87,7 +101,7 @@ test("the list keeps its place through full screen", async ({ page, heapPath }) 
   await expect(exitButton(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(fullButton(page)).toBeVisible();
-  expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(before);
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(before);
 });
 
 test("All items goes full screen with the item kept, and Escape leaves it", async ({ page }) => {

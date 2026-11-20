@@ -1,3 +1,4 @@
+import type { HistoryState } from "@tanstack/history";
 import { Link, type LinkProps, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { Check, ChevronDown, ChevronUp, Link as LinkIcon, Maximize2, Minimize2, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
@@ -326,17 +327,28 @@ function useFullScreen() {
         resetScroll: false,
       }),
     leave: () => {
-      if (fullBack) {
-        router.history.back();
-      } else {
-        void navigate({
-          to: ".",
-          search: (prev: object) => ({ ...prev, full: undefined }),
-          state: (prev) => prev,
-          replace: true,
-          resetScroll: false,
-        });
+      const pane = {
+        to: ".",
+        search: (prev: object) => ({ ...prev, full: undefined }),
+        state: (prev: HistoryState) => prev,
+        replace: true,
+        resetScroll: false,
+      } as const;
+      if (!fullBack) {
+        void navigate(pane);
+        return;
       }
+      // ↑ ↓ in full screen replace its entry, so the pane one entry back may be another item's. Back lands there,
+      // and then the entry becomes this item's pane, as if the walk had been in the pane.
+      const here = router.buildLocation(pane).href;
+      const unsubscribe = router.subscribe("onResolved", () => {
+        unsubscribe();
+        // By its address: `.` would now be the item Back landed on.
+        if (router.state.location.href !== here) {
+          void navigate({ href: here, state: pane.state, replace: true, resetScroll: false });
+        }
+      });
+      router.history.back();
     },
   };
 }
