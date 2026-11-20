@@ -630,8 +630,9 @@ a fixed time.
      `member_removed`, so it doesn't void invite links made before it. Lock order where these meet: the mapped teams in
      ID order, then a SCIM row, then a person's personal team; a write that locks several of a person's teams (a
      display-name change) takes the mapped ones first. A sign-in of a known person, by the provider or by password,
-     locks their personal team before it opens the session, so it waits for a SCIM write that is ending their
-     sign-ins and then sees the deactivation. A first sign-in has no user yet, so the callback keeps the groups on
+     locks their personal team before it opens the session, and approving a CLI sign-in and exchanging its code lock
+     it before they store or use the code, so each waits for a SCIM write that is ending their sign-ins and then
+     sees the deactivation. A first sign-in has no user yet, so the callback keeps the groups on
      the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step runs the sync after making the
      user. Password sign-in, invite registration and reset never sync.
    - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)
