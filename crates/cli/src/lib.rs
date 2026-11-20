@@ -26,8 +26,8 @@ use clap::{CommandFactory, Parser, Subcommand};
 use reqwest::Url;
 
 pub use crate::agent::{
-    Access, AgentTools, Interrupt, ListenForInterrupts, SystemTools, Tool, ToolError, ToolReport, ToolStart,
-    UsageLimit, WorkDeps,
+    Access, AgentTools, Interrupt, ListenForInterrupts, PullRequestError, PullRequests, SystemTools, Tool, ToolError,
+    ToolReport, ToolStart, UsageLimit, WorkDeps,
 };
 pub use crate::auth::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
 pub use crate::client::HttpClients;
@@ -319,6 +319,8 @@ enum WorkCommand {
     Reached(commands::work::reached::ReachedArgs),
     /// Give the turn back: there was nothing to do for its goal (needs UPHEAP_RUN)
     HandBack(commands::work::hand_back::HandBackArgs),
+    /// End the run to wait on its own pull request: the item comes back on a comment, a failed check, a merge or a close (needs UPHEAP_RUN)
+    Watch(commands::work::watch::WatchArgs),
     /// End the run and record what it cost (needs UPHEAP_RUN)
     Finish(commands::work::finish::FinishArgs),
 }
@@ -406,6 +408,7 @@ impl Command {
             Self::Work(WorkCommand::Run(args)) => &args.shared,
             Self::Work(WorkCommand::Reached(args)) => &args.shared,
             Self::Work(WorkCommand::HandBack(args)) => &args.shared,
+            Self::Work(WorkCommand::Watch(args)) => &args.shared,
             Self::Work(WorkCommand::Finish(args)) => &args.shared,
             Self::Heap(HeapCommand::List(args)) => &args.shared,
             Self::Heap(HeapCommand::Use(args)) => &args.shared,
@@ -580,6 +583,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Work(WorkCommand::Run(args)) => commands::work::run::run(args, app, work, out).await,
         Command::Work(WorkCommand::Reached(args)) => commands::work::reached::run(args, app, out).await,
         Command::Work(WorkCommand::HandBack(args)) => commands::work::hand_back::run(args, app, out).await,
+        Command::Work(WorkCommand::Watch(args)) => commands::work::watch::run(args, app, out).await,
         Command::Work(WorkCommand::Finish(args)) => commands::work::finish::run(args, app, out).await,
         Command::Heap(HeapCommand::List(args)) => commands::heap::list::run(args, app, out).await,
         Command::Heap(HeapCommand::Use(args)) => commands::heap::use_heap::run(args, app, out).await,

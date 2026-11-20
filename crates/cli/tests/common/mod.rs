@@ -15,8 +15,8 @@ use std::time::Duration as StdDuration;
 use anyhow::{Context, Result};
 use api::{AppState, CookieSettings};
 use cli::{
-    AgentTools, Browser, Deps, Environment, HttpClients, Interrupt, MemoryTokenStore, StoredTokens, TokenStore,
-    TokenStoreError, Tool, ToolError, ToolReport, ToolStart, WorkDeps,
+    AgentTools, Browser, Deps, Environment, HttpClients, Interrupt, MemoryTokenStore, PullRequestError, PullRequests,
+    StoredTokens, TokenStore, TokenStoreError, Tool, ToolError, ToolReport, ToolStart, WorkDeps,
 };
 use domain::sign_in::SignInLimit;
 use domain::{Duration, Timestamp};
@@ -504,6 +504,8 @@ pub struct TestCli {
     pub sweep_every: StdDuration,
     /// How often `work run` looks at the clock for a heartbeat that is due, and waits to try a failed one again.
     pub heartbeat_check: StdDuration,
+    /// The pull requests `work run` reads for its watches. A machine where `gh` isn't installed by default.
+    pub pull_requests: StandInPullRequests,
     /// Milliseconds the CLI's clock runs ahead of the real one, so a test can have the machine "sleep".
     pub clock_offset: Arc<AtomicI64>,
     browser: Arc<dyn Browser>,
@@ -533,6 +535,7 @@ impl TestCli {
             heartbeat_every: StdDuration::from_secs(60),
             sweep_every: StdDuration::from_secs(60 * 60),
             heartbeat_check: StdDuration::from_millis(5),
+            pull_requests: StandInPullRequests::not_installed(),
             clock_offset: Arc::new(AtomicI64::new(0)),
             browser: Arc::new(NoBrowser),
         })
@@ -612,6 +615,8 @@ impl TestCli {
             heartbeat_check: self.heartbeat_check,
             finish_retry: StdDuration::from_millis(5),
             sweep_every: self.sweep_every,
+            pull_requests: Box::new(self.pull_requests.clone()),
+            watch_every: StdDuration::from_secs(60 * 60),
         }
     }
 
@@ -860,6 +865,49 @@ impl AgentTools for StandIn {
     }
 }
 
+type ViewResult = Result<String, PullRequestError>;
+
+/// The pull requests of a machine for tests: what `answer` says for each address plays `gh pr view`. Keeps the
+/// addresses it was asked about.
+#[derive(Clone)]
+pub struct StandInPullRequests {
+    answer: Arc<dyn Fn(&str) -> ViewResult + Send + Sync>,
+    asked: Arc<Mutex<Vec<String>>>,
+}
+
+impl StandInPullRequests {
+    /// Pull requests that are `answer`ed for each address.
+    pub fn new(answer: impl Fn(&str) -> ViewResult + Send + Sync + 'static) -> Self {
+        Self {
+            answer: Arc::new(answer),
+            asked: Arc::default(),
+        }
+    }
+
+    /// A machine without `gh`.
+    pub fn not_installed() -> Self {
+        Self::new(|_| Err(PullRequestError("gh isn't installed, or isn't on PATH".to_owned())))
+    }
+
+    /// The addresses `gh` was asked about, oldest first.
+    pub fn asked(&self) -> Vec<String> {
+        self.asked
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl PullRequests for StandInPullRequests {
+    fn view(&self, url: &str) -> Pin<Box<dyn Future<Output = ViewResult> + Send + '_>> {
+        self.asked
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(url.to_owned());
+        Box::pin(std::future::ready((self.answer)(url)))
+    }
+}
+
 /// The hands of an agent: runs `upheap` as a run does, with the run, server and heap its tool was started with.
 #[derive(Clone)]
 pub struct Agent {
@@ -905,6 +953,8 @@ impl Agent {
                 heartbeat_check: StdDuration::from_millis(1),
                 finish_retry: StdDuration::from_millis(1),
                 sweep_every: StdDuration::ZERO,
+                pull_requests: Box::new(StandInPullRequests::not_installed()),
+                watch_every: StdDuration::from_secs(60 * 60),
             },
         };
         let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;

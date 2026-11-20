@@ -10,8 +10,8 @@ use std::time::Duration as StdDuration;
 use anyhow::{Context, Result};
 use cli::{Access, Interrupt, TokenStore, Tool, ToolError, ToolReport, ToolStart, UsageLimit};
 use common::{
-    Agent, Buffer, HEAP, Outcome, START, StandIn, TestCli, TestServer, TestUser, change_heap, cli_in_heap, key,
-    lines_with, wait_until,
+    Agent, Buffer, HEAP, Outcome, START, StandIn, StandInPullRequests, TestCli, TestServer, TestUser, change_heap,
+    cli_in_heap, key, lines_with, wait_until,
 };
 use domain::Duration;
 use googletest::prelude::*;
@@ -3168,5 +3168,81 @@ async fn ctrl_c_during_the_hold_ends_the_loop_at_once() -> Result<()> {
     pressed?;
     expect_that!(outcome.exited(0), eq(true));
     expect_that!(tool.starts().len(), eq(1));
+    Ok(())
+}
+
+const PR: &str = "https://github.com/acme/app/pull/12";
+
+/// An agent that ends its run by watching `PR`.
+fn watching_agent(agent: &Agent) -> StandIn {
+    let agent = agent.clone();
+    StandIn::new(move |start| {
+        let agent = agent.clone();
+        async move {
+            agent.upheap(&start, &["work", "watch", PR]).await;
+            Ok(ToolReport::default())
+        }
+    })
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_watched_pull_request_that_was_merged_fires_and_the_item_is_claimed_again() -> Result<()> {
+    // Arrange: a run that ends by watching.
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    let watched = cli.run_work(ONCE, &watching_agent(&cli.agent())).await;
+    let waiting = server.read_item(&ada, HEAP, &note).await?;
+    let again = idle_agent(None);
+    cli.pull_requests = StandInPullRequests::new(|_| Ok(r#"{"state":"MERGED"}"#.to_owned()));
+
+    // Act
+    let outcome = cli.run_work(ONCE, &again).await;
+    let item = server.read_item(&ada, HEAP, &note).await?;
+
+    // Assert
+    expect_that!(watched.exited(0), eq(true));
+    expect_that!(
+        lines_with(&watched.stdout, &note),
+        elements_are![contains_substring("watching")]
+    );
+    expect_that!(waiting["agent_state"], eq("watching"));
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(cli.pull_requests.asked(), elements_are![eq(PR)]);
+    expect_that!(
+        outcome.stderr,
+        contains_substring(format!("{note} is back from watching {PR}."))
+    );
+    expect_that!(again.starts().len(), eq(1));
+    expect_that!(
+        item["comments"][0]["body"],
+        eq(&json!(format!("Back from watching {PR}:\n\n- Merged.")))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_pull_request_gh_cannot_read_leaves_the_watch_and_the_loop_goes_on() -> Result<()> {
+    // Arrange: a watching item, and a machine without gh.
+    let (server, ada, cli, note) = with_prepared_note().await?;
+    cli.run_work(ONCE, &watching_agent(&cli.agent())).await;
+    let tool = idle_agent(None);
+
+    // Act
+    let outcome = cli.run_work(ONCE, &tool).await;
+    let item = server.read_item(&ada, HEAP, &note).await?;
+
+    // Assert
+    expect_that!(outcome.exited(0), eq(true));
+    expect_that!(
+        outcome.stderr,
+        contains_substring(format!(
+            "Couldn't check {PR} with gh: gh isn't installed, or isn't on PATH. Trying again later."
+        ))
+    );
+    expect_that!(outcome.stdout, contains_substring("Nothing to do."));
+    expect_that!(tool.starts().len(), eq(0));
+    expect_that!(item["agent_state"], eq("watching"));
+    expect_that!(item["comments"], eq(&json!([])));
     Ok(())
 }

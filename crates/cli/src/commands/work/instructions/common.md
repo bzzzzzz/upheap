@@ -47,3 +47,7 @@ Ending the run
 - If there is nothing to do and the goal needn't be reached (the work was done or dropped elsewhere), give the turn
   back: `upheap work hand-back --reason "<why, in a line>"`, and stop. The item goes back to the person as it is.
   Blocked is not nothing to do: ask the person instead.
+- If the run would only wait on its own pull request (CI to finish, a bot's review), don't wait: end the run with
+  `upheap work watch <pr-url>`, and stop. The item comes back when the pull request gets a comment or a failed
+  check, or is merged or closed, with a comment saying what came. Never after asking a question or a review: then
+  the item waits for the person.

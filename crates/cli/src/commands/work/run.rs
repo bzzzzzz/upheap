@@ -8,6 +8,7 @@
 //! The tool sits behind [`AgentTools`], and the waits and interruptions come in through [`WorkDeps`], so tests pass
 //! their own.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -15,8 +16,11 @@ use std::time::{Duration, SystemTime};
 
 use api_types::common::ItemDto;
 use api_types::heaps::HeapDto;
-use api_types::work::{ClaimDto, ClaimRequestDto, FinishRequestDto, RunDto, RunEndDto};
+use api_types::work::{
+    ClaimDto, ClaimRequestDto, FinishRequestDto, FireWatchRequestDto, RunDto, RunEndDto, WatchDto, WatchesDto,
+};
 use clap::Args;
+use domain::comment::CommentBody;
 use futures_util::future::join_all;
 use reqwest::Url;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -26,13 +30,15 @@ use tokio::time::{Instant, MissedTickBehavior};
 use super::brief::{BriefParts, KnownGoal, build_brief};
 use super::kept::{self, Kept, LiveDirs, Verdict};
 use super::logs;
+use super::watches::what_came;
 use super::{
     HeapsArgs, NamedHeap, end_word, ended_journey, journey, missing_agents, resolve_named_heaps, waiting_by_heap_text,
     waiting_text,
 };
 use crate::agent::leftovers;
 use crate::agent::{
-    Access, AgentTools, Interrupt, Tool, ToolError, ToolReport, ToolStart, UsageLimit, WorkDeps, make_root,
+    Access, AgentTools, Interrupt, PullRequests, Tool, ToolError, ToolReport, ToolStart, UsageLimit, WorkDeps,
+    make_root,
 };
 use crate::client::{ApiClient, ClientError, Fetched, NO_QUERY};
 use crate::commands::heap_api::HeapApi;
@@ -214,6 +220,8 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         heartbeat_check,
         finish_retry,
         sweep_every,
+        pull_requests,
+        watch_every,
     } = work;
     let (stop, _) = watch::channel(Stop::No);
     let shared = Shared {
@@ -237,6 +245,10 @@ pub async fn run(args: RunArgs, app: &App, work: WorkDeps, out: &mut Output) -> 
         heartbeat_check,
         finish_retry,
         sweep_every,
+        pull_requests,
+        watch_every,
+        last_watch_check: Mutex::new(None),
+        unreadable_noted: Mutex::new(HashSet::new()),
         last_sweep: Mutex::new(None),
         last_log_prune: Mutex::new(None),
         live_dirs: LiveDirs::default(),
@@ -432,6 +444,13 @@ struct Shared<'a> {
     heartbeat_check: Duration,
     finish_retry: Duration,
     sweep_every: Duration,
+    pull_requests: Box<dyn PullRequests>,
+    watch_every: Duration,
+    /// When the open watches were last checked, or began to be; `None` before the first check. Taken by the worker
+    /// that finds a check due, so the others go on claiming.
+    last_watch_check: Mutex<Option<Instant>>,
+    /// The pull requests `gh` failed on that the loop has said so for: a URL is said once for the loop's life.
+    unreadable_noted: Mutex<HashSet<String>>,
     /// When the root was last swept, or began to be; `None` before the first sweep. Taken by the worker that finds
     /// a sweep due, so the others go on claiming.
     last_sweep: Mutex<Option<Instant>>,
@@ -574,7 +593,8 @@ impl Shared<'_> {
             }
             self.prune_logs_if_due().await;
             self.sweep_if_due().await;
-            // A sweep can take a while: a Ctrl-C during it claims nothing more, so the runs the note listed are all.
+            self.check_watches_if_due().await;
+            // A sweep or a check can take a while: a Ctrl-C during it claims nothing more, so the runs the note listed are all.
             if self.is_stopping() {
                 return;
             }
@@ -897,6 +917,86 @@ impl Shared<'_> {
         self.sweep(root).await;
     }
 
+    /// Checks the open watches if it has been `watch_every` since the last check, or never has been: before the first
+    /// claim, then now and then. A worker that finds one due marks it started and does it; the others carry on.
+    async fn check_watches_if_due(&self) {
+        {
+            let mut last = lock(&self.last_watch_check);
+            if last.is_some_and(|at| at.elapsed() < self.watch_every) {
+                return;
+            }
+            *last = Some(Instant::now());
+        }
+        let watches = match self.list_watches().await {
+            Ok(watches) => watches,
+            Err(err) => {
+                tracing::debug!(error = %err, "couldn't list the open watches");
+                return;
+            }
+        };
+        for watch in &watches.value.watches {
+            if self.is_stopping() {
+                return;
+            }
+            self.check_watch(watch).await;
+        }
+    }
+
+    async fn list_watches(&self) -> Result<Fetched<WatchesDto>, CliError> {
+        let client = self.app.client(self.server.clone())?;
+        let token = self.app.access_token(&client).await?;
+        let query = [("heaps", self.heaps.join(","))];
+        Ok(client.get::<WatchesDto>(&["work", "watches"], &query, &token).await?)
+    }
+
+    /// Reads one watched pull request with `gh`, and when something came since the watch began, fires the watch. A
+    /// pull request `gh` can't read, or a watch the server can't be told of, is left for the next check.
+    async fn check_watch(&self, watch: &WatchDto) {
+        let json = match self.pull_requests.view(&watch.url).await {
+            Ok(json) => json,
+            Err(err) => return self.note_unreadable(&watch.url, &err.to_string()),
+        };
+        // The comment says `Back from watching <url>:` and a blank line before what came.
+        let intro = format!("Back from watching {}:\n\n", watch.url);
+        let room = CommentBody::MAX_CHARS.saturating_sub(intro.chars().count());
+        let what = match what_came(&json, watch.since, room) {
+            Ok(Some(what)) => what,
+            Ok(None) => return,
+            Err(err) => return self.note_unreadable(&watch.url, &err.to_string()),
+        };
+        match self.fire_watch(watch, what).await {
+            Ok(()) => {
+                if self.mode == Mode::Human {
+                    // Nowhere left to say it if stderr is gone.
+                    let _ = self.write(|out| out.note(&format!("{} is back from watching {}.", watch.key, watch.url)));
+                }
+            }
+            // Taken back, or fired by another loop, meanwhile.
+            Err(err) if err.problem_status() == Some(409) => {}
+            Err(err) => tracing::warn!(url = %watch.url, error = %err, "couldn't fire a watch"),
+        }
+    }
+
+    async fn fire_watch(&self, watch: &WatchDto, what: String) -> Result<(), CliError> {
+        let client = self.app.client(self.server.clone())?;
+        let token = self.app.access_token(&client).await?;
+        let turn = watch.turn_id.to_string();
+        let request = FireWatchRequestDto { what };
+        Ok(client
+            .post_for_no_content(&["work", "watches", &turn, "fire"], &request, &token)
+            .await?)
+    }
+
+    /// Says once for the loop's life that `url` couldn't be checked, then logs it each time.
+    fn note_unreadable(&self, url: &str, error: &str) {
+        let first = lock(&self.unreadable_noted).insert(url.to_owned());
+        if first {
+            self.note(&format!("Couldn't check {url} with gh: {error}. Trying again later."));
+        } else {
+            tracing::warn!(url, error, "couldn't check a pull request with gh");
+        }
+    }
+
     /// Removes the kept directories of closed and missing items, and those unused for 7 days; see [`kept`]. Never
     /// fails: whatever goes wrong leaves a directory in place, or is a warning.
     async fn sweep(&self, root: &Path) {
@@ -1166,11 +1266,14 @@ impl Shared<'_> {
         }
     }
 
-    /// Whether `run` ended by the agent's own say: as reached, or handed back. Asked through `finish` with nothing to
+    /// Whether `run` ended by the agent's own say: as reached, handed back, or watching. Asked through `finish` with nothing to
     /// record, which leaves a run that has ended as it is and answers with it.
     async fn has_ended_itself(&self, run: &RunDto) -> bool {
         match self.finish(run, &FinishRequestDto::default()).await {
-            Ok(finished) => matches!(finished.value.end, Some(RunEndDto::Reached | RunEndDto::HandedBack)),
+            Ok(finished) => matches!(
+                finished.value.end,
+                Some(RunEndDto::Reached | RunEndDto::HandedBack | RunEndDto::Watching)
+            ),
             Err(_) => false,
         }
     }

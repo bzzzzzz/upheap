@@ -166,6 +166,48 @@ pub trait AgentTools: Send + Sync {
     }
 }
 
+/// Why a pull request couldn't be read.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
+pub struct PullRequestError(pub String);
+
+/// The pull requests a machine can read, with its own `gh`.
+pub trait PullRequests: Send + Sync {
+    /// What `gh pr view <url> --json state,comments,reviews,statusCheckRollup` prints, as JSON text.
+    fn view(&self, url: &str) -> Pin<Box<dyn Future<Output = Result<String, PullRequestError>> + Send + '_>>;
+}
+
+/// The pull requests of this machine: `gh`, signed in as the person.
+pub struct SystemPullRequests;
+
+impl PullRequests for SystemPullRequests {
+    fn view(&self, url: &str) -> Pin<Box<dyn Future<Output = Result<String, PullRequestError>> + Send + '_>> {
+        let url = url.to_owned();
+        Box::pin(async move {
+            let output = tokio::process::Command::new("gh")
+                .args(["pr", "view", &url, "--json", "state,comments,reviews,statusCheckRollup"])
+                .stdin(std::process::Stdio::null())
+                .output()
+                .await
+                .map_err(|err| match err.kind() {
+                    std::io::ErrorKind::NotFound => PullRequestError("gh isn't installed, or isn't on PATH".to_owned()),
+                    _ => PullRequestError(format!("gh wouldn't start: {err}")),
+                })?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let last = stderr
+                    .lines()
+                    .rev()
+                    .find(|line| !line.trim().is_empty())
+                    .unwrap_or_default();
+                return Err(PullRequestError(format!("gh {}: {}", output.status, last.trim())));
+            }
+            String::from_utf8(output.stdout)
+                .map_err(|_| PullRequestError("gh printed text that isn't UTF-8".to_owned()))
+        })
+    }
+}
+
 /// An interruption of the loop.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interrupt {
@@ -195,6 +237,10 @@ pub struct WorkDeps {
     pub finish_retry: Duration,
     /// How long between sweeps of the `--root` for directories to remove. 1 hour in the binary.
     pub sweep_every: Duration,
+    /// The pull requests the loop checks for open watches.
+    pub pull_requests: Box<dyn PullRequests>,
+    /// How long between checks of the open watches. 60 seconds in the binary.
+    pub watch_every: Duration,
 }
 
 impl WorkDeps {
@@ -208,6 +254,8 @@ impl WorkDeps {
             heartbeat_check: Duration::from_secs(30),
             finish_retry: Duration::from_secs(5),
             sweep_every: Duration::from_secs(60 * 60),
+            pull_requests: Box::new(SystemPullRequests),
+            watch_every: Duration::from_secs(60),
         }
     }
 }

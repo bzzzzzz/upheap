@@ -204,6 +204,21 @@ impl ApiClient {
         Ok(())
     }
 
+    /// `POST /api/v1/<path>` with `body` as JSON, for an endpoint that answers `204`, as the holder of `token`.
+    pub async fn post_for_no_content(
+        &self,
+        path: &[&str],
+        body: &(impl Serialize + ?Sized),
+        token: &str,
+    ) -> Result<(), ClientError> {
+        let request = self.http.post(self.api_url(path)).json(body).bearer_auth(token);
+        let response = self.send(request).await?;
+        if !response.status().is_success() {
+            return Err(self.read_failure(response).await);
+        }
+        Ok(())
+    }
+
     /// `PATCH /api/v1/<path>` with `body` as JSON, for the item or other row at `version`. The server wants the
     /// version in `If-Match`, quoted (`"3"`), and answers `409 version_conflict` if the row has moved on.
     pub async fn patch<T: DeserializeOwned>(
