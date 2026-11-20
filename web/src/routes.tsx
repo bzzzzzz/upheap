@@ -41,6 +41,7 @@ import { ParametersPage } from "./pages/ParametersPage";
 import { ProviderStepPage } from "./pages/ProviderStepPage";
 import { HeapRankingSettings } from "./pages/RankingPage";
 import { ChangeEmailPage } from "./pages/ChangeEmailPage";
+import { ConfirmPage } from "./pages/ConfirmPage";
 import { ResetPage } from "./pages/ResetPage";
 import { TagsPage } from "./pages/TagsPage";
 import { TeamPage } from "./pages/TeamPage";
@@ -83,14 +84,17 @@ export function isSignInPath(router: ReturnType<typeof useRouter>, pathname: str
 }
 
 /**
- * Whether `pathname` is a page a link opens, an invite link's or a password reset link's, which handles its own
- * sign-in: signed out is one of the invite page's states, and the reset page signs the visitor in as the link's user
- * whoever they are, so a `401` there doesn't send the user to sign-in.
+ * Whether `pathname` is a page a link opens, an invite link's, a password reset link's or an email confirmation
+ * link's, which handles its own sign-in: signed out is one of the invite page's states, and the reset and confirm
+ * pages sign the visitor in as the link's user whoever they are, so a `401` there doesn't send the user to sign-in.
  */
 export function handlesOwnSignIn(router: ReturnType<typeof useRouter>, pathname: string): boolean {
   return router
     .matchRoutes(pathname, {})
-    .some((match) => match.routeId === inviteRoute.id || match.routeId === resetRoute.id);
+    .some(
+      (match) =>
+        match.routeId === inviteRoute.id || match.routeId === resetRoute.id || match.routeId === confirmRoute.id,
+    );
 }
 
 /**
@@ -245,6 +249,18 @@ const changeEmailRoute = createRoute({
   path: "/change-email/$token",
   component: function ChangeEmailRoute() {
     return <ChangeEmailPage token={changeEmailRoute.useParams().token} />;
+  },
+});
+
+/**
+ * The page an email confirmation link opens (ux.md, Confirm page), outside the app's shell like sign-in. It has no
+ * guard: holding the link is the permission, whether signed in or not, and it signs the visitor in as the link's user.
+ */
+const confirmRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/confirm/$token",
+  component: function ConfirmRoute() {
+    return <ConfirmPage token={confirmRoute.useParams().token} />;
   },
 });
 
@@ -611,6 +627,7 @@ const routeTree = rootRoute.addChildren([
   inviteRoute,
   resetRoute,
   changeEmailRoute,
+  confirmRoute,
   authorizeRoute,
   shortTeamRoute,
   shortHeapRoute,

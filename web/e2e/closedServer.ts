@@ -35,7 +35,7 @@ export type ClosedServer = {
    */
   resetLink: (login: string) => Promise<string>;
   /**
-   * Waits for the newest mail to `email` that holds a link under `path` (`reset` or `change-email`) in the server's
+   * Waits for the newest mail to `email` that holds a link under `path` (`reset`, `change-email` or `confirm`) in the server's
    * mail directory (its mail goes to files there), and returns the link. `after` is the time the person asked, so an
    * earlier mail isn't taken.
    */
@@ -43,7 +43,7 @@ export type ClosedServer = {
 };
 
 /** What comes before the token in a link the server mails. */
-export type MailedLinkPath = "reset" | "change-email";
+export type MailedLinkPath = "reset" | "change-email" | "confirm";
 
 /** The server binary `npm run e2e`'s web server has built by the time a worker starts (cargo's target directory). */
 const REPOSITORY_ROOT = fileURLToPath(new URL("../..", import.meta.url));

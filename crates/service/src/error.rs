@@ -41,6 +41,10 @@ pub enum ServiceError {
     AccountDeactivated,
     #[error("email or password is wrong")]
     InvalidCredentials,
+    /// The right password for an account that hasn't confirmed its address, on a server with mail set up. A new link
+    /// was mailed.
+    #[error("Confirm your address first: we mailed you a new link.")]
+    EmailNotConfirmed,
     /// The current password given to change the password is not the user's.
     #[error("the current password is wrong")]
     WrongPassword,
@@ -135,6 +139,9 @@ pub enum ServiceError {
     /// An email change link that can't be used to change an address.
     #[error(transparent)]
     EmailChangeLink(#[from] EmailChangeLinkError),
+    /// An email confirmation link that can't be used to confirm an address. It fails like an email change link.
+    #[error(transparent)]
+    ConfirmationLink(EmailChangeLinkError),
     /// The user to add to a team doesn't exist.
     #[error("there is no user {user_id}")]
     UserNotFound { user_id: UserId },

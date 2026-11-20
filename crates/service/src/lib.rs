@@ -13,6 +13,7 @@ pub mod auth;
 mod clock;
 pub mod comments;
 pub mod email_change;
+pub mod email_confirmation;
 mod error;
 mod figures;
 pub mod group_teams;
@@ -152,7 +153,7 @@ impl Services {
         self
     }
 
-    /// Whether this server has mail set up: it mails password reset links, and email change links.
+    /// Whether this server has mail set up: it mails password reset links, email change links and email confirmation links.
     pub fn has_mail(&self) -> bool {
         self.mail.is_some()
     }

@@ -176,6 +176,7 @@ fn classify_service(err: &ServiceError) -> Classified {
             ..simple(StatusCode::UNAUTHORIZED, "token_expired", Category::Permission)
         },
         ServiceError::AccountDeactivated => simple(StatusCode::FORBIDDEN, "account_deactivated", Category::Permission),
+        ServiceError::EmailNotConfirmed => simple(StatusCode::FORBIDDEN, "email_not_confirmed", Category::Permission),
         ServiceError::InvalidCredentials => {
             simple(StatusCode::UNAUTHORIZED, "invalid_credentials", Category::Permission)
         }
@@ -403,6 +404,15 @@ fn classify_service(err: &ServiceError) -> Classified {
         }
         ServiceError::EmailChangeLink(EmailChangeLinkError::Ended) => {
             simple(StatusCode::CONFLICT, "email_change_ended", Category::Conflict)
+        }
+        ServiceError::ConfirmationLink(EmailChangeLinkError::Used) => {
+            simple(StatusCode::CONFLICT, "confirmation_link_used", Category::Conflict)
+        }
+        ServiceError::ConfirmationLink(EmailChangeLinkError::Cancelled) => {
+            simple(StatusCode::CONFLICT, "confirmation_link_cancelled", Category::Conflict)
+        }
+        ServiceError::ConfirmationLink(EmailChangeLinkError::Ended) => {
+            simple(StatusCode::CONFLICT, "confirmation_link_ended", Category::Conflict)
         }
         ServiceError::UserNotFound { .. } => Classified {
             field: Some("user_id"),

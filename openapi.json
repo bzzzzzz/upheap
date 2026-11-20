@@ -16,7 +16,7 @@
           "auth"
         ],
         "summary": "Signs in with an email address or a username, and a password.",
-        "description": "Each account gets a few attempts per time window, counted together whether it's named by email address or by\nusername, and so does each address or username without an account. Past that, attempts fail with `429` until\nthe window ends, and a successful sign-in starts the count over.",
+        "description": "Each account gets a few attempts per time window, counted together whether it's named by email address or by\nusername, and so does each address or username without an account. Past that, attempts fail with `429` until\nthe window ends, and a successful sign-in starts the count over.\n\nOn a server with mail set up, the right password for an account that hasn't confirmed its address doesn't sign in:\na new confirmation link is mailed, cancelling the earlier one, and the answer is `403`. The attempt isn't cleared,\nso the mails are limited like sign-ins.",
         "operationId": "sign_in",
         "requestBody": {
           "content": {
@@ -50,7 +50,7 @@
             }
           },
           "403": {
-            "description": "`password_sign_in_off`: the server signs in through its provider only",
+            "description": "`password_sign_in_off`: the server signs in through its provider only; or `email_not_confirmed`: the account hasn't confirmed its address, and a new link is mailed",
             "content": {
               "application/json": {
                 "schema": {
@@ -362,7 +362,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Creates an account with a personal team and heap, and signs in.",
+        "summary": "Creates an account with a personal team and heap, and signs in. On a server with mail set up it doesn't sign in:\nthe account can't sign in until it opens the confirmation link mailed to its address.",
         "operationId": "register",
         "requestBody": {
           "content": {
@@ -381,6 +381,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "With mail set up: made, and a confirmation link is mailed; not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationSent"
                 }
               }
             }
@@ -556,6 +566,69 @@
         }
       }
     },
+    "/api/v1/email-confirmations/{token}": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Confirms the account's email address with the link mailed to it, and signs this browser in as the account. The\nlink works once, for a day, and a newer one for the account cancels it. Anyone holding the token may; a session\ncookie or bearer token is ignored, and the answer's cookie replaces any session cookie the browser had. There is\nno read of a link: confirming is a `POST`, so a mail scanner that opens the link confirms nothing.",
+        "description": "Works whether the server has mail set up or not. Not rate limited, as a token can't be guessed.",
+        "operationId": "confirm_email",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "The link's secret: the last part of the link, `{origin}/confirm/{token}`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Confirmed; the answer is the account, and it sets the session cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`, `password_sign_in_off`, or `account_deactivated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`confirmation_link_used`, `confirmation_link_cancelled` or `confirmation_link_ended`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/invites/{token}": {
       "get": {
         "tags": [
@@ -710,6 +783,7 @@
           "auth"
         ],
         "summary": "Creates an account through the link, and joins its team as a member in the same act: the account, its personal\nteam and heap, the membership and the session are all made, or none is. Works whether registration is open or\nclosed on the server. Takes the same body as `/auth/register` and checks it the same way, and answers `409`\n`invite_link_ended` or `invite_link_revoked` when the link isn't working at this moment, even if the username is\nalso taken. Sets the session cookie, replacing any the caller had. The link keeps working for others.",
+        "description": "On a server with mail set up nobody is signed in: the account is made and joined, a confirmation link is mailed\nto its address, and the answer is `202` with no cookie.",
         "operationId": "register_by_invite",
         "parameters": [
           {
@@ -739,6 +813,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/InviteRegistration"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "With mail set up: made and joined, and a confirmation link is mailed; not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationSent"
                 }
               }
             }
@@ -9210,7 +9294,8 @@
           "account_reactivated",
           "heap_priority_changed",
           "email_change_asked",
-          "email_changed"
+          "email_changed",
+          "email_confirmed"
         ]
       },
       "AccountHistory": {
@@ -9596,7 +9681,8 @@
           "account_deactivated",
           "account_reactivated",
           "email_change_asked",
-          "email_changed"
+          "email_changed",
+          "email_confirmed"
         ]
       },
       "AuditChange": {
@@ -10096,6 +10182,19 @@
             "format": "int32",
             "description": "The comment's number within its item, given when it was added and never changed or reused. The comment is\nnamed by its item's key and this number, as `k3x9a.c3`.",
             "minimum": 0
+          }
+        }
+      },
+      "ConfirmationSent": {
+        "type": "object",
+        "description": "What registering answers when the account must confirm its address first.",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The address the confirmation link was mailed to, as stored."
           }
         }
       },

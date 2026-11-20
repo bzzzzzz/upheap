@@ -239,8 +239,13 @@ function SignedOut({
     isPending: register.isPending,
     reset: register.reset,
     // The new account lands in the team the response carries, with no call to fetch it.
-    mutate: (body) =>
-      register.mutate(body, { onSuccess: ({ team: joined }) => land(joined, `You joined ${joined.name}.`) }),
+    mutate: (body, onConfirmationSent) =>
+      register.mutate(body, {
+        onSuccess: (registered) =>
+          registered.kind === "signed_in"
+            ? land(registered.team, `You joined ${registered.team.name}.`)
+            : onConfirmationSent(registered.email),
+      }),
   };
   return (
     <AuthPage

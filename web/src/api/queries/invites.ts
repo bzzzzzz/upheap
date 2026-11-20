@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, unwrap } from "../client";
+import type { InviteRegistration } from "../schema";
+import { registeredFrom } from "./auth";
 import { inviteLinksKey, invalidateMe, removeUserQueries } from "./keys";
 
 /** The team's invite links, every one made and past, newest first. Admins only: `enabled` is whether the caller is. */
@@ -58,14 +60,25 @@ export function useJoinByInvite(token: string) {
   });
 }
 
-/** Creates an account through the link and joins its team in the same act; the response signs the browser in. */
+/**
+ * Creates an account through the link and joins its team in the same act. The response signs the browser in and has
+ * the team (`team`), or, on a server with mail set up, it mails a confirmation link and signs nobody in.
+ */
 export function useRegisterByInvite(token: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { email: string; username: string; display_name: string; password: string }) =>
-      unwrap(await api.POST("/api/v1/invites/{token}/register", { params: { path: { token } }, body })),
-    // As `useRegister`: nothing of a previous user's cache survives.
-    onSuccess: () => removeUserQueries(queryClient),
+    mutationFn: async (body: { email: string; username: string; display_name: string; password: string }) => {
+      const result = await api.POST("/api/v1/invites/{token}/register", { params: { path: { token } }, body });
+      const answer = unwrap(result);
+      const registered = registeredFrom(result.response, answer);
+      return registered.kind === "signed_in"
+        ? { ...registered, team: (answer as InviteRegistration).team }
+        : registered;
+    },
+    // As `useRegister`: nothing of a previous user's cache survives, once a session is made.
+    onSuccess: (registered) => {
+      if (registered.kind === "signed_in") removeUserQueries(queryClient);
+    },
     onError: (error) => refreshInvitationAfter(queryClient, token, error),
   });
 }

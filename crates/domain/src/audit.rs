@@ -59,6 +59,7 @@ coded_enum! {
         AccountReactivated = "account_reactivated",
         EmailChangeAsked = "email_change_asked",
         EmailChanged = "email_changed",
+        EmailConfirmed = "email_confirmed",
     }
 }
 

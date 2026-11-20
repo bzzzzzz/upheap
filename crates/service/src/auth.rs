@@ -22,6 +22,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use store::{StoreError, TransactionTrait};
 
+use crate::email_confirmation::Registered;
 use crate::{Principal, ServiceError, Services};
 
 /// A session token as sent to the client. Never log it.
@@ -163,11 +164,13 @@ impl Login {
 static DUMMY_HASH: LazyLock<Option<String>> = LazyLock::new(|| hash_password("dummy password for timing").ok());
 
 impl Services {
-    /// Creates a local account with its personal team and heap, and signs the user in.
+    /// Creates a local account with its personal team and heap, and signs the user in. On a server with mail set up
+    /// it doesn't sign them in: the account is made unconfirmed, a confirmation link is mailed to its address after
+    /// the transaction commits, and the answer is [`Registered::ConfirmationSent`].
     ///
     /// The team is named after the user and takes their username as its slug, and the user is its admin. Its first
     /// heap is `personal`.
-    pub async fn register(&self, registration: Registration<'_>) -> Result<SessionGrant, ServiceError> {
+    pub async fn register(&self, registration: Registration<'_>) -> Result<Registered, ServiceError> {
         self.ensure_password_sign_in()?;
         if !self.settings.allow_registration {
             return Err(ServiceError::RegistrationClosed);
@@ -176,11 +179,13 @@ impl Services {
 
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
-        let (grant, team, heap) = self.insert_account(&txn, account, now).await?;
+        let (user, team, heap) = self.insert_account(&txn, account, now).await?;
+        let user_id = user.id;
+        let access = self.open_new_account(&txn, user, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
-        tracing::info!(user_id = %grant.user.id, team_id = %team.id, heap_id = %heap.id, "user registered");
-        Ok(grant)
+        tracing::info!(%user_id, team_id = %team.id, heap_id = %heap.id, "user registered");
+        Ok(self.registered(access))
     }
 
     /// Signs in with email and password.
@@ -190,6 +195,10 @@ impl Services {
     /// [`ServiceError::TooManySignInAttempts`] before the password is checked. An empty email or password fails
     /// with [`ValidationError::Empty`] before anything is counted, so a form sent before a password manager filled
     /// it doesn't use up an attempt.
+    ///
+    /// On a server with mail set up, the right password for an account that hasn't confirmed its address fails with
+    /// [`ServiceError::EmailNotConfirmed`] instead of opening a session, after a new confirmation link is mailed
+    /// (see [`Services::mail_new_confirmation_link`]). The attempt stays counted, so the mails are limited too.
     pub async fn sign_in(&self, login: &str, password: &str) -> Result<SessionGrant, ServiceError> {
         self.ensure_password_sign_in()?;
         let login = login.trim();
@@ -218,6 +227,12 @@ impl Services {
             tracing::info!("sign-in rejected");
             return Err(ServiceError::InvalidCredentials);
         };
+        if let Some(mail) = &self.mail
+            && !store::users::is_email_confirmed(&self.db, user.id).await?
+        {
+            self.mail_new_confirmation_link(mail, &user).await?;
+            return Err(ServiceError::EmailNotConfirmed);
+        }
         // The personal team's lock puts the session in turn with a provider deactivating the person, as for a
         // provider sign-in.
         let personal_team = self.load_personal_team(&self.db, &user).await?;
@@ -445,15 +460,16 @@ impl Services {
         Ok(crate::oidc::provider_logout_url(oidc, &id_token).await)
     }
 
-    /// Makes the account inside the caller's transaction: the user with their personal team and first heap, their
-    /// password, and a session. Fails like [`Services::insert_personal_user`] when the email or username is taken.
-    /// Returns the session and the personal team and heap, for the caller's log line.
+    /// Makes the account inside the caller's transaction: the user with their personal team and first heap, and their
+    /// password. Fails like [`Services::insert_personal_user`] when the email or username is taken. The caller
+    /// gives the account its way in with [`Services::open_new_account`]. Returns the user and the personal team and
+    /// heap, for the caller's log line.
     pub(crate) async fn insert_account(
         &self,
         txn: &impl store::ConnectionTrait,
         account: NewAccount,
         now: Timestamp,
-    ) -> Result<(SessionGrant, Team, Heap), ServiceError> {
+    ) -> Result<(User, Team, Heap), ServiceError> {
         let made = self
             .insert_personal_user(
                 txn,
@@ -465,8 +481,7 @@ impl Services {
             )
             .await?;
         store::users::insert_password(txn, made.user.id, &account.password_hash, now).await?;
-        let grant = self.open_session(txn, made.user, now, None).await?;
-        Ok((grant, made.team, made.heap))
+        Ok((made.user, made.team, made.heap))
     }
 
     /// Ends every sign-in of the account in the caller's transaction: its web sessions, its OAuth token families and

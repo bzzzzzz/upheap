@@ -12,7 +12,6 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [ux.md](ux.md) | The web app's UX: principles, core flows, toolkit, layout at each width, each screen's behaviour, the rules that settle questions, what comes later | A principle, a layout or a behaviour changes |
 | [../web/e2e/CLAUDE.md](../web/e2e/CLAUDE.md) | The rules the Playwright tests follow so they don't race the app: what to wait for after a save, what not to assert, how to reproduce a flake | A flake teaches a rule, or the tests' setup changes |
 | [work/work-with-agents.md](work/work-with-agents.md) | Work with agents, the design: context, tasks with steps, reminders, questions and the agent loop. Commitments, workflows, concepts and rules, interface, choices | The design changes, until it's built |
-| [work/email.md](work/email.md) | Email, the design: optional SMTP mail, reset by mail, confirming an address, changing an address. Commitments, workflows, rules, interface, stages | The design changes, until it's built |
 | [work/smaller-changes.md](work/smaller-changes.md) | Smaller changes, the design: why a feature touches so many files, the refactors that remove the repeats, and what stays as it is | The design changes, until it's built |
 | [work/scim.md](work/scim.md) | SCIM provisioning, the design: the provider pushes group membership and deactivation, and group-managed teams follow at once. Promises, setup, endpoints, storage, how a push and a sign-in apply | The design changes, until it's built |
 

@@ -147,7 +147,8 @@ impl Services {
     /// and the other fails like a used link), and ends every sign-in of the user: their unused authorization codes,
     /// web sessions and token families, whichever browser or client made them. The caller gets a new session. Any
     /// other working link of the user is cancelled. The user's sign-in attempt count starts over, since the person
-    /// holding the link has proved who they are. The reset is recorded in the user's personal team with the number of
+    /// holding the link has proved who they are. The user's address counts as confirmed, as the link was mailed to it (an
+    /// operator's link is the same kind of link). The reset is recorded in the user's personal team with the number of
     /// sign-ins it ended and nothing about the password or the token.
     pub async fn reset_password(&self, token: &ResetToken, new: &str) -> Result<SessionGrant, ServiceError> {
         self.ensure_password_sign_in()?;
@@ -176,6 +177,8 @@ impl Services {
             return Err(link.state(now).error().unwrap_or(ResetLinkError::Used).into());
         }
         store::users::set_password(&txn, user.id, &new_hash, now).await?;
+        // A link that came by mail proves the address. The operator's is the same kind of link.
+        store::users::confirm_email(&txn, user.id).await?;
         let ended_sign_ins = self.end_sign_ins(&txn, user.id, None, now).await?;
         let session = self.open_session(&txn, user.clone(), now, None).await?;
         // There shouldn't be one, since making a link cancels the others; this keeps "one working link" true anyway.

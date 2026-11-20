@@ -58,9 +58,16 @@ fn token_in(mail: &str) -> Result<String> {
 
 /// A server with mail, written to `dir`, and the registered user's session.
 async fn start(dir: &Path) -> Result<(TestApp, String)> {
-    let app = TestApp::start().await?;
-    let (session, _) = app.register(EMAIL).await?;
-    Ok((app.with_mail(dir)?, session))
+    let (app, session, _) = start_with_plain(dir).await?;
+    Ok((app, session))
+}
+
+/// [`start`], and the same server without mail too, for the accounts a test needs that nobody has to confirm: a
+/// server with mail makes an account that signs in only once its address is confirmed.
+async fn start_with_plain(dir: &Path) -> Result<(TestApp, String, TestApp)> {
+    let plain = TestApp::start().await?;
+    let (session, _) = plain.register(EMAIL).await?;
+    Ok((plain.with_mail(dir)?, session, plain))
 }
 
 fn actions(response: &TestResponse) -> Vec<&str> {
@@ -174,8 +181,8 @@ async fn a_wrong_password_sends_nothing() -> Result<()> {
 async fn a_taken_address_gets_the_same_answer_and_no_mail() -> Result<()> {
     // Arrange
     let dir = tempfile::tempdir()?;
-    let (app, session) = start(dir.path()).await?;
-    app.register("grace@example.test").await?;
+    let (app, session, plain) = start_with_plain(dir.path()).await?;
+    plain.register("grace@example.test").await?;
 
     // Act
     let taken = ask_as(&app, &session, NEW_EMAIL, PASSWORD).await?;
@@ -269,8 +276,8 @@ async fn the_action_needs_mail_a_session_and_a_password() -> Result<()> {
 async fn an_ask_for_a_taken_address_cancels_the_earlier_link() -> Result<()> {
     // Arrange
     let dir = tempfile::tempdir()?;
-    let (app, session) = start(dir.path()).await?;
-    app.register("grace@example.test").await?;
+    let (app, session, plain) = start_with_plain(dir.path()).await?;
+    plain.register("grace@example.test").await?;
     ask_as(&app, &session, "hopper@example.test", PASSWORD).await?;
     let first = token_in(&common::wait_for_mails(dir.path(), 1).await?[0])?;
     ask_as(&app, &session, NEW_EMAIL, PASSWORD).await?;
@@ -338,10 +345,10 @@ async fn an_ended_link_says_so() -> Result<()> {
 async fn an_address_taken_since_the_ask_is_refused_and_the_link_keeps_working() -> Result<()> {
     // Arrange
     let dir = tempfile::tempdir()?;
-    let (app, session) = start(dir.path()).await?;
+    let (app, session, plain) = start_with_plain(dir.path()).await?;
     ask_as(&app, &session, NEW_EMAIL, PASSWORD).await?;
     let token = token_in(&common::wait_for_mails(dir.path(), 1).await?[0])?;
-    let (grace_session, _) = app.register(NEW_EMAIL).await?;
+    let (grace_session, _) = plain.register(NEW_EMAIL).await?;
 
     // Act
     let refused = apply(&app, &token).await?;

@@ -717,11 +717,32 @@ a fixed time.
      the link keeps working. Sessions and tokens stay, and it signs no one in. After commit a notice goes to the old
      address, in a spawned task like the other mails. Sign-in counts are keyed by address, so the new address starts
      fresh. A password change or reset doesn't cancel a working email change link.
+   - With mail set up, a new password account **confirms its address** before it can sign in. `users.unconfirmed_since`
+     (millis) is set when a registration, plain or through an invite link, is made while the server has mail set up,
+     and `NULL` means confirmed, so every account that existed before, every account made while mail was off, and
+     every provider or SCIM account counts as confirmed with no backfill. Such a registration makes the account, its
+     personal team and heap (and the invite's membership) with no session and a confirmation link in the same
+     transaction, mails the link after commit like the others, and answers `202` with the address. The link is a row
+     in `email_confirmation_links` (a token's SHA-256, the user, an expiry a day on), apart from the other two link
+     tables as each purpose has its own, and one is working per user. Its state is the reset link's
+     (`domain::password_reset::ResetLink`) and a link that doesn't work fails as an email change link does
+     (`domain::email_change`). Sign-in checks the address only after the password verified, and only while mail is
+     set up: an unconfirmed account gets a new link (cancelling the earlier one) and `403 email_not_confirmed`, so a
+     wrong password reveals nothing and the attempt, still counted, caps the mails at the sign-in limit; with mail
+     off an account left unconfirmed signs in, and turning mail back on refuses it again. There is no resend
+     endpoint, since signing in again is how a person asks. Confirming is `POST /email-confirmations/{token}`, no
+     sign-in and no read of a link (scanners again): it uses the link conditionally, clears `unconfirmed_since`,
+     records `email_confirmed` (`made_by: link`) unless the address already was (a reset that confirms writes no entry of its own, its entry stands for it) and opens a session, in one transaction, with or without mail, then clears the address's sign-in count. Any
+     mailed link confirms: setting a password with a reset link, the operator's included, and applying an email
+     change clear `unconfirmed_since` too, so someone whose address a squatter used gets in through Forgot your
+     password?, which mails any account with the address. Sessions an unconfirmed account already holds stay. The
+     operator confirms by hand with `upheap-server user confirm <username or email>`, which needs no mail and records
+     `email_confirmed` (`made_by: operator`) unless the address already was.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
      go: a password change, a reset link made for them (actor: the user, for the reason above), a password set with
-     one, an email change asked and one made, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
+     one, an email change asked and one made, an address confirmed, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
      reset link made for them), and their own heap priority change (recorded here and not in the heap's team, since
-     the value is private to them). `GET /me/history` reads exactly those eight actions for the caller, with no way to name another user or
+     the value is private to them). `GET /me/history` reads exactly those nine actions for the caller, with no way to name another user or
      team, so only the user sees them and team admins never do. It is not the team log: the server words each entry
      as one sentence with no actor ("Password changed. 2 other sign-ins ended.", "You changed your priority for Work
      from 1 to 3.") from the entry's diff, and the sentence is made on reading, so a wording fix reaches old entries.
@@ -905,7 +926,7 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
 6. **Mail** is optional. The `mail` crate builds the mailer at startup from `MAIL_URL` and `MAIL_FROM` (lettre with
    rustls, no connection pool). SMTP always uses TLS, implicit or STARTTLS. `file://` and `log:` are the development
    transports, and the only places a mail's text is recorded. A failed send isn't retried. `service` sends the mail
-   it needs through that mailer (the reset mail, the email change link and the notice of a change, see Authentication).
+   it needs through that mailer (the reset mail, the email change link and the notice of a change, and the confirmation link, see Authentication).
 7. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. The database gets time first: a database that scales to zero (Neon) can
    take longer to wake than one try's 10 s timeout, so the connect is retried with backoff, every error alike, until

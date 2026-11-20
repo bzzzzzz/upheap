@@ -172,7 +172,8 @@ mod tests {
                 "account_deactivated",
                 "account_reactivated",
                 "email_change_asked",
-                "email_changed"
+                "email_changed",
+                "email_confirmed"
             ]
         );
         pinned!(

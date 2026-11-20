@@ -8,6 +8,7 @@ pub mod audit;
 mod codes;
 pub mod comments;
 pub mod email_changes;
+pub mod email_confirmations;
 mod entities;
 mod error;
 pub mod figures;

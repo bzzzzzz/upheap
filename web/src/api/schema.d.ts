@@ -18,6 +18,10 @@ export interface paths {
          * @description Each account gets a few attempts per time window, counted together whether it's named by email address or by
          *     username, and so does each address or username without an account. Past that, attempts fail with `429` until
          *     the window ends, and a successful sign-in starts the count over.
+         *
+         *     On a server with mail set up, the right password for an account that hasn't confirmed its address doesn't sign in:
+         *     a new confirmation link is mailed, cancelling the earlier one, and the answer is `403`. The attempt isn't cleared,
+         *     so the mails are limited like sign-ins.
          */
         post: operations["sign_in"];
         delete?: never;
@@ -160,7 +164,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Creates an account with a personal team and heap, and signs in. */
+        /**
+         * Creates an account with a personal team and heap, and signs in. On a server with mail set up it doesn't sign in:
+         *     the account can't sign in until it opens the confirmation link mailed to its address.
+         */
         post: operations["register"];
         delete?: never;
         options?: never;
@@ -230,6 +237,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/email-confirmations/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirms the account's email address with the link mailed to it, and signs this browser in as the account. The
+         *     link works once, for a day, and a newer one for the account cancels it. Anyone holding the token may; a session
+         *     cookie or bearer token is ignored, and the answer's cookie replaces any session cookie the browser had. There is
+         *     no read of a link: confirming is a `POST`, so a mail scanner that opens the link confirms nothing.
+         * @description Works whether the server has mail set up or not. Not rate limited, as a token can't be guessed.
+         */
+        post: operations["confirm_email"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invites/{token}": {
         parameters: {
             query?: never;
@@ -289,6 +319,8 @@ export interface paths {
          *     closed on the server. Takes the same body as `/auth/register` and checks it the same way, and answers `409`
          *     `invite_link_ended` or `invite_link_revoked` when the link isn't working at this moment, even if the username is
          *     also taken. Sets the session cookie, replacing any the caller had. The link keeps working for others.
+         * @description On a server with mail set up nobody is signed in: the account is made and joined, a confirmation link is mailed
+         *     to its address, and the answer is `202` with no cookie.
          */
         post: operations["register_by_invite"];
         delete?: never;
@@ -1907,7 +1939,7 @@ export interface components {
          * @description What happened to the account.
          * @enum {string}
          */
-        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "heap_priority_changed" | "email_change_asked" | "email_changed";
+        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "heap_priority_changed" | "email_change_asked" | "email_changed" | "email_confirmed";
         /** @description A page of the caller's account history, newest first. */
         AccountHistory: {
             entries: components["schemas"]["AccountEvent"][];
@@ -2081,7 +2113,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed" | "email_confirmed";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2274,6 +2306,11 @@ export interface components {
              *     named by its item's key and this number, as `k3x9a.c3`.
              */
             number: number;
+        };
+        /** @description What registering answers when the account must confirm its address first. */
+        ConfirmationSent: {
+            /** @description The address the confirmation link was mailed to, as stored. */
+            email: string;
         };
         /** @description One labelled reason for an item's position. */
         Contributor: {
@@ -4722,6 +4759,7 @@ export type ClientSignInList = components['schemas']['ClientSignInList'];
 export type ClosedGroup = components['schemas']['ClosedGroup'];
 export type ClosedItems = components['schemas']['ClosedItems'];
 export type Comment = components['schemas']['Comment'];
+export type ConfirmationSent = components['schemas']['ConfirmationSent'];
 export type Contributor = components['schemas']['Contributor'];
 export type CreateHeapRequest = components['schemas']['CreateHeapRequest'];
 export type CreateItemRequest = components['schemas']['CreateItemRequest'];
@@ -4944,7 +4982,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `password_sign_in_off`: the server signs in through its provider only */
+            /** @description `password_sign_in_off`: the server signs in through its provider only; or `email_not_confirmed`: the account hasn't confirmed its address, and a new link is mailed */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5203,6 +5241,15 @@ export interface operations {
                     "application/json": components["schemas"]["User"];
                 };
             };
+            /** @description With mail set up: made, and a confirmation link is mailed; not signed in */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmationSent"];
+                };
+            };
             /** @description `password_sign_in_off`: the server signs in through its provider only */
             403: {
                 headers: {
@@ -5323,6 +5370,56 @@ export interface operations {
                 };
             };
             /** @description `email_change_used`, `email_change_cancelled` or `email_change_ended`; or `email_taken` (`field` `email`): another account has the address by now, and the link keeps working */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    confirm_email: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The link's secret: the last part of the link, `{origin}/confirm/{token}`. */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Confirmed; the answer is the account, and it sets the session cookie */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description `csrf_header_missing`, `password_sign_in_off`, or `account_deactivated` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such link */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `confirmation_link_used`, `confirmation_link_cancelled` or `confirmation_link_ended` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5464,6 +5561,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InviteRegistration"];
+                };
+            };
+            /** @description With mail set up: made and joined, and a confirmation link is mailed; not signed in */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmationSent"];
                 };
             };
             /** @description `password_sign_in_off`: the server signs in through its provider only */

@@ -30,6 +30,7 @@ pub async fn insert_user(db: &impl ConnectionTrait, user: &User) -> Result<(), S
         email: Set(user.email.as_str().to_owned()),
         display_name: Set(user.display_name.as_str().to_owned()),
         created_at: Set(user.created_at.as_millis()),
+        unconfirmed_since: Set(None),
     };
     users::Entity::insert(row).exec_without_returning(db).await?;
     Ok(())
@@ -149,16 +150,48 @@ pub async fn update_user(
     Ok((result.rows_affected == 1).then_some(saved))
 }
 
-/// Sets the user's email and bumps their version, so an edit made from the old value fails with a conflict. Fails
-/// with [`StoreError::Duplicate`] when another user has the email.
+/// Sets the user's email and bumps their version, so an edit made from the old value fails with a conflict. The new
+/// address is one a mailed link proved, so the user's address counts as confirmed. Fails with
+/// [`StoreError::Duplicate`] when another user has the email.
 pub async fn set_email(db: &impl ConnectionTrait, user_id: UserId, email: &Email) -> Result<(), StoreError> {
     users::Entity::update_many()
         .col_expr(users::Column::Email, email.as_str().into())
+        .col_expr(users::Column::UnconfirmedSince, Expr::value(Option::<i64>::None))
         .col_expr(users::Column::Version, Expr::col(users::Column::Version).add(1))
         .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
         .exec(db)
         .await?;
     Ok(())
+}
+
+/// Marks the user's address as not confirmed since `since`, for an account made while the server has mail set up.
+pub async fn set_unconfirmed(db: &impl ConnectionTrait, user_id: UserId, since: Timestamp) -> Result<(), StoreError> {
+    users::Entity::update_many()
+        .col_expr(users::Column::UnconfirmedSince, since.as_millis().into())
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .exec(db)
+        .await?;
+    Ok(())
+}
+
+/// Marks the user's address as confirmed. Returns whether it changed: `false` means it already was.
+pub async fn confirm_email(db: &impl ConnectionTrait, user_id: UserId) -> Result<bool, StoreError> {
+    let result = users::Entity::update_many()
+        .col_expr(users::Column::UnconfirmedSince, Expr::value(Option::<i64>::None))
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .filter(users::Column::UnconfirmedSince.is_not_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
+/// Whether the user's address is confirmed. A missing user is an error: the caller has just loaded it.
+pub async fn is_email_confirmed(db: &impl ConnectionTrait, user_id: UserId) -> Result<bool, StoreError> {
+    let row = users::Entity::find_by_id(id_to_db(user_id.as_uuid()))
+        .one(db)
+        .await?
+        .ok_or_else(|| StoreError::corrupt("users", &user_id.to_string(), "user vanished"))?;
+    Ok(row.unconfirmed_since.is_none())
 }
 
 /// Makes `%`, `_` and the escape character itself match literally in a `LIKE` pattern.

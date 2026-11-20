@@ -131,6 +131,7 @@ mod tests {
     use domain::{Duration, Timestamp};
     use googletest::prelude::*;
     use service::auth::Registration;
+    use service::email_confirmation::Registered;
     use service::{ManualClock, Principal, Services, Settings};
     use store::audit::{AuditQuery, AuditScope};
 
@@ -177,14 +178,17 @@ mod tests {
         let services = Services::new(db.clone(), Arc::new(ManualClock::new(start)), settings);
         let mut ids = Vec::new();
         for name in ["sam", "alex", "blair"] {
-            let grant = services
+            let Registered::SignedIn(grant) = services
                 .register(Registration {
                     email: &format!("{name}@example.com"),
                     username: name,
                     display_name: name,
                     password: "correct horse battery",
                 })
-                .await?;
+                .await?
+            else {
+                panic!("a server without mail signs the new account in");
+            };
             ids.push(grant.user.id);
         }
         let sam = Principal {

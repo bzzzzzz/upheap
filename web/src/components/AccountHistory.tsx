@@ -1,5 +1,5 @@
 // The account's History card: password changes, reset links made for the user, passwords set with one, address changes and
-// the user's own heap priority changes. The server words each line; this only lays them out (design/ux.md, History).
+// confirmations, and the user's own heap priority changes. The server words each line; this only lays them out (design/ux.md, History).
 import type { AccountEvent } from "../api/schema";
 import { useAccountHistory } from "../api/queries/audit";
 import { Disclosure, PagedHistory } from "./AuditHistory";
