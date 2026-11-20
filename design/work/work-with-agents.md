@@ -618,7 +618,9 @@ change it makes carries the run it was made in.
 1. A run makes a watch by ending as watching, with the pull request's address. It is refused while the item has an
    open question: that item waits for the person, and only their reply sends it back.
 2. A watch fires when the pull request has a comment or a review newer than the watch, a check that failed after
-   it, or is merged or closed, whoever wrote it. A pull request already merged or closed fires at once.
+   it, or is merged or closed, whoever wrote it. A pull request already merged or closed fires at once. Nothing
+   else fires it: checks that pass don't, and neither does a comment the person adds in Upheap (they take the item
+   back to have it now).
 3. Firing clears the watch and adds a comment on the item, by the person whose loop found it, saying what came with
    the links. The item is in the queue again at its ranked place.
 4. A watch ends with its turn: taking the turn back, starting or closing the item, or reaching its goal by hand

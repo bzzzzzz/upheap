@@ -163,6 +163,29 @@ async fn a_watch_is_set_and_cleared_on_an_open_turn_only() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_turn_that_ends_while_watching_keeps_no_watch() -> Result<()> {
+    // Arrange
+    let world = world().await?;
+    let item = item(&world, "k3x9a").await?;
+    let opened = turn(&item, world.user, None)?;
+    store::turns::insert_turn(&world.db, &opened).await?;
+    let watch = Watch {
+        url: PullRequestLink::parse("https://github.com/acme/app/pull/12")?,
+        since: now()?,
+    };
+    store::turns::set_turn_watch(&world.db, opened.id, Some(&watch)).await?;
+
+    // Act
+    store::turns::end_turn(&world.db, &opened.take_back(world.user, now()?)).await?;
+    let ended = store::turns::find_turn(&world.db, opened.id).await?;
+
+    // Assert
+    expect_that!(ended.map(|turn| turn.watch), some(none()));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_turn_ends_once_and_is_then_not_open_but_stays() -> Result<()> {
     // Arrange
     let world = world().await?;

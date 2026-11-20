@@ -594,7 +594,8 @@ impl Shared<'_> {
             self.prune_logs_if_due().await;
             self.sweep_if_due().await;
             self.check_watches_if_due().await;
-            // A sweep or a check can take a while: a Ctrl-C during it claims nothing more, so the runs the note listed are all.
+            // A sweep or a check can take a while: a Ctrl-C during it claims nothing more, so the runs the note listed
+            // are all.
             if self.is_stopping() {
                 return;
             }
@@ -1266,8 +1267,8 @@ impl Shared<'_> {
         }
     }
 
-    /// Whether `run` ended by the agent's own say: as reached, handed back, or watching. Asked through `finish` with nothing to
-    /// record, which leaves a run that has ended as it is and answers with it.
+    /// Whether `run` ended by the agent's own say: as reached, handed back, or watching. Asked through `finish` with
+    /// nothing to record, which leaves a run that has ended as it is and answers with it.
     async fn has_ended_itself(&self, run: &RunDto) -> bool {
         match self.finish(run, &FinishRequestDto::default()).await {
             Ok(finished) => matches!(

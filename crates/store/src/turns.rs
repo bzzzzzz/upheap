@@ -274,6 +274,9 @@ pub async fn end_turn(db: &impl ConnectionTrait, turn: &Turn) -> Result<bool, St
             ended_at: Set(Some(ended.at.as_millis())),
             ended_by: Set(ended.by.map(|user| id_to_db(user.as_uuid()))),
             end_kind: Set(Some(ended.end.code().to_owned())),
+            // A watch lives only as long as its open turn.
+            watch_url: Set(None),
+            watch_since: Set(None),
             ..Default::default()
         })
         .filter(item_turns::Column::Id.eq(id_to_db(turn.id.as_uuid())))

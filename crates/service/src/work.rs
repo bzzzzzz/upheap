@@ -2,9 +2,10 @@
 //!
 //! A run is claimed from the queue of some heaps, holds one item for as long as it is heard from, and ends by
 //! reaching the turn's goal, by asking a question, by failing, by handing the turn back, by watching a pull request
-//! (the turn stays open, with a watch the loop checks), or by the person taking it back. A turn whose item is already at its goal is never claimed: the claim ends it as reached. There is no
-//! lock to give up: a run nobody has heard from for [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and
-//! is written as failed the next time a claim, its own `finish` or a take back touches it (architecture.md, Runs).
+//! (the turn stays open, with a watch the loop checks), or by the person taking it back. A turn whose item is already
+//! at its goal is never claimed: the claim ends it as reached. There is no lock to give up: a run nobody has heard
+//! from for [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and is written as failed the next time a
+//! claim, its own `finish` or a take back touches it (architecture.md, Runs).
 
 use std::collections::{HashMap, HashSet};
 
