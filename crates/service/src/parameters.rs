@@ -480,23 +480,34 @@ impl Services {
         if parameter.is_archived() {
             return Err(ParameterError::Archived { parameter_id }.into());
         }
-        let before = store::parameters::lock_heap_use(&txn, heap_id, parameter_id).await?;
-        if before.is_some_and(|heap_use| heap_use.stopped_at.is_none()) {
-            return load_parameter_list(&txn, access.heap, access.membership.role).await;
-        }
         let now = self.now();
-        let after = HeapUse {
+        let first = HeapUse {
             heap_id,
             parameter_id,
-            weight: before.map_or(Weight::DEFAULT, |heap_use| heap_use.weight),
-            stopped_at: None,
+            weight: Weight::DEFAULT,
+            stopped_at: Some(now),
         };
-        if before.is_some() {
-            store::parameters::update_heap_use(&txn, &after).await?;
-        } else {
-            store::parameters::insert_heap_use(&txn, &after, now).await?;
+        // Written before it is read, stopped (see `store::parameters::ensure_heap_use`), so a first use starts at the
+        // default weight and its entry says only that the heap now uses it.
+        store::parameters::ensure_heap_use(&txn, &first, now).await?;
+        let before = store::parameters::lock_heap_use(&txn, heap_id, parameter_id)
+            .await?
+            .ok_or_else(|| {
+                StoreError::corrupt(
+                    "heap_parameters",
+                    &parameter_id.to_string(),
+                    "a use row just written is gone",
+                )
+            })?;
+        if before.stopped_at.is_none() {
+            return load_parameter_list(&txn, access.heap, access.membership.role).await;
         }
-        self.record_heap_use(&txn, &access.heap, principal, &parameter, before.as_ref(), &after, now)
+        let after = HeapUse {
+            stopped_at: None,
+            ..before
+        };
+        store::parameters::update_heap_use(&txn, &after).await?;
+        self.record_heap_use(&txn, &access.heap, principal, &parameter, Some(&before), &after, now)
             .await?;
         let list = load_parameter_list(&txn, access.heap, access.membership.role).await?;
         txn.commit().await.map_err(StoreError::from)?;

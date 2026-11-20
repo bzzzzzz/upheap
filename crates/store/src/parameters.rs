@@ -261,16 +261,23 @@ pub async fn lock_heap_use(
         .transpose()
 }
 
-/// Records that the heap uses the parameter from `now`, with `heap_use.weight`. Fails if it has a row already.
-pub async fn insert_heap_use(db: &impl ConnectionTrait, heap_use: &HeapUse, now: Timestamp) -> Result<(), StoreError> {
+/// Gives the heap a use row for the parameter, unless it has one: from `now`, stopped at `now`, with `heap_use.weight`.
+/// The caller then reads it with [`lock_heap_use`] and starts the use. A first use writes the row before it reads,
+/// rather than reading the missing row with a lock: on MySQL that read takes a gap lock, and two first uses in two
+/// heaps would each wait on the other's gap to insert. The row is written stopped so that whether it was there
+/// before needn't be known, which MySQL's affected-row count doesn't tell for a skipped insert.
+pub async fn ensure_heap_use(db: &impl ConnectionTrait, heap_use: &HeapUse, now: Timestamp) -> Result<(), StoreError> {
     let row = heap_parameters::ActiveModel {
         heap_id: Set(id_to_db(heap_use.heap_id.as_uuid())),
         parameter_id: Set(id_to_db(heap_use.parameter_id.as_uuid())),
         weight: Set(i32::from(heap_use.weight.get())),
         used_at: Set(now.as_millis()),
-        stopped_at: Set(heap_use.stopped_at.map(Timestamp::as_millis)),
+        stopped_at: Set(Some(now.as_millis())),
     };
-    heap_parameters::Entity::insert(row).exec_without_returning(db).await?;
+    heap_parameters::Entity::insert(row)
+        .on_conflict_do_nothing()
+        .exec_without_returning(db)
+        .await?;
     Ok(())
 }
 

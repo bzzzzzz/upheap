@@ -524,8 +524,8 @@ async fn team_parameter_entries_are_in_the_teams_log_and_a_heaps_use_of_one_in_t
     );
     expect_that!(
         heap_log["entries"][2]["changes"],
+        // A first use starts at the default weight, so its entry says only that the heap uses it now.
         eq(&json!([
-            { "field": "weight", "label": "Weight", "before": null, "after": "10", "text_diff": null },
             { "field": "used", "label": "Used in the heap", "before": "no", "after": "yes", "text_diff": null },
         ]))
     );
