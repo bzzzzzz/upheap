@@ -31,7 +31,7 @@ async function revokeFirstLink(page: Page) {
 closed(
   "an invite link brings a newcomer and an existing user into a team on a server with registration closed",
   async ({ browser, closedServer }, testInfo) => {
-    const { baseURL, admin, member, mailedLink } = closedServer;
+    const { baseURL, admin, member } = closedServer;
     const person = (permissions: string[] = []) =>
       browser.newContext({ ...testInfo.project.use, baseURL, permissions });
     const ana = await person(["clipboard-read", "clipboard-write"]);
@@ -70,22 +70,15 @@ closed(
       await expect(newcomer.getByText("You'll join Acme as a member, and get a heap of your own too.")).toBeVisible();
       await expectFitsWidth(newcomer, "The invite page");
 
-      // They create an account. This server has mail, so they confirm the address with the mailed link before they
-      // are signed in, and then find the team's heap in the sidebar.
+      // They create an account. This server has mail, so they are asked to check it, signed out. (The confirm path is
+      // in confirm-address.spec.ts.)
       const { username, email } = uniqueUser();
-      const asked = new Date();
       await newcomer.getByLabel("Name", { exact: true }).fill("Nia Park");
       await newcomer.getByLabel("Username").fill(username);
       await newcomer.getByLabel("Email").fill(email);
       await newcomer.getByLabel("Password").fill(PASSWORD);
       await newcomer.getByRole("button", { name: "Create account and join" }).click();
       await expect(newcomer.getByRole("heading", { name: "Check your mail" })).toBeVisible();
-      await newcomer.goto(await mailedLink(email, asked, "confirm"));
-      await newcomer.getByRole("button", { name: "Confirm and sign in" }).click();
-      await expect(newcomer).toHaveURL(HEAP_URL);
-      await expect(newcomer.getByText("Address confirmed. You're signed in.")).toBeVisible();
-      await newcomer.goto(`${baseURL}/teams/${team}/heaps/launch`);
-      await expect(newcomer.getByRole("heading", { name: "Launch" })).toBeVisible();
 
       // Plain registration on this server is still closed.
       const plain = await newcomerContext.request.post(`${baseURL}/api/v1/auth/register`, {
@@ -95,7 +88,7 @@ closed(
       expect(plain.status()).toBe(403);
       expect(((await plain.json()) as { code: string }).code).toBe("registration_closed");
 
-      // Sam, who has an account, opens the link signed out, signs in, confirms, and lands the same way.
+      // Sam, who has an account, opens the link signed out, signs in, and lands on the team's heap.
       const sam = await samContext.newPage();
       await sam.goto(link);
       await sam.getByRole("tab", { name: "Sign in" }).click();
@@ -228,6 +221,32 @@ test("a member who opens the link lands on the team with a line saying they're i
     await expect(sam.page).not.toHaveURL(/\/invite\//);
   } finally {
     await sam.context.close();
+  }
+});
+
+test("a newcomer who creates an account through the link lands on the team's heap with a line saying they joined", async ({
+  page,
+  browser,
+}, testInfo) => {
+  const acme = await acmeWithLink(page, 1);
+  const nia = await newPerson(browser, testInfo, "Nia Park", false);
+  try {
+    await nia.page.goto(acme.path);
+    await nia.page.getByLabel("Name", { exact: true }).fill("Nia Park");
+    await nia.page.getByLabel("Username").fill(nia.username);
+    await nia.page.getByLabel("Email").fill(nia.email);
+    await nia.page.getByLabel("Password").fill(PASSWORD);
+    await nia.page.getByRole("button", { name: "Create account and join" }).click();
+    await expect(nia.page).toHaveURL(`/teams/${acme.slug}/heaps/heap-1`);
+    await expect(nia.page.getByRole("heading", { name: "Heap 1" })).toBeVisible();
+    await expect(nia.page.getByText("You joined Acme.")).toBeVisible();
+
+    // Reloading doesn't bring the line back.
+    await nia.page.reload();
+    await expect(nia.page.getByRole("heading", { name: "Heap 1" })).toBeVisible();
+    await expect(nia.page.getByText("You joined Acme.")).toHaveCount(0);
+  } finally {
+    await nia.context.close();
   }
 });
 

@@ -4,6 +4,8 @@
 //! A link's token is a 256-bit random value. The database holds only its SHA-256, so the link exists only in the
 //! mail. The stored link is a [`ResetLink`], and a link that doesn't work fails like an email change link.
 
+use std::sync::Arc;
+
 use domain::Timestamp;
 use domain::UserId;
 use domain::audit::{AuditAction, AuditField, EntityType};
@@ -41,6 +43,7 @@ pub(crate) enum NewAccountAccess {
     Confirm {
         user: User,
         token: ResetToken,
+        mail: Arc<MailSettings>,
     },
 }
 
@@ -53,14 +56,18 @@ impl Services {
         user: User,
         now: Timestamp,
     ) -> Result<NewAccountAccess, ServiceError> {
-        if self.mail.is_none() {
+        let Some(mail) = &self.mail else {
             return Ok(NewAccountAccess::SignedIn(
                 self.open_session(txn, user, now, None).await?,
             ));
-        }
+        };
         store::users::set_unconfirmed(txn, user.id, now).await?;
         let token = make_confirmation_link(txn, user.id, now).await?;
-        Ok(NewAccountAccess::Confirm { user, token })
+        Ok(NewAccountAccess::Confirm {
+            user,
+            token,
+            mail: Arc::clone(mail),
+        })
     }
 
     /// Ends a registration once its transaction has committed: mails the link of an unconfirmed account, in a task
@@ -68,15 +75,13 @@ impl Services {
     pub(crate) fn registered(&self, access: NewAccountAccess) -> Registered {
         match access {
             NewAccountAccess::SignedIn(grant) => Registered::SignedIn(grant),
-            NewAccountAccess::Confirm { user, token } => {
-                if let Some(mail) = &self.mail {
-                    self.send_later(
-                        mail,
-                        confirmation_mail(&user, mail, &token),
-                        user.id,
-                        "email confirmation",
-                    );
-                }
+            NewAccountAccess::Confirm { user, token, mail } => {
+                self.send_later(
+                    &mail,
+                    confirmation_mail(&user, &mail, &token),
+                    user.id,
+                    "email confirmation",
+                );
                 Registered::ConfirmationSent(user)
             }
         }
@@ -143,22 +148,32 @@ impl Services {
                     .unwrap_or(EmailChangeLinkError::Used),
             ));
         }
-        store::users::confirm_email(&txn, user.id).await?;
-        let entry = self.team_audit_entry(
-            Principal {
-                user_id: user.id,
-                run: None,
-            },
-            personal_team,
-            AuditAction::EmailConfirmed,
-            EntityType::User,
-            *user.id.as_uuid(),
-            json!({ AuditField::MadeBy.code(): "link" }),
-            now,
-        );
-        store::audit::insert_audit_entry(&txn, &entry).await?;
+        // Already confirmed, by a reset or the operator, since the link was made: that wrote its own entry.
+        if store::users::confirm_email(&txn, user.id).await? {
+            let entry = self.team_audit_entry(
+                Principal {
+                    user_id: user.id,
+                    run: None,
+                },
+                personal_team,
+                AuditAction::EmailConfirmed,
+                EntityType::User,
+                *user.id.as_uuid(),
+                json!({ AuditField::MadeBy.code(): "link" }),
+                now,
+            );
+            store::audit::insert_audit_entry(&txn, &entry).await?;
+        }
         let session = self.open_session(&txn, user.clone(), now, None).await?;
         txn.commit().await.map_err(StoreError::from)?;
+
+        // Refused sign-ins and their "Send it again" presses were counted, and the address is confirmed now, so
+        // failing to clear the count mustn't fail the request.
+        if let Err(error) =
+            store::sign_in_attempts::clear_sign_in_attempts(&self.db, &sha256_hex(user.email.as_str())).await
+        {
+            tracing::warn!(?error, "can't clear sign-in attempts");
+        }
 
         tracing::info!(user_id = %user.id, "address confirmed with a link");
         Ok(session)

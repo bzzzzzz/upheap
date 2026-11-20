@@ -730,7 +730,7 @@ a fixed time.
      off an account left unconfirmed signs in, and turning mail back on refuses it again. There is no resend
      endpoint, since signing in again is how a person asks. Confirming is `POST /email-confirmations/{token}`, no
      sign-in and no read of a link (scanners again): it uses the link conditionally, clears `unconfirmed_since`,
-     records `email_confirmed` (`made_by: link`) and opens a session, in one transaction, with or without mail. Any
+     records `email_confirmed` (`made_by: link`) unless the address already was (a reset that confirms writes no entry of its own, its entry stands for it) and opens a session, in one transaction, with or without mail, then clears the address's sign-in count. Any
      mailed link confirms: setting a password with a reset link, the operator's included, and applying an email
      change clear `unconfirmed_since` too, so someone whose address a squatter used gets in through Forgot your
      password?, which mails any account with the address. Sessions an unconfirmed account already holds stay. The

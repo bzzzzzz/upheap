@@ -185,10 +185,13 @@ pub async fn confirm_email(db: &impl ConnectionTrait, user_id: UserId) -> Result
     Ok(result.rows_affected == 1)
 }
 
-/// Whether the user's address is confirmed. `true` for a user that doesn't exist, which has nothing to confirm.
+/// Whether the user's address is confirmed. A missing user is an error: the caller has just loaded it.
 pub async fn is_email_confirmed(db: &impl ConnectionTrait, user_id: UserId) -> Result<bool, StoreError> {
-    let row = users::Entity::find_by_id(id_to_db(user_id.as_uuid())).one(db).await?;
-    Ok(row.is_none_or(|row| row.unconfirmed_since.is_none()))
+    let row = users::Entity::find_by_id(id_to_db(user_id.as_uuid()))
+        .one(db)
+        .await?
+        .ok_or_else(|| StoreError::corrupt("users", &user_id.to_string(), "user vanished"))?;
+    Ok(row.unconfirmed_since.is_none())
 }
 
 /// Makes `%`, `_` and the escape character itself match literally in a `LIKE` pattern.

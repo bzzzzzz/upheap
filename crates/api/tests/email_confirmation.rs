@@ -82,13 +82,18 @@ async fn an_account_confirms_before_it_signs_in_and_the_link_works_once() -> Res
     let mails = common::wait_for_mails(dir.path(), 1).await?;
     let first = token_in(&mails[0])?;
     let refused = sign_in(&app, EMAIL, PASSWORD).await?;
+    // Three more presses of "Send it again", each a counted sign-in, then a wrong password: the fifth attempt.
+    for _ in 0..3 {
+        sign_in(&app, EMAIL, PASSWORD).await?;
+    }
     let wrong = sign_in(&app, EMAIL, "not the password").await?;
-    // The refused sign-in mailed a new link, which cancelled the first.
-    let token = token_of_mail(dir.path(), 2).await?;
+    // Each refused sign-in mailed a new link, which cancelled the one before.
+    let token = token_of_mail(dir.path(), 5).await?;
     let cancelled = confirm(&app, &first).await?;
     let confirmed = confirm(&app, &token).await?;
     let cookie = confirmed.session_cookie.clone().context("no session cookie")?;
     let current = me(&app, &cookie).await?;
+    // Confirming cleared the count, so this sixth attempt isn't refused as too many.
     let signed_in = sign_in(&app, EMAIL, PASSWORD).await?;
     let again = confirm(&app, &token).await?;
 
