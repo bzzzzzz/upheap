@@ -150,7 +150,8 @@ pub async fn lock_user(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<Sci
 
 /// Takes a lock on every user whose external ID is `external_id` until the transaction ends (`FOR UPDATE`), so a write
 /// to one of them ([`lock_user`]) and a first sign-in of the person with that subject run one after the other, and the
-/// later one's reads see what the earlier one committed.
+/// later one's reads see what the earlier one committed. With no such user, MySQL still locks the gap in the index, so
+/// a user inserted with that external ID meanwhile waits for the transaction too.
 pub async fn lock_users_by_external_id(db: &impl ConnectionTrait, external_id: &str) -> Result<(), StoreError> {
     scim_users::Entity::find()
         .filter(scim_users::Column::ExternalId.eq(external_id))
