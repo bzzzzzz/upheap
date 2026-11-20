@@ -415,11 +415,7 @@ function FactorRow({
         </span>
         <span className="min-w-10 text-right font-semibold tabular-nums">{total === 0 ? "–" : `${share}%`}</span>
       </div>
-      <p
-        className={`mt-1 text-[13px]/[1.45] text-muted max-sm:text-sm/[1.45] ${factor.parameter ? "line-clamp-2" : ""}`}
-      >
-        {factor.description}
-      </p>
+      <p className="mt-1 text-[13px]/[1.45] text-muted max-sm:text-sm/[1.45]">{factor.description}</p>
       {factor.editable ? (
         <div className="mt-1.5 flex items-center gap-3 max-sm:mt-1 max-sm:gap-2.5">
           <input

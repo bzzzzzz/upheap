@@ -555,7 +555,6 @@ function OptionRow({
         <Link
           {...toList}
           aria-label={linkLabel}
-          title={linkLabel}
           className="flex items-center gap-2 py-1.5 text-sm font-medium text-param-ink hover:underline max-sm:min-h-11 max-sm:py-2.5"
         >
           {rank}
