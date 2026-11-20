@@ -104,6 +104,8 @@ pub struct WaitingInHeapDto {
 /// - `taken_back`: the person took the turn back while the run was live. Not a failure.
 /// - `handed_back`: it found nothing to do and handed the turn back. Not a failure.
 /// - `limited`: the run stopped because the account hit the agent tool's usage limit. Not a failure.
+/// - `watching`: the run waits on its own pull request, which is its one link; the turn stays open with a watch. Not a
+///   failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = RunEnd)]
@@ -116,6 +118,8 @@ pub enum RunEndDto {
     HandedBack,
     /// The run stopped because the account hit the agent tool's usage limit. Not a failure.
     Limited,
+    /// The run waits on its own pull request, and the turn stays open with a watch. Not a failure.
+    Watching,
     /// An end this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -131,6 +135,7 @@ impl From<RunEnd> for RunEndDto {
             RunEnd::TakenBack => Self::TakenBack,
             RunEnd::HandedBack => Self::HandedBack,
             RunEnd::Limited => Self::Limited,
+            RunEnd::Watching => Self::Watching,
         }
     }
 }
@@ -246,6 +251,49 @@ pub struct ReachedRequestDto {
 pub struct HandBackRequestDto {
     /// Why there was nothing to do, in a line or two: plain text, 1 to 2,000 characters.
     pub reason: String,
+}
+
+/// Ends a run by watching its own pull request.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = WatchRequest)]
+pub struct WatchRequestDto {
+    /// The pull request: `http` or `https`, then `<host>/<owner>/<repo>/pull/<number>`, with one trailing `/` allowed.
+    #[schema(example = "https://github.com/acme/app/pull/12")]
+    pub url: String,
+}
+
+/// An open watch on an open item: the pull request its turn waits on.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = Watch)]
+pub struct WatchDto {
+    /// The watching turn, which `POST /work/watches/{turn}/fire` names.
+    pub turn_id: Uuid,
+    /// Five characters, unique within the heap.
+    #[schema(example = "k3x9a")]
+    pub key: String,
+    pub title: String,
+    pub heap: ItemHeapDto,
+    pub url: String,
+    /// UTC milliseconds: when the watch began. Only what is newer brings the item back.
+    pub since: i64,
+}
+
+/// The open watches of some heaps.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = Watches)]
+pub struct WatchesDto {
+    pub watches: Vec<WatchDto>,
+}
+
+/// What came while a pull request was watched.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = FireWatchRequest)]
+pub struct FireWatchRequestDto {
+    /// One markdown line per thing that came, which the server adds to the comment after `Back from watching <url>:`:
+    /// checked as a comment body is, and short enough for the whole comment to fit.
+    pub what: String,
 }
 
 /// Ends a run that has not ended, and records what it cost.

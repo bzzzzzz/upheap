@@ -3,7 +3,8 @@
 //! never deleted: a taken-back one keeps its row.
 
 use domain::item::StateKind;
-use domain::turn::{Ended, Goal, Reach, Redone, Turn, TurnEnd, TurnLine, TurnSource};
+use domain::run::PullRequestLink;
+use domain::turn::{Ended, Goal, Reach, Redone, Turn, TurnEnd, TurnLine, TurnSource, Watch};
 use domain::{HeapId, ItemId, TurnId, UserId};
 use sea_orm::sea_query::Expr;
 use sea_orm::{
@@ -246,6 +247,22 @@ pub async fn set_failed_runs(db: &impl ConnectionTrait, id: TurnId, failed_runs:
     Ok(result.rows_affected == 1)
 }
 
+/// Sets, or with `None` clears, the watch of the open turn `id`. Returns whether the turn was open: `false` means it
+/// ended first, and nothing is written.
+pub async fn set_turn_watch(db: &impl ConnectionTrait, id: TurnId, watch: Option<&Watch>) -> Result<bool, StoreError> {
+    let result = item_turns::Entity::update_many()
+        .set(item_turns::ActiveModel {
+            watch_url: Set(watch.map(|watch| watch.url.as_str().to_owned())),
+            watch_since: Set(watch.map(|watch| watch.since.as_millis())),
+            ..Default::default()
+        })
+        .filter(item_turns::Column::Id.eq(id_to_db(id.as_uuid())))
+        .filter(item_turns::Column::EndedAt.is_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
 /// Writes how `turn` ended, if it is still open in the store. Returns whether it was: `false` means someone ended
 /// it first, and nothing is written. An ended turn never changes again.
 pub async fn end_turn(db: &impl ConnectionTrait, turn: &Turn) -> Result<bool, StoreError> {
@@ -257,6 +274,9 @@ pub async fn end_turn(db: &impl ConnectionTrait, turn: &Turn) -> Result<bool, St
             ended_at: Set(Some(ended.at.as_millis())),
             ended_by: Set(ended.by.map(|user| id_to_db(user.as_uuid()))),
             end_kind: Set(Some(ended.end.code().to_owned())),
+            // A watch lives only as long as its open turn.
+            watch_url: Set(None),
+            watch_since: Set(None),
             ..Default::default()
         })
         .filter(item_turns::Column::Id.eq(id_to_db(turn.id.as_uuid())))
@@ -287,6 +307,8 @@ fn to_row(turn: &Turn) -> item_turns::ActiveModel {
             .and_then(|redone| redone.by)
             .map(|user| id_to_db(user.as_uuid()))),
         failed_runs: Set(i32::try_from(turn.failed_runs).unwrap_or(i32::MAX)),
+        watch_url: Set(turn.watch.as_ref().map(|watch| watch.url.as_str().to_owned())),
+        watch_since: Set(turn.watch.as_ref().map(|watch| watch.since.as_millis())),
     }
 }
 
@@ -327,6 +349,14 @@ fn to_turn(row: item_turns::Model) -> Result<Turn, StoreError> {
                 .transpose()?,
         }),
     };
+    let watch = match (row.watch_url.as_deref(), row.watch_since) {
+        (None, None) => None,
+        (Some(url), Some(since)) => Some(Watch {
+            url: PullRequestLink::parse(url).map_err(|e| read.corrupt(e.to_string()))?,
+            since: read.timestamp(since)?,
+        }),
+        _ => return Err(read.corrupt("watch_url and watch_since disagree".to_owned())),
+    };
     Ok(Turn {
         id: TurnId::from_uuid(read.uuid(&row.id)?),
         send_id: TurnId::from_uuid(read.uuid(&row.send_id)?),
@@ -345,5 +375,6 @@ fn to_turn(row: item_turns::Model) -> Result<Turn, StoreError> {
         redone,
         failed_runs: u32::try_from(row.failed_runs)
             .map_err(|_| read.corrupt(format!("failed_runs {} is negative", row.failed_runs)))?,
+        watch,
     })
 }

@@ -6,7 +6,7 @@
 use crate::heap::Heap;
 use crate::ids::coded_enum;
 use crate::item::{Item, ItemError, Kind, Stage, StateKind};
-use crate::run::{Run, STUCK_AFTER};
+use crate::run::{PullRequestLink, Run, STUCK_AFTER};
 use crate::text::parse_optional;
 use crate::validation::Field;
 use crate::{ItemId, Timestamp, TurnId, UserId, ValidationError};
@@ -178,6 +178,13 @@ pub struct Redone {
     pub by: Option<UserId>,
 }
 
+/// A pull request an open turn waits on: the loop checks it, and what is newer than `since` brings the item back.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Watch {
+    pub url: PullRequestLink,
+    pub since: Timestamp,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Turn {
     pub id: TurnId,
@@ -200,6 +207,9 @@ pub struct Turn {
     /// How many of its runs in a row failed. A run that asked a question sets it back to 0. At [`STUCK_AFTER`] the
     /// turn is stuck.
     pub failed_runs: u32,
+    /// The pull request an open turn waits on, set by a run that ended as watching. `None` once it fires, and on a turn
+    /// that ended: a watch lives only as long as its open turn.
+    pub watch: Option<Watch>,
 }
 
 /// A rule opening or retrying a turn broke.
@@ -282,6 +292,7 @@ impl Turn {
             ended: None,
             redone: None,
             failed_runs: 0,
+            watch: None,
         }
     }
 
@@ -350,6 +361,7 @@ impl Turn {
             ended: None,
             redone: None,
             failed_runs: 0,
+            watch: None,
         })
     }
 
@@ -374,6 +386,7 @@ impl Turn {
             ended: None,
             redone: None,
             failed_runs: 0,
+            watch: None,
         })
     }
 
@@ -427,6 +440,7 @@ impl Turn {
             ended: None,
             redone: None,
             failed_runs: 0,
+            watch: None,
         }
     }
 
@@ -512,6 +526,8 @@ pub enum AgentState {
     Queued,
     /// An open turn that waits for the person: an open question or a blocker that is gone.
     Waits,
+    /// With an agent, whose run ended by watching a pull request: not in the queue until the watch fires.
+    Watching,
     /// An open turn whose runs keep failing.
     Stuck,
     /// No open turn.
@@ -519,15 +535,23 @@ pub enum AgentState {
 }
 
 /// The [`AgentState`] of a listed item. `with_agent` is [`with_agent`]'s answer and `running` whether the open turn
-/// has a live run. Stuck wins over waits, and waits over running and queued, so an item that waits for the person
-/// is never the agent's.
-pub const fn agent_state(has_open_turn: bool, stuck: bool, with_agent: bool, running: bool) -> AgentState {
+/// has a live run, and `watching` whether it has a watch. Stuck wins over waits, and waits over watching, running and
+/// queued, so an item that waits for the person is never the agent's.
+pub const fn agent_state(
+    has_open_turn: bool,
+    stuck: bool,
+    with_agent: bool,
+    running: bool,
+    watching: bool,
+) -> AgentState {
     if !has_open_turn {
         AgentState::None
     } else if stuck {
         AgentState::Stuck
     } else if !with_agent {
         AgentState::Waits
+    } else if watching {
+        AgentState::Watching
     } else if running {
         AgentState::Running
     } else {
@@ -754,13 +778,16 @@ mod tests {
 
     #[gtest]
     fn the_agent_state_splits_with_agent_by_a_live_run() {
-        expect_that!(agent_state(false, false, false, false), eq(AgentState::None));
-        expect_that!(agent_state(true, true, false, false), eq(AgentState::Stuck));
-        expect_that!(agent_state(true, false, true, true), eq(AgentState::Running));
-        expect_that!(agent_state(true, false, true, false), eq(AgentState::Queued));
-        expect_that!(agent_state(true, false, false, false), eq(AgentState::Waits));
+        expect_that!(agent_state(false, false, false, false, false), eq(AgentState::None));
+        expect_that!(agent_state(true, true, false, false, false), eq(AgentState::Stuck));
+        expect_that!(agent_state(true, false, true, true, false), eq(AgentState::Running));
+        expect_that!(agent_state(true, false, true, false, false), eq(AgentState::Queued));
+        expect_that!(agent_state(true, false, false, false, false), eq(AgentState::Waits));
         // An item that waits for the person isn't the agent's even with a live run.
-        expect_that!(agent_state(true, false, false, true), eq(AgentState::Waits));
+        expect_that!(agent_state(true, false, false, true, false), eq(AgentState::Waits));
+        // A watch is the agent's, but not running or queued; a question still wins.
+        expect_that!(agent_state(true, false, true, false, true), eq(AgentState::Watching));
+        expect_that!(agent_state(true, false, false, false, true), eq(AgentState::Waits));
     }
 
     #[gtest]
@@ -822,6 +849,7 @@ mod tests {
                 ended: None,
                 redone: None,
                 failed_runs: 0,
+                watch: None,
             }))
         );
     }
@@ -896,6 +924,7 @@ mod tests {
                 ended: None,
                 redone: None,
                 failed_runs: 0,
+                watch: None,
             }))
         );
     }

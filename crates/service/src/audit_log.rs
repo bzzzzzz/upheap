@@ -531,6 +531,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::TurnTakenBack, _) => ("took back a turn on", true),
         (AuditAction::TurnReached, _) => ("reached the goal of a turn on", true),
         (AuditAction::TurnHandedBack, _) => ("handed back a turn on", true),
+        (AuditAction::TurnWatching, _) => ("started watching a pull request on", true),
         (AuditAction::TurnRetried, _) => ("let agents try again on", true),
         (AuditAction::TurnRedone, _) => ("asked for changes on", true),
         (AuditAction::TagCreated, _) => ("created tag", true),
@@ -584,6 +585,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::TurnOpened
         | AuditAction::TurnTakenBack
         | AuditAction::TurnHandedBack
+        | AuditAction::TurnWatching
         | AuditAction::TurnRetried
         | AuditAction::TagCreated
         | AuditAction::SavedViewCreated
@@ -802,6 +804,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::HeapId => "Heap",
         AuditField::MadeBy => "Made by",
         AuditField::Email => "Email",
+        AuditField::Url => "Pull request",
         // Never shown as changes of their own (see `reading`): the phrase names the groups.
         AuditField::Groups => "Groups",
         AuditField::By => "By",
@@ -936,7 +939,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         | AuditField::Priority
         | AuditField::Slug
         | AuditField::Username
-        | AuditField::Email => shown(Form::Plain),
+        | AuditField::Email
+        | AuditField::Url => shown(Form::Plain),
     }
 }
 

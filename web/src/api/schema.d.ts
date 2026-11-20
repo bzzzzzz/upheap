@@ -1817,6 +1817,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/work/runs/{run}/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Says the run waits on its own pull request, such as for CI or a bot's review, and needn't stay live. The run ends as
+         *     `watching`, with the address as its one link; it is not a failure, and the turn's failed runs are set back to 0. The
+         *     turn stays open with a watch since now, and `turn_watching` is recorded. The item is out of the queue and not
+         *     waiting for the person until the loop fires the watch, and its agent state is `watching`. Refused with
+         *     `watch_while_asking` when the item has an open question (an open review request too): it waits for the person then,
+         *     and nothing is written.
+         */
+        post: operations["watch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work/watches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every open watch on an open item in the given heaps, and the heaps made from their items, as `GET /work/queue`
+         *     reads them: the turn, the item's key, title and heap, the pull request and when the watch began. What the loop
+         *     checks. Read-only. Any member who may edit items in every given heap may ask.
+         */
+        get: operations["list_watches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/work/watches/{turn}/fire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fires the watch of a turn: under the heap's lock, when the turn is open and has a watch, clears it and adds a
+         *     comment on the item as the caller, outside any run: `Back from watching <url>:`, a blank line, then `what`. No audit
+         *     entry of its own: the comment's is recorded. The item is in the queue again at its ranked place. Any member who may
+         *     edit items in the heap may fire.
+         */
+        post: operations["fire_watch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1942,11 +2009,12 @@ export interface components {
          *     - `running`: with an agent, and a run is live now.
          *     - `queued`: with an agent, and no run is live.
          *     - `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.
+         *     - `watching`: with an agent, whose run ended by watching a pull request; not in the queue until the watch fires.
          *     - `stuck`: an open turn whose runs keep failing.
          *     - `none`: no open turn.
          * @enum {string}
          */
-        AgentState: "running" | "queued" | "waits" | "stuck" | "none";
+        AgentState: "running" | "queued" | "waits" | "watching" | "stuck" | "none";
         ArchiveOptionRequest: {
             /**
              * Format: uuid
@@ -2013,7 +2081,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2462,6 +2530,14 @@ export interface components {
              *     ignored.
              */
             tool_started_at?: number | null;
+        };
+        /** @description What came while a pull request was watched. */
+        FireWatchRequest: {
+            /**
+             * @description One markdown line per thing that came, which the server adds to the comment after `Back from watching <url>:`:
+             *     checked as a comment body is, and short enough for the whole comment to fit.
+             */
+            what: string;
         };
         /**
          * @description The stable state a turn goes to, fixed when it opens: a note as written goes to `with_context`, a note with
@@ -3996,9 +4072,11 @@ export interface components {
          *     - `taken_back`: the person took the turn back while the run was live. Not a failure.
          *     - `handed_back`: it found nothing to do and handed the turn back. Not a failure.
          *     - `limited`: the run stopped because the account hit the agent tool's usage limit. Not a failure.
+         *     - `watching`: the run waits on its own pull request, which is its one link; the turn stays open with a watch. Not a
+         *       failure.
          * @enum {string}
          */
-        RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back" | "limited";
+        RunEnd: "reached" | "asked" | "failed" | "taken_back" | "handed_back" | "limited" | "watching";
         /** @description A link a run left. */
         RunLink: {
             /** @description What to show for it: "pull request" for a pull or merge request, else the address without its `https://` or `http://`. */
@@ -4481,6 +4559,39 @@ export interface components {
             /** @description Why the latest failed run failed; `null` when that is not known. */
             reason?: string | null;
         };
+        /** @description An open watch on an open item: the pull request its turn waits on. */
+        Watch: {
+            heap: components["schemas"]["ItemHeap"];
+            /**
+             * @description Five characters, unique within the heap.
+             * @example k3x9a
+             */
+            key: string;
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when the watch began. Only what is newer brings the item back.
+             */
+            since: number;
+            title: string;
+            /**
+             * Format: uuid
+             * @description The watching turn, which `POST /work/watches/{turn}/fire` names.
+             */
+            turn_id: string;
+            url: string;
+        };
+        /** @description Ends a run by watching its own pull request. */
+        WatchRequest: {
+            /**
+             * @description The pull request: `http` or `https`, then `<host>/<owner>/<repo>/pull/<number>`, with one trailing `/` allowed.
+             * @example https://github.com/acme/app/pull/12
+             */
+            url: string;
+        };
+        /** @description The open watches of some heaps. */
+        Watches: {
+            watches: components["schemas"]["Watch"][];
+        };
         /** @description An item an agent may work on: the item, its heap, and the turn it works to. */
         WorkItem: {
             /**
@@ -4611,6 +4722,7 @@ export type DueInput = components['schemas']['DueInput'];
 export type EmailChanged = components['schemas']['EmailChanged'];
 export type Factor = components['schemas']['Factor'];
 export type FinishRequest = components['schemas']['FinishRequest'];
+export type FireWatchRequest = components['schemas']['FireWatchRequest'];
 export type Goal = components['schemas']['Goal'];
 export type HandBackRequest = components['schemas']['HandBackRequest'];
 export type Heap = components['schemas']['Heap'];
@@ -4771,6 +4883,9 @@ export type WaitingLeftTeam = components['schemas']['WaitingLeftTeam'];
 export type WaitingRow = components['schemas']['WaitingRow'];
 export type WaitingRowKind = components['schemas']['WaitingRowKind'];
 export type WaitingStuck = components['schemas']['WaitingStuck'];
+export type Watch = components['schemas']['Watch'];
+export type WatchRequest = components['schemas']['WatchRequest'];
+export type Watches = components['schemas']['Watches'];
 export type WorkItem = components['schemas']['WorkItem'];
 export type WorkNext = components['schemas']['WorkNext'];
 export type WorkQueue = components['schemas']['WorkQueue'];
@@ -10500,6 +10615,208 @@ export interface operations {
                 };
             };
             /** @description `not_reached`, or invalid fields: a `result` that is empty or over 2,000 characters, more than 10 `links`, a link that isn't an absolute `http` or `https` address, or a `stage` that is below the turn's goal or given for a turn to `done` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    watch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The run's ID, from the claim. */
+                run: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description `invalid_body` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such run, or not the caller's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `run_over`: the run has ended or lapsed, or its turn was taken back; or `watch_while_asking` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_empty`, `field_too_long` or `field_invalid` (`field` `url`): not an `http` or `https` address of a pull request, `/<owner>/<repo>/pull/<number>` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_watches: {
+        parameters: {
+            query?: {
+                /**
+                 * @description One to 20 heaps, each `team/heap` by slug, separated by commas. A heap named twice counts once.
+                 * @example ops/backlog,ops/infra
+                 */
+                heaps?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Watches"];
+                };
+            };
+            /** @description `invalid_query` or `invalid_header` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `forbidden`: the caller can't edit items in a given heap */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A heap outside the caller's teams */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    fire_watch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The watching turn's ID, from `GET /work/watches`. */
+                turn: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FireWatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Fired */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `invalid_body` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `forbidden`, or from inside a run `run_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such turn, or not in the caller's teams */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `watch_over`: the turn has ended or has no watch, and nothing was written; or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_empty` or `field_too_long` (`field` `what`, or `body` when the whole comment is too long) */
             422: {
                 headers: {
                     [name: string]: unknown;

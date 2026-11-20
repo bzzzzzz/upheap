@@ -12,6 +12,7 @@ const END_LABELS: Record<RunEnd, string> = {
   taken_back: "taken back",
   handed_back: "handed back",
   limited: "hit the limit",
+  watching: "watching",
 };
 
 /** How the run ended, in a word; "running" while it hasn't. */

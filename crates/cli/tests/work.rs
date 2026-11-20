@@ -1,4 +1,4 @@
-//! `upheap work next | queue | claim | reached | hand-back | finish`, the writes an agent makes in a run, and what a run is refused.
+//! `upheap work next | queue | claim | reached | hand-back | watch | finish`, the writes an agent makes in a run, and what a run is refused.
 
 mod common;
 
@@ -125,6 +125,45 @@ async fn hand_back_gives_the_turn_back_with_a_reason() -> Result<()> {
     expect_that!(finished.stdout, eq("Run ended: handed back. ($0.12)\n"));
     expect_that!(item["turn"], eq(&Value::Null));
     expect_that!(item["stage"], eq("as_written"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn watch_ends_the_run_and_says_when_the_item_comes_back() -> Result<()> {
+    // Arrange
+    let (server, ada, mut cli, note) = with_prepared_note().await?;
+    let pr = "https://github.com/acme/app/pull/12";
+    let without_run = cli.run(&["work", "watch", pr]).await;
+    let claim = cli.run(&["work", "claim", "--quiet"]).await;
+    cli.env.run = Some(claim.stdout.trim().to_owned());
+
+    // Act
+    let refused = cli
+        .run(&["work", "watch", "https://github.com/acme/app/issues/12"])
+        .await;
+    let watching = cli.run(&["work", "watch", pr]).await;
+    let finished = cli.run(&["work", "finish", "--cost-usd", "0.12"]).await;
+    let item = server.read_item(&ada, HEAP, &note).await?;
+
+    // Assert
+    expect_that!(without_run.exited(2), eq(true));
+    expect_that!(
+        without_run.stderr,
+        contains_substring("work watch runs inside a run: set UPHEAP_RUN")
+    );
+    expect_that!(refused.exited(3), eq(true));
+    expect_that!(watching.exited(0), eq(true));
+    expect_that!(
+        watching.stdout,
+        eq(&format!(
+            "Watching: {note} comes back when the pull request gets a comment or a failed check, or is merged or closed.\n"
+        ))
+    );
+    expect_that!(finished.stdout, eq("Run ended: watching. ($0.12)\n"));
+    expect_that!(item["agent_state"], eq("watching"));
+    expect_that!(item["runs"][0]["end"], eq("watching"));
+    expect_that!(item["runs"][0]["links"], eq(&json!([pr])));
     Ok(())
 }
 

@@ -404,8 +404,9 @@ impl Services {
                 gone.contains_key(&item.id),
             );
             let running = turn.is_some_and(|turn| turn.running);
+            let watching = turn.is_some_and(|turn| turn.turn.watch.is_some());
             (
-                agent_state(turn.is_some(), stuck, agent, running),
+                agent_state(turn.is_some(), stuck, agent, running, watching),
                 turn.map(|turn| turn.turn.going_to()),
             )
         };
@@ -539,6 +540,7 @@ impl Services {
                 stuck,
                 view.with_agent,
                 turn.as_ref().is_some_and(|turn| turn.running),
+                turn.as_ref().is_some_and(|turn| turn.turn.watch.is_some()),
             );
             view.allowance = item_allowance(&view.item, &heap, role, turn.is_some(), stuck, None, now);
             view.turn = turn;
@@ -1449,6 +1451,7 @@ pub(crate) async fn build_item_view(
             stuck,
             with_agent,
             turn.as_ref().is_some_and(|turn| turn.running),
+            turn.as_ref().is_some_and(|turn| turn.turn.watch.is_some()),
         ),
         turn,
         with_agent,

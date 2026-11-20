@@ -3186,3 +3186,254 @@ async fn queue_puts_an_item_the_usage_limit_cut_off_first_and_says_so() -> Resul
     expect_that!(items[1]["limited"], eq(&json!(false)));
     Ok(())
 }
+
+const PR: &str = "https://github.com/acme/app/pull/12";
+
+impl World {
+    async fn watches(&self) -> Result<TestResponse> {
+        self.app
+            .send(
+                Method::GET,
+                &format!("/api/v1/work/watches?heaps={}", self.heap_ref),
+                Some(&self.session),
+                None,
+            )
+            .await
+    }
+
+    async fn fire(&self, turn: &str, what: &str) -> Result<TestResponse> {
+        self.app
+            .send(
+                Method::POST,
+                &format!("/api/v1/work/watches/{turn}/fire"),
+                Some(&self.session),
+                Some(json!({ "what": what })),
+            )
+            .await
+    }
+
+    /// Claims the only item, and watches `PR` in its run. Returns the run's ID.
+    async fn watching(&self) -> Result<String> {
+        let run = self.claimed().await?;
+        let watched = self.run_call(&run, "watch", Some(json!({ "url": PR }))).await?;
+        anyhow::ensure!(watched.status == StatusCode::OK, "watch failed: {}", watched.body);
+        Ok(run)
+    }
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_ends_by_watching_and_its_item_leaves_the_queue() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let id = w.get(&key).await?["id"].as_str().context("id")?.to_owned();
+    let run = w.claimed().await?;
+
+    // Act
+    let watched = w.run_call(&run, "watch", Some(json!({ "url": PR }))).await?;
+    let next = w.next().await?;
+    let item = w.get(&key).await?;
+    let waiting = w.waiting().await?;
+    let finished = w.finish(&run, json!({ "cost_usd": 0.2 })).await?;
+    let entries = w.app.audit_entries(&id).await?;
+
+    // Assert
+    expect_that!(watched.status, eq(StatusCode::OK));
+    expect_that!(watched.body["end"], eq(&json!("watching")));
+    expect_that!(watched.body["links"], eq(&json!([PR])));
+    expect_that!(watched.body["result"], eq(&Value::Null));
+    expect_that!(watched.body["failure"], eq(&Value::Null));
+    expect_that!(next.body["item"], eq(&Value::Null));
+    expect_that!(next.body["waiting_count"], eq(&json!(0)));
+    expect_that!(item["agent_state"], eq(&json!("watching")));
+    expect_that!(item["with_agent"], eq(true));
+    expect_that!(item["turn"]["failed_runs"], eq(&json!(0)));
+    expect_that!(waiting.to_string(), not(contains_substring(key.as_str())));
+    expect_that!(finished.body["end"], eq(&json!("watching")));
+    expect_that!(finished.body["cost_usd"], eq(&json!(0.2)));
+    let entry = entries
+        .iter()
+        .find(|(action, _)| action == "turn_watching")
+        .context("no turn_watching entry")?;
+    expect_that!(entry.1, eq(&json!({ "goal": "with_context", "url": PR })));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_watch_needs_a_pull_request_address() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+
+    // Act
+    let mut refused = Vec::new();
+    for url in [
+        "https://github.com/acme/app/issues/12",
+        "https://github.com/acme/app/pull/12/files",
+        "ftp://github.com/acme/app/pull/12",
+    ] {
+        refused.push(w.run_call(&run, "watch", Some(json!({ "url": url }))).await?);
+    }
+    let live = w.run_call(&run, "heartbeat", None).await?;
+
+    // Assert
+    for response in &refused {
+        expect_that!(response.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+        expect_that!(response.body["field"], eq(&json!("url")));
+    }
+    expect_that!(live.status, eq(StatusCode::NO_CONTENT));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_run_that_asked_cannot_also_watch_and_nothing_is_written() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    let run = w.claimed().await?;
+    let asked = w
+        .in_run(
+            &run,
+            Method::POST,
+            &format!("{}/questions", w.item_path(&key).await?),
+            None,
+            Some(json!({ "kind": "question", "text": "Which CA?" })),
+        )
+        .await?;
+    anyhow::ensure!(asked.status == StatusCode::CREATED, "ask failed: {}", asked.body);
+    let audit_before = w.app.count_rows("audit_log").await?;
+
+    // Act
+    let watched = w.run_call(&run, "watch", Some(json!({ "url": PR }))).await?;
+    let watches = w.watches().await?;
+    let live = w.run_call(&run, "heartbeat", None).await?;
+
+    // Assert
+    expect_that!(watched.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&watched), some(eq("watch_while_asking")));
+    expect_that!(w.app.count_rows("audit_log").await?, eq(audit_before));
+    expect_that!(watches.body["watches"], eq(&json!([])));
+    expect_that!(live.status, eq(StatusCode::NO_CONTENT));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_watch_after_the_run_is_over_is_refused() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    w.add_sent("Rotate the certs").await?;
+    let run = w.watching().await?;
+
+    // Act
+    let again = w.run_call(&run, "watch", Some(json!({ "url": PR }))).await?;
+
+    // Assert
+    expect_that!(again.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&again), some(eq("run_over")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_open_watches_are_listed_and_firing_one_brings_the_item_back() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    w.watching().await?;
+    let listed = w.watches().await?;
+    let turn = listed.body["watches"][0]["turn_id"]
+        .as_str()
+        .context("turn")?
+        .to_owned();
+
+    // Act
+    let fired = w.fire(&turn, "- Merged.").await?;
+    let item = w.get(&key).await?;
+    let next = w.next().await?;
+    let after = w.watches().await?;
+    let again = w.fire(&turn, "- Merged.").await?;
+
+    // Assert
+    let watch = &listed.body["watches"][0];
+    expect_that!(watch["key"], eq(&json!(key)));
+    expect_that!(watch["title"], eq(&json!("Rotate the certs")));
+    expect_that!(watch["url"], eq(&json!(PR)));
+    expect_that!(watch["since"].is_i64(), eq(true));
+    expect_that!(watch["heap"]["slug"].is_string(), eq(true));
+    expect_that!(fired.status, eq(StatusCode::NO_CONTENT));
+    let comments = item["comments"].as_array().context("comments")?;
+    expect_that!(comments.len(), eq(1));
+    expect_that!(
+        comments[0]["body"],
+        eq(&json!(format!("Back from watching {PR}:\n\n- Merged.")))
+    );
+    expect_that!(item["agent_state"], eq(&json!("queued")));
+    expect_that!(next.body["item"]["key"], eq(&json!(key)));
+    expect_that!(after.body["watches"], eq(&json!([])));
+    expect_that!(again.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&again), some(eq("watch_over")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_watch_ends_with_its_turn_and_firing_it_then_writes_nothing() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let key = w.add_sent("Rotate the certs").await?;
+    w.watching().await?;
+    let turn = w.watches().await?.body["watches"][0]["turn_id"]
+        .as_str()
+        .context("turn")?
+        .to_owned();
+    let taken = w
+        .app
+        .send(
+            Method::DELETE,
+            &format!("{}/turn", w.item_path(&key).await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+    let comments_before = w.app.count_rows("item_comments").await?;
+
+    // Act
+    let fired = w.fire(&turn, "- Merged.").await?;
+    let listed = w.watches().await?;
+
+    // Assert
+    expect_that!(taken.status, eq(StatusCode::OK));
+    expect_that!(fired.status, eq(StatusCode::CONFLICT));
+    expect_that!(code(&fired), some(eq("watch_over")));
+    expect_that!(w.app.count_rows("item_comments").await?, eq(comments_before));
+    expect_that!(listed.body["watches"], eq(&json!([])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn firing_needs_what_came() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    w.add_sent("Rotate the certs").await?;
+    w.watching().await?;
+    let turn = w.watches().await?.body["watches"][0]["turn_id"]
+        .as_str()
+        .context("turn")?
+        .to_owned();
+
+    // Act
+    let empty = w.fire(&turn, "  ").await?;
+    let still_there = w.watches().await?;
+
+    // Assert
+    expect_that!(empty.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(empty.body["field"], eq(&json!("what")));
+    expect_that!(still_there.body["watches"].as_array().map(Vec::len), some(eq(1)));
+    Ok(())
+}

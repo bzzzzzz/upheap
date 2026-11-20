@@ -67,7 +67,7 @@ pub struct ListArgs {
     /// Keep items with any of these impacts: s, m, l, xl. Repeat or separate with commas
     #[arg(long, value_name = "SIZE", value_delimiter = ',', value_parser = parse_api_value::<SizeDto>)]
     pub impact: Vec<SizeDto>,
-    /// Keep items in any of these agent states: running, queued, waits, stuck, none. Repeat or separate with commas
+    /// Keep items in any of these agent states: running, queued, waits, watching, stuck, none. Repeat or separate with commas
     #[arg(long, value_name = "STATE", value_delimiter = ',', value_parser = parse_api_value::<AgentStateDto>)]
     pub agent: Vec<AgentStateDto>,
     /// Keep items whose agent's turn goes to any of these: with_context, defined, done. Repeat or separate with commas

@@ -92,6 +92,7 @@ impl TryFrom<GoalDto> for Goal {
 /// - `running`: with an agent, and a run is live now.
 /// - `queued`: with an agent, and no run is live.
 /// - `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.
+/// - `watching`: with an agent, whose run ended by watching a pull request; not in the queue until the watch fires.
 /// - `stuck`: an open turn whose runs keep failing.
 /// - `none`: no open turn.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -101,6 +102,7 @@ pub enum AgentStateDto {
     Running,
     Queued,
     Waits,
+    Watching,
     Stuck,
     #[default]
     None,
@@ -116,6 +118,7 @@ impl From<AgentState> for AgentStateDto {
             AgentState::Running => Self::Running,
             AgentState::Queued => Self::Queued,
             AgentState::Waits => Self::Waits,
+            AgentState::Watching => Self::Watching,
             AgentState::Stuck => Self::Stuck,
             AgentState::None => Self::None,
         }
@@ -131,6 +134,7 @@ impl TryFrom<AgentStateDto> for AgentState {
             AgentStateDto::Running => Ok(Self::Running),
             AgentStateDto::Queued => Ok(Self::Queued),
             AgentStateDto::Waits => Ok(Self::Waits),
+            AgentStateDto::Watching => Ok(Self::Watching),
             AgentStateDto::Stuck => Ok(Self::Stuck),
             AgentStateDto::None => Ok(Self::None),
             AgentStateDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Agent }),

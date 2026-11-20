@@ -41,11 +41,14 @@ test("Filters open as a sheet on a phone and a popover on a tablet", async ({ pa
   await expect(filters).toBeVisible();
   const box = await filters.boundingBox();
   const height = viewport?.height ?? 0;
-  if ((viewport?.width ?? 0) < 640) {
+  const width = viewport?.width ?? 0;
+  if (width < 640) {
     // A sheet reaches the bottom of the screen.
     expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBeGreaterThanOrEqual(height - 40);
   } else {
-    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThan(height - 40);
+    // A popover is narrower than the screen and stops short of its edges; its height follows the filters it holds.
+    expect(Math.round(box?.width ?? width)).toBeLessThan(width - 100);
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? height))).toBeLessThan(height);
   }
   await filters.getByRole("button", { name: "Close" }).click();
   await expect(filters).toHaveCount(0);

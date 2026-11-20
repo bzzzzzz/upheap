@@ -169,8 +169,8 @@ export function ItemRow({
       {item.step_progress && `, ${item.step_progress.ticked} of ${item.step_progress.total} steps ticked`}
       {item.waits_for_you && ", waits for you"}
       {item.turn &&
-        (item.agent_state === "running" || item.agent_state === "queued") &&
-        `, with an agent, ${item.agent_state === "running" ? "running now" : "queued"}, going to ${GOAL_LABELS[item.turn.going_to]}`}
+        (item.agent_state === "running" || item.agent_state === "queued" || item.agent_state === "watching") &&
+        `, with an agent, ${item.agent_state === "running" ? "running now" : item.agent_state}, going to ${GOAL_LABELS[item.turn.going_to]}`}
       {item.agent_state === "stuck" && ", agent stuck"}
     </span>
   );
@@ -249,9 +249,10 @@ export function ItemRow({
               <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-accent sm:hidden" />
             )}
             {/* The same slot says an agent has the item, with a mark: the two never show together. */}
-            {item.turn && (item.agent_state === "running" || item.agent_state === "queued") && (
-              <PhoneMark item={item} turn={item.turn} />
-            )}
+            {item.turn &&
+              (item.agent_state === "running" || item.agent_state === "queued" || item.agent_state === "watching") && (
+                <PhoneMark item={item} turn={item.turn} />
+              )}
             {/* The link covers the whole row, under the buttons and tags. */}
             {selection ? (
               <button
@@ -702,7 +703,7 @@ function RobotMark({ item, turn, link, itemOpen }: { item: Item; turn: Turn; lin
   const title =
     item.agent_state === "stuck"
       ? `Agent stuck: ${turn.failed_runs} runs failed`
-      : `${running ? "Running now" : item.agent_state === "queued" ? "Queued" : "Waits for you"} · going to: ${target}`;
+      : `${running ? "Running now" : item.agent_state === "queued" ? "Queued" : item.agent_state === "watching" ? "Watching" : "Waits for you"} · going to: ${target}`;
   return (
     <Link
       {...link}

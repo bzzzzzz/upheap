@@ -4,6 +4,8 @@ You can run `upheap` and edit files in this directory. Which other commands you 
 own settings for this tool.
 
 Before anything, read the comments and the questions under the item: they say where this task stands.
+- The latest comment says "Back from watching": read what came at its links (the comments, the failed check's log),
+  deal with it, and carry on.
 - A review replied "Changes asked": read the reply and the comments at the link, change the work, and ask for
   review again with `upheap question review` (below). Use the same link, or `--piece` if the piece moved to a new
   link: that is the next round.

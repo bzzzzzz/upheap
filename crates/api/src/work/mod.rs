@@ -4,16 +4,17 @@
 //! extractor reads (`extract.rs`).
 
 use api_types::work::{
-    ClaimDto, ClaimRequestDto, FinishRequestDto, HandBackRequestDto, QueuedItemDto, ReachedRequestDto, RunDto,
-    WaitingInHeapDto, WorkItemDto, WorkNextDto, WorkQueueDto,
+    ClaimDto, ClaimRequestDto, FinishRequestDto, FireWatchRequestDto, HandBackRequestDto, QueuedItemDto,
+    ReachedRequestDto, RunDto, WaitingInHeapDto, WatchDto, WatchRequestDto, WatchesDto, WorkItemDto, WorkNextDto,
+    WorkQueueDto,
 };
 use axum::Json;
 use axum::extract::{FromRequestParts, State};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use domain::item::Stage;
-use domain::run::{RunLink, RunResult, check_tool_times, cut_failure, cut_tool_text, parse_cost_usd};
-use domain::{RunId, Timestamp, ValidationError};
+use domain::run::{PullRequestLink, RunLink, RunResult, check_tool_times, cut_failure, cut_tool_text, parse_cost_usd};
+use domain::{RunId, Timestamp, TurnId, ValidationError};
 use serde::Deserialize;
 use service::ServiceError;
 use service::work::{RunView, WaitingInHeap, WorkItem};
@@ -35,6 +36,9 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(heartbeat))
         .routes(routes!(reached))
         .routes(routes!(hand_back))
+        .routes(routes!(watch))
+        .routes(routes!(list_watches))
+        .routes(routes!(fire_watch))
         .routes(routes!(finish_run))
 }
 
@@ -309,6 +313,100 @@ async fn hand_back(
     let reason = RunResult::parse_reason(&body.reason).map_err(ServiceError::from)?;
     let view = state.services.hand_back(path.principal, path.run_id, reason).await?;
     Ok(Json(run_dto(&view)))
+}
+
+/// Says the run waits on its own pull request, such as for CI or a bot's review, and needn't stay live. The run ends as
+/// `watching`, with the address as its one link; it is not a failure, and the turn's failed runs are set back to 0. The
+/// turn stays open with a watch since now, and `turn_watching` is recorded. The item is out of the queue and not
+/// waiting for the person until the loop fires the watch, and its agent state is `watching`. Refused with
+/// `watch_while_asking` when the item has an open question (an open review request too): it waits for the person then,
+/// and nothing is written.
+#[utoipa::path(post, path = "/work/runs/{run}/watch", tag = "work", security(("session" = [])),
+    params(RunParams), request_body = WatchRequestDto,
+    responses(
+        (status = 200, body = RunDto),
+        (status = 400, description = "`invalid_body`", body = Problem),
+        (status = 404, description = "No such run, or not the caller's", body = Problem),
+        (status = 409, description = "`run_over`: the run has ended or lapsed, or its turn was taken back; or `watch_while_asking`", body = Problem),
+        (status = 422, description = "`field_empty`, `field_too_long` or `field_invalid` (`field` `url`): not an `http` or `https` address of a pull request, `/<owner>/<repo>/pull/<number>`", body = Problem),
+    ))]
+async fn watch(
+    State(state): State<AppState>,
+    path: RunPath,
+    ApiJson(body): ApiJson<WatchRequestDto>,
+) -> Result<Json<RunDto>, ApiError> {
+    let url = PullRequestLink::parse(&body.url).map_err(ServiceError::from)?;
+    let view = state.services.watch(path.principal, path.run_id, url).await?;
+    Ok(Json(run_dto(&view)))
+}
+
+/// Every open watch on an open item in the given heaps, and the heaps made from their items, as `GET /work/queue`
+/// reads them: the turn, the item's key, title and heap, the pull request and when the watch began. What the loop
+/// checks. Read-only. Any member who may edit items in every given heap may ask.
+#[utoipa::path(get, path = "/work/watches", tag = "work", security(("session" = [])),
+    params(NextQuery),
+    responses(
+        (status = 200, body = WatchesDto),
+        (status = 400, description = "`invalid_query` or `invalid_header`", body = Problem),
+        (status = 403, description = "`forbidden`: the caller can't edit items in a given heap", body = Problem),
+        (status = 404, description = "A heap outside the caller's teams", body = Problem),
+        (status = 409, description = "`heap_archived`", body = Problem),
+        (status = 422, description = "`invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap`", body = Problem),
+    ))]
+async fn list_watches(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ApiQuery(query): ApiQuery<NextQuery>,
+) -> Result<Json<WatchesDto>, ApiError> {
+    let heaps = split_heaps(&query.heaps);
+    let watches = state.services.list_watches(principal, &heaps).await?;
+    Ok(Json(WatchesDto {
+        watches: watches
+            .iter()
+            .map(|view| WatchDto {
+                turn_id: *view.turn.id.as_uuid(),
+                key: view.item.key.to_string(),
+                title: view.item.title.as_str().to_owned(),
+                heap: to_item_heap_dto(&view.heap, &view.team),
+                url: view.watch.url.as_str().to_owned(),
+                since: view.watch.since.as_millis(),
+            })
+            .collect(),
+    }))
+}
+
+#[derive(Deserialize, IntoParams)]
+#[into_params(parameter_in = Path)]
+struct WatchParams {
+    /// The watching turn's ID, from `GET /work/watches`.
+    turn: String,
+}
+
+/// Fires the watch of a turn: under the heap's lock, when the turn is open and has a watch, clears it and adds a
+/// comment on the item as the caller, outside any run: `Back from watching <url>:`, a blank line, then `what`. No audit
+/// entry of its own: the comment's is recorded. The item is in the queue again at its ranked place. Any member who may
+/// edit items in the heap may fire.
+#[utoipa::path(post, path = "/work/watches/{turn}/fire", tag = "work", security(("session" = [])),
+    params(WatchParams), request_body = FireWatchRequestDto,
+    responses(
+        (status = 204, description = "Fired"),
+        (status = 400, description = "`invalid_body`", body = Problem),
+        (status = 403, description = "`forbidden`, or from inside a run `run_forbidden`", body = Problem),
+        (status = 404, description = "No such turn, or not in the caller's teams", body = Problem),
+        (status = 409, description = "`watch_over`: the turn has ended or has no watch, and nothing was written; or `heap_archived`", body = Problem),
+        (status = 422, description = "`field_empty` or `field_too_long` (`field` `what`, or `body` when the whole comment is too long)", body = Problem),
+    ))]
+async fn fire_watch(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ApiPath(params): ApiPath<WatchParams>,
+    ApiJson(body): ApiJson<FireWatchRequestDto>,
+) -> Result<StatusCode, ApiError> {
+    let turn_id = Uuid::parse_str(&params.turn)
+        .map(TurnId::from_uuid)
+        .map_err(|_| ServiceError::NotFound)?;
+    state.services.fire_watch(principal, turn_id, &body.what).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Ends the run if it hasn't ended, and records what it cost; a loop calls it when the agent tool exits. A run that

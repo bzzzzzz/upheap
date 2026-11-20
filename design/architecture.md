@@ -146,7 +146,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   next stage of an all-the-way send and a split's turn for its task carry it on), a reach (one state, or
   all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens, or picked by the
   person: defined, for a note as written, which all the way opens at defined anyway; then stored), the person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
-  prepare setting did, then when and by whom it ended and how (taken back, handed back, or reached) and how many of its runs in a
+  prepare setting did, then when and by whom it ended and how (taken back, handed back, or reached), its watch, and how many of its runs in a
   row failed (`failed_runs`).
   Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
   with someone editing it, and sending and taking back need no `If-Match`. A turn sent all the way still goes one
@@ -158,8 +158,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   (one entry for each). Who has an item is derived, not stored: `with_agent` is the item being open, its heap active,
   an open turn, and no open question; list rows get their open turns from one grouped query, like question counts.
   The agent state of a listed item splits that: `stuck` for a stuck turn, `waits` for an open turn that isn't
-  `with_agent`, `running` or `queued` for one that is, by whether the turn has a live run (read at request time), and `none`
-  without a turn. Rows carry it as `agent_state`. A turn's target (`going_to`) is its goal, except that a turn sent
+  `with_agent`, `watching` for one that is and has a watch, `running` or `queued` for one that is and hasn't, by whether the
+  turn has a live run (read at request time), and `none` without a turn. Rows carry it as `agent_state`. A turn's target (`going_to`) is its goal, except that a turn sent
   all the way is `done`; the turn carries it as `going_to`, for the row's badge. The ranked list
   filters by both, so it reads turns and open questions for every non-closed item, not only the listed ones, before
   it filters (still none in an archived heap). Saved views don't store these filters.
@@ -182,7 +182,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   history is the runs that ended as reached in the last 30 days, and Your decision is the items whose latest turn
   ended as reached by such a run and that are still at that stage, not started and not closed.
   `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
-  blocked, in an active heap, with an open turn that isn't stuck, no open question and no live run, ordered first by
+  blocked, in an active heap, with an open turn that isn't stuck or watching, no open question and no live run, ordered first by
   whether the open turn's latest run ended `limited` (those come before all others, so the item a usage limit cut off
   is the one claimed once the limit resets), then by the item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
   `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
@@ -209,8 +209,16 @@ The tables and columns are in the migrations. These are the conventions they fol
   defines a task split from its note (`became`, below); `next` skips such turns without
   writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
   ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
+  `work watch <pr-url>` ends the run as `watching` (the address is its one link) and leaves the turn open, with a
+  **watch** stored on it: `watch_url` and `watch_since`, both null or both set, so a watch lives and dies with its open turn and
+  an item has at most one. It is refused while the item has an open question, and a watching turn is out of the queue
+  without being waiting for the person. The server never reaches GitHub: the loop lists the open watches
+  (`GET /work/watches`), reads each pull request with the person's `gh` about once a minute, and when something is
+  newer than `watch_since` (a comment, a review, a failed check, a merge or a close) fires the watch
+  (`POST /work/watches/{turn}/fire`), which clears it and adds a comment on the item, written as the person running the
+  loop with the comment's usual audit entry.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
-  `extract.rs` (the item's `PATCH`, steps, questions, comments, creating an item, closing a note as became, and the run's own heartbeat, reached, hand-back and finish) or it is
+  `extract.rs` (the item's `PATCH`, steps, questions, comments, creating an item, closing a note as became, and the run's own heartbeat, reached, hand-back, watch and finish) or it is
   `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
   open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
   and touches `heard_at`. Starting an item in a run keeps its turn.
@@ -982,7 +990,7 @@ section is how it maps onto this API.
    the tool's name and that model along with the tool's times, for a run whose tool was started. A run that was
    stopped or taken back left no report, so it records the `--model` given, if any. When the tool ends it sends
    `finish` with the cost the tool reported and, only if the tool itself failed, why: the server decides whether the
-   run reached its goal, asked, handed back, hit the limit, or failed, and
+   run reached its goal, asked, handed back, is watching, hit the limit, or failed, and
    the loop never works that out. The exception is the agent tool's usage limit, recognised for Claude only: a run whose claude stream had a rejected
    `rate_limit_event` (not overage use) or `api_error` `usage_limit_reached` on its result is sent with `limited`, and
    ends as `limited`, not failed, so the turn's failed runs are left alone. The loop then holds every worker until the

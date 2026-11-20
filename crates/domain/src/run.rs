@@ -1,6 +1,6 @@
 //! Runs: one go an agent has at the turn of an item (Work with agents, Runs and The agent loop).
 //!
-//! A run is claimed from the queue, holds one item, and ends one of six ways. An agent that goes quiet is not waited
+//! A run is claimed from the queue, holds one item, and ends one of seven ways. An agent that goes quiet is not waited
 //! for: a run nobody has heard from in [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and is written
 //! as failed the next time something touches it (architecture.md, Runs).
 
@@ -49,6 +49,8 @@ coded_enum! {
         /// It stopped because the account hit the agent tool's usage limit. Not a failure: the turn's failed runs are
         /// left as they are, and the queue gives its item first place.
         Limited = "limited",
+        /// It waits on its own pull request, and the turn stays open with a watch. Not a failure.
+        Watching = "watching",
     }
 }
 
@@ -143,6 +145,39 @@ impl RunLink {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+/// A pull request a run watches: a [`RunLink`] whose path is `/<owner>/<repo>/pull/<number>`, with one trailing `/`
+/// allowed. The host is any: `gh` decides whether it can read it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRequestLink(RunLink);
+
+impl PullRequestLink {
+    pub fn parse(raw: &str) -> Result<Self, ValidationError> {
+        let link = RunLink::parse_as(raw, Field::Url)?;
+        let after_scheme = link.as_str().split_once("://").map_or("", |(_, rest)| rest);
+        let path = after_scheme.split_once('/').map_or("", |(_, path)| path);
+        let path = path.strip_suffix('/').unwrap_or(path);
+        let parts: Vec<&str> = path.split('/').collect();
+        let is_pull = matches!(parts.as_slice(), [owner, repo, "pull", number]
+            if !owner.is_empty()
+                && !repo.is_empty()
+                && !number.is_empty()
+                && number.bytes().all(|b| b.is_ascii_digit()));
+        if !is_pull {
+            return Err(ValidationError::FieldInvalid { field: Field::Url });
+        }
+        Ok(Self(link))
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    /// The same address as a run's link, which is how the watching run carries it.
+    pub fn to_run_link(&self) -> RunLink {
+        self.0.clone()
     }
 }
 
@@ -264,6 +299,9 @@ pub enum RunError {
     /// The cost of the run was sent before: it is set once.
     #[error("The run's cost is already recorded.")]
     CostRecorded,
+    /// A watch asked while the item has an open question: it waits for the person, not for a pull request.
+    #[error("This item waits for the person: a run that asked can't also watch. It comes back when they reply.")]
+    WatchWhileAsking,
     /// A write only the person makes, tried inside a run.
     #[error("{0}")]
     Forbidden(RunForbidden),
@@ -848,5 +886,34 @@ mod tests {
             made_heaps_check(&[(made_heap("blog-move", Some("A project.")), vec![task, note.clone()])]),
             err(eq(&NotReached::MadeNoteNeedsContext { key: note.key }))
         );
+    }
+
+    #[gtest]
+    fn a_pull_request_link_is_a_pull_page_on_any_host() {
+        for raw in [
+            "https://github.com/acme/app/pull/12",
+            "http://github.com/acme/app/pull/12/",
+            "https://git.example.org/acme/app/pull/7",
+        ] {
+            expect_that!(
+                PullRequestLink::parse(raw).map(|link| link.as_str().to_owned()),
+                ok(eq(raw))
+            );
+        }
+        for raw in [
+            "https://github.com/acme/app/issues/12",
+            "https://github.com/acme/app/pull/12/files",
+            "https://github.com/acme/app/pull/twelve",
+            "https://github.com/acme/app/pull/",
+            "https://github.com/acme/app",
+            "https://github.com",
+            "ftp://github.com/acme/app/pull/12",
+            "github.com/acme/app/pull/12",
+        ] {
+            expect_that!(
+                PullRequestLink::parse(raw),
+                err(eq(&ValidationError::FieldInvalid { field: Field::Url }))
+            );
+        }
     }
 }

@@ -37,6 +37,7 @@ coded_enum! {
         TurnTakenBack = "turn_taken_back",
         TurnReached = "turn_reached",
         TurnHandedBack = "turn_handed_back",
+        TurnWatching = "turn_watching",
         TurnRetried = "turn_retried",
         TurnRedone = "turn_redone",
         TagCreated = "tag_created",
@@ -156,5 +157,6 @@ coded_enum! {
         ArchivedAt = "archived_at",
         Merged = "merged",
         Email = "email",
+        Url = "url",
     }
 }

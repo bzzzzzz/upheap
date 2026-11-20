@@ -302,6 +302,10 @@ fn classify_service(err: &ServiceError) -> Classified {
             simple(StatusCode::CONFLICT, "nothing_to_redo", Category::Conflict)
         }
         ServiceError::Run(RunError::Over) => simple(StatusCode::CONFLICT, "run_over", Category::Conflict),
+        ServiceError::Run(RunError::WatchWhileAsking) => {
+            simple(StatusCode::CONFLICT, "watch_while_asking", Category::Conflict)
+        }
+        ServiceError::WatchOver => simple(StatusCode::CONFLICT, "watch_over", Category::Conflict),
         ServiceError::Run(RunError::CostRecorded) => {
             simple(StatusCode::CONFLICT, "run_cost_recorded", Category::Conflict)
         }

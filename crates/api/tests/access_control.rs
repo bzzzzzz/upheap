@@ -122,6 +122,8 @@ enum Target {
     StuckItem,
     /// An item whose turn a run reached, in `{item}`: its changes can be asked.
     ReachedItem,
+    /// A turn that watches a pull request, in `{turn}`.
+    WatchingTurn,
     /// A run the caller claimed on an item that has a context, in `{run}`. A caller who can't claim gets a run ID
     /// nobody has.
     OwnRun,
@@ -166,6 +168,10 @@ enum RequestBody {
     /// A run reaching its goal.
     Reached,
     HandBack,
+    /// A run watching a pull request.
+    Watch,
+    /// What came while a pull request was watched.
+    FireWatch,
     /// A run finishing.
     Finish,
     /// A tag name no other request used, since names are unique per heap.
@@ -906,6 +912,30 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
+            "/work/runs/{run}/watch",
+            Access::OwnRun,
+            Target::OwnRun,
+            RequestBody::Watch,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/work/watches",
+            edit,
+            Target::Queue,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/work/watches/{turn}/fire",
+            edit,
+            Target::WatchingTurn,
+            RequestBody::FireWatch,
+            StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::POST,
             "/work/runs/{run}/finish",
             Access::OwnRun,
             Target::OwnRun,
@@ -1434,6 +1464,39 @@ impl World {
         Ok(key)
     }
 
+    /// Creates an item with context, sends it to an agent and has a run end by watching a pull request. Returns the
+    /// turn's ID.
+    async fn create_watching_turn(&self) -> Result<String> {
+        let key = self.create_item_with_turn("critical").await?;
+        let run = self.claim_item(&self.admin.session, &key).await?;
+        let watched = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/work/runs/{run}/watch"),
+                Some(&self.admin.session),
+                Some(json!({ "url": "https://example.test/acme/app/pull/1" })),
+            )
+            .await?;
+        anyhow::ensure!(watched.status == StatusCode::OK, "watch failed: {}", watched.body);
+        let watches = self
+            .app
+            .send(
+                Method::GET,
+                &format!("/api/v1/work/watches?heaps={}/{}", self.team_slug, self.heap_slug),
+                Some(&self.admin.session),
+                None,
+            )
+            .await?;
+        let found = watches.body["watches"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|watch| watch["key"].as_str() == Some(key.as_str()))
+            .context("the watch isn't listed")?;
+        Ok(found["turn_id"].as_str().context("no turn id")?.to_owned())
+    }
+
     async fn create_stuck_item(&self) -> Result<String> {
         let key = self.create_item_with_turn("critical").await?;
         for _ in 0..3 {
@@ -1697,6 +1760,8 @@ impl World {
                 Some(json!({ "result": "Added the context", "links": ["https://example.test/pr/1"] }))
             }
             RequestBody::HandBack => Some(json!({ "reason": "Nothing to do" })),
+            RequestBody::Watch => Some(json!({ "url": "https://example.test/acme/app/pull/1" })),
+            RequestBody::FireWatch => Some(json!({ "what": "- Merged." })),
             RequestBody::Finish => Some(json!({})),
             RequestBody::NewTag => Some(json!({ "name": self.unique_name("new") })),
             RequestBody::RenameTag => Some(json!({ "name": self.unique_name("renamed") })),
@@ -1832,6 +1897,7 @@ impl World {
                 self.create_item_with_turn("critical").await?;
             }
             Target::StuckItem => path = path.replace("{item}", &self.create_stuck_item().await?),
+            Target::WatchingTurn => path = path.replace("{turn}", &self.create_watching_turn().await?),
             Target::ReachedItem => path = path.replace("{item}", &self.create_reached_item().await?),
             Target::OwnRun => {
                 let run = match session.as_deref() {
