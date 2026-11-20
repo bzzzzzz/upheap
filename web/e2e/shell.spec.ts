@@ -533,3 +533,38 @@ test("on a phone, the rows' chips and buttons scroll under the top bar and the t
   expect(result.checked.parameter).toBeGreaterThan(0);
   expect(result.checked.start).toBeGreaterThan(0);
 });
+
+test("on a wide screen, opening and closing an item leaves the sidebar and the list where they are", async ({
+  page,
+}) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, "only a wide screen has the pane beside the list");
+  const title = "Write up the findings from the customer interviews";
+  await addItem(page, title);
+  const sidebar = page.getByRole("complementary", { name: "Heaps and views" });
+  const box = async (locator: Locator) => {
+    const b = await locator.boundingBox();
+    if (!b) throw new Error("not laid out");
+    return { x: Math.round(b.x), right: Math.round(b.x + b.width), width: Math.round(b.width) };
+  };
+
+  // 1600 px has room for the pane beside the list; 1024 px doesn't, so the list narrows from the right.
+  for (const width of [1600, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    const before = { sidebar: await box(sidebar), row: await box(row(page, title)) };
+    // With no item open the list keeps its reading width next to the sidebar.
+    expect(before.row.x - before.sidebar.right).toBeLessThanOrEqual(32);
+    expect(before.row.width).toBeLessThanOrEqual(720);
+
+    await openItem(page, title);
+    const pane = await box(itemPane(page));
+    const open = { sidebar: await box(sidebar), row: await box(row(page, title)) };
+    expect(open.sidebar).toEqual(before.sidebar);
+    expect(open.row.x).toBe(before.row.x);
+    expect(open.row.right).toBeLessThanOrEqual(pane.x);
+    if (width === 1600) expect(open.row.width).toBe(before.row.width);
+    else expect(open.row.width).toBeLessThan(before.row.width);
+
+    await closeItem(page);
+    expect({ sidebar: await box(sidebar), row: await box(row(page, title)) }).toEqual(before);
+  }
+});
