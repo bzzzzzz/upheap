@@ -596,7 +596,8 @@ impl TestCli {
             work,
             http: shared_http(),
         };
-        let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
+        // Boxed: the whole command's future is large in a debug build, and a test thread's stack is 2 MiB.
+        let code = Box::pin(cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps)).await;
         Outcome {
             code,
             stdout: String::new(),
@@ -957,7 +958,8 @@ impl Agent {
                 watch_every: StdDuration::from_secs(60 * 60),
             },
         };
-        let code = cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps).await;
+        // Boxed: the whole command's future is large in a debug build, and a test thread's stack is 2 MiB.
+        let code = Box::pin(cli::run(std::iter::once("upheap").chain(args.iter().copied()), deps)).await;
         Outcome {
             code,
             stdout: stdout.take(),

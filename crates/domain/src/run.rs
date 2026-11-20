@@ -151,7 +151,10 @@ impl RunLink {
 /// A pull request a run watches: a [`RunLink`] whose path is `/<owner>/<repo>/pull/<number>`, with one trailing `/`
 /// allowed. The host is any: `gh` decides whether it can read it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PullRequestLink(RunLink);
+pub struct PullRequestLink {
+    link: RunLink,
+    number: u64,
+}
 
 impl PullRequestLink {
     pub fn parse(raw: &str) -> Result<Self, ValidationError> {
@@ -160,24 +163,30 @@ impl PullRequestLink {
         let path = after_scheme.split_once('/').map_or("", |(_, path)| path);
         let path = path.strip_suffix('/').unwrap_or(path);
         let parts: Vec<&str> = path.split('/').collect();
-        let is_pull = matches!(parts.as_slice(), [owner, repo, "pull", number]
-            if !owner.is_empty()
-                && !repo.is_empty()
-                && !number.is_empty()
-                && number.bytes().all(|b| b.is_ascii_digit()));
-        if !is_pull {
-            return Err(ValidationError::FieldInvalid { field: Field::Url });
-        }
-        Ok(Self(link))
+        let number = match parts.as_slice() {
+            [owner, repo, "pull", number]
+                if !owner.is_empty() && !repo.is_empty() && number.bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                number.parse().ok()
+            }
+            _ => None,
+        };
+        let number = number.ok_or(ValidationError::FieldInvalid { field: Field::Url })?;
+        Ok(Self { link, number })
     }
 
     pub fn as_str(&self) -> &str {
-        self.0.as_str()
+        self.link.as_str()
+    }
+
+    /// The pull request's number, the last part of its address: 276 for `…/pull/276`.
+    pub fn number(&self) -> u64 {
+        self.number
     }
 
     /// The same address as a run's link, which is how the watching run carries it.
     pub fn to_run_link(&self) -> RunLink {
-        self.0.clone()
+        self.link.clone()
     }
 }
 
@@ -900,10 +909,15 @@ mod tests {
                 ok(eq(raw))
             );
         }
+        expect_that!(
+            PullRequestLink::parse("http://github.com/acme/app/pull/12/").map(|link| link.number()),
+            ok(eq(&12))
+        );
         for raw in [
             "https://github.com/acme/app/issues/12",
             "https://github.com/acme/app/pull/12/files",
             "https://github.com/acme/app/pull/twelve",
+            "https://github.com/acme/app/pull/99999999999999999999999",
             "https://github.com/acme/app/pull/",
             "https://github.com/acme/app",
             "https://github.com",

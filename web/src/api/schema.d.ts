@@ -4417,6 +4417,7 @@ export interface components {
             stuck: boolean;
             /** @description Why the latest failed run failed, when the turn is stuck; otherwise `null`. */
             stuck_reason: string | null;
+            watch: null | components["schemas"]["TurnWatch"];
         };
         /**
          * @description How a turn came to be opened.
@@ -4426,6 +4427,26 @@ export interface components {
          * @enum {string}
          */
         TurnSource: "go_ahead" | "prepare";
+        /**
+         * @description A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge or a
+         *     close.
+         */
+        TurnWatch: {
+            /**
+             * Format: int64
+             * @description The pull request's number, from its address: 276 for `…/pull/276`.
+             */
+            number: number;
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when the watch began.
+             */
+            since: number;
+            /** @description When the watch began, in the client's time zone, as `opened_label` says it. */
+            since_label: string;
+            /** @description The pull request's address. */
+            url: string;
+        };
         User: {
             display_name: string;
             email: string;
@@ -4871,6 +4892,7 @@ export type TeamSummary = components['schemas']['TeamSummary'];
 export type TeamTagList = components['schemas']['TeamTagList'];
 export type Turn = components['schemas']['Turn'];
 export type TurnSource = components['schemas']['TurnSource'];
+export type TurnWatch = components['schemas']['TurnWatch'];
 export type User = components['schemas']['User'];
 export type UserMatch = components['schemas']['UserMatch'];
 export type UserMatches = components['schemas']['UserMatches'];

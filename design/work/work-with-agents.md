@@ -994,6 +994,8 @@ Who has it, by state:
   An agent brought it:   "An agent brought this to: with context, 2 h ago."
                          [Send on ▾] [Changes asked…]  Changes asked takes a line saying what's wrong.
   With an agent:         "With an agent since 14:02, going to: defined."  [Take back]
+  Watching a PR:         the same, then "Watching PR #276 since 14:05. It comes back on a new comment, a failed
+                         check, a merge or a close.", the PR a link.  [Take back]
   Stuck:                 shown under Waits for you, with [Retry] [Take back].
   Closed, any reminder, an archived heap: no line. A reminder becomes a task first.
 Steps: a tap ticks or unticks; the title is edited in place; Drop is under the step's ⋯.

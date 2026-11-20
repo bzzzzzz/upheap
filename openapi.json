@@ -15145,7 +15145,8 @@
           "stuck",
           "failed_runs",
           "stuck_reason",
-          "runs"
+          "runs",
+          "watch"
         ],
         "properties": {
           "failed_runs": {
@@ -15210,6 +15211,17 @@
               "null"
             ],
             "description": "Why the latest failed run failed, when the turn is stuck; otherwise `null`."
+          },
+          "watch": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TurnWatch",
+                "description": "The pull request the turn waits on, set by a run that ended by watching it; `null` when it watches nothing."
+              }
+            ]
           }
         }
       },
@@ -15220,6 +15232,37 @@
           "go_ahead",
           "prepare"
         ]
+      },
+      "TurnWatch": {
+        "type": "object",
+        "description": "A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge or a\nclose.",
+        "required": [
+          "url",
+          "number",
+          "since",
+          "since_label"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The pull request's number, from its address: 276 for `…/pull/276`.",
+            "minimum": 0
+          },
+          "since": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds: when the watch began."
+          },
+          "since_label": {
+            "type": "string",
+            "description": "When the watch began, in the client's time zone, as `opened_label` says it."
+          },
+          "url": {
+            "type": "string",
+            "description": "The pull request's address."
+          }
+        }
       },
       "User": {
         "type": "object",

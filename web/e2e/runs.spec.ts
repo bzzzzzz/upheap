@@ -3,7 +3,7 @@
 // is made through the API, as a loop would: claim, then finish with a failure, three times. Server build only.
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, isPhone, itemPane, openHistory, test } from "./fixtures";
+import { expect, isPhone, itemPane, openHistory, row, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
 
@@ -325,4 +325,29 @@ test("History marks an agent's change with its run, and the link opens Runs at t
   await expect(runs.locator("details")).not.toHaveAttribute("open");
   await agent.click();
   await expect(runs.locator("details")).toHaveAttribute("open");
+});
+
+test("an item watching a pull request says so on its row and in its item, with the link", async ({
+  page,
+  heapPath,
+}) => {
+  const pr = "https://github.com/acme/app/pull/7";
+  const certs = await seed(page, heapPath, "Rotate the certs");
+  const claimed = await page.request.post("/api/v1/work/runs", { headers, data: { heaps: [refOf(heapPath)] } });
+  expect(claimed.status()).toBe(201);
+  const { run } = await claimed.json();
+  const watched = await page.request.post(`/api/v1/work/runs/${run.id}/watch`, { headers, data: { url: pr } });
+  expect(watched.status()).toBe(200);
+
+  await page.goto(heapPath);
+  await expect(
+    row(page, "Rotate the certs").getByRole("link", { name: /watching pull request 7, going to/ }),
+  ).toBeVisible();
+
+  await page.goto(`${heapPath}/items/${certs.key}`);
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
+  await chip(page).click();
+  await expect(who(page)).toContainText("Watching PR #7 since");
+  await expect(who(page)).toContainText("It comes back on a new comment, a failed check, a merge or a close.");
+  await expect(who(page).getByRole("link", { name: "PR #7", exact: true })).toHaveAttribute("href", pr);
 });

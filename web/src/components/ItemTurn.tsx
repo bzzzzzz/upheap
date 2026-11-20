@@ -310,7 +310,10 @@ function SendToAgent({
   );
 }
 
-/** What an agent having the item means: since when, where it is going, what the person said and how it began. */
+/**
+ * What an agent having the item means: since when, where it is going, the pull request it watches, what the person
+ * said and how it began.
+ */
 function TurnText({ item, turn }: { item: Item; turn: Turn }) {
   const goal = GOAL_LABELS[turn.goal];
   return (
@@ -322,6 +325,20 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
             ? `An agent is waiting for your answer, going to: ${goal}.`
             : `With an agent since ${turn.opened_label}, going to: ${goal}${turn.reach === "all_the_way" ? ", all the way" : ""}`}
       </p>
+      {item.agent_state === "watching" && turn.watch && (
+        <p className="text-sm">
+          Watching{" "}
+          <a
+            href={turn.watch.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            PR #{turn.watch.number}
+          </a>{" "}
+          since {turn.watch.since_label}. It comes back on a new comment, a failed check, a merge or a close.
+        </p>
+      )}
       {turn.line && <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">“{turn.line}”</p>}
       {turn.source === "prepare" && <p className="text-xs text-muted">Prepared on add</p>}
     </>

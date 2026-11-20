@@ -3249,6 +3249,10 @@ async fn a_run_ends_by_watching_and_its_item_leaves_the_queue() -> Result<()> {
     expect_that!(item["agent_state"], eq(&json!("watching")));
     expect_that!(item["with_agent"], eq(true));
     expect_that!(item["turn"]["failed_runs"], eq(&json!(0)));
+    expect_that!(item["turn"]["watch"]["url"], eq(&json!(PR)));
+    expect_that!(item["turn"]["watch"]["number"], eq(&json!(12)));
+    expect_that!(item["turn"]["watch"]["since"].as_i64(), some(gt(0)));
+    expect_that!(item["turn"]["watch"]["since_label"].as_str(), some(not(eq(""))));
     expect_that!(waiting.to_string(), not(contains_substring(key.as_str())));
     expect_that!(finished.body["end"], eq(&json!("watching")));
     expect_that!(finished.body["cost_usd"], eq(&json!(0.2)));
@@ -3373,6 +3377,7 @@ async fn the_open_watches_are_listed_and_firing_one_brings_the_item_back() -> Re
         eq(&json!(format!("Back from watching {PR}:\n\n- Merged.")))
     );
     expect_that!(item["agent_state"], eq(&json!("queued")));
+    expect_that!(item["turn"]["watch"], eq(&Value::Null));
     expect_that!(next.body["item"]["key"], eq(&json!(key)));
     expect_that!(after.body["watches"], eq(&json!([])));
     expect_that!(again.status, eq(StatusCode::CONFLICT));
