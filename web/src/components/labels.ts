@@ -26,6 +26,9 @@ export const NEED_HINTS: Record<Need, string> = {
   critical: "It has to happen. Skipping it does real damage.",
 };
 
+/** A pull request's number, from its address (`…/pull/276`), which the server has checked. */
+export const pullNumber = (url: string) => url.replace(/\/$/, "").split("/").pop();
+
 export const KIND_LABELS: Record<Kind, string> = { note: "Note", task: "Task", reminder: "Reminder" };
 
 /**

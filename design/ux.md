@@ -295,8 +295,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    no line, when the server allows it and no agent has the item; a blue robot mark on a blue tint when an agent has
    it, on a solid blue tile while a run is live (queued otherwise), with a small accent dot when it waits for the person
    and, in the corner, a badge for where the turn ends (with context, defined, or done, which is also where a turn sent
-   all the way ends); its tooltip says it ("Running now · going to: defined", "Queued · going to: with context", "Waits
-   for you · going to: done", "Agent stuck: 3 runs failed"); empty otherwise (a reminder, a blocked item, a reader).
+   all the way ends), or an eye while it watches a pull request; its tooltip says it ("Running now · going to:
+   defined", "Queued · going to: with context", "Watching PR #276 · going to: done", "Waits for you · going to: done",
+   "Agent stuck: 3 runs failed"); empty otherwise (a reminder, a blocked item, a reader).
    With a mouse, Done and the robot are muted until the row is hovered or has focus within; with a finger they are
    always in full colour. A quick send shows the toast "Sent to an agent, going to: with context." with Undo (The item
    point 15), gives focus to the row, and a failed one says why in a toast. A phone shows the state button only (44 px)
@@ -337,8 +338,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 14. An open item an agent has shows the robot mark in its slot (point 3), with a dot while it waits for the person: an
     item that waits for the person is not the agent's, and says so in words (point 13). On a phone a small blue robot mark
     before the title stands for it, on a small solid tile while a run is live, with the icon of where the turn ends after
-    it; a dot alone stands for an item that waits for the person. A screen reader hears ", with an agent, running now,
-    going to defined" or ", queued, going to with context" after the title, and ", agent stuck" after ", waits for you"
+    it, or the eye while it watches a pull request; a dot alone stands for an item that waits for the person. A screen
+    reader hears ", with an agent, running now, going to defined", ", queued, going to with context" or ", watching pull
+    request 276, going to done" after the title, and ", agent stuck" after ", waits for you"
     for a stuck one. Who has an item never
     changes its place. The closed list never shows it.
 15. Moving an item an agent has to a state that takes it back, from the list, asks first, naming the item: "An
@@ -561,7 +563,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 15. **Who has it** is a chip in the status line, shown only while an agent has the item: "Agent · to with context" (or "Agent ·
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
     with "With an agent since 14:02" (the time today, else the date as the server words it: "yesterday", "3 Nov"),
-    "going to: <state>" and ", all the way" for that reach, the person's line in quotes, and "Prepared on add" for an
+    "going to: <state>" and ", all the way" for that reach; while it watches a pull request, "Watching PR #276 since
+    14:05. It comes back on a new comment, a failed check, a merge or a close.", the PR a link that opens in a new tab;
+    the person's line in quotes, and "Prepared on add" for an
     item the heap's setting sent. If the item waits for the person it reads "An agent is waiting for your answer,
     going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons: Retry and Take back are
     in Waits for you. **Take back** is in the popover, and asks first, "Take this back from the agent? It stops, and

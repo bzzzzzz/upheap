@@ -2,7 +2,7 @@
 //! endpoints answer with the whole item (`ItemDto`).
 
 use domain::ValidationError;
-use domain::turn::{AgentState, Goal, Reach, Turn, TurnLine, TurnSource};
+use domain::turn::{AgentState, Goal, Reach, Turn, TurnLine, TurnSource, Watch};
 use domain::validation::Field;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -214,17 +214,35 @@ pub struct TurnDto {
     #[serde(default)]
     #[schema(required = true)]
     pub runs: u32,
+    /// The pull request the turn waits on, set by a run that ended by watching it; `null` when it watches nothing.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub watch: Option<TurnWatchDto>,
+}
+
+/// A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge or a
+/// close.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = TurnWatch)]
+pub struct TurnWatchDto {
+    /// The pull request's address.
+    pub url: String,
+    /// UTC milliseconds: when the watch began.
+    pub since: i64,
+    /// When the watch began, in the client's time zone, as `opened_label` says it.
+    pub since_label: String,
 }
 
 impl TurnDto {
     /// The open `turn`, with the user who opened it if the caller knows them, `opened_label` for when it opened, how
-    /// many `runs` it has had and, when it is stuck, why (`stuck_reason`).
+    /// many `runs` it has had, when it is stuck, why (`stuck_reason`), and `watch_label` for when its watch began.
     pub fn new(
         turn: &Turn,
         opened_by: Option<UserRefDto>,
         opened_label: String,
         runs: u32,
         stuck_reason: Option<String>,
+        watch_label: impl FnOnce(&Watch) -> String,
     ) -> Self {
         Self {
             reach: turn.reach.into(),
@@ -239,6 +257,11 @@ impl TurnDto {
             failed_runs: turn.failed_runs,
             stuck_reason: if turn.is_stuck() { stuck_reason } else { None },
             runs,
+            watch: turn.watch.as_ref().map(|watch| TurnWatchDto {
+                url: watch.url.as_str().to_owned(),
+                since: watch.since.as_millis(),
+                since_label: watch_label(watch),
+            }),
         }
     }
 }
