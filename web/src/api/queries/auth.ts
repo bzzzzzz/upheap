@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, ensureOk, unwrap } from "../client";
-import type { OAuthAuthorizationRequest } from "../schema";
+import type { ConfirmationSent, OAuthAuthorizationRequest } from "../schema";
 import { oidcProviderKey, registrationOptionsKey, removeUserQueries } from "./keys";
 
 export function useSignIn() {
@@ -14,14 +14,35 @@ export function useSignIn() {
   });
 }
 
+/**
+ * What registering did: signed the browser in (`201`), or, on a server with mail set up, made the account and mailed
+ * a confirmation link to `email` without signing in (`202`).
+ */
+export type Registered = { kind: "signed_in" } | { kind: "confirmation_sent"; email: string };
+
+/**
+ * What a registering endpoint's answer means. Its `201` and `202` bodies differ, and only the status tells them
+ * apart: `answer` is a `ConfirmationSent` for a `202`, and is not read for a `201`.
+ */
+export function registeredFrom(response: Response, answer: ConfirmationSent | object): Registered {
+  return response.status === 202
+    ? { kind: "confirmation_sent", email: (answer as ConfirmationSent).email }
+    : { kind: "signed_in" };
+}
+
 export function useRegister() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { email: string; username: string; display_name: string; password: string }) =>
-      unwrap(await api.POST("/api/v1/auth/register", { body })),
+    mutationFn: async (body: { email: string; username: string; display_name: string; password: string }) => {
+      const result = await api.POST("/api/v1/auth/register", { body });
+      return registeredFrom(result.response, unwrap(result));
+    },
     // Another user's data may be cached from before a session ended, so start over, and the guard loads `me`
-    // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on.
-    onSuccess: () => removeUserQueries(queryClient),
+    // afresh. Queries only: the mutation cache holds this mutation, whose callbacks navigate on. Only for a sign-in:
+    // an account waiting for its address to be confirmed has no session.
+    onSuccess: (registered) => {
+      if (registered.kind === "signed_in") removeUserQueries(queryClient);
+    },
   });
 }
 

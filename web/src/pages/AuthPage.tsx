@@ -2,13 +2,14 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Tab, TabList, TabPanel, Tabs, type Key } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
-import { useOidcProvider, useRegister, useRegistrationOptions, useSignIn } from "../api/queries/auth";
+import { useOidcProvider, useRegister, useRegistrationOptions, useSignIn, type Registered } from "../api/queries/auth";
 import { usePasswordResetOptions, useRequestPasswordReset } from "../api/queries/passwordReset";
 import { BASE } from "../basePath";
 import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";
 import { ACCOUNT_DEACTIVATED, problemMessage } from "../components/ProblemText";
 import { RequestId } from "../components/RequestId";
+import { CheckMail, type CheckMailCause } from "./CheckMail";
 
 export type Mode = "sign_in" | "register";
 /** The form's inputs, named as the API names them, so a problem's `field` says which one it's about. */
@@ -67,11 +68,12 @@ function refusalLine(
 type RegisterBody = { email: string; username: string; display_name: string; password: string };
 
 /**
- * A request that creates an account, which the invite page uses in place of `useRegister`. It takes no callback: it
- * moves on by itself when it succeeds, where `onSignedIn` is for the default request.
+ * A request that creates an account, which the invite page uses in place of `useRegister`. It moves on by itself when
+ * the account is signed in, where `onSignedIn` is for the default request. `onConfirmationSent` is called instead,
+ * with the address the link went to, when the server has mail set up and nobody is signed in.
  */
 export type RegisterRequest = {
-  mutate: (body: RegisterBody) => void;
+  mutate: (body: RegisterBody, onConfirmationSent: (email: string) => void) => void;
   error: Error | null;
   isPending: boolean;
   reset: () => void;
@@ -99,6 +101,10 @@ export type RegisterRequest = {
  * account) a footnote says accounts come with an invite link. A failed read of the setting shows the switch. A
  * sign-in the server throttles counts down in its error line and holds the button until the wait ends
  * (`useRetryCountdown`).
+ *
+ * On a server with mail set up, Create account answers with no sign-in, and a sign-in with the right password for an
+ * account that hasn't confirmed its address is refused: either way the card shows Check your mail (`CheckMail`) in
+ * place of the forms, with Send it again.
  */
 export function AuthPage({
   notice,
@@ -136,6 +142,8 @@ export function AuthPage({
       : undefined;
   const carriesLogin = refusal === "email_taken" && initialLogin !== undefined;
   const [mode, setMode] = useState<Mode>(initialMode);
+  // Set once the server wants the address confirmed first, with the login and password to send the sign-in again.
+  const [checkMail, setCheckMail] = useState<{ cause: CheckMailCause; login: string; password: string }>();
   // After "Sign in instead", the password is the next thing to type: the address is already carried over.
   const [focusPassword, setFocusPassword] = useState(carriesLogin);
   // Kept across the switch, so an email typed under Sign in stays for Create account; the password isn't.
@@ -150,7 +158,11 @@ export function AuthPage({
   const signIn = useSignIn();
   const defaultRegister = useRegister();
   const register: RegisterRequest = registerOverride ?? {
-    mutate: (body) => defaultRegister.mutate(body, { onSuccess: onSignedIn }),
+    mutate: (body, onConfirmationSent) =>
+      defaultRegister.mutate(body, {
+        onSuccess: (registered: Registered) =>
+          registered.kind === "signed_in" ? onSignedIn() : onConfirmationSent(registered.email),
+      }),
     error: defaultRegister.error,
     isPending: defaultRegister.isPending,
     reset: defaultRegister.reset,
@@ -184,13 +196,31 @@ export function AuthPage({
       onSubmit={() => {
         setRefusalShown(false);
         return formMode === "sign_in"
-          ? signIn.mutate({ login: values.login, password: values.password }, { onSuccess: onSignedIn })
-          : register.mutate({
-              display_name: values.display_name,
-              username: values.username,
-              email: values.email,
-              password: values.password,
-            });
+          ? signIn.mutate(
+              { login: values.login, password: values.password },
+              {
+                onSuccess: onSignedIn,
+                onError: (problem) => {
+                  if (problem instanceof ApiProblem && problem.code === "email_not_confirmed") {
+                    setCheckMail({ cause: { kind: "refused" }, login: values.login, password: values.password });
+                  }
+                },
+              },
+            )
+          : register.mutate(
+              {
+                display_name: values.display_name,
+                username: values.username,
+                email: values.email,
+                password: values.password,
+              },
+              (email) =>
+                setCheckMail({
+                  cause: { kind: "created", email },
+                  login: values.email,
+                  password: values.password,
+                }),
+            );
       }}
       values={values}
       onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))}
@@ -214,6 +244,22 @@ export function AuthPage({
   // page is never left empty.
   if (providerQuery.isPending || (registerOverride === undefined && registrationQuery.isPending)) {
     return <AuthCard>{intro}</AuthCard>;
+  }
+  if (checkMail) {
+    return (
+      <AuthCard>
+        <CheckMail
+          cause={checkMail.cause}
+          login={checkMail.login}
+          password={checkMail.password}
+          onSignedIn={onSignedIn}
+          onWrongAddress={() => {
+            setCheckMail(undefined);
+            register.reset();
+          }}
+        />
+      </AuthCard>
+    );
   }
   if (provider && !provider.password_sign_in) {
     return (

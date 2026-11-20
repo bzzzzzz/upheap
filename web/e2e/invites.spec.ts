@@ -31,7 +31,7 @@ async function revokeFirstLink(page: Page) {
 closed(
   "an invite link brings a newcomer and an existing user into a team on a server with registration closed",
   async ({ browser, closedServer }, testInfo) => {
-    const { baseURL, admin, member } = closedServer;
+    const { baseURL, admin, member, mailedLink } = closedServer;
     const person = (permissions: string[] = []) =>
       browser.newContext({ ...testInfo.project.use, baseURL, permissions });
     const ana = await person(["clipboard-read", "clipboard-write"]);
@@ -70,21 +70,22 @@ closed(
       await expect(newcomer.getByText("You'll join Acme as a member, and get a heap of your own too.")).toBeVisible();
       await expectFitsWidth(newcomer, "The invite page");
 
-      // They create an account, and land on the team's only heap, with a line saying they joined.
+      // They create an account. This server has mail, so they confirm the address with the mailed link before they
+      // are signed in, and then find the team's heap in the sidebar.
       const { username, email } = uniqueUser();
+      const asked = new Date();
       await newcomer.getByLabel("Name", { exact: true }).fill("Nia Park");
       await newcomer.getByLabel("Username").fill(username);
       await newcomer.getByLabel("Email").fill(email);
       await newcomer.getByLabel("Password").fill(PASSWORD);
       await newcomer.getByRole("button", { name: "Create account and join" }).click();
-      await expect(newcomer).toHaveURL(`${baseURL}/teams/${team}/heaps/launch`);
+      await expect(newcomer.getByRole("heading", { name: "Check your mail" })).toBeVisible();
+      await newcomer.goto(await mailedLink(email, asked, "confirm"));
+      await newcomer.getByRole("button", { name: "Confirm and sign in" }).click();
+      await expect(newcomer).toHaveURL(HEAP_URL);
+      await expect(newcomer.getByText("Address confirmed. You're signed in.")).toBeVisible();
+      await newcomer.goto(`${baseURL}/teams/${team}/heaps/launch`);
       await expect(newcomer.getByRole("heading", { name: "Launch" })).toBeVisible();
-      await expect(newcomer.getByText("You joined Acme.")).toBeVisible();
-
-      // Reloading doesn't bring the line back.
-      await newcomer.reload();
-      await expect(newcomer.getByRole("heading", { name: "Launch" })).toBeVisible();
-      await expect(newcomer.getByText("You joined Acme.")).toHaveCount(0);
 
       // Plain registration on this server is still closed.
       const plain = await newcomerContext.request.post(`${baseURL}/api/v1/auth/register`, {
