@@ -144,9 +144,12 @@ shows it, the heap's views link to it with none marked active, the tabs show on 
 that is `/waiting`, `/agents` and `/all`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
 there and active, else the first active heap, else the first.
 
-On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
-wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens
-the block when it opens.
+On a wide screen the sidebar and the content are one centred block, at most the sidebar, the content column and the
+item pane wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The block is
+that wide whether or not an item is open, so opening or closing one never moves the sidebar or the list: an item is
+opened many times a session. The content column (48rem) sits next to the sidebar, with the pane's room left empty on
+its right. The pane opens into that room; where the screen has too little of it, the list narrows from the right and
+its left edge stays.
 
 ### Heap settings
 

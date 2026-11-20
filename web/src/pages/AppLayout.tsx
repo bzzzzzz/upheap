@@ -70,21 +70,23 @@ export function AppLayout() {
   }, [heapId]);
 
   return (
-    // On a wide screen the shell is the sidebar plus the content column (15rem + 48rem + padding), centred, so the
-    // menu stays next to what it opens. The left half behind it takes the sidebar's colour, so the sidebar reaches
-    // the edge of the screen. An open item pane (`data-item-pane`) widens the block by its own width and takes the
-    // right-hand padding.
+    // On a wide screen the shell is one centred block, at most the sidebar plus the content column plus the item
+    // pane wide (15rem + 48rem + 26rem + padding), whether or not an item is open, so opening or closing one never
+    // moves the sidebar or the list. The content column sits next to the sidebar; an open item pane
+    // (`data-item-pane`) widens it by the pane's width, into the room on its right where there is some, and takes the
+    // right-hand padding. The left half behind the block takes the sidebar's colour, so the sidebar reaches the edge
+    // of the screen.
     <ToastProvider>
       <NoticeLine />
       <ConnectionBanner />
       <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : onAll ? "all" : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
-          <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[66rem] lg:has-[[data-item-pane]]:max-w-[92rem]">
+          <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[92rem]">
             {me && <Sidebar me={me} heapRef={shellHeap} />}
             <div className="min-w-0 flex-1 bg-canvas">
               {me && <PhoneTopBar me={me} heapRef={shellHeap} />}
               {/* On a phone, room at the bottom for the tabs. */}
-              <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:has-[[data-item-pane]]:max-w-none lg:has-[[data-item-pane]]:pr-0">
+              <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:has-[[data-item-pane]]:max-w-[74rem] lg:has-[[data-item-pane]]:pr-0">
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
                 <Outlet />
               </div>
