@@ -280,14 +280,18 @@ enum TagCommand {
 
 #[derive(Subcommand)]
 enum ParameterCommand {
-    /// The heap's parameters and their options
+    /// The heap's parameters and their options, or with --team the team's
     List(commands::parameter::list::ListArgs),
-    /// Add a parameter to the heap
+    /// Add a parameter to the heap, or with --team to a team
     Add(commands::parameter::add::AddArgs),
     /// Change a parameter's name, weight, tags or option order
     Edit(commands::parameter::edit::EditArgs),
     /// Archive a parameter no open item has a value for
     Archive(commands::parameter::archive::ArchiveArgs),
+    /// Make the heap use one of its team's parameters
+    Use(commands::parameter::use_parameter::UseArgs),
+    /// Make the heap stop using a team parameter
+    StopUsing(commands::parameter::stop_using::StopUsingArgs),
     /// A parameter's options
     #[command(subcommand)]
     Option(ParameterOptionCommand),
@@ -397,6 +401,8 @@ impl Command {
             Self::Parameter(ParameterCommand::Add(args)) => &args.shared,
             Self::Parameter(ParameterCommand::Edit(args)) => &args.shared,
             Self::Parameter(ParameterCommand::Archive(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::Use(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::StopUsing(args)) => &args.shared,
             Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Add(args))) => &args.shared,
             Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Edit(args))) => &args.shared,
             Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Archive(args))) => &args.shared,
@@ -566,6 +572,12 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Parameter(ParameterCommand::Add(args)) => commands::parameter::add::run(args, app, out).await,
         Command::Parameter(ParameterCommand::Edit(args)) => commands::parameter::edit::run(args, app, out).await,
         Command::Parameter(ParameterCommand::Archive(args)) => commands::parameter::archive::run(args, app, out).await,
+        Command::Parameter(ParameterCommand::Use(args)) => {
+            commands::parameter::use_parameter::run(args, app, out).await
+        }
+        Command::Parameter(ParameterCommand::StopUsing(args)) => {
+            commands::parameter::stop_using::run(args, app, out).await
+        }
         Command::Parameter(ParameterCommand::Option(ParameterOptionCommand::Add(args))) => {
             commands::parameter::option::add::run(args, app, out).await
         }
