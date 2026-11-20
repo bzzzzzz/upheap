@@ -942,7 +942,7 @@ form. Create account has none. The invite page's Sign in side has it too.
 
 With mail set up, Create account doesn't sign in. The card shows **Check your mail** in place of the forms, focus on its
 heading: "We sent a link to a@x.dev. It works for a day.", a **Send it again** button (disabled while it is pending),
-and "Wrong address? **Create the account again.**", which brings the form back with what was typed. Signing in with the
+and "Wrong address? **Create the account again** with the right one and another username.", which brings the form back with what was typed (the first account keeps its username). Signing in with the
 right password for an account that hasn't confirmed its address shows the same card as **Confirm your address**: "We
 mailed you a new link. It works for a day." with Send it again and no Wrong address line. Send it again signs in again
 with the login and password the form held, which makes the server mail a fresh link and answer that the address isn't

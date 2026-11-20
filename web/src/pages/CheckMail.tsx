@@ -71,8 +71,9 @@ export function CheckMail({
             onClick={onWrongAddress}
             className="font-semibold text-accent-ink underline pointer-coarse:min-h-11"
           >
-            Create the account again.
-          </button>
+            Create the account again
+          </button>{" "}
+          with the right one and another username.
         </p>
       )}
     </div>
