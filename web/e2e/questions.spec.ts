@@ -1,5 +1,5 @@
-// Questions on an item (ux.md, The item): "Waits for you" at the top says how many wait, they are answered in the
-// Questions section under the Steps, and read back in its fold, "N answered". Most are seeded through the API, as another member or an agent would; the "Ask a question" form on the item asks
+// Questions on an item (ux.md, The item): the open ones are answered in "Waits for you" at the top, under a line that
+// says how many wait, and read back in the Questions section's fold, "N answered". Most are seeded through the API, as another member or an agent would; the "Ask a question" form on the item asks
 // them from the web app. Server build only.
 import type { Page } from "@playwright/test";
 
@@ -40,9 +40,9 @@ async function itemWithQuestions(page: Page, heapPath: string, title: string, qu
   return item;
 }
 
-/** The block at the top that says how many questions wait. */
+/** The block at the top that holds what waits, the open questions among it. */
 const topWaits = (page: Page) => itemPane(page).getByRole("region", { name: "Waits for you", exact: true });
-/** The outlined box in Questions that holds the open questions with their reply controls. */
+/** The open questions with their reply controls, in Waits for you. */
 const waits = (page: Page) => itemPane(page).getByRole("group", { name: "Open questions", exact: true });
 const answered = (page: Page) =>
   itemPane(page)
@@ -215,12 +215,11 @@ test("a question without choices is answered with text, and then reads in Questi
   ]);
 
   const section = waits(page);
-  // At the top it says how many wait, and Answer takes the first control to the first question.
+  // At the top, in Waits for you, it says how many wait, over the questions themselves.
   await expect(topWaits(page)).toContainText("2 questions wait for you");
   await expect(topWaits(page)).toHaveCSS("border-top-width", "2px");
+  await expect(topWaits(page).getByRole("group", { name: "Open questions" })).toHaveCount(1);
   await expect(section.getByRole("listitem")).toHaveCount(2);
-  await topWaits(page).getByRole("button", { name: "Answer ↓" }).click();
-  await expect(section.getByLabel("Answer").first()).toBeFocused();
 
   const first = section.getByRole("listitem").filter({ hasText: "Which CA do we use?" });
   const answer = first.getByLabel("Answer");
@@ -266,6 +265,51 @@ test("a question without choices is answered with text, and then reads in Questi
   await expect(section).toHaveCount(0);
   const [one, two] = await questionsOf(page, item);
   expect([one.state, one.reply.comment, two.reply.comment]).toEqual(["answered", "Let's Encrypt", "Sam"]);
+});
+
+test("Skip to details goes past the open questions to the fields, and the link in Questions comes back up", async ({
+  page,
+  heapPath,
+}) => {
+  await itemWithQuestions(page, heapPath, "Rotate the certs", [
+    { kind: "question", text: "Which CA do we use?" },
+    { kind: "question", text: "Who signs off?" },
+  ]);
+  const fields = itemPane(page).getByRole("region", { name: "Fields", exact: true });
+  const top = topWaits(page);
+  // The questions come before the fields.
+  const topBox = await top.boundingBox();
+  const fieldsBox = await fields.boundingBox();
+  expect(Math.round(topBox?.y ?? 0)).toBeLessThan(Math.round(fieldsBox?.y ?? 0));
+  await expect(top.getByRole("button", { name: "Answer ↓" })).toHaveCount(0);
+
+  const skip = top.getByRole("button", { name: "Skip to details ↓", exact: true });
+  if (isPhone(page)) expect(Math.round((await skip.boundingBox())?.height ?? 0)).toBeGreaterThanOrEqual(44);
+  await skip.click();
+  // Focus is on the first field, and the questions stay as they were.
+  await expect(fields.getByRole("button").first()).toBeFocused();
+  await expect(fields).toBeInViewport();
+  await expect(waits(page).getByRole("listitem")).toHaveCount(2);
+
+  // From the bottom, "2 open, at the top" goes back to the first question's first control.
+  const back = itemPane(page)
+    .getByRole("region", { name: "Questions", exact: true })
+    .getByRole("button", { name: "2 open, at the top ↑", exact: true });
+  await back.click();
+  await expect(waits(page).getByLabel("Answer").first()).toBeFocused();
+  await expect(waits(page).getByRole("listitem").first()).toBeInViewport();
+
+  // With one question the link counts one, and with none it is gone, as is Skip.
+  const first = waits(page).getByRole("listitem").first();
+  await first.getByLabel("Answer").fill("Let's Encrypt");
+  await first.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(top).toContainText("1 question waits for you");
+  await expect(itemPane(page).getByRole("button", { name: "1 open, at the top ↑", exact: true })).toBeVisible();
+  await expect(skip).toBeVisible();
+  await waits(page).getByLabel("Answer").fill("Sam");
+  await waits(page).getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(top).toHaveCount(0);
+  await expect(itemPane(page).getByRole("button", { name: /open, at the top/ })).toHaveCount(0);
 });
 
 test("a choice question is answered by one pick, a many-choice one by any number", async ({ page, heapPath }) => {
