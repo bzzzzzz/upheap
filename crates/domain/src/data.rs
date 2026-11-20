@@ -173,7 +173,9 @@ impl Buckets {
                     Some(RunEnd::Reached) => bucket.runs.reached += 1,
                     Some(RunEnd::Asked) => bucket.runs.asked += 1,
                     Some(RunEnd::Failed) => bucket.runs.failed += 1,
-                    Some(RunEnd::TakenBack | RunEnd::HandedBack | RunEnd::Limited) | None => bucket.runs.other += 1,
+                    Some(RunEnd::TakenBack | RunEnd::HandedBack | RunEnd::Limited | RunEnd::Watching) | None => {
+                        bucket.runs.other += 1
+                    }
                 }
             }
         }

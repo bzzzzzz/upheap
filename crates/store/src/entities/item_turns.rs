@@ -20,6 +20,8 @@ pub struct Model {
     pub redone_at: Option<i64>,
     pub redone_by: Option<String>,
     pub failed_runs: i32,
+    pub watch_url: Option<String>,
+    pub watch_since: Option<i64>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

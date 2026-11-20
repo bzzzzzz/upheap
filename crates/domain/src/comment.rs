@@ -52,7 +52,13 @@ impl CommentBody {
     pub const MAX_CHARS: usize = Context::MAX_CHARS;
 
     pub fn parse(raw: &str) -> Result<Self, ValidationError> {
-        parse_required(raw, Field::Body, Self::MAX_CHARS).map(Self)
+        Self::parse_as(raw, Field::Body)
+    }
+
+    /// [`Self::parse`] for text that is another field, such as what came while a pull request was watched: the same
+    /// rule, reported against `field`.
+    pub fn parse_as(raw: &str, field: Field) -> Result<Self, ValidationError> {
+        parse_required(raw, field, Self::MAX_CHARS).map(Self)
     }
 
     /// A body read back from storage, which was checked when the comment was added.

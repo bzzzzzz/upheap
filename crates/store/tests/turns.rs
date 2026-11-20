@@ -8,9 +8,10 @@ use anyhow::{Context as _, Result};
 use domain::handle::{Handle, ItemKey};
 use domain::heap::{Heap, HeapPolicy};
 use domain::item::{Item, Kind, Need, NewItem, Title};
+use domain::run::PullRequestLink;
 use domain::team::Team;
 use domain::text::Name;
-use domain::turn::{Reach, Turn, TurnLine, TurnSource, goal_for};
+use domain::turn::{Reach, Turn, TurnLine, TurnSource, Watch, goal_for};
 use domain::user::{DisplayName, Email, User};
 use domain::validation::Field;
 use domain::{HeapId, ItemId, TeamId, Timestamp, TurnId, UserId, Version};
@@ -127,6 +128,36 @@ async fn an_open_turn_reads_back_as_written() -> Result<()> {
     expect_that!(found, some(eq(&opened)));
     expect_that!(locked, some(eq(&opened)));
     expect_that!(listed.get(&item.id), some(eq(&opened)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_watch_is_set_and_cleared_on_an_open_turn_only() -> Result<()> {
+    // Arrange
+    let world = world().await?;
+    let item = item(&world, "k3x9a").await?;
+    let opened = turn(&item, world.user, None)?;
+    store::turns::insert_turn(&world.db, &opened).await?;
+    let watch = Watch {
+        url: PullRequestLink::parse("https://github.com/acme/app/pull/12")?,
+        since: now()?,
+    };
+
+    // Act
+    let set = store::turns::set_turn_watch(&world.db, opened.id, Some(&watch)).await?;
+    let watched = store::turns::find_open_turn(&world.db, item.id).await?;
+    let cleared = store::turns::set_turn_watch(&world.db, opened.id, None).await?;
+    let unwatched = store::turns::find_open_turn(&world.db, item.id).await?;
+    store::turns::end_turn(&world.db, &opened.take_back(world.user, now()?)).await?;
+    let after_end = store::turns::set_turn_watch(&world.db, opened.id, Some(&watch)).await?;
+
+    // Assert
+    expect_that!(set, eq(true));
+    expect_that!(watched.map(|turn| turn.watch), some(some(eq(&watch))));
+    expect_that!(cleared, eq(true));
+    expect_that!(unwatched, some(eq(&opened)));
+    expect_that!(after_end, eq(false));
     Ok(())
 }
 

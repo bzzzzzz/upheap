@@ -154,6 +154,10 @@ pub enum Field {
     BlockedReason,
     /// When a run's agent tool exited.
     ToolEndedAt,
+    /// The pull request a run watches.
+    Url,
+    /// What came while a pull request was watched.
+    What,
 }
 
 impl Field {
@@ -200,6 +204,8 @@ impl Field {
             Self::Origin => "origin",
             Self::BlockedReason => "blocked_reason",
             Self::ToolEndedAt => "tool_ended_at",
+            Self::Url => "url",
+            Self::What => "what",
         }
     }
 }

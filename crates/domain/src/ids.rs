@@ -151,6 +151,7 @@ mod tests {
                 "turn_taken_back",
                 "turn_reached",
                 "turn_handed_back",
+                "turn_watching",
                 "turn_retried",
                 "turn_redone",
                 "tag_created",
@@ -248,7 +249,8 @@ mod tests {
                 "by",
                 "archived_at",
                 "merged",
-                "email"
+                "email",
+                "url"
             ]
         );
         pinned!(
@@ -279,7 +281,15 @@ mod tests {
         pinned!(RemindersMode, ["hidden", "shown"]);
         pinned!(
             RunEnd,
-            ["reached", "asked", "failed", "taken_back", "handed_back", "limited"]
+            [
+                "reached",
+                "asked",
+                "failed",
+                "taken_back",
+                "handed_back",
+                "limited",
+                "watching"
+            ]
         );
         pinned!(RunReached, ["with_context", "defined", "became"]);
         pinned!(Reach, ["one", "all_the_way"]);
