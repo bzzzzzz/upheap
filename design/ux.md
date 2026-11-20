@@ -940,6 +940,17 @@ problem (too many requests, a network error) shows above the line, under the but
 doesn't know yet, the disclosure shows one line, "Whoever runs this Upheap server can send you a reset link.", and no
 form. Create account has none. The invite page's Sign in side has it too.
 
+With mail set up, Create account doesn't sign in. The card shows **Check your mail** in place of the forms, focus on its
+heading: "We sent a link to a@x.dev. It works for a day.", a **Send it again** button (disabled while it is pending),
+and "Wrong address? **Create the account again.**", which brings the form back with what was typed. Signing in with the
+right password for an account that hasn't confirmed its address shows the same card as **Confirm your address**: "We
+mailed you a new link. It works for a day." with Send it again and no Wrong address line. Send it again signs in again
+with the login and password the form held, which makes the server mail a fresh link and answer that the address isn't
+confirmed; that answer is "sent", and a line under the button says "Sent. It can take a minute to arrive.", shown anew
+for each send. If the sign-in goes through (the address was confirmed meanwhile, in another tab) the user is signed in as
+a sign-in would. Too many tries, or anything else, is the server's message in place of the line. The invite page's Create
+account and Sign in sides do the same.
+
 On a server with registration closed, the sign-in page has no switch and no Create account: the Sign in form shows
 alone, and under its button a footnote in Create account's style says "New accounts need an invite link from a team's
 admin." With a provider there is no footnote, since a first sign-in through it makes the account. The invite page keeps
@@ -1002,7 +1013,8 @@ order, and the page only shows it:
 - **Signed out:** "Join Acme" and who invited them, over the provider button (when the server has one; it returns
   to this page signed in) and the sign-in switch with Create account first
   ([Sign in and create account](#sign-in-and-create-account)). Create account and join makes the account and joins in
-  one act, also when registration is closed. A taken email offers **Sign in instead**, which carries the address
+  one act, also when registration is closed; with mail set up the account is made and joined, and the card is
+  **Check your mail** as a state of this page (the team is in the sidebar once the address is confirmed). A taken email offers **Sign in instead**, which carries the address
   over. Signing in leads to the signed-in state, where they press Join: it doesn't join by itself, so they see who
   they joined as.
 
@@ -1062,6 +1074,26 @@ account?" and has one button, **Use this address**, disabled while it is pending
   as the heading, and no button. The link keeps working until it ends.
 
 Anything else is the server's message above the button. When the page changes state, focus moves to its heading.
+
+## Confirm page
+
+`/confirm/{token}` is where an email confirmation link leads, outside the app's shell in the Change-email page's card,
+the same way at every width, and needs no sign-in: holding the link is the permission. Nothing is sent when it opens, so
+a mail scanner that fetches the link confirms nothing: the page asks "Confirm your address and sign in?" and has one
+button, **Confirm and sign in**, disabled while it is pending and until the landing. What the server answers is the
+state:
+
+- **Confirmed:** the browser is signed in as the link's user, whoever it was signed in as. It lands on `/`, which goes
+  to the user's heap, replacing the page in the history, with the toast "Address confirmed. You're signed in.", shown
+  once like the reset page's.
+- **Not a working link** for a token the server doesn't know: "This isn't a working link.", "Check that the whole
+  link was copied."
+- **Used**, **cancelled** (a newer one was mailed, which a refused sign-in or Send it again does) and **ended** show
+  the server's words as the heading ("This link was already used.", "This link no longer works: a newer one was asked
+  for.", "This link has ended."), with **Open Upheap**.
+
+Anything else is the server's message above the button. When the page changes state, focus moves to its heading. A
+`401` on this page never sends the user to sign-in.
 
 ## Email
 

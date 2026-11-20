@@ -248,7 +248,22 @@ For development, `MAIL_URL=log:` writes each mail to the server's log, and `MAIL
 each as an `.eml` file in that directory, which must exist. Nothing is sent.
 
 With mail set up, users can ask for a password reset link on the sign-in page ([Resetting a
-password](#resetting-a-password)).
+password](#resetting-a-password)), and a new account (open registration, or Create account through an invite link)
+confirms its address before it can sign in: a link is mailed to it, and it works for a day. Signing in again with the
+right password mails a fresh link. Accounts made before mail was set up, or while it was off, and provider accounts
+count as confirmed; with mail off, nobody has to confirm. If the mail doesn't come, confirm an account by hand:
+
+```sh
+upheap-server user confirm sam          # a username or an email address
+docker compose exec upheap upheap-server user confirm sam
+```
+
+It takes the same environment variables as the server (at least `DATABASE_URL`), needs no mail, and prints
+`Confirmed @sam's address, sam@example.com.`, or says the address is already confirmed. The confirmation is in the
+user's account history. It runs no migrations and starts no server, so run it once the server of the same version has
+started. Exit codes: `0` confirmed or already confirmed, `2` wrong arguments, `3` no such user, `5` the database can't
+be reached, `1` anything else, a database a version behind included. A reset link, which also arrives by mail,
+confirms the address too.
 
 ### Resetting a password
 
