@@ -1,5 +1,5 @@
-import { Link, type LinkProps, useNavigate } from "@tanstack/react-router";
-import { Check, ChevronDown, ChevronUp, Link as LinkIcon, X } from "lucide-react";
+import { Link, type LinkProps, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { Check, ChevronDown, ChevronUp, Link as LinkIcon, Maximize2, Minimize2, X } from "lucide-react";
 import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
@@ -77,6 +77,8 @@ export function ItemPane({
   const paneRef = useRef<HTMLElement>(null);
   const headingId = useId();
   const drag = useDragToClose(onClose);
+  const fullScreen = useFullScreen();
+  const { full } = fullScreen;
   // The ↑ or ↓ that walked to this item, so focus stays on it for the next step.
   const walkedBy = useRef<string | undefined>(undefined);
 
@@ -144,7 +146,18 @@ export function ItemPane({
         aria-labelledby={headingId}
         data-item-pane=""
         {...drag.paneProps}
-        className="fixed inset-x-0 bottom-(--keyboard-inset) z-40 max-h-[calc(88dvh-var(--keyboard-inset))] overflow-y-auto rounded-t-2xl bg-surface text-ink shadow-2xl outline-none sm:top-0 sm:bottom-0 sm:left-auto sm:z-20 sm:max-h-none sm:w-[25rem] sm:rounded-none sm:border-l sm:border-line lg:sticky lg:right-auto lg:bottom-auto lg:h-dvh lg:w-[26rem] lg:shrink-0 lg:shadow-none"
+        // Escape leaves full screen and keeps the item open; the page's own Escape (closing the item) sees it handled.
+        onKeyDown={(event) => {
+          if (full && event.key === "Escape" && !event.defaultPrevented && !document.querySelector("[role=dialog]")) {
+            event.preventDefault();
+            fullScreen.leave();
+          }
+        }}
+        className={`fixed inset-x-0 bottom-(--keyboard-inset) z-40 overflow-y-auto bg-surface text-ink shadow-2xl outline-none sm:top-0 sm:bottom-0 sm:z-20 sm:max-h-none sm:rounded-none sm:border-l sm:border-line lg:shadow-none ${
+          full
+            ? "top-0 max-h-none sm:left-20 sm:w-auto lg:left-[calc(max(0px,(100vw-92rem)/2)+15rem)] lg:overscroll-contain"
+            : "max-h-[calc(88dvh-var(--keyboard-inset))] rounded-t-2xl sm:left-auto sm:w-[25rem] lg:sticky lg:right-auto lg:bottom-auto lg:h-dvh lg:w-[26rem] lg:shrink-0"
+        }`}
       >
         {/* The top bar is what drags: down to close the phone's sheet, right to close the tablet's panel. */}
         <div
@@ -187,6 +200,19 @@ export function ItemPane({
           <CopyKey key={itemKey} heapRef={heapRef} itemKey={itemKey} />
           <button
             type="button"
+            onClick={full ? fullScreen.leave : fullScreen.enter}
+            aria-label={full ? "Exit full screen" : "Full screen"}
+            title={full ? "Exit full screen" : "Full screen"}
+            className="flex size-9 items-center justify-center rounded-lg text-ink-soft hover:bg-sunken pointer-coarse:size-11 max-sm:hidden"
+          >
+            {full ? (
+              <Minimize2 aria-hidden="true" className="size-4" />
+            ) : (
+              <Maximize2 aria-hidden="true" className="size-4" />
+            )}
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             aria-label="Close"
             aria-keyshortcuts="Escape"
@@ -195,7 +221,9 @@ export function ItemPane({
             <X aria-hidden="true" className="size-4" />
           </button>
         </div>
-        <div className="px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] has-[[data-state-bar]]:pb-0 sm:px-5">
+        <div
+          className={`px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] has-[[data-state-bar]]:pb-0 sm:px-5 ${full ? "mx-auto max-w-[720px]" : ""}`}
+        >
           {body}
         </div>
       </motion.section>
@@ -275,6 +303,42 @@ function WalkLink({
       <Icon aria-hidden="true" className="size-4" />
     </Link>
   );
+}
+
+/**
+ * Whether the open item is full screen, which the location's `full=1` says, and the way in and out of it (ux.md, The
+ * item). Going in is a history entry of its own, marked `fullBack`, so leaving by Escape or ⤡ goes back to the pane;
+ * an item reached by a full link or a reload has no such entry, so leaving replaces it with the pane's address. The
+ * pane stays mounted through both, so an unsaved draft in it survives.
+ */
+function useFullScreen() {
+  const router = useRouter();
+  const navigate = useNavigate();
+  const full = useRouterState({ select: (state) => (state.location.search as { full?: unknown }).full === 1 });
+  const fullBack = useRouterState({ select: (state) => state.location.state.fullBack === true });
+  return {
+    full,
+    enter: () =>
+      void navigate({
+        to: ".",
+        search: (prev: object) => ({ ...prev, full: 1 as const }),
+        state: (prev) => ({ ...prev, fullBack: true }),
+        resetScroll: false,
+      }),
+    leave: () => {
+      if (fullBack) {
+        router.history.back();
+      } else {
+        void navigate({
+          to: ".",
+          search: (prev: object) => ({ ...prev, full: undefined }),
+          state: (prev) => prev,
+          replace: true,
+          resetScroll: false,
+        });
+      }
+    },
+  };
 }
 
 /**

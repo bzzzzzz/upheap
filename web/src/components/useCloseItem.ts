@@ -26,6 +26,7 @@ export function useCloseItem(list: NavigateOptions, itemKey: string | undefined)
   const router = useRouter();
   const navigate = useNavigate();
   const closesBack = useRouterState({ select: (state) => state.location.state.closesBack === true });
+  const fullBack = useRouterState({ select: (state) => state.location.state.fullBack === true });
   const listPath = router.buildLocation(list).pathname;
   const keepPlace = useKeepPlaceOnBack(listPath, itemKey !== undefined);
   const close = useCallback(() => {
@@ -38,12 +39,14 @@ export function useCloseItem(list: NavigateOptions, itemKey: string | undefined)
     });
     if (closesBack) {
       keepPlace();
-      router.history.back();
+      // From full screen entered from the pane, the pane is one entry back and the list another.
+      if (fullBack) router.history.go(-2);
+      else router.history.back();
     } else {
       // Closing by navigating says to the router itself that the list keeps its place.
       void navigate({ ...list, resetScroll: false });
     }
-  }, [router, navigate, closesBack, list, itemKey, keepPlace]);
+  }, [router, navigate, closesBack, fullBack, list, itemKey, keepPlace]);
   return itemKey === undefined ? undefined : close;
 }
 
