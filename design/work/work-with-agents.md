@@ -144,6 +144,10 @@ is resolved or turned into a task.
 2. **Core.** Only what the person asked to be pushed is pushed: a reminder on its date, and whatever else they
    have said is critical to act on fast. Upheap and agents never decide that for them.
 3. An agent that has to wait for the person goes on to the next item it can work on.
+4. An agent waiting on its own work's place (a pull request's checks or a bot's review) doesn't hold a worker: it
+   watches the pull request, and the item comes back to it by itself on a new comment, a failed check, a merge or a
+   close. A watch is only for the agent's own waits: while a review request is open the item waits for the person,
+   and only their reply sends it back.
 
 **Stable states**
 
@@ -384,6 +388,14 @@ week), setup (once or rarely) or recovery.
    proposal.
 4. Changes asked: on its next run it reads the comments at the link, changes the work, and asks again.
 
+**A7. Wait on the work.** Loop.
+
+1. The agent's work is in a pull request, and all that is left is CI to finish or a bot's review.
+2. It ends the run with `work watch`. The worker's slot is free and the item is out of the queue.
+3. The loop checks the pull request with `gh` about once a minute. A new comment or review, a failed check, a merge
+   or a close brings the item back: a comment on the item says what came, and the item is in the queue again.
+4. The next run reads that comment, deals with what came and carries on as A1 from step 3.
+
 **A5. A run dies.** Recovery, for A1.
 
 1. The agent tool crashes, is killed, hangs (showing no output for 30 minutes, when the loop stops it), or
@@ -428,8 +440,7 @@ From the steps above that ask something of the product.
 
 - Commenting on the work inside Upheap: comments stay where the work lives, and Upheap holds the link and the
   outcome.
-- Upheap watching a pull request or a document for new comments. The person's reply in Upheap is what sends the
-  work back.
+- Watching a document for comments.
 - Setting up the agent tool, its sign-in and its permissions.
 - Anything about teammates beyond what a member can do today: who answers, who reviews.
 - Being told about any of this without looking.
@@ -508,13 +519,14 @@ rendered and edits them as Markdown; the command-line client reads and writes th
 
 **Turn.** One piece of an agent's work on one item: from the stable state it's at to the next. It has a
 **reach** (one state, or all the way) and is opened by the person's go-ahead or by the heap's prepare setting. It
-is open, then ends as reached, handed back or taken back. It also ends as reached when the person sets the item's
+is open, then ends as reached, handed back or taken back. An open turn may have a **watch**: a pull request's link
+and since when. It also ends as reached when the person sets the item's
 stage to the turn's goal or past it. A reached turn can later be marked **redone**. An open turn can be
 **stuck**. An item has at most one open turn. A go-ahead can carry a line from the person, shown to the turn's
 runs.
 
 **Run.** One start of the agent tool on one item, inside a turn. It records when it started and ended, how it
-ended (reached, asked, failed, handed back, or stopped by the usage limit), the state it started from and reached, a **result** (a line or two and links to
+ended (reached, asked, failed, handed back, watching, or stopped by the usage limit), the state it started from and reached, a **result** (a line or two and links to
 what it produced), and its cost as reported. A turn has one or more runs. Runs are never changed or deleted.
 
 **Claim.** While a run is live it holds its item, and no other run is given it. A claim lapses when its run
@@ -561,8 +573,8 @@ change it makes carries the run it was made in.
 
 **The agent's queue**
 
-1. An item is in the queue when it has an open turn, doesn't wait for the person, isn't blocked, isn't claimed,
-   and is in a heap `upheap work` was given. A heap made from an item in a given heap counts as given, and starts
+1. An item is in the queue when it has an open turn, doesn't wait for the person, isn't watching, isn't blocked,
+   isn't claimed, and is in a heap `upheap work` was given. A heap made from an item in a given heap counts as given, and starts
    with its source's priority.
 2. The queue is one list over all the given heaps. An item's place is its priority score in its own heap,
    times the priority the person running `upheap work` gave that heap. So the top items of every heap get worked,
@@ -575,9 +587,10 @@ change it makes carries the run it was made in.
    agent tool's usage limit comes before all others, so it is the first one claimed once the limit resets.
 4. "Next" is the first item of the queue, and gives its run the claim. It depends on stored state and the time
    only.
-5. A run ends in one of five ways: **reached**, with its result; **asked**, having attached at least one
+5. A run ends in one of six ways: **reached**, with its result; **asked**, having attached at least one
    question; **handed back**, with a reason, when there is nothing to do and the goal needn't be reached,
-   such as work done elsewhere (the turn goes back to the person, and it isn't a failure); **limited**, when the
+   such as work done elsewhere (the turn goes back to the person, and it isn't a failure); **watching**, when it
+   waits on its own pull request (the turn stays open with a watch; not a failure); **limited**, when the
    agent tool stopped at the account's usage limit (not a failure: it doesn't count toward a stuck turn); or
    **failed**. An item
    that already has what the goal needs is reached, not handed back. A claim that lapses counts as failed.
@@ -599,6 +612,20 @@ change it makes carries the run it was made in.
 1. When a turn with that reach ends short of done, the next turn on the item opens at once, with the same reach.
 2. Tasks split from the item get it too. Follow-up tasks a run adds, and notes and heaps made from it, don't.
 3. It never answers a question, a request or a review.
+
+**Watching**
+
+1. A run makes a watch by ending as watching, with the pull request's address. It is refused while the item has an
+   open question: that item waits for the person, and only their reply sends it back.
+2. A watch fires when the pull request has a comment or a review newer than the watch, a check that failed after
+   it, or is merged or closed, whoever wrote it. A pull request already merged or closed fires at once.
+3. Firing clears the watch and adds a comment on the item, by the person whose loop found it, saying what came with
+   the links. The item is in the queue again at its ranked place.
+4. A watch ends with its turn: taking the turn back, starting or closing the item, or reaching its goal by hand
+   ends it as it ends any open turn. An item has one open turn, so one watch.
+5. The loop checks the open watches with the person's own `gh`, about once a minute. The server only stores the
+   watch and is told when it fires: it never reaches GitHub. A pull request `gh` can't read is left to be checked
+   again.
 
 **Questions and waiting**
 
@@ -784,7 +811,9 @@ joining the queue; and need being settled for everything made from a note.
    with 2.1.322: `Read(./**)` allows a file under the start directory and refuses `/etc/hosts`, where a bare `Read`
    allows any path; a heredoc on a command's stdin passes a prefix rule; that version has no Grep tool. Exit 0 with
    `is_error` false is a run that ended; anything else is a failed run, with its cost still reported.
-2. **Nothing else.** Claims that lapse, checked moves and in-place kind changes are ordinary.
+2. **Reading a pull request with `gh`.** `gh pr view --json state,comments,reviews,statusCheckRollup` gives what the
+   loop needs (assumed from `gh`'s documented fields).
+3. **Nothing else.** Claims that lapse, checked moves and in-place kind changes are ordinary.
 
 ## 5. Interface
 
@@ -824,6 +853,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | W20 | Steps: reorder by dragging | P5 | Sometimes | Polish | |
 | W21 | Activity and history: a mark on what an agent changed | P10, story 19 | Sometimes | Enabler | Otherwise an agent's wrong edit reads as the person's own |
 | W22 | Heap: its total cost | P10, story 25 | Sometimes | Enabler | The only place the cost of a whole project is seen |
+| W23 | List row and item: an item waiting on a pull request, with its link | A7 | Daily | Nice to have | |
 
 **Command-line client**
 
@@ -837,6 +867,7 @@ workaround), Enabler (done painfully without it), Nice to have or Polish.
 | C6 | `question ask`, `request`, `review`, `propose-done` | A2, A6 | Constant | Core | The agent's only way to reach the person |
 | C7 | `work reached`: the run says what it reached and made | A1 | Constant | Core | An agent ends a turn no other way, bar a hand-back (C7a) |
 | C7a | `work hand-back`: the run found nothing to do and gives the turn back | A1 | Weekly | Enabler | Without it a run that finds the work done must say reached, or fail |
+| C19 | `work watch`: the run waits on its own pull request and ends | A7 | Weekly | Enabler | Without it a run waiting on CI holds a worker and its item |
 | C8 | `item to-task` | A1 | Daily | Core | Golden path step 6 |
 | C9 | Splitting: `item add --from`, `item became` | A4 | Weekly | Core | Golden path step 6 |
 | C10 | `item to-step` | A4 | Sometimes | Enabler | A core move with no other way for an agent |
