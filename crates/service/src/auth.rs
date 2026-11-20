@@ -233,7 +233,13 @@ impl Services {
             self.mail_new_confirmation_link(mail, &user).await?;
             return Err(ServiceError::EmailNotConfirmed);
         }
-        let grant = self.open_session(&self.db, user, self.now(), None).await?;
+        // The personal team's lock puts the session in turn with a provider deactivating the person, as for a
+        // provider sign-in.
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        store::teams::lock_team(&txn, personal_team).await?;
+        let grant = self.open_session(&txn, user, self.now(), None).await?;
+        txn.commit().await.map_err(StoreError::from)?;
         // The session exists by now, so failing to clear the count mustn't fail the sign-in; the count then just
         // runs out with its window.
         if let Some(key) = &attempts_key

@@ -114,6 +114,13 @@ fn sam() -> Claims {
 
 /// Starts a sign-in at the provider and returns the callback's answer after it vouched for `claims`, and the state.
 async fn sign_in(h: &Harness, claims: Claims) -> Result<(TestResponse, String)> {
+    let (code, state) = start_sign_in(h, claims).await?;
+    let answered = callback(h, &code, &state).await?;
+    Ok((answered, state))
+}
+
+/// Starts a sign-in at the provider and returns the code it gave for `claims`, and the state.
+async fn start_sign_in(h: &Harness, claims: Claims) -> Result<(String, String)> {
     let start = h
         .app
         .send_with(Method::GET, "/api/v1/auth/oidc/start", None, None, &[])
@@ -121,9 +128,12 @@ async fn sign_in(h: &Harness, claims: Claims) -> Result<(TestResponse, String)> 
     let location = start.headers.get(header::LOCATION).context("no Location")?.to_str()?;
     let request = oidc::parse_authorization(location)?;
     let code = h.provider.code_for(&request, claims);
-    let state = request.state;
-    let answered = h
-        .app
+    Ok((code, request.state))
+}
+
+/// The provider's redirect back to the callback with `code` and `state`, from the browser that started the sign-in.
+async fn callback(h: &Harness, code: &str, state: &str) -> Result<TestResponse> {
+    h.app
         .send_with(
             Method::GET,
             &format!("/api/v1/auth/oidc/callback?code={code}&state={state}"),
@@ -131,8 +141,7 @@ async fn sign_in(h: &Harness, claims: Claims) -> Result<(TestResponse, String)> 
             None,
             &[("cookie", &format!("upheap_oidc={state}"))],
         )
-        .await?;
-    Ok((answered, state))
+        .await
 }
 
 /// Sam's first sign-in through the username step. Returns their session.
@@ -1022,6 +1031,125 @@ async fn two_deactivations_at_once_of_a_persons_last_two_records_end_their_sign_
         expect_that!(other.status, eq(StatusCode::OK), "{}", other.body);
         expect_that!(ended.status, eq(StatusCode::UNAUTHORIZED), "round {round}");
         expect_that!(turned_off, elements_are![eq("account_deactivated")], "round {round}");
+    }
+    Ok(())
+}
+
+/// How many times a sign-in races a deactivation. Only MySQL and Postgres race; in-memory SQLite has one connection,
+/// so there the two take turns.
+const ROUNDS: u32 = 50;
+
+/// Runs `sign_in` and `deactivate` at once, one of them started a little later. Over the rounds the delay moves from
+/// the sign-in to the deactivation, so the deactivation lands at each point of the sign-in's work rather than always
+/// at the same one.
+async fn race<A: Future, B: Future>(round: u32, sign_in: A, deactivate: B) -> (A::Output, B::Output) {
+    let step = std::time::Duration::from_micros(400);
+    let (sign_in_waits, deactivation_waits) = if round < ROUNDS / 2 {
+        (step * (ROUNDS / 2 - round), std::time::Duration::ZERO)
+    } else {
+        (std::time::Duration::ZERO, step * (round - ROUNDS / 2))
+    };
+    tokio::join!(
+        async {
+            tokio::time::sleep(sign_in_waits).await;
+            sign_in.await
+        },
+        async {
+            tokio::time::sleep(deactivation_waits).await;
+            deactivate.await
+        }
+    )
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_provider_sign_in_during_the_deactivation_of_the_last_record_is_refused_or_ended() -> Result<()> {
+    // Arrange: no group-managed team, so only the personal team's lock can put the two in turn.
+    let h = harness_with(&[]).await?;
+    // A race may go either way, so it is run many times, once per person.
+    for round in 0..ROUNDS {
+        let subject = format!("subject-{round}");
+        let email = format!("person{round}@example.test");
+        let record = push_user(&h, &email, Some(&subject), true).await?;
+        let claims = Claims::verified(&subject, &email, "Person").with_claim("groups", json!([]));
+        let first = first_sign_in_as(&h, claims.clone(), &format!("person{round}")).await?;
+        let user_id = user_id_of(&me(&h.app, &first).await?)?;
+        let (code, state) = start_sign_in(&h, claims).await?;
+        let off = json!([{ "op": "replace", "value": { "active": false } }]);
+
+        // Act
+        let path = format!("/scim/v2/Users/{record}");
+        let (signed_in, deactivated) = race(round, callback(&h, &code, &state), patch(&h, &path, off)).await;
+        let (signed_in, deactivated) = (signed_in?, deactivated?);
+        let left_signed_in = match &signed_in.session_cookie {
+            Some(session) => me(&h.app, session).await?.status == StatusCode::OK,
+            None => false,
+        };
+
+        // Assert
+        expect_that!(deactivated.status, eq(StatusCode::OK), "{}", deactivated.body);
+        expect_that!(signed_in.status, eq(StatusCode::SEE_OTHER), "round {round}");
+        expect_that!(left_signed_in, eq(false), "round {round}");
+        expect_that!(
+            provider_entries(&h, &user_id).await?,
+            elements_are![eq("account_deactivated")],
+            "round {round}"
+        );
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_password_sign_in_during_the_deactivation_of_the_last_record_is_refused_or_ended() -> Result<()> {
+    // Arrange: no group-managed team, so only the personal team's lock can put the two in turn.
+    let h = harness_with(&[]).await?;
+    for round in 0..ROUNDS {
+        let subject = format!("subject-{round}");
+        let email = format!("person{round}@example.test");
+        let username = format!("person{round}");
+        let record = push_user(&h, &email, Some(&subject), true).await?;
+        let claims = Claims::verified(&subject, &email, "Person").with_claim("groups", json!([]));
+        let first = first_sign_in_as(&h, claims, &username).await?;
+        let user_id = user_id_of(&me(&h.app, &first).await?)?;
+        let link = h.app.make_reset_link(&username).await?;
+        let set_password = h
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/password-resets/{link}"),
+                None,
+                Some(json!({ "password": "a long enough password" })),
+            )
+            .await?;
+        assert_eq!(set_password.status, StatusCode::OK, "{}", set_password.body);
+        let off = json!([{ "op": "replace", "value": { "active": false } }]);
+        let login = json!({ "login": username, "password": "a long enough password" });
+
+        // Act
+        let path = format!("/scim/v2/Users/{record}");
+        let password_sign_in = h.app.send(Method::POST, "/api/v1/auth/login", None, Some(login));
+        let (signed_in, deactivated) = race(round, password_sign_in, patch(&h, &path, off)).await;
+        let (signed_in, deactivated) = (signed_in?, deactivated?);
+        let left_signed_in = match &signed_in.session_cookie {
+            Some(session) => me(&h.app, session).await?.status == StatusCode::OK,
+            None => false,
+        };
+
+        // Assert
+        expect_that!(deactivated.status, eq(StatusCode::OK), "{}", deactivated.body);
+        expect_that!(
+            signed_in.status,
+            any![eq(StatusCode::OK), eq(StatusCode::FORBIDDEN)],
+            "{}",
+            signed_in.body
+        );
+        expect_that!(left_signed_in, eq(false), "round {round}");
+        expect_that!(
+            provider_entries(&h, &user_id).await?,
+            elements_are![eq("account_deactivated")],
+            "round {round}"
+        );
     }
     Ok(())
 }
