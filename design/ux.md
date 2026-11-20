@@ -209,12 +209,16 @@ nothing, and the form keeps what was typed.
 **Parameters** opens its add form from a New parameter button, and gives each parameter a
 card: the name with Rename, the weight, the options as a numbered list (↑ ↓ and Archive on each; Archive turns the
 row into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History
-and Archive parameter. Archived parameters are listed last. On a phone everything stacks in one column, main
+and Archive parameter. Each option opens the heap's list filtered by it (`?param=<option id>`): for an admin, whose
+label is an input, a list icon after the label, named "Items with Energy: Low"; for a member who can't edit, the
+option row itself. Archived parameters are listed last, and their options aren't links. On a phone everything stacks in one column, main
 buttons span the width, and every control is 44 px to a finger.
 
 **Ranking** (the canvas boards "Wide · Ranking" and "Phone · Ranking") sets how much each factor counts. A Built in
 card has a row each for need, age, deadline and value per effort, and a Parameters card, shown when the heap has
-parameters in use, has one per parameter, with its options as the description. Between them, a **Tags** card holds
+parameters in use, has one per parameter, with its options as the description ("Low, then Medium, then High"), each
+label a violet link to the heap's list filtered by that option. On a phone the links stay inline, the one place they
+are smaller than 44 px. Between them, a **Tags** card holds
 the Tags weight as a factor row ("Tag order") and the heap's tag order as a numbered list, the highest first. Each row
 says, dim, what the tag does next to an untagged item ("lifts", "as untagged", "holds back"), and a line under the list
 says where untagged items sit ("Untagged items score the same as #2."). Editors get ↑ ↓ and Remove on each row (a ⋯

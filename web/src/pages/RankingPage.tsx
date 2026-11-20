@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Ellipsis, RotateCcw } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
@@ -53,7 +53,7 @@ type Factor = {
   /** `need`, `age`, `deadline`, `value`, `tags` or `parameter:{id}`: where its draft is kept. */
   key: string;
   name: string;
-  description: string;
+  description: React.ReactNode;
   /** The weight as last saved. */
   saved: number;
   /** Whether the caller may set it. */
@@ -131,7 +131,7 @@ function RankingForm({
     key: `parameter:${parameter.id}`,
     name: parameter.name,
     description:
-      parameter.options.length > 0 ? parameter.options.map((option) => option.label).join(", then ") : "No options yet",
+      parameter.options.length > 0 ? <OptionLinks heapRef={heapRef} parameter={parameter} /> : "No options yet",
     saved: parameter.weight,
     editable: canEdit && parameter.allowed_actions.includes("edit"),
     parameter,
@@ -342,6 +342,24 @@ function RankingForm({
       )}
     </div>
   );
+}
+
+/** A parameter's options, highest first, each a link to the heap's list filtered by it. */
+function OptionLinks({ heapRef, parameter }: { heapRef: HeapRef; parameter: Parameter }) {
+  return parameter.options.map((option, index) => (
+    <Fragment key={option.id}>
+      {index > 0 && ", then "}
+      <Link
+        to="/teams/$team/heaps/$heap"
+        params={heapRef}
+        search={{ param: option.id }}
+        aria-label={`Items with ${parameter.name}: ${option.label}`}
+        className="text-param-ink hover:underline"
+      >
+        {option.label}
+      </Link>
+    </Fragment>
+  ));
 }
 
 /** A card of factor rows under a small uppercase label, with something at the end of the label's line. */
