@@ -8,6 +8,7 @@ import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
 import { useOidcProvider } from "../api/queries/auth";
 import { useCreateHeap, useUpdateHeap } from "../api/queries/heaps";
 import { useMe } from "../api/queries/me";
+import { useTeamParameters } from "../api/queries/parameters";
 import { useTeamTags } from "../api/queries/tags";
 import {
   isUserQuery,
@@ -33,6 +34,7 @@ import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { useTeamName } from "../components/teamName";
 import { listOf } from "../components/words";
 import { canManageInviteLinks, InviteLinkButton, InviteLinks, useMakeInviteLink } from "./InviteLinks";
+import { NewParameterForm, ParameterCard } from "./ParametersPage";
 import { NewTagForm, TagRow, tagCardClass, type TagSettings } from "./TagSettings";
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass, sectionTitleClass } from "./teamStyles";
 import { TeamNotFound } from "../components/NotFound";
@@ -75,6 +77,7 @@ export function TeamPage({ team: slug }: { team: string }) {
       <TeamHeader team={data} />
       <HeapsSection team={data} phone={phone} />
       <TagsSection team={data} />
+      <ParametersSection team={data} />
       <MembersSection team={data} phone={phone} />
       <LeaveTeam team={data} />
     </main>
@@ -314,6 +317,77 @@ function TagsSection({ team }: { team: Team }) {
         Tags
       </h2>
       <p className="text-[13px] break-words text-muted max-sm:text-sm">Used in every heap of {name}.</p>
+      {body}
+    </section>
+  );
+}
+
+/**
+ * The team's own parameters, which each of its heaps may use with a weight of its own: the parameter cards of a heap's
+ * Parameters tab, without the weight, each saying which heaps use it. Members read them; admins make and edit them, as
+ * `allowed_actions` says. Loading and failing show in the section, and the rest of the page as usual.
+ */
+function ParametersSection({ team }: { team: Team }) {
+  const parameters = useTeamParameters(team.slug);
+  const name = useTeamName(team);
+  const scope = { kind: "team", team: team.slug } as const;
+  const [adding, setAdding] = useState(false);
+  const { ref: newButton, returnFocus } = useReturnFocus<HTMLButtonElement>(adding);
+  const closeForm = () => {
+    returnFocus();
+    setAdding(false);
+  };
+
+  let body;
+  if (!parameters.data) {
+    body = parameters.isError ? (
+      <>
+        <p role="alert" className="text-sm text-overdue-ink">
+          {parameters.error.message}
+        </p>
+        <RequestId error={parameters.error} />
+      </>
+    ) : (
+      <p className="text-sm text-muted">Loading parameters…</p>
+    );
+  } else {
+    const canCreate = parameters.data.allowed_actions.includes("create");
+    body = (
+      <>
+        {canCreate && !adding && (
+          <button
+            ref={newButton}
+            type="button"
+            onClick={() => setAdding(true)}
+            className={`${compactButtonClass.bordered} self-start max-sm:w-full`}
+          >
+            <Plus aria-hidden="true" className="size-4" />
+            New parameter
+          </button>
+        )}
+        {canCreate && adding && <NewParameterForm scope={scope} onClose={closeForm} />}
+        {parameters.data.parameters.length === 0 ? (
+          <p className="text-sm break-words text-muted">
+            No team parameters yet. A team parameter can be used in every heap of {name}.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-4 sm:gap-5">
+            {parameters.data.parameters.map((parameter) => (
+              <ParameterCard key={parameter.id} parameter={parameter} scope={scope} />
+            ))}
+          </ul>
+        )}
+      </>
+    );
+  }
+  return (
+    <section aria-labelledby="team-parameters" className="flex flex-col gap-2 max-sm:gap-2.5">
+      <h2 id="team-parameters" className={sectionTitleClass}>
+        Parameters
+      </h2>
+      <p className="text-[13px] break-words text-muted max-sm:text-sm">
+        Each heap of {name} chooses which to use, and weights each on its own.
+      </p>
       {body}
     </section>
   );

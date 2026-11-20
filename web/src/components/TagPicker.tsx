@@ -8,7 +8,7 @@ import { heapTags, useCreateTagIn, useTags } from "../api/queries/tags";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 import { RequestId } from "./RequestId";
 import { teamName } from "./teamName";
-import { TeamTagMark } from "./TeamTagMark";
+import { TeamMark } from "./TeamMark";
 
 const MAX_SUGGESTIONS = 6;
 
@@ -149,7 +149,7 @@ export function TagPicker({
           className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
         >
           {tag.name}
-          {tag.kind === "team" && <TeamTagMark />}
+          {tag.kind === "team" && <TeamMark of="tag" />}
           {tag.description && <span className="ml-2 text-xs text-muted">{tag.description}</span>}
         </li>
       ))}

@@ -3,13 +3,16 @@ import { ArrowDown, ArrowUp, List, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import type { HeapRef } from "../api/client";
-import type { ItemTag, Parameter, ParameterOption } from "../api/schema";
+import type { ItemTag, Parameter, ParameterList, ParameterOption, TeamParameter } from "../api/schema";
+import { useMe } from "../api/queries/me";
 import {
   useArchiveOption,
   useArchiveParameter,
   useChangeParameter,
   useCreateParameter,
   useParameters,
+  useSetUsingTeamParameter,
+  type ParameterScope,
 } from "../api/queries/parameters";
 import { heapTags, useTags } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
@@ -17,7 +20,10 @@ import { compactButtonClass } from "../components/buttons";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { TagPicker } from "../components/TagPicker";
+import { TeamMark } from "../components/TeamMark";
+import { teamName } from "../components/teamName";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
+import { listOf, plural } from "../components/words";
 import {
   cardClass,
   cardTitleClass,
@@ -30,6 +36,12 @@ import {
 import { RequestId } from "../components/RequestId";
 
 const problemClass = "text-overdue-ink";
+
+/** A parameter as a card shows it: a heap's (which may be its team's, in use there) or, on the Team page, a team's. */
+type CardParameter = Parameter | TeamParameter;
+
+/** The history of what the scope owns. */
+const historyScope = (scope: ParameterScope) => (scope.kind === "heap" ? { heap: scope.heap } : { team: scope.team });
 /** An option's place in the list, in the parameter colour. */
 const rankClass =
   "inline-flex size-[22px] shrink-0 items-center justify-center rounded-md bg-param-soft text-xs font-semibold text-param-ink max-sm:size-6";
@@ -40,6 +52,7 @@ const rankClass =
  */
 export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
   const parameters = useParameters(heapRef);
+  const scope: ParameterScope = { kind: "heap", heap: heapRef };
   const [adding, setAdding] = useState(false);
   const { ref: newButton, returnFocus } = useReturnFocus<HTMLButtonElement>(adding);
 
@@ -84,16 +97,17 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
           </button>
         )}
       </div>
-      {canCreate && adding && <NewParameterForm heapRef={heapRef} onClose={closeForm} />}
+      {canCreate && adding && <NewParameterForm scope={scope} onClose={closeForm} />}
       {parameters.data.parameters.length === 0 ? (
         <p className="py-12 text-center text-muted">No parameters yet.</p>
       ) : (
         <ul className="flex flex-col gap-4 sm:gap-5">
           {parameters.data.parameters.map((parameter) => (
-            <ParameterCard key={parameter.id} parameter={parameter} heapRef={heapRef} />
+            <ParameterCard key={parameter.id} parameter={parameter} scope={scope} />
           ))}
         </ul>
       )}
+      <TeamParametersCard heapRef={heapRef} list={parameters.data} />
       {archived.length > 0 && (
         <section aria-labelledby="archived-parameters" className="mt-2">
           <h3 id="archived-parameters" className="mb-2 text-sm font-medium text-muted">
@@ -121,8 +135,9 @@ export function ParametersPage({ heap: heapRef }: { heap: HeapRef }) {
   );
 }
 
-function NewParameterForm({ heapRef, onClose }: { heapRef: HeapRef; onClose: () => void }) {
-  const create = useCreateParameter(heapRef);
+/** The New parameter card. A team's parameter has no weight of its own: each heap weights it. */
+export function NewParameterForm({ scope, onClose }: { scope: ParameterScope; onClose: () => void }) {
+  const create = useCreateParameter(scope);
   const [name, setName] = useState("");
   const [weight, setWeight] = useState(10);
   const [options, setOptions] = useState("");
@@ -140,7 +155,7 @@ function NewParameterForm({ heapRef, onClose }: { heapRef: HeapRef; onClose: () 
   return (
     <section aria-labelledby="new-parameter" className={cardClass}>
       <h3 id="new-parameter" className={`${cardTitleClass} mb-3`}>
-        New parameter
+        {scope.kind === "team" ? "New team parameter" : "New parameter"}
       </h3>
       <form
         onSubmit={submit}
@@ -164,7 +179,9 @@ function NewParameterForm({ heapRef, onClose }: { heapRef: HeapRef; onClose: () 
               className={`${inputClass} font-normal`}
             />
           </label>
-          <WeightInput value={weight} onChange={setWeight} label="Weight of the new parameter" />
+          {scope.kind === "heap" && (
+            <WeightInput value={weight} onChange={setWeight} label="Weight of the new parameter" />
+          )}
         </div>
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           <span>
@@ -216,11 +233,13 @@ function WeightInput({ value, onChange, label }: { value: number; onChange: (val
 
 /**
  * One parameter: its name with Rename, its weight, its options, the tags that suggest it, and at the foot its history
- * and Archive parameter. Those without `edit` read the name, weight, options and tags.
+ * and Archive parameter. Those without `edit` read the name, weight, options and tags. A team's parameter in a heap
+ * (`kind` team) is read there, with its weight, and edited on the Team page; the heap may stop using it. On the Team
+ * page, a team's parameter has no weight, and says which heaps use it.
  */
-function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: HeapRef }) {
-  const rename = useChangeParameter(heapRef);
-  const weigh = useChangeParameter(heapRef);
+export function ParameterCard({ parameter, scope }: { parameter: CardParameter; scope: ParameterScope }) {
+  const rename = useChangeParameter(scope);
+  const weigh = useChangeParameter(scope);
   const canEdit = parameter.allowed_actions.includes("edit");
   const [renaming, setRenaming] = useState(false);
   const { ref: renameButton, returnFocus } = useReturnFocus<HTMLButtonElement>(renaming);
@@ -233,6 +252,10 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
   const headingId = `parameter-${parameter.id}`;
   const canArchive = parameter.allowed_actions.includes("archive");
   const canViewHistory = parameter.allowed_actions.includes("view_history");
+  const canStopUsing = parameter.allowed_actions.includes("stop_using");
+  const inHeap = "weight" in parameter ? parameter : null;
+  const usedTeam = inHeap?.kind === "team" && scope.kind === "heap";
+  const usedBy = "heaps" in parameter ? parameter.heaps : null;
 
   return (
     <li aria-labelledby={headingId} className={cardClass}>
@@ -261,23 +284,26 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
         ) : (
           <h3 id={headingId} className="min-w-0 text-[17px] font-semibold break-words max-sm:flex-1 sm:text-base">
             {parameter.name}
+            {usedTeam && <TeamMark of="parameter" />}
           </h3>
         )}
-        <div className="max-sm:order-last max-sm:basis-full">
-          {canEdit ? (
-            <WeightForm
-              parameter={parameter}
-              pending={weigh.isPending}
-              onSave={(weight) => weigh.mutate({ parameter, change: { kind: "patch", patch: { weight } } })}
-              // Cancelled, the weight is back to the saved one, so the last attempt's error no longer applies.
-              onCancel={() => weigh.reset()}
-            />
-          ) : (
-            <span className="inline-flex h-7 items-center rounded-full bg-accent-soft px-2.5 text-[13px] font-medium text-accent-ink">
-              Weight {parameter.weight}
-            </span>
-          )}
-        </div>
+        {inHeap && (
+          <div className="max-sm:order-last max-sm:basis-full">
+            {canEdit && scope.kind === "heap" ? (
+              <WeightForm
+                parameter={inHeap}
+                pending={weigh.isPending}
+                onSave={(weight) => weigh.mutate({ parameter, change: { kind: "patch", patch: { weight } } })}
+                // Cancelled, the weight is back to the saved one, so the last attempt's error no longer applies.
+                onCancel={() => weigh.reset()}
+              />
+            ) : (
+              <span className="inline-flex h-7 items-center rounded-full bg-accent-soft px-2.5 text-[13px] font-medium text-accent-ink">
+                Weight {inHeap.weight}
+              </span>
+            )}
+          </div>
+        )}
         {!renaming && (
           <>
             <span className="flex-1 max-sm:hidden" />
@@ -296,21 +322,69 @@ function ParameterCard({ parameter, heapRef }: { parameter: Parameter; heapRef: 
         )}
       </div>
       <ProblemText error={weigh.error} className={problemClass} />
+      {usedBy && (
+        <p className="mt-1.5 text-sm break-words text-ink-soft">
+          {usedBy.length === 0 ? "Not used in any heap yet" : `Used in ${listOf(usedBy.map((heap) => heap.name))}`}
+        </p>
+      )}
+      {usedTeam && scope.kind === "heap" && (
+        <p className="mt-1.5 text-sm text-ink-soft">
+          Its weight is set with the heap's other weights, on the{" "}
+          <Link to="/teams/$team/heaps/$heap/settings/ranking" params={scope.heap} className="underline hover:text-ink">
+            Ranking page
+          </Link>
+          . Its name and options are edited on the{" "}
+          <Link
+            to="/teams/$team"
+            params={{ team: scope.heap.team }}
+            hash="team-parameters"
+            className="underline hover:text-ink"
+          >
+            Team page
+          </Link>
+          .
+        </p>
+      )}
 
       <div className="mt-[18px] flex flex-col gap-[18px] sm:flex-row sm:flex-wrap sm:gap-8">
-        <OptionsEditor parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
-        <LinkedTags parameter={parameter} heapRef={heapRef} canEdit={canEdit} />
+        <OptionsEditor
+          parameter={parameter}
+          scope={scope}
+          canEdit={canEdit}
+          heapNames={usedBy?.map((heap) => heap.name)}
+        />
+        {scope.kind === "heap" && <LinkedTags parameter={parameter} heapRef={scope.heap} canEdit={canEdit} />}
       </div>
 
-      {(canViewHistory || canArchive) && (
+      {(canViewHistory || canArchive || (canStopUsing && scope.kind === "heap")) && (
         <div className="mt-3.5 flex flex-wrap items-start gap-2 border-t border-line pt-1.5 sm:mt-[18px] sm:pt-3">
           {canViewHistory && (
-            <HistoryDisclosure scope={{ heap: heapRef }} entityId={parameter.id} className="min-w-0 flex-1" />
+            <HistoryDisclosure scope={historyScope(scope)} entityId={parameter.id} className="min-w-0 flex-1" />
           )}
-          {canArchive && <ArchiveParameter parameter={parameter} heapRef={heapRef} />}
+          {canStopUsing && scope.kind === "heap" && <StopUsing parameter={parameter} heapRef={scope.heap} />}
+          {canArchive && <ArchiveParameter parameter={parameter} scope={scope} />}
         </div>
       )}
     </li>
+  );
+}
+
+/** Stop using: the heap stops counting its team's parameter, which it can use again with the weight it had. */
+function StopUsing({ parameter, heapRef }: { parameter: CardParameter; heapRef: HeapRef }) {
+  const stop = useSetUsingTeamParameter(heapRef, false);
+  return (
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm">
+      <button
+        type="button"
+        disabled={stop.isPending}
+        onClick={() => stop.mutate(parameter.id)}
+        aria-label={`Stop using ${parameter.name}`}
+        className={compactButtonClass.quiet}
+      >
+        Stop using
+      </button>
+      <ProblemText error={stop.error} className={`${problemClass} text-right`} />
+    </div>
   );
 }
 
@@ -378,8 +452,19 @@ function WeightForm({
  * The options in use, highest priority first. Labels and order are edited together and saved as one arrangement;
  * a new option is added last. Archiving an option asks which option open items should switch to.
  */
-function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; heapRef: HeapRef; canEdit: boolean }) {
-  const change = useChangeParameter(heapRef);
+function OptionsEditor({
+  parameter,
+  scope,
+  canEdit,
+  heapNames,
+}: {
+  parameter: CardParameter;
+  scope: ParameterScope;
+  canEdit: boolean;
+  /** The heaps a team's parameter is used in, which archiving an option names. */
+  heapNames: string[] | undefined;
+}) {
+  const change = useChangeParameter(scope);
   const [options, setOptions] = useState<ParameterOption[]>(parameter.options);
   const [newLabel, setNewLabel] = useState("");
   // Reseeded when the saved options change (added, archived, relabelled or reordered), not on every new version, so
@@ -425,7 +510,8 @@ function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; 
             others={options.filter((o) => o.id !== option.id)}
             canArchive={!changed && options.length > 1}
             isLast={index === options.length - 1}
-            heapRef={heapRef}
+            scope={scope}
+            heapNames={heapNames}
             // The link filters by the option's id, so it names the option as saved while its label is being edited.
             linkLabel={`Items with ${parameter.name}: ${parameter.options.find((o) => o.id === option.id)?.label ?? option.label}`}
             onLabel={(label) => setOptions(options.map((o) => (o.id === option.id ? { ...o, label } : o)))}
@@ -483,7 +569,8 @@ function OptionRow({
   others,
   canArchive,
   isLast,
-  heapRef,
+  scope,
+  heapNames,
   linkLabel,
   onLabel,
   onMove,
@@ -494,13 +581,15 @@ function OptionRow({
   others: ParameterOption[];
   canArchive: boolean;
   isLast: boolean;
-  heapRef: HeapRef;
+  scope: ParameterScope;
+  /** The heaps a team's parameter is used in, named by the confirm of archiving an option. */
+  heapNames: string[] | undefined;
   /** The accessible name and tooltip of the link to the list filtered by this option. */
   linkLabel: string;
   onLabel: (label: string) => void;
   onMove: (by: -1 | 1) => void;
 }) {
-  const archive = useArchiveOption(heapRef);
+  const archive = useArchiveOption(scope);
   const { confirming, ask, cancel, dismiss, buttonRef } = useConfirmation();
   const [picked, setReplacement] = useState("");
   // Editing the options takes Archive away, and the confirm with it: it doesn't come back, stealing focus, once the
@@ -509,7 +598,11 @@ function OptionRow({
   // Options come and go while the row stays mounted, so the pick falls back to the first other option.
   const replacement = others.some((other) => other.id === picked) ? picked : (others[0]?.id ?? "");
   const rank = <span className={rankClass}>{index + 1}</span>;
-  const toList = { to: "/teams/$team/heaps/$heap", params: heapRef, search: { param: option.id } } as const;
+  // A heap's list can be filtered by the option; a team's parameter is in many heaps, so there is no one list.
+  const toList =
+    scope.kind === "heap"
+      ? ({ to: "/teams/$team/heaps/$heap", params: scope.heap, search: { param: option.id } } as const)
+      : null;
 
   if (confirming) {
     return (
@@ -520,7 +613,8 @@ function OptionRow({
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <label className="flex flex-wrap items-center gap-1.5 text-ink-soft max-sm:w-full max-sm:flex-col max-sm:items-stretch">
-            Open items with {option.label} switch to
+            Open items {heapNames && heapNames.length > 0 ? `in ${listOf(heapNames)} ` : ""}with {option.label} switch
+            to
             <select
               autoFocus
               value={replacement}
@@ -550,6 +644,14 @@ function OptionRow({
     );
   }
   if (!canEdit) {
+    if (!toList) {
+      return (
+        <li className="flex items-center gap-2 py-1.5 text-sm font-medium text-param-ink">
+          {rank}
+          {option.label}
+        </li>
+      );
+    }
     return (
       <li>
         <Link
@@ -573,9 +675,11 @@ function OptionRow({
         onChange={(e) => onLabel(e.target.value)}
         className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm font-medium text-ink hover:border-line focus:border-line-strong focus:bg-surface pointer-coarse:min-h-11"
       />
-      <Link {...toList} aria-label={linkLabel} title={linkLabel} className={compactButtonClass.icon}>
-        <List aria-hidden="true" className="size-4" />
-      </Link>
+      {toList && (
+        <Link {...toList} aria-label={linkLabel} title={linkLabel} className={compactButtonClass.icon}>
+          <List aria-hidden="true" className="size-4" />
+        </Link>
+      )}
       <button
         type="button"
         disabled={index === 0}
@@ -605,9 +709,9 @@ function OptionRow({
 }
 
 /** The tags whose items the parameter is suggested for. Each change is saved at once. */
-function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; heapRef: HeapRef; canEdit: boolean }) {
+function LinkedTags({ parameter, heapRef, canEdit }: { parameter: CardParameter; heapRef: HeapRef; canEdit: boolean }) {
   const tags = useTags(heapRef);
-  const change = useChangeParameter(heapRef);
+  const change = useChangeParameter({ kind: "heap", heap: heapRef });
   const heading = <h4 className={labelClass}>Suggested by tags</h4>;
 
   // Until the tags load, the linked ones can't be named, and a pick would replace the links rather than add to them.
@@ -669,15 +773,18 @@ function LinkedTags({ parameter, heapRef, canEdit }: { parameter: Parameter; hea
   );
 }
 
-function ArchiveParameter({ parameter, heapRef }: { parameter: Parameter; heapRef: HeapRef }) {
-  const archive = useArchiveParameter(heapRef);
+function ArchiveParameter({ parameter, scope }: { parameter: CardParameter; scope: ParameterScope }) {
+  const archive = useArchiveParameter(scope);
   const { confirming, ask, cancel, buttonRef } = useConfirmation();
   return (
     <div className="ml-auto flex flex-wrap items-center justify-end gap-2 text-sm">
       {confirming ? (
         <>
           <span className="text-ink-soft">
-            Archive {parameter.name}? It stops counting in the ranking; closed items keep their values.
+            Archive {parameter.name}?{" "}
+            {scope.kind === "team"
+              ? "It stops counting in the ranking of every heap that uses it; closed items keep their values."
+              : "It stops counting in the ranking; closed items keep their values."}
           </span>
           <button
             type="button"
@@ -704,5 +811,87 @@ function ArchiveParameter({ parameter, heapRef }: { parameter: Parameter; heapRe
       )}
       <ProblemText error={archive.error} className={`${problemClass} text-right`} />
     </div>
+  );
+}
+
+/**
+ * The team's other parameters in use, which this heap doesn't use: each with its options and Use, for those who may
+ * (`use_team_parameter`), and a link to the Team page, where they are made and edited.
+ */
+function TeamParametersCard({ heapRef, list }: { heapRef: HeapRef; list: ParameterList }) {
+  const { data: me } = useMe();
+  const team = me?.teams.find((t) => t.slug === heapRef.team);
+  const name = me && team ? teamName(team, me) : heapRef.team;
+  const available = list.team_available;
+  const canUse = list.allowed_actions.includes("use_team_parameter");
+  const teamPage = (
+    <Link
+      to="/teams/$team"
+      params={{ team: heapRef.team }}
+      hash="team-parameters"
+      className="text-ink-soft underline hover:text-ink"
+    >
+      Team page
+    </Link>
+  );
+  return (
+    <section
+      aria-labelledby="team-parameters-card"
+      className="overflow-hidden rounded-[14px] border border-line bg-surface"
+    >
+      <div className="flex items-baseline justify-between gap-3 px-3.5 pt-3.5 pb-2.5 sm:px-4 sm:pt-4 sm:pb-3">
+        <h3 id="team-parameters-card" className={cardTitleClass}>
+          {plural(available.length, "parameter")} of the team {name}
+        </h3>
+        {/* With none, the line below links there instead. */}
+        {available.length > 0 && <span className="shrink-0 text-sm">{teamPage}</span>}
+      </div>
+      {available.length === 0 ? (
+        <p className="border-t border-line px-3.5 py-3 text-sm text-muted sm:px-4">
+          {name} has no other team parameters. Make them on the {teamPage}.
+        </p>
+      ) : (
+        <ul className="divide-y divide-line border-t border-line">
+          {available.map((parameter) => (
+            <AvailableParameter key={parameter.id} parameter={parameter} heapRef={heapRef} canUse={canUse} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** A team parameter the heap could use: its name, its options, and Use. */
+function AvailableParameter({
+  parameter,
+  heapRef,
+  canUse,
+}: {
+  parameter: TeamParameter;
+  heapRef: HeapRef;
+  canUse: boolean;
+}) {
+  const use = useSetUsingTeamParameter(heapRef, true);
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3.5 py-2.5 sm:px-4 sm:py-3.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-medium break-words">{parameter.name}</span>
+        <span className="text-sm break-words text-ink-soft">
+          {parameter.options.length === 0 ? "No options yet" : parameter.options.map((o) => o.label).join(", ")}
+        </span>
+      </div>
+      {canUse && (
+        <button
+          type="button"
+          disabled={use.isPending}
+          onClick={() => use.mutate(parameter.id)}
+          aria-label={`Use ${parameter.name}`}
+          className={compactButtonClass.bordered}
+        >
+          Use
+        </button>
+      )}
+      <ProblemText error={use.error} className={`${problemClass} basis-full`} />
+    </li>
   );
 }

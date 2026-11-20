@@ -18,6 +18,8 @@ export const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.
 export const teamKey = (team: string) => ["team", team] as const;
 /** The team's own tags, under its key, so invalidating the team refreshes them too. */
 export const teamTagsKey = (team: string) => [...teamKey(team), "tags"] as const;
+/** The team's own parameters, under its key, as its tags are. */
+export const teamParametersKey = (team: string) => [...teamKey(team), "parameters"] as const;
 /** Under the team's key, so invalidating the team refreshes its links too. */
 export const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
 export const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
@@ -64,6 +66,27 @@ export function invalidateTeamTags(queryClient: QueryClient, team: string, renam
     queryClient.invalidateQueries({ queryKey: teamTagsKey(team) }),
     queryClient.invalidateQueries({ queryKey: ["tags", team] }),
     ...(renamed
+      ? [
+          queryClient.invalidateQueries({ queryKey: ["ranked", team] }),
+          queryClient.invalidateQueries({ queryKey: ["closed", team] }),
+          queryClient.invalidateQueries({ queryKey: ["item"] }),
+          queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
+          queryClient.invalidateQueries({ queryKey: waitingKey }),
+        ]
+      : []),
+  ]);
+}
+
+/**
+ * After a team parameter is made or changed, or a heap starts or stops using one: the team's list and every heap's
+ * parameters of the team, and what shows a team parameter's name, options and values in its heaps. `items` is false
+ * for a change that doesn't touch items, such as making one.
+ */
+export function invalidateTeamParameters(queryClient: QueryClient, team: string, items = true) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: teamParametersKey(team) }),
+    queryClient.invalidateQueries({ queryKey: ["parameters", team] }),
+    ...(items
       ? [
           queryClient.invalidateQueries({ queryKey: ["ranked", team] }),
           queryClient.invalidateQueries({ queryKey: ["closed", team] }),
