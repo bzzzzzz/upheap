@@ -18,7 +18,7 @@ use domain::{Duration, Timestamp, TokenFamilyId, ValidationError};
 use sha2::{Digest, Sha256};
 use store::{DatabaseTransaction, StoreError, TransactionTrait};
 
-use crate::auth::{random_token, sha256_hex};
+use crate::auth::{SessionToken, random_token, sha256_hex};
 use crate::{Principal, ServiceError, Services};
 
 /// An authorization code, access token or refresh token, as the client holds it. Never log it.
@@ -110,16 +110,34 @@ impl Services {
 
     /// Approves an authorization request for the signed-in user: stores a single-use code, good for
     /// [`AUTHORIZATION_CODE_LIFETIME`], bound to the client, the redirect URI and the PKCE challenge.
+    ///
+    /// The caller's `session` is checked again in the transaction that inserts the code, after the personal team is
+    /// locked as a sign-in locks it, so a code can't be made with a session that a SCIM deactivation has ended. Fails
+    /// with [`ServiceError::Unauthenticated`] when the session is gone.
     pub async fn approve_authorization(
         &self,
         principal: Principal,
+        session: &SessionToken,
         params: AuthorizationParams<'_>,
     ) -> Result<Approval, ServiceError> {
         let request = AuthorizationRequest::check(params)?;
-        let now = self.now();
         let code = OAuthSecret::generate();
+        let user = store::users::find_user(&self.db, principal.user_id)
+            .await?
+            .ok_or(ServiceError::Unauthenticated)?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        store::teams::lock_team(&txn, personal_team).await?;
+        // After the lock: a deactivation that held it has ended the session by now.
+        let now = self.now();
+        if store::sessions::find_session_user(&txn, &session.to_hash(), now)
+            .await?
+            .is_none()
+        {
+            return Err(ServiceError::Unauthenticated);
+        }
         store::oauth::insert_auth_code(
-            &self.db,
+            &txn,
             &store::oauth::NewAuthCode {
                 code_hash: &code.to_hash(),
                 user_id: principal.user_id,
@@ -131,6 +149,7 @@ impl Services {
             },
         )
         .await?;
+        txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(user_id = %principal.user_id, client_id = request.client.id, "authorization approved");
         Ok(Approval { request, code })
     }
@@ -143,12 +162,27 @@ impl Services {
     /// it isn't the client. Past its lifetime it's only refused, so a code left in a browser's history can't end the
     /// sign-in it started at any later time.
     ///
+    /// The code's person's personal team is locked first, as a sign-in locks it, so the exchange and a SCIM
+    /// deactivation of the person's last record go one after the other: a code the deactivation expired, or any code
+    /// of a person the provider has deactivated, is refused as expired, and a family issued before it is revoked by
+    /// it.
+    ///
     /// A successful exchange also removes a few codes and sign-ins that ended over [`KEEP_ENDED_GRANTS_FOR`] ago.
     pub async fn exchange_authorization_code(&self, exchange: CodeExchange<'_>) -> Result<TokenPair, ServiceError> {
         require_client(exchange.client_id)?;
-        let now = self.now();
         let code_hash = exchange.code.to_hash();
+        // Read outside the transaction, only to learn whose code it is.
+        let user_id = store::oauth::find_auth_code(&self.db, &code_hash)
+            .await?
+            .ok_or(GrantError::CodeUnknown)?
+            .user_id;
+        let personal_team = self.personal_team(&self.db, user_id).await?;
         let txn = self.db.begin().await.map_err(StoreError::from)?;
+        // The lock comes before any plain read in the transaction: on MySQL the first one fixes its snapshot, so a
+        // read after the lock sees what a deactivation that held it committed. `now` is taken after it too, as that
+        // deactivation expired the code at its own, possibly later, `now`.
+        store::teams::lock_team(&txn, personal_team).await?;
+        let now = self.now();
         let code = store::oauth::find_auth_code(&txn, &code_hash)
             .await?
             .ok_or(GrantError::CodeUnknown)?;
@@ -169,6 +203,12 @@ impl Services {
             && code.code_challenge.is_met_by(&s256_challenge(exchange.code_verifier));
         if !verified {
             return Err(GrantError::VerifierMismatch.into());
+        }
+        // A deactivation expired the code at its own `now`, which another server's clock may put after this one's, so
+        // the person's state is checked too. Refused as the expired code it is, in the token endpoint's own format.
+        match self.refuse_deactivated(&txn, code.user_id).await {
+            Err(ServiceError::AccountDeactivated) => return Err(GrantError::CodeExpired.into()),
+            other => other?,
         }
         let family_id = TokenFamilyId::from_uuid(self.new_id(now));
         store::oauth::insert_token_family(
