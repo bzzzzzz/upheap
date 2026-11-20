@@ -152,8 +152,14 @@ async fn first_sign_in(h: &Harness, claims: Claims) -> Result<String> {
 /// A first sign-in through the username step, registering `username`. Returns their session.
 async fn first_sign_in_as(h: &Harness, claims: Claims, username: &str) -> Result<String> {
     let (_, state) = sign_in(h, claims).await?;
-    let registered = h
-        .app
+    let registered = register(h, &state, username).await?;
+    assert_eq!(registered.status, StatusCode::CREATED, "{}", registered.body);
+    registered.session_cookie.context("no session cookie")
+}
+
+/// The username step of the sign-in `state` names, from the browser that started it, registering `username`.
+async fn register(h: &Harness, state: &str, username: &str) -> Result<TestResponse> {
+    h.app
         .send_with(
             Method::POST,
             "/api/v1/auth/oidc/register",
@@ -161,9 +167,7 @@ async fn first_sign_in_as(h: &Harness, claims: Claims, username: &str) -> Result
             Some(json!({ "username": username })),
             &[CSRF, ("cookie", &format!("upheap_oidc={state}"))],
         )
-        .await?;
-    assert_eq!(registered.status, StatusCode::CREATED, "{}", registered.body);
-    registered.session_cookie.context("no session cookie")
+        .await
 }
 
 async fn me(app: &TestApp, session: &str) -> Result<TestResponse> {
@@ -1095,6 +1099,43 @@ async fn a_provider_sign_in_during_the_deactivation_of_the_last_record_is_refuse
             elements_are![eq("account_deactivated")],
             "round {round}"
         );
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_first_provider_sign_in_during_the_deactivation_of_the_record_is_refused_or_ended() -> Result<()> {
+    // Arrange: no group-managed team, so no mapped team's lock puts the two in turn, and the person has no personal
+    // team yet whose lock could.
+    let h = harness_with(&[]).await?;
+    for round in 0..ROUNDS {
+        let subject = format!("subject-{round}");
+        let email = format!("person{round}@example.test");
+        let record = push_user(&h, &email, Some(&subject), true).await?;
+        let claims = Claims::verified(&subject, &email, "Person").with_claim("groups", json!([]));
+        let (_, state) = sign_in(&h, claims).await?;
+        let off = json!([{ "op": "replace", "value": { "active": false } }]);
+
+        // Act
+        let path = format!("/scim/v2/Users/{record}");
+        let username = format!("person{round}");
+        let (registered, deactivated) = race(round, register(&h, &state, &username), patch(&h, &path, off)).await;
+        let (registered, deactivated) = (registered?, deactivated?);
+        let left_signed_in = match &registered.session_cookie {
+            Some(session) => me(&h.app, session).await?.status == StatusCode::OK,
+            None => false,
+        };
+
+        // Assert
+        expect_that!(deactivated.status, eq(StatusCode::OK), "{}", deactivated.body);
+        expect_that!(
+            registered.status,
+            any![eq(StatusCode::CREATED), eq(StatusCode::FORBIDDEN)],
+            "{}",
+            registered.body
+        );
+        expect_that!(left_signed_in, eq(false), "round {round}");
     }
     Ok(())
 }

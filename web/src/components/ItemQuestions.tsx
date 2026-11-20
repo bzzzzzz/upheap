@@ -165,8 +165,8 @@ function blockerGoneOf(item: Item): GoneBlocker | null {
 }
 
 /**
- * What an item is waiting for the person to answer (ux.md, The item): the open questions, which sit in the Questions
- * section, and the item's stuck turn, when it has one, which sits in Waits for you at the top. The two share what a
+ * What an item is waiting for the person to answer (ux.md, The item): the open questions and the item's stuck turn,
+ * when it has one, which sit in Waits for you at the top. The two share what a
  * reply or a retry leaves to say, and where focus goes next, so it is kept here, by the item, for both to use. Both
  * show only while the item is open: closing withdraws its open questions, which {@link AnsweredQuestions} lists.
  */
@@ -271,20 +271,25 @@ function firstControl(list: HTMLElement | null, number: number) {
 }
 
 /**
+ * Skip to details: scrolls the item's fields to the top of the pane and focuses the first of them, or the fields
+ * themselves when none can be edited, so a screen reader hears their label. Found from the pressed button, as the
+ * fields are drawn by the pane, not here.
+ */
+function skipToDetails(from: Element) {
+  const fields = from.closest("[data-item-pane]")?.querySelector<HTMLElement>("[data-item-fields]");
+  if (!fields) return;
+  fields.scrollIntoView({ block: "start" });
+  (fields.querySelector<HTMLElement>("button:not(:disabled)") ?? fields).focus({ preventScroll: true });
+}
+
+/**
  * Waits for you, the one tinted, outlined block at the top of the item (ux.md, The item): the gone blocker, when it
- * has one, with Unblock, the stuck turn, when it has one, with Retry and Take back, and one line saying how many questions wait, with Answer to go to the first. The
- * reply controls are in {@link ItemQuestions}, under the Steps. It stays mounted when empty, for the live message
- * after the last reply and the note about a stuck turn someone else dealt with.
+ * has one, with Unblock, the stuck turn, when it has one, with Retry and Take back, then the open questions with
+ * their reply controls, under a line saying how many wait, with Skip to details on its right. It stays mounted when
+ * empty, for the live message after the last reply and the notes about a row someone else dealt with.
  */
 export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
   const { open, stuck, blocker } = waits;
-  const answer = () => {
-    const first = open[0];
-    if (!first) return;
-    const list = document.getElementById(waits.listId);
-    list?.querySelector(`[data-question="${first.number}"]`)?.scrollIntoView({ block: "nearest" });
-    firstControl(list, first.number)?.focus({ preventScroll: true });
-  };
   return (
     <>
       <span role="status" className="sr-only">
@@ -323,62 +328,44 @@ export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: 
               </ul>
             )}
             {open.length > 0 && (
-              <div className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                <p className="text-sm">
-                  {open.length === 1 ? "1 question waits for you" : `${open.length} questions wait for you`}
-                </p>
-                <Button onPress={answer} className={`${compactButtonClass.bordered} shrink-0 ${focusClass}`}>
-                  Answer ↓
-                </Button>
+              <div
+                role="group"
+                aria-label="Open questions"
+                data-open-questions=""
+                tabIndex={-1}
+                className="flex flex-col py-3 outline-none first:pt-0 last:pb-0"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm">
+                    {open.length === 1 ? "1 question waits for you" : `${open.length} questions wait for you`}
+                  </p>
+                  <Button
+                    onPress={(event) => skipToDetails(event.target)}
+                    className={`${compactButtonClass.quiet} shrink-0 ${focusClass}`}
+                  >
+                    Skip to details ↓
+                  </Button>
+                </div>
+                <ul id={waits.listId} className="mt-2 flex flex-col divide-y divide-accent/30">
+                  {open.map((question) => (
+                    <QuestionRow
+                      key={question.number}
+                      heapRef={heapRef}
+                      item={item}
+                      line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
+                      question={question}
+                      summary={question.kind === "done_proposal" ? proposalSummary(item) : undefined}
+                      title={item.title}
+                      onReplied={waits.replied}
+                      onElsewhere={waits.repliedElsewhere}
+                      onRefused={waits.refusedReply}
+                    />
+                  ))}
+                </ul>
               </div>
             )}
           </div>
         </section>
-      )}
-      {!waits.closed && waits.stuckChanged && (
-        <p role="alert" className="text-sm text-overdue-ink">
-          Someone else changed this meanwhile.
-        </p>
-      )}
-    </>
-  );
-}
-
-/**
- * The Questions section (ux.md, The item): the open questions with their reply controls in the outlined box, then
- * what {@link AnsweredQuestions} folds, then {@link AskQuestion}. Shown when the item has any question, or the server
- * offers `ask_question`, or the Ask form is open. A row is shown with controls when the server offers `reply` on the
- * question, otherwise (an archived heap) as text. After a reply the row leaves and joins the fold.
- */
-export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
-  const ask = useAskQuestion(heapRef, item.key);
-  const canAsk = item.allowed_actions.includes("ask_question");
-  // Kept here, not in the form: an open form keeps the section, so a refetch that takes `ask_question` away (the
-  // item was closed meanwhile) doesn't take the typed draft with it.
-  const [asking, setAsking] = useState(false);
-  if ((item.questions ?? []).length === 0 && !canAsk && !asking) return null;
-  return (
-    <section aria-label="Questions" className="flex flex-col gap-2 border-t border-line pt-3">
-      <h3 className="text-xs font-semibold text-muted">Questions</h3>
-      {waits.open.length > 0 && (
-        <div role="group" aria-label="Open questions" className="rounded-xl border-2 border-accent bg-accent/10 p-3">
-          <ul id={waits.listId} className="flex flex-col divide-y divide-accent/30">
-            {waits.open.map((question) => (
-              <QuestionRow
-                key={question.number}
-                heapRef={heapRef}
-                item={item}
-                line={<p className="text-xs text-muted">{kindLine(item, question)}</p>}
-                question={question}
-                summary={question.kind === "done_proposal" ? proposalSummary(item) : undefined}
-                title={item.title}
-                onReplied={waits.replied}
-                onElsewhere={waits.repliedElsewhere}
-                onRefused={waits.refusedReply}
-              />
-            ))}
-          </ul>
-        </div>
       )}
       {waits.refused.map((entry, index) => (
         <p key={index} role="alert" className="text-sm whitespace-pre-wrap text-overdue-ink">
@@ -392,6 +379,46 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
             Someone else replied to “{text}” meanwhile.
           </p>
         ))}
+      {!waits.closed && waits.stuckChanged && (
+        <p role="alert" className="text-sm text-overdue-ink">
+          Someone else changed this meanwhile.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * The Questions section (ux.md, The item): while questions are open, a link up to them in {@link WaitsForYou}, then
+ * what {@link AnsweredQuestions} folds, then {@link AskQuestion}. Shown when the item has any question, or the server
+ * offers `ask_question`, or the Ask form is open. A replied row leaves Waits for you and joins the fold.
+ */
+export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item: Item; waits: ItemWaits }) {
+  const ask = useAskQuestion(heapRef, item.key);
+  const canAsk = item.allowed_actions.includes("ask_question");
+  // Kept here, not in the form: an open form keeps the section, so a refetch that takes `ask_question` away (the
+  // item was closed meanwhile) doesn't take the typed draft with it.
+  const [asking, setAsking] = useState(false);
+  const first = waits.open[0];
+  if ((item.questions ?? []).length === 0 && !canAsk && !asking) return null;
+  return (
+    <section aria-label="Questions" className="flex flex-col gap-2 border-t border-line pt-3">
+      <h3 className="text-xs font-semibold text-muted">Questions</h3>
+      {first && (
+        <Button
+          onPress={() => {
+            const list = document.getElementById(waits.listId);
+            list?.querySelector(`[data-question="${first.number}"]`)?.scrollIntoView({ block: "nearest" });
+            // Rows without controls (an archived heap) give the focus to the open questions themselves.
+            (firstControl(list, first.number) ?? list?.closest<HTMLElement>("[data-open-questions]"))?.focus({
+              preventScroll: true,
+            });
+          }}
+          className={`${detailsButtonClass} text-accent-ink`}
+        >
+          {waits.open.length} open, at the top ↑
+        </Button>
+      )}
       <AnsweredQuestions heapRef={heapRef} item={item} />
       <AskQuestion item={item} canAsk={canAsk} ask={ask} open={asking} onOpenChange={setAsking} />
     </section>
@@ -399,7 +426,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
 }
 
 /**
- * One open question with its reply controls, in the item's Questions and on the Waiting for me page. `line` is the
+ * One open question with its reply controls, in the item's Waits for you and on the Waiting for me page. `line` is the
  * row's own first line, and `context` what the page folds under the details. The reply and its failures are the
  * same in both: the caller says what to do once the row has been replied to, or turns out to be answered already or
  * on a closed item.
