@@ -126,7 +126,8 @@ impl Services {
     ///
     /// Applying marks the link used (a conditional update, so of two requests racing for one link exactly one wins
     /// and the other fails like a used link), sets the address and bumps the user's version, and cancels the user's
-    /// working password reset link, since one mailed to the old address mustn't keep working. Sessions and tokens are
+    /// working password reset link, since one mailed to the old address mustn't keep working. The new address is
+    /// proven by the link, so it counts as confirmed. Sessions and tokens are
     /// left alone. The change is recorded in the user's personal team with the address before and after. After it
     /// commits the notice is sent, in a task of its own, to the old address. Returns the new address.
     pub async fn apply_email_change(&self, token: &ResetToken) -> Result<Email, ServiceError> {

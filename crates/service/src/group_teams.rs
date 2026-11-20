@@ -220,6 +220,8 @@ const PROVIDER_GROUPS: &str = "provider_groups";
 mod tests {
     use googletest::prelude::*;
 
+    use crate::email_confirmation::Registered;
+
     use super::*;
 
     /// A compact token whose payload is `payload`. The header and signature are not read.
@@ -300,14 +302,17 @@ mod tests {
                 ..Settings::default()
             },
         );
-        let sam = services
+        let Registered::SignedIn(sam) = services
             .register(Registration {
                 email: "sam@example.com",
                 username: "sam",
                 display_name: "Sam",
                 password: "correct horse battery",
             })
-            .await?;
+            .await?
+        else {
+            panic!("a server without mail signs the new account in");
+        };
         let team = services
             .create_team(
                 Principal {
@@ -368,14 +373,17 @@ mod tests {
         );
         let mut people = Vec::new();
         for name in ["sam", "alex"] {
-            let grant = open
+            let Registered::SignedIn(grant) = open
                 .register(Registration {
                     email: &format!("{name}@example.com"),
                     username: name,
                     display_name: name,
                     password: "correct horse battery",
                 })
-                .await?;
+                .await?
+            else {
+                panic!("a server without mail signs the new account in");
+            };
             people.push(Principal {
                 user_id: grant.user.id,
                 run: None,

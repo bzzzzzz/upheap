@@ -11,6 +11,7 @@ pub struct Model {
     pub display_name: String,
     pub created_at: i64,
     pub version: i32,
+    pub unconfirmed_since: Option<i64>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

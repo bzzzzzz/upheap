@@ -2,12 +2,16 @@
 //! it. It runs beside a server that has already migrated the database, so it doesn't migrate (it stops when the
 //! database is behind this version) and doesn't listen. Only the link goes to stdout, so it can be piped; everything
 //! else, logs included, goes to stderr.
+//!
+//! `upheap-server user confirm <username or email>` confirms an account's address by hand, with the same database
+//! rules, and prints what it did.
 
 use std::io::Write;
 use std::process::ExitCode;
 
 use domain::Timestamp;
 use service::ServiceError;
+use service::email_confirmation::OperatorConfirmed;
 use service::group_teams::GroupTeams;
 use service::password_reset::ResetLinkMade;
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
@@ -15,9 +19,11 @@ use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use crate::config::Config;
 use crate::terminal::for_terminal;
 
-const USAGE: &str = "usage: upheap-server user reset-link <username or email>";
+const USAGE: &str =
+    "usage: upheap-server user reset-link <username or email>\n       upheap-server user confirm <username or email>";
 
-/// Exit codes, as documented in the README (Resetting a password). `0` is a link made.
+/// Exit codes, as documented in the README (Resetting a password). `0` is a link made, or an address confirmed or
+/// already confirmed.
 const EXIT_UNEXPECTED: u8 = 1;
 const EXIT_USAGE: u8 = 2;
 const EXIT_NO_SUCH_USER: u8 = 3;
@@ -27,19 +33,21 @@ const EXIT_DATABASE_UNREACHABLE: u8 = 5;
 #[derive(Debug, PartialEq, Eq)]
 enum UserCommand {
     ResetLink { login: String },
+    Confirm { login: String },
 }
 
-/// Reads the arguments after `user`: `reset-link` and one login. Anything else is a usage error.
+/// Reads the arguments after `user`: `reset-link` or `confirm`, and one login. Anything else is a usage error.
 fn parse_args(args: &[String]) -> Result<UserCommand, &'static str> {
     match args {
         [verb, login] if verb == "reset-link" => Ok(UserCommand::ResetLink { login: login.clone() }),
+        [verb, login] if verb == "confirm" => Ok(UserCommand::Confirm { login: login.clone() }),
         _ => Err(USAGE),
     }
 }
 
 /// Runs the command on the arguments after `user`, and returns the process's exit code.
 pub async fn run(args: &[String]) -> ExitCode {
-    let UserCommand::ResetLink { login } = match parse_args(args) {
+    let command = match parse_args(args) {
         Ok(command) => command,
         Err(usage) => {
             eprintln!("{usage}");
@@ -74,9 +82,17 @@ pub async fn run(args: &[String]) -> ExitCode {
         }
     }
     let services = crate::build_services(&config, GroupTeams::default(), db);
+    match command {
+        UserCommand::ResetLink { login } => reset_link(&services, &login, &config.base_url).await,
+        UserCommand::Confirm { login } => confirm(&services, &login).await,
+    }
+}
+
+/// Makes and prints a reset link for `login`.
+async fn reset_link(services: &service::Services, login: &str, base_url: &str) -> ExitCode {
     let login = login.trim();
     match services.create_password_reset_link(login).await {
-        Ok(made) => match write_link(&mut std::io::stdout(), &mut std::io::stderr(), &made, &config.base_url) {
+        Ok(made) => match write_link(&mut std::io::stdout(), &mut std::io::stderr(), &made, base_url) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("can't write the link: {error}");
@@ -91,6 +107,48 @@ pub async fn run(args: &[String]) -> ExitCode {
             eprintln!("can't make a reset link: {error}");
             ExitCode::from(EXIT_UNEXPECTED)
         }
+    }
+}
+
+/// Confirms the address of `login` and prints what happened.
+async fn confirm(services: &service::Services, login: &str) -> ExitCode {
+    let login = login.trim();
+    match services.confirm_email_by_operator(login).await {
+        Ok(outcome) => match write_confirmed(&mut std::io::stdout(), &outcome) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("can't write the answer: {error}");
+                ExitCode::from(EXIT_UNEXPECTED)
+            }
+        },
+        Err(ServiceError::NotFound) => {
+            eprintln!("No user is called {login:?}.");
+            ExitCode::from(EXIT_NO_SUCH_USER)
+        }
+        Err(error) => {
+            eprintln!("can't confirm the address: {error}");
+            ExitCode::from(EXIT_UNEXPECTED)
+        }
+    }
+}
+
+/// Says on `stdout` whose address was confirmed, or already was.
+fn write_confirmed(stdout: &mut impl Write, outcome: &OperatorConfirmed) -> std::io::Result<()> {
+    match outcome {
+        OperatorConfirmed::Confirmed(user) => {
+            writeln!(
+                stdout,
+                "Confirmed @{}'s address, {}.",
+                user.username,
+                user.email.as_str()
+            )
+        }
+        OperatorConfirmed::AlreadyConfirmed(user) => writeln!(
+            stdout,
+            "@{}'s address, {}, is already confirmed.",
+            user.username,
+            user.email.as_str()
+        ),
     }
 }
 
@@ -145,11 +203,21 @@ mod tests {
     }
 
     #[gtest]
+    fn confirm_with_a_login_is_understood() {
+        expect_that!(
+            parse_args(&args(&["confirm", "sam"])),
+            ok(eq(&UserCommand::Confirm { login: "sam".into() }))
+        );
+    }
+
+    #[gtest]
     fn everything_else_is_a_usage_error() {
         for words in [
             &[][..],
             &["reset-link"],
             &["reset-link", "sam", "extra"],
+            &["confirm"],
+            &["confirm", "sam", "extra"],
             &["frobnicate", "sam"],
             &["sam"],
         ] {
@@ -216,6 +284,56 @@ mod tests {
             String::from_utf8(stderr)?,
             eq("For Sam Ortiz (@sam). Works once, until 11:00 UTC.\n")
         );
+        Ok(())
+    }
+
+    /// A server with mail set up, where Sam registered and hasn't confirmed.
+    async fn services_with_unconfirmed_sam() -> anyhow::Result<Services> {
+        let db = store::connect("sqlite::memory:", 1).await?;
+        store::run_migrations(&db).await?;
+        let start = Timestamp::from_millis(Duration::from_hours(10).as_millis()).expect("in range");
+        let settings = Settings {
+            allow_registration: true,
+            ..Settings::default()
+        };
+        let mailer = Arc::new(mail::Mailer::new("log:", "upheap@example.com")?);
+        let services = Services::new(db, Arc::new(ManualClock::new(start)), settings)
+            .with_mail(mailer, "https://upheap.example".to_owned());
+        services
+            .register(Registration {
+                email: "sam@example.com",
+                username: "sam",
+                display_name: "Sam Ortiz",
+                password: "correct horse battery",
+            })
+            .await?;
+        Ok(services)
+    }
+
+    #[gtest]
+    #[tokio::test]
+    async fn an_unconfirmed_address_is_confirmed_once_and_the_second_time_changes_nothing() -> anyhow::Result<()> {
+        // Arrange
+        let services = services_with_unconfirmed_sam().await?;
+
+        // Act
+        let first = services.confirm_email_by_operator("sam").await?;
+        let second = services.confirm_email_by_operator("sam@example.com").await?;
+        let unknown = services.confirm_email_by_operator("nobody").await;
+
+        // Assert
+        let (mut said_first, mut said_second) = (Vec::new(), Vec::new());
+        write_confirmed(&mut said_first, &first)?;
+        write_confirmed(&mut said_second, &second)?;
+        expect_that!(
+            String::from_utf8(said_first)?,
+            eq("Confirmed @sam's address, sam@example.com.\n")
+        );
+        expect_that!(
+            String::from_utf8(said_second)?,
+            eq("@sam's address, sam@example.com, is already confirmed.\n")
+        );
+        expect_that!(unknown, err(matches_pattern!(ServiceError::NotFound)));
         Ok(())
     }
 

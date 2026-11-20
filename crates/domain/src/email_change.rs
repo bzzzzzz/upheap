@@ -12,7 +12,16 @@ use crate::{Duration, Timestamp, UserId};
 /// How long a link works after it was asked for.
 pub const EMAIL_CHANGE_LINK_LIFETIME: Duration = Duration::from_hours(24);
 
+/// How long an email confirmation link works after it was mailed.
+pub const EMAIL_CONFIRMATION_LINK_LIFETIME: Duration = Duration::from_hours(24);
+
+/// When a confirmation link mailed at `now` stops working by itself. `None` if that is beyond the supported range.
+pub fn confirmation_link_end_from(now: Timestamp) -> Option<Timestamp> {
+    now.checked_add(EMAIL_CONFIRMATION_LINK_LIFETIME)
+}
+
 /// Why a link can't be used to change an address. The messages name no IDs: they reach whoever holds the link.
+/// Email confirmation links use it too, for the same three reasons.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum EmailChangeLinkError {
     #[error("This link was already used.")]

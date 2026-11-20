@@ -1,6 +1,6 @@
 //! Opening an invite link, joining a team through it and creating an account through it, by the link's token.
 
-use api_types::auth::RegisterRequest;
+use api_types::auth::{ConfirmationSentDto, RegisterRequest};
 use api_types::invite_links::{
     InvitationActionDto, InvitationDto, InviteLinkStateDto, InviteRegistrationDto, InviteViewerDto,
     InviteViewerStatusDto,
@@ -15,12 +15,13 @@ use domain::invite_link::InviteToken;
 use serde::Deserialize;
 use service::ServiceError;
 use service::auth::Registration;
+use service::email_confirmation::Registered;
 use service::teams::{InvitationView, InviteViewer, MemberAdded};
 use utoipa::IntoParams;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::auth::signed_in_with;
+use crate::auth::{confirmation_sent, signed_in_with};
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiPath, MaybeUser, SessionUser};
 use crate::teams::to_team_dto;
@@ -120,10 +121,14 @@ async fn join_by_invite(
 /// closed on the server. Takes the same body as `/auth/register` and checks it the same way, and answers `409`
 /// `invite_link_ended` or `invite_link_revoked` when the link isn't working at this moment, even if the username is
 /// also taken. Sets the session cookie, replacing any the caller had. The link keeps working for others.
+///
+/// On a server with mail set up nobody is signed in: the account is made and joined, a confirmation link is mailed
+/// to its address, and the answer is `202` with no cookie.
 #[utoipa::path(post, path = "/invites/{token}/register", tag = "auth", request_body = RegisterRequest,
     params(InviteTokenParams),
     responses(
         (status = 201, description = "Registered, joined and signed in; sets the session cookie", body = InviteRegistrationDto),
+        (status = 202, description = "With mail set up: made and joined, and a confirmation link is mailed; not signed in", body = ConfirmationSentDto),
         (status = 403, description = "`password_sign_in_off`: the server signs in through its provider only", body = Problem),
         (status = 404, description = "No such link", body = Problem),
         (status = 409, description = "`invite_link_ended`, `invite_link_revoked`, `team_group_managed`, `email_taken` (`field` `email`), or `handle_taken` (`field` `username`)", body = Problem),
@@ -142,10 +147,15 @@ async fn register_by_invite(
         password: &body.password,
     };
     let cookies = &state.cookies;
-    let (grant, detail) = state.services.register_through_invite(&token, registration).await?;
-    let answer = InviteRegistrationDto {
-        user: UserDto::from(&grant.user),
-        team: to_team_dto(detail),
-    };
-    Ok(signed_in_with(StatusCode::CREATED, &grant, cookies, answer))
+    let (registered, detail) = state.services.register_through_invite(&token, registration).await?;
+    Ok(match registered {
+        Registered::SignedIn(grant) => {
+            let answer = InviteRegistrationDto {
+                user: UserDto::from(&grant.user),
+                team: to_team_dto(detail),
+            };
+            signed_in_with(StatusCode::CREATED, &grant, cookies, answer)
+        }
+        Registered::ConfirmationSent(user) => confirmation_sent(&user),
+    })
 }

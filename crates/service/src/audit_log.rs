@@ -554,6 +554,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::AccountReactivated, _) => ("was turned back on by the sign-in provider", false),
         (AuditAction::EmailChangeAsked, _) => ("asked to change their email address", false),
         (AuditAction::EmailChanged, _) => ("changed their email address", false),
+        (AuditAction::EmailConfirmed, _) => ("confirmed their email address", false),
     }
 }
 
@@ -596,7 +597,8 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::PasswordReset
         | AuditAction::AccountDeactivated
         | AuditAction::AccountReactivated
-        | AuditAction::EmailChangeAsked => DiffShape::Created,
+        | AuditAction::EmailChangeAsked
+        | AuditAction::EmailConfirmed => DiffShape::Created,
         AuditAction::MemberRemoved | AuditAction::MemberLeft | AuditAction::GroupMemberRemoved => DiffShape::Ended,
         AuditAction::UserUpdated
         | AuditAction::TeamUpdated

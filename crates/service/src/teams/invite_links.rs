@@ -32,7 +32,8 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 use super::manage::{MemberAdded, lock_team_for};
 use super::{TeamDetail, load_team_detail};
 use crate::access::authorize_team;
-use crate::auth::{Registration, SessionGrant, hash_registration, random_token, validate_registration};
+use crate::auth::{Registration, hash_registration, random_token, validate_registration};
+use crate::email_confirmation::Registered;
 use crate::{Principal, ServiceError, Services};
 
 /// An invite link as an admin of its team sees it.
@@ -163,7 +164,8 @@ impl Services {
         Ok((detail, MemberAdded::Added))
     }
 
-    /// Creates an account through a link, and signs it in: the user, their personal team and heap, their password,
+    /// Creates an account through a link, and signs it in (or, with mail set up, mails it a confirmation link as
+    /// [`Services::register`] does, and signs nobody in): the user, their personal team and heap, their password,
     /// their membership in the link's team and the sign-in are made together or not at all. Works whether
     /// registration is open or closed; the link is what lets the person in.
     ///
@@ -176,7 +178,7 @@ impl Services {
         &self,
         token: &InviteToken,
         registration: Registration<'_>,
-    ) -> Result<(SessionGrant, TeamDetail), ServiceError> {
+    ) -> Result<(Registered, TeamDetail), ServiceError> {
         self.ensure_password_sign_in()?;
         // Only to learn which team to lock: see the module doc.
         let found = store::invite_links::find_invite_link_by_token(&self.db, token)
@@ -196,22 +198,21 @@ impl Services {
         // A new user has never been removed from any team. Before the user is made, so that an ended link wins over
         // a taken username.
         link.check_join(now, None)?;
-        let (grant, _, _) = self.insert_account(&txn, account, now).await?;
-        let principal = Principal {
-            user_id: grant.user.id,
-            run: None,
-        };
+        let (user, _, _) = self.insert_account(&txn, account, now).await?;
+        let user_id = user.id;
+        let access = self.open_new_account(&txn, user, now).await?;
+        let principal = Principal { user_id, run: None };
         self.admit_through_link(&txn, principal, &link, now).await?;
         let detail = load_team_detail(&txn, &self.settings.group_teams, principal, team, self.now()).await?;
         txn.commit().await.map_err(StoreError::from)?;
 
         tracing::info!(
-            user_id = %grant.user.id,
+            %user_id,
             %team_id,
             invite_link_id = %link.id,
             "user registered through invite link"
         );
-        Ok((grant, detail))
+        Ok((self.registered(access), detail))
     }
 
     /// Makes a link that works for a week. Admins only. Fails with [`domain::team::TeamError::PersonalTeam`] on a

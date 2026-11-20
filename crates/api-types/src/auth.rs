@@ -103,6 +103,14 @@ pub struct SetPasswordRequestDto {
     pub password: String,
 }
 
+/// What registering answers when the account must confirm its address first.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[schema(as = ConfirmationSent)]
+pub struct ConfirmationSentDto {
+    /// The address the confirmation link was mailed to, as stored.
+    pub email: String,
+}
+
 /// What applying an email change link did.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[schema(as = EmailChanged)]

@@ -102,6 +102,9 @@ enum Target {
     /// A working password reset link of an account of its own, in `{token}`, so resetting it ends none of the callers'
     /// sign-ins.
     ResetLink,
+    /// A working email confirmation link of an account of its own, in `{token}`, so confirming it signs in none of
+    /// the callers.
+    ConfirmationLink,
     /// The caller's own user, with its version for `If-Match`.
     Me,
     /// A sign-in of the CLI as the caller, in `{id}`.
@@ -514,6 +517,14 @@ fn endpoints() -> Vec<Endpoint> {
             "/email-changes/{token}",
             Mail,
             Target::ResetLink,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/email-confirmations/{token}",
+            Public,
+            Target::ConfirmationLink,
             RequestBody::Empty,
             StatusCode::OK,
         ),
@@ -1651,6 +1662,30 @@ impl World {
         self.app.make_reset_link(&common::username_for(&email)).await
     }
 
+    /// The token of a working confirmation link of a new account. This server has no mail, so the account is made on
+    /// a copy of it that has, and the token is read from the mail.
+    async fn new_confirmation_token(&self) -> Result<String> {
+        let dir = tempfile::tempdir()?;
+        let mailed = self.app.with_mail(dir.path())?;
+        let email = format!("{}@example.test", self.unique_name("user"));
+        let body = json!({
+            "email": email,
+            "username": common::username_for(&email),
+            "display_name": "Tester",
+            "password": PASSWORD,
+        });
+        let made = mailed
+            .send(Method::POST, "/api/v1/auth/register", None, Some(body))
+            .await?;
+        anyhow::ensure!(made.status == StatusCode::ACCEPTED, "register failed: {}", made.body);
+        let mail = common::wait_for_mails(dir.path(), 1).await?.remove(0);
+        let (_, after) = mail.split_once("/confirm/").context("no link in the mail")?;
+        Ok(after
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .collect())
+    }
+
     /// A new heap in the shared team, created by its admin. Returns its slug.
     async fn new_heap(&self) -> Result<String> {
         let created = self.create_heap().await?;
@@ -1850,6 +1885,7 @@ impl World {
             }
             Target::ForeignInviteLink => path = path.replace("{token}", &self.new_invite_token().await?),
             Target::ResetLink => path = path.replace("{token}", &self.new_reset_token().await?),
+            Target::ConfirmationLink => path = path.replace("{token}", &self.new_confirmation_token().await?),
             Target::Me => {
                 if let Some(session) = &session {
                     let me = self.app.send(Method::GET, "/api/v1/me", Some(session), None).await?;
