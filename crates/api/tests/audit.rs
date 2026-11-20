@@ -465,6 +465,79 @@ async fn archiving_an_option_reads_on_the_parameter_and_on_each_switched_item() 
 
 #[gtest]
 #[tokio::test]
+async fn team_parameter_entries_are_in_the_teams_log_and_a_heaps_use_of_one_in_the_heaps() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register_as("ada@example.test", "Ada").await?;
+    let heap_path = app.heap_url(&heap).await?;
+    let team_path = heap_path.split("/heaps/").next().context("heap url")?.to_owned();
+    let parameter = post(
+        &app,
+        &session,
+        &format!("{team_path}/parameters"),
+        json!({ "name": "Customer", "options": ["Small", "Big"] }),
+    )
+    .await?;
+    let pid = parameter["id"].as_str().unwrap_or_default().to_owned();
+
+    // Act
+    post(&app, &session, &format!("{heap_path}/parameters/{pid}/use"), json!({})).await?;
+    let version = get(&app, &session, &heap_path).await?["version"].clone();
+    app.patch(
+        &session,
+        &format!("{heap_path}/weights"),
+        &version,
+        json!({ "parameters": [{ "id": pid, "weight": 40, "version": parameter["version"] }] }),
+    )
+    .await?;
+    post(
+        &app,
+        &session,
+        &format!("{heap_path}/parameters/{pid}/stop-using"),
+        json!({}),
+    )
+    .await?;
+    let heap_log = get(&app, &session, &format!("{heap_path}/audit?entity_id={pid}")).await?;
+    let team_log = get(&app, &session, &format!("{team_path}/audit?entity_id={pid}")).await?;
+    let heap_wide = get(&app, &session, &format!("{heap_path}/audit")).await?;
+
+    // Assert
+    expect_that!(actions(&team_log), elements_are![eq(&"parameter_created")]);
+    expect_that!(sentences(&team_log), elements_are![eq("Ada added parameter Customer")]);
+    expect_that!(
+        actions(&heap_log),
+        elements_are![
+            eq(&"parameter_updated"),
+            eq(&"parameter_updated"),
+            eq(&"parameter_updated")
+        ]
+    );
+    expect_that!(
+        heap_log["entries"][0]["changes"],
+        eq(
+            &json!([{ "field": "used", "label": "Used in the heap", "before": "yes", "after": "no", "text_diff": null }])
+        )
+    );
+    expect_that!(
+        heap_log["entries"][1]["changes"],
+        eq(&json!([{ "field": "weight", "label": "Weight", "before": "10", "after": "40", "text_diff": null }]))
+    );
+    expect_that!(
+        heap_log["entries"][2]["changes"],
+        eq(&json!([
+            { "field": "weight", "label": "Weight", "before": null, "after": "10", "text_diff": null },
+            { "field": "used", "label": "Used in the heap", "before": "no", "after": "yes", "text_diff": null },
+        ]))
+    );
+    expect_that!(
+        sentences(&heap_wide).first().map(String::as_str),
+        some(eq("Ada changed parameter Customer"))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn membership_heap_and_view_entries_read_as_sentences() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

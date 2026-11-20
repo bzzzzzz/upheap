@@ -80,6 +80,10 @@ enum Target {
     Parameter,
     /// The first option of a new parameter of the shared heap.
     ParameterOption,
+    /// A parameter of the shared team with two options, with its version for `If-Match`.
+    TeamParameter,
+    /// The first option of a new parameter of the shared team.
+    TeamParameterOption,
     /// A session of its own, so signing out doesn't end the caller's shared session.
     FreshSession,
     /// An account of its own, signed in when the caller is, so a request that replaces the caller's session (a
@@ -1137,6 +1141,78 @@ fn endpoints() -> Vec<Endpoint> {
             RequestBody::ArchiveOption,
             StatusCode::OK,
         ),
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use",
+            configure,
+            Target::TeamParameter,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/stop-using",
+            configure,
+            Target::TeamParameter,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/teams/{team}/parameters",
+            team(ViewTeam),
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/parameters",
+            team(ConfigureHeap),
+            Target::Nothing,
+            RequestBody::NewParameter,
+            StatusCode::CREATED,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team}/parameters/{parameter_id}",
+            team(ConfigureHeap),
+            Target::TeamParameter,
+            RequestBody::NewParameter,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/parameters/{parameter_id}/archive",
+            team(ConfigureHeap),
+            Target::TeamParameter,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/parameters/{parameter_id}/options",
+            team(ConfigureHeap),
+            Target::TeamParameter,
+            RequestBody::NewOption,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PATCH,
+            "/teams/{team}/parameters/{parameter_id}/options",
+            team(ConfigureHeap),
+            Target::TeamParameter,
+            RequestBody::ArrangeOptions,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/options/{option_id}/archive",
+            team(ConfigureHeap),
+            Target::TeamParameterOption,
+            RequestBody::ArchiveOption,
+            StatusCode::OK,
+        ),
     ]
 }
 
@@ -1590,6 +1666,25 @@ impl World {
         Ok(created.body)
     }
 
+    /// Creates a parameter of the shared team with two options as the admin and returns its body.
+    async fn create_team_parameter(&self) -> Result<Value> {
+        let created = self
+            .app
+            .send(
+                Method::POST,
+                &format!("/api/v1/teams/{}/parameters", self.team_slug),
+                Some(&self.admin.session),
+                Some(json!({ "name": self.unique_name("team-target"), "options": ["High", "Low"] })),
+            )
+            .await?;
+        anyhow::ensure!(
+            created.status == StatusCode::CREATED,
+            "create team parameter failed: {}",
+            created.body
+        );
+        Ok(created.body)
+    }
+
     /// Registers a new user and returns their session and ID.
     async fn new_user(&self) -> Result<(String, String)> {
         let email = format!("{}@example.test", self.unique_name("user"));
@@ -2019,6 +2114,19 @@ impl World {
                 let id = parameter["id"].as_str().context("parameter has no id")?;
                 path = path.replace("{parameter_id}", id);
                 if_match = Some(parameter["version"].to_string());
+            }
+            Target::TeamParameter => {
+                parameter = self.create_team_parameter().await?;
+                let id = parameter["id"].as_str().context("team parameter has no id")?;
+                path = path.replace("{parameter_id}", id);
+                if_match = Some(parameter["version"].to_string());
+            }
+            Target::TeamParameterOption => {
+                parameter = self.create_team_parameter().await?;
+                let id = parameter["options"][0]["id"]
+                    .as_str()
+                    .context("team parameter has no option")?;
+                path = path.replace("{option_id}", id);
             }
             Target::ParameterOption => {
                 parameter = self.create_parameter().await?;

@@ -644,6 +644,78 @@ async fn values_are_kept_by_parameter_name_and_option_label_and_the_rest_are_dro
 
 #[gtest]
 #[tokio::test]
+async fn a_team_parameter_value_comes_along_when_the_target_uses_it_and_is_dropped_when_not() -> Result<()> {
+    // Arrange: a team parameter that both heaps use, and one that only the first uses, each with a value.
+    let w = world().await?;
+    let team = w
+        .app
+        .heap_url(&w.from)
+        .await?
+        .split("/heaps/")
+        .next()
+        .context("heap url")?
+        .to_owned();
+    let make = |name: &'static str| {
+        let (app, session, team) = (&w.app, &w.session, team.clone());
+        async move {
+            let created = app
+                .send(
+                    Method::POST,
+                    &format!("{team}/parameters"),
+                    Some(session),
+                    Some(json!({ "name": name, "options": ["High", "Low"] })),
+                )
+                .await?;
+            anyhow::ensure!(
+                created.status == StatusCode::CREATED,
+                "team parameter failed: {}",
+                created.body
+            );
+            Ok::<Value, anyhow::Error>(created.body)
+        }
+    };
+    let shared = make("Customer").await?;
+    let only_here = make("Area").await?;
+    for (heap, parameter) in [(&w.from, &shared), (&w.from, &only_here), (&w.to, &shared)] {
+        let used = w
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/parameters/{}/use", w.app.heap_url(heap).await?, id(parameter)),
+                Some(&w.session),
+                None,
+            )
+            .await?;
+        anyhow::ensure!(used.status == StatusCode::OK, "use failed: {}", used.body);
+    }
+    let high = |parameter: &Value| id(&parameter["options"][0]);
+    let set = edit(
+        &w.app,
+        &w.session,
+        &w.item,
+        json!({ "parameter_values": { id(&shared): high(&shared), id(&only_here): high(&only_here) } }),
+    )
+    .await?;
+    anyhow::ensure!(set.status == StatusCode::OK, "set values failed: {}", set.body);
+
+    // Act
+    let moved = w.moved().await?;
+
+    // Assert
+    expect_that!(moved.status, eq(StatusCode::OK));
+    let values: Vec<(&str, &str)> = moved.body["parameters"]
+        .as_array()
+        .context("no parameters")?
+        .iter()
+        .filter_map(|p| Some((p["name"].as_str()?, p["option"]["label"].as_str()?)))
+        .collect();
+    expect_that!(values, elements_are![eq(&("Customer", "High"))]);
+    expect_that!(moved.body["parameters"][0]["option"]["id"], eq(&json!(high(&shared))));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn items_left_behind_keep_the_moved_blocker_and_wait_for_the_person() -> Result<()> {
     // Arrange: M waits for B, and A waits for M.
     let w = world().await?;
