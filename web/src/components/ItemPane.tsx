@@ -141,6 +141,9 @@ export function ItemPane({
     <>
       {/* On a phone the sheet covers the list, and a tap on what shows of it closes the sheet. */}
       <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-40 bg-black/40 sm:hidden" />
+      {/* Full screen takes the pane out of the row beside the list; its slot stays, so the list keeps its width, its
+          height and so its scroll position. */}
+      {full && <div aria-hidden="true" className="hidden w-[26rem] shrink-0 lg:block" />}
       <motion.section
         ref={paneRef}
         tabIndex={-1}
@@ -306,6 +309,11 @@ function WalkLink({
   );
 }
 
+/** Whether the open item is shown full screen: `full=1` in the address (ux.md, The item §23). */
+export function useFullScreenShown() {
+  return useRouterState({ select: (state) => (state.location.search as { full?: unknown }).full === 1 });
+}
+
 /**
  * Whether the open item is full screen, which the location's `full=1` says, and the way in and out of it (ux.md, The
  * item). Going in is a history entry of its own, marked `fullBack`, so leaving by Escape or ⤡ goes back to the pane;
@@ -315,8 +323,10 @@ function WalkLink({
 function useFullScreen() {
   const router = useRouter();
   const navigate = useNavigate();
-  const full = useRouterState({ select: (state) => (state.location.search as { full?: unknown }).full === 1 });
+  const full = useFullScreenShown();
   const fullBack = useRouterState({ select: (state) => state.location.state.fullBack === true });
+  // A second Escape or ⤡ while the first one's Back is under way would go back past the pane.
+  const leaving = useRef(false);
   return {
     full,
     enter: () =>
@@ -338,11 +348,14 @@ function useFullScreen() {
         void navigate(pane);
         return;
       }
+      if (leaving.current) return;
+      leaving.current = true;
       // ↑ ↓ in full screen replace its entry, so the pane one entry back may be another item's. Back lands there,
       // and then the entry becomes this item's pane, as if the walk had been in the pane.
       const here = router.buildLocation(pane).href;
       const unsubscribe = router.subscribe("onResolved", () => {
         unsubscribe();
+        leaving.current = false;
         // By its address: `.` would now be the item Back landed on.
         if (router.state.location.href !== here) {
           void navigate({ href: here, state: pane.state, replace: true, resetScroll: false });

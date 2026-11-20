@@ -80,25 +80,44 @@ test("a full link opens full screen, and leaves for the pane, then the list", as
   await expect(page).not.toHaveURL(/items|full=/);
 });
 
+test("✕ from a full link leaves full screen behind, so the next item opens in the pane", async ({ page }) => {
+  await addItem(page, "Plan the launch");
+  await addItem(page, "Water the plants");
+  await openItem(page, "Plan the launch");
+  await page.goto(`${page.url()}?full=1`);
+  await expect(itemPane(page)).toBeVisible();
+
+  await closeItem(page);
+  await expect(page).not.toHaveURL(/items|full=/);
+  await openItem(page, "Water the plants");
+  await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Water the plants");
+  await expect(page).not.toHaveURL(/full=/);
+});
+
 test("the list keeps its place through full screen", async ({ page, heapPath }) => {
   test.skip(isPhone(page), "a phone has no full screen button");
+  // Titles that wrap beside the pane, so a list that widened under full screen would get shorter.
+  const title = (i: number) =>
+    `Task ${String(i).padStart(2, "0")} ${"with a title long enough to wrap ".repeat(3).trim()}`;
   for (let i = 0; i < 30; i++) {
     const made = await page.request.post(`/api/v1${heapPath}/items`, {
       headers: { "x-csrf-protection": "1" },
-      data: { title: `Task ${String(i).padStart(2, "0")}`, need: "expected" },
+      data: { title: title(i), need: "expected" },
     });
     expect(made.status()).toBe(201);
   }
   await page.goto(heapPath);
-  await expect(row(page, "Task 05")).toBeVisible();
-  await page.evaluate(() => window.scrollTo(0, 300));
-  const before = await page.evaluate(() => Math.round(window.scrollY));
-  expect(before).toBeGreaterThan(0);
-  await row(page, "Task 05").getByRole("link").first().click();
+  await row(page, title(5)).getByRole("link").first().click();
   await expect(itemPane(page)).toBeVisible();
+  // At the bottom, where a shorter list would pull the window up.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(0);
+  const before = await page.evaluate(() => Math.round(window.scrollY));
 
-  await fullButton(page).click();
+  // At the bottom the sticky pane's header sits above the window, and a click would scroll it into view first.
+  await fullButton(page).dispatchEvent("click");
   await expect(exitButton(page)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(before);
   await page.keyboard.press("Escape");
   await expect(fullButton(page)).toBeVisible();
   await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(before);
