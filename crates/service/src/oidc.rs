@@ -382,10 +382,14 @@ impl Services {
             let user = store::users::find_user(&self.db, user_id)
                 .await?
                 .ok_or_else(|| StoreError::corrupt("user_identities", &claims.subject, "no such user"))?;
+            let personal_team = self.load_personal_team(&self.db, &user).await?;
             let txn = self.db.begin().await.map_err(StoreError::from)?;
             // The provider's pushes decide the teams they have pushed, instead of the token's groups. The teams are
             // locked before they are read, as a push does.
             self.lock_group_teams(&txn).await?;
+            // A deactivation holds this lock until it has ended the person's sign-ins, so the session opened below
+            // either comes after it and is refused, or before it and is ended by it.
+            store::teams::lock_team(&txn, personal_team).await?;
             self.sync_sign_in_groups(&txn, user.id, &claims.subject, claims.groups.clone(), now)
                 .await?;
             let grant = match self.open_session(&txn, user, now, id_token_to_keep.as_deref()).await {
