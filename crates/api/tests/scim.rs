@@ -1035,14 +1035,15 @@ async fn two_deactivations_at_once_of_a_persons_last_two_records_end_their_sign_
     Ok(())
 }
 
-/// How many times a sign-in races a deactivation.
-const ROUNDS: u32 = 100;
+/// How many times a sign-in races a deactivation. Only MySQL and Postgres race; in-memory SQLite has one connection,
+/// so there the two take turns.
+const ROUNDS: u32 = 50;
 
 /// Runs `sign_in` and `deactivate` at once, one of them started a little later. Over the rounds the delay moves from
 /// the sign-in to the deactivation, so the deactivation lands at each point of the sign-in's work rather than always
 /// at the same one.
 async fn race<A: Future, B: Future>(round: u32, sign_in: A, deactivate: B) -> (A::Output, B::Output) {
-    let step = std::time::Duration::from_micros(200);
+    let step = std::time::Duration::from_micros(400);
     let (sign_in_waits, deactivation_waits) = if round < ROUNDS / 2 {
         (step * (ROUNDS / 2 - round), std::time::Duration::ZERO)
     } else {

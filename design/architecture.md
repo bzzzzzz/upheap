@@ -631,9 +631,9 @@ a fixed time.
      ID order, then a SCIM row, then a person's personal team; a write that locks several of a person's teams (a
      display-name change) takes the mapped ones first. A sign-in of a known person, by the provider or by password,
      locks their personal team before it opens the session, so it waits for a SCIM write that is ending their
-     sign-ins and then sees the deactivation. A first sign-in has no user yet, so the
-     callback keeps the groups on the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step
-     runs the sync after making the user. Password sign-in, invite registration and reset never sync.
+     sign-ins and then sees the deactivation. A first sign-in has no user yet, so the callback keeps the groups on
+     the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step runs the sync after making the
+     user. Password sign-in, invite registration and reset never sync.
    - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)
      makes every password path in the service layer fail with `PasswordSignInOff`, so the API and the operator
      command both refuse: sign-in, registration, invite registration, asking for and using a reset link, and the

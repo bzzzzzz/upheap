@@ -11,9 +11,9 @@
 //! Records may share an `externalId`, so a person's state is read from all of them at once ([`ScimPerson`]): inactive
 //! only when every record is, else in the groups of the active ones. A linked person who is left inactive, or whose
 //! last record is deleted, also loses every session and token, and [`Services::open_session`] refuses an inactive
-//! person until the provider turns them back on. A sign-in locks the person's personal team before it opens the
-//! session, so it comes before such a write, which ends it, or after, and is refused. A write to users that turns a linked person off or back on records
-//! it in their personal team, where their own account history reads it.
+//! person until the provider turns them back on. A sign-in of a known person locks their personal team before it
+//! opens the session, so it comes before such a write, which ends it, or after, and is refused. A write to users that
+//! turns a linked person off or back on records it in their personal team, where their own account history reads it.
 //!
 //! Resources are JSON as in RFC 7643, built and read here; the HTTP side is in `api`.
 
@@ -629,7 +629,8 @@ impl Services {
             };
             if let Some(was_off) = was_off {
                 let off_before = was_off.contains(subject);
-                // Before the sign-ins: password changes and resets lock the personal team, then end sign-ins.
+                // Before the sign-ins: password changes and resets lock the personal team, then end sign-ins, and sign-ins
+                // open a session under it.
                 let personal_team = self.lock_personal_team(txn, user_id).await?;
                 if !person.active {
                     let ended_sign_ins = self.end_sign_ins(txn, user_id, None, now).await?;
