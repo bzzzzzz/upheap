@@ -157,13 +157,13 @@ export function ItemPane({
             fullScreen.leave();
           }
         }}
-        className={`fixed inset-x-0 bottom-(--keyboard-inset) z-40 overflow-y-auto bg-surface text-ink shadow-2xl outline-none sm:top-0 sm:bottom-0 sm:z-20 sm:max-h-none sm:rounded-none sm:border-l sm:border-line lg:shadow-none ${
+        className={`fixed inset-x-0 bottom-(--keyboard-inset) z-40 scroll-pt-20 overflow-y-auto bg-surface text-ink shadow-2xl outline-none sm:top-0 sm:bottom-0 sm:z-20 sm:max-h-none sm:rounded-none sm:border-l sm:border-line lg:shadow-none ${
           full
             ? "top-0 max-h-none sm:left-20 sm:w-auto lg:left-[calc(max(0px,(100vw-92rem)/2)+15rem)] lg:overscroll-contain"
             : "max-h-[calc(88dvh-var(--keyboard-inset))] rounded-t-2xl sm:left-auto sm:w-[25rem] lg:sticky lg:right-auto lg:bottom-auto lg:h-dvh lg:w-[26rem] lg:shrink-0"
         }`}
       >
-        {/* The top bar is what drags: down to close the phone's sheet, right to close the tablet's panel. */}
+        {/* The top bar is what drags (the pane's scroll padding keeps what is scrolled to out from under it): down to close the phone's sheet, right to close the tablet's panel. */}
         <div
           {...drag.handleProps}
           className="sticky top-0 z-10 flex items-center gap-2 bg-surface px-4 pt-3 pb-2 sm:px-5 sm:pt-5"
