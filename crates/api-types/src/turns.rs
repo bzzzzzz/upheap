@@ -227,6 +227,8 @@ pub struct TurnDto {
 pub struct TurnWatchDto {
     /// The pull request's address.
     pub url: String,
+    /// The pull request's number, from its address: 276 for `…/pull/276`.
+    pub number: u64,
     /// UTC milliseconds: when the watch began.
     pub since: i64,
     /// When the watch began, in the client's time zone, as `opened_label` says it.
@@ -259,6 +261,7 @@ impl TurnDto {
             runs,
             watch: turn.watch.as_ref().map(|watch| TurnWatchDto {
                 url: watch.url.as_str().to_owned(),
+                number: watch.url.number(),
                 since: watch.since.as_millis(),
                 since_label: watch_label(watch),
             }),

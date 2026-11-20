@@ -15238,10 +15238,17 @@
         "description": "A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge or a\nclose.",
         "required": [
           "url",
+          "number",
           "since",
           "since_label"
         ],
         "properties": {
+          "number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The pull request's number, from its address: 276 for `…/pull/276`.",
+            "minimum": 0
+          },
           "since": {
             "type": "integer",
             "format": "int64",

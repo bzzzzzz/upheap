@@ -7,7 +7,7 @@ import type { HeapRef } from "../api/client";
 import type { Item, ItemState, RankedItem, RankedList, Turn } from "../api/schema";
 import { useSendWithUndo } from "./ItemTurn";
 import { KindIcon, StageIcon, TargetIcon } from "./kindIcons";
-import { GOAL_LABELS, pullNumber, STAGE_LABELS, STATE_LABELS } from "./labels";
+import { GOAL_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
 import { ParameterChips } from "./ParameterPicker";
 import { formatDate } from "./reminders";
@@ -160,6 +160,12 @@ export function ItemRow({
   };
 
   // What a screen reader hears after the title. The icons are for the eye.
+  const agentDoing =
+    item.agent_state === "running"
+      ? "running now"
+      : item.turn?.watch
+        ? `watching pull request ${item.turn.watch.number}`
+        : item.agent_state;
   const readAloud = (
     <span className="sr-only">
       {item.kind === "task" && ", task"}
@@ -170,7 +176,7 @@ export function ItemRow({
       {item.waits_for_you && ", waits for you"}
       {item.turn &&
         (item.agent_state === "running" || item.agent_state === "queued" || item.agent_state === "watching") &&
-        `, with an agent, ${item.agent_state === "running" ? "running now" : item.agent_state === "watching" && item.turn.watch ? `watching pull request ${pullNumber(item.turn.watch.url)}` : item.agent_state}, going to ${GOAL_LABELS[item.turn.going_to]}`}
+        `, with an agent, ${agentDoing}, going to ${GOAL_LABELS[item.turn.going_to]}`}
       {item.agent_state === "stuck" && ", agent stuck"}
     </span>
   );
@@ -693,7 +699,8 @@ function RobotButton({ item, disabled, onPress }: { item: Item; disabled: boolea
 /**
  * Says an agent has the item: a blue robot on a blue tint, so it reads as on in either theme, apart from the quiet robot
  * that sends and from the accent that marks in progress. A run that is live turns the tile solid. An accent dot says the
- * agent waits for the person, and a badge in the corner says where the turn goes, or an eye that it watches a pull request. The tooltip is for the mouse; the
+ * agent waits for the person, and a badge in the corner says where the turn goes, or an eye that it watches a pull
+ * request. The tooltip is for the mouse; the
  * row's own link says the same in words. The tile is a second link to the item, above the row's link so the tooltip
  * shows, and a click on it opens the item as a click on the row does. Only the row's link takes the focus.
  */
@@ -703,7 +710,7 @@ function RobotMark({ item, turn, link, itemOpen }: { item: Item; turn: Turn; lin
   const title =
     item.agent_state === "stuck"
       ? `Agent stuck: ${turn.failed_runs} runs failed`
-      : `${running ? "Running now" : item.agent_state === "queued" ? "Queued" : item.agent_state === "watching" ? (turn.watch ? `Watching PR #${pullNumber(turn.watch.url)}` : "Watching") : "Waits for you"} · going to: ${target}`;
+      : `${running ? "Running now" : item.agent_state === "queued" ? "Queued" : turn.watch && item.agent_state === "watching" ? `Watching PR #${turn.watch.number}` : "Waits for you"} · going to: ${target}`;
   return (
     <Link
       {...link}

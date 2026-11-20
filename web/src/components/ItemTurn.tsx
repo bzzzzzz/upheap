@@ -9,7 +9,7 @@ import { TAKE_BACK_QUESTION } from "./agentConfirm";
 import { chipClass, compactButtonClass } from "./buttons";
 import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
-import { GOAL_LABELS, pullNumber, STAGE_LABELS } from "./labels";
+import { GOAL_LABELS, STAGE_LABELS } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
 import { Sheet } from "./Sheet";
@@ -334,7 +334,7 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
             rel="noopener noreferrer"
             className="text-accent-ink underline underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-accent"
           >
-            PR #{pullNumber(turn.watch.url)}
+            PR #{turn.watch.number}
           </a>{" "}
           since {turn.watch.since_label}. It comes back on a new comment, a failed check, a merge or a close.
         </p>

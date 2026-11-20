@@ -3250,6 +3250,7 @@ async fn a_run_ends_by_watching_and_its_item_leaves_the_queue() -> Result<()> {
     expect_that!(item["with_agent"], eq(true));
     expect_that!(item["turn"]["failed_runs"], eq(&json!(0)));
     expect_that!(item["turn"]["watch"]["url"], eq(&json!(PR)));
+    expect_that!(item["turn"]["watch"]["number"], eq(&json!(12)));
     expect_that!(item["turn"]["watch"]["since"].as_i64(), some(gt(0)));
     expect_that!(item["turn"]["watch"]["since_label"].as_str(), some(not(eq(""))));
     expect_that!(waiting.to_string(), not(contains_substring(key.as_str())));

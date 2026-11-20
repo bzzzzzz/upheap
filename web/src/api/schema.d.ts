@@ -4434,6 +4434,11 @@ export interface components {
         TurnWatch: {
             /**
              * Format: int64
+             * @description The pull request's number, from its address: 276 for `…/pull/276`.
+             */
+            number: number;
+            /**
+             * Format: int64
              * @description UTC milliseconds: when the watch began.
              */
             since: number;
