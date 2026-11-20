@@ -687,4 +687,10 @@ test("in an archived heap a question shows its text and details, with no control
   await expect(section.getByRole("textbox")).toHaveCount(0);
   await expect(section.getByRole("radio")).toHaveCount(0);
   await expect(askButton(page)).toHaveCount(0);
+
+  // Skip still shows; with no field to edit it focuses the fields, and the link back focuses the questions.
+  await section.getByRole("button", { name: "Skip to details ↓", exact: true }).click();
+  await expect(itemPane(page).getByRole("region", { name: "Fields", exact: true })).toBeFocused();
+  await itemPane(page).getByRole("button", { name: "2 open, at the top ↑", exact: true }).click();
+  await expect(section).toBeFocused();
 });

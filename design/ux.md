@@ -546,7 +546,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     closing withdrew its open questions, which read in the fold as "Withdrawn".
     **Questions** is a section under the Steps, shown when the item has any question, or is open and the person may
     ask one (see **Ask a question** below), under the heading "Questions". While questions are open it starts with a
-    quiet link, "N open, at the top ↑", which scrolls up to the first of them and focuses its first control, for
+    quiet link, "N open, at the top ↑", which scrolls up to the first of them and focuses its first control (the
+    open questions themselves when it has none), for
     someone who is at the bottom, after asking, say. The fold of point 14 comes next.
     **Ask a question** ends the section, after the fold, as a quiet text button with a plus, on an open item in an
     unarchived heap for a member (no button for a viewer, a closed item or an archived heap); with no questions the
@@ -730,7 +731,7 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
 1. The heading is "Waiting for me · 5" (no count at zero) and under it a quiet line, "All heaps, most important
    first". The order is the server's: the item's score in its own heap, then heap name, position and question number.
    Rows are one column at the app's content width, separated by thin rules; no item pane opens beside the page.
-2. A row is the item's open-question row in Questions, the same component, with a head line of its own: the kind ("Request",
+2. A row is the item's open-question row in Waits for you, the same component, with a head line of its own: the kind ("Request",
    "Question", "Question · pick any", "Review, round N", "Ready to close"), the item's title as an accent, underlined link to the item in its heap, the heap's
    name, the team's name only when the person is in more than one team, and `step "<title>"` when the question names
    one. Then the short text, and the reply controls as in the item. A row whose question lost its `reply` action

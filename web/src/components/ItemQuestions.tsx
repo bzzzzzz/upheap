@@ -328,7 +328,13 @@ export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: 
               </ul>
             )}
             {open.length > 0 && (
-              <div role="group" aria-label="Open questions" className="flex flex-col py-3 first:pt-0 last:pb-0">
+              <div
+                role="group"
+                aria-label="Open questions"
+                data-open-questions=""
+                tabIndex={-1}
+                className="flex flex-col py-3 outline-none first:pt-0 last:pb-0"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm">
                     {open.length === 1 ? "1 question waits for you" : `${open.length} questions wait for you`}
@@ -403,7 +409,10 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
           onPress={() => {
             const list = document.getElementById(waits.listId);
             list?.querySelector(`[data-question="${first.number}"]`)?.scrollIntoView({ block: "nearest" });
-            firstControl(list, first.number)?.focus({ preventScroll: true });
+            // Rows without controls (an archived heap) give the focus to the open questions themselves.
+            (firstControl(list, first.number) ?? list?.closest<HTMLElement>("[data-open-questions]"))?.focus({
+              preventScroll: true,
+            });
           }}
           className={`${detailsButtonClass} text-accent-ink`}
         >
@@ -417,7 +426,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
 }
 
 /**
- * One open question with its reply controls, in the item's Questions and on the Waiting for me page. `line` is the
+ * One open question with its reply controls, in the item's Waits for you and on the Waiting for me page. `line` is the
  * row's own first line, and `context` what the page folds under the details. The reply and its failures are the
  * same in both: the caller says what to do once the row has been replied to, or turns out to be answered already or
  * on a closed item.
