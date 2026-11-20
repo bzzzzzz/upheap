@@ -355,7 +355,7 @@ impl Services {
         let now = self.now();
         let mut parameters_changed = 0_usize;
         for requested in &change.parameters {
-            let current = lock_listed(&txn, heap_id, requested.id, requested.version).await?;
+            let current = lock_listed(&txn, &heap, requested.id, requested.version).await?;
             let patch = ParameterPatch {
                 weight: Some(requested.weight),
                 ..ParameterPatch::default()
@@ -363,17 +363,23 @@ impl Services {
             let Some(edited) = current.apply_patch(&patch)? else {
                 continue;
             };
-            let diff = diff_parameters(&current, &edited);
-            self.write_parameter(
-                &txn,
-                &heap,
-                principal,
-                &edited,
-                AuditAction::ParameterUpdated,
-                diff,
-                now,
-            )
-            .await?;
+            if current.is_team_owned() {
+                self.write_heap_weight(&txn, &heap, principal, &current, &edited, now)
+                    .await?;
+            } else {
+                let diff = diff_parameters(&current, &edited);
+                self.write_parameter(
+                    &txn,
+                    heap.team_id,
+                    Some(heap.id),
+                    principal,
+                    &edited,
+                    AuditAction::ParameterUpdated,
+                    diff,
+                    now,
+                )
+                .await?;
+            }
             parameters_changed += 1;
         }
 

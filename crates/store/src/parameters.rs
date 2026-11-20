@@ -3,19 +3,40 @@
 //!
 //! A parameter is read and written whole: its row, its options and its tag links. Every function that returns a
 //! parameter returns all three.
+//!
+//! A parameter is owned by a heap or by a team: exactly one of `heap_id` and `team_id` is set, which reading a row
+//! checks. A heap uses a team parameter through a `heap_parameters` row, which holds the heap's weight for it.
+//! [`list_parameters`] shows a heap its own parameters and the team parameters it uses as one list, so everything
+//! that reads a heap's parameters sees the ones it uses as its own.
 
 use std::collections::{BTreeSet, HashMap};
 
-use domain::parameter::{ArchivedOption, OptionLabel, Parameter, ParameterName, ParameterOption};
-use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, Timestamp, Version};
+use domain::parameter::{
+    ArchivedOption, OptionLabel, Parameter, ParameterName, ParameterOption, ParameterOwner, Weight,
+};
+use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, TeamId, Timestamp, Version};
 use sea_orm::sea_query::{Expr, ExprTrait};
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, Select};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, Select,
+};
 
 use crate::StoreError;
 use crate::codes::{IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
-use crate::entities::{item_parameter_values, items, parameter_options, parameter_tags, parameters};
+use crate::entities::{heap_parameters, item_parameter_values, items, parameter_options, parameter_tags, parameters};
 
 const TABLE: &str = "parameters";
+const USES_TABLE: &str = "heap_parameters";
+
+/// A heap's use of a team parameter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeapUse {
+    pub heap_id: HeapId,
+    pub parameter_id: ParameterId,
+    /// The heap's weight for the parameter.
+    pub weight: Weight,
+    /// `None` while the heap uses the parameter.
+    pub stopped_at: Option<Timestamp>,
+}
 
 /// How a read locks the rows it reads.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -43,15 +64,21 @@ const fn child_lock(lock: Lock) -> Lock {
     }
 }
 
-/// Inserts a new parameter with its options and tag links. The caller has checked the tags belong to its heap.
+/// Inserts a new parameter with its options and tag links. The caller has checked the tags belong to its owner.
+/// A team parameter's own weight is stored as `0` and never read: each heap's weight is in its use row.
 pub async fn insert_parameter(db: &impl ConnectionTrait, parameter: &Parameter) -> Result<(), StoreError> {
     let id = id_to_db(parameter.id.as_uuid());
+    let (heap_id, team_id, weight) = match parameter.owner {
+        ParameterOwner::Heap(heap) => (Some(id_to_db(heap.as_uuid())), None, i32::from(parameter.weight.get())),
+        ParameterOwner::Team(team) => (None, Some(id_to_db(team.as_uuid())), 0),
+    };
     let row = parameters::ActiveModel {
         version: Set(version_to_db(parameter.version, TABLE, &id)?),
         id: Set(id),
-        heap_id: Set(id_to_db(parameter.heap_id.as_uuid())),
+        heap_id: Set(heap_id),
+        team_id: Set(team_id),
         name: Set(parameter.name.as_str().to_owned()),
-        weight: Set(i32::from(parameter.weight.get())),
+        weight: Set(weight),
         created_at: Set(parameter.created_at.as_millis()),
         archived_at: Set(parameter.archived_at.map(Timestamp::as_millis)),
     };
@@ -60,6 +87,8 @@ pub async fn insert_parameter(db: &impl ConnectionTrait, parameter: &Parameter) 
     sync_tags(db, parameter.id, &parameter.tags, parameter.created_at).await
 }
 
+/// The parameter's own row. For a team parameter that is the team's: its weight is `0` and not meaningful, and it is
+/// archived only when the team archived it.
 pub async fn find_parameter(db: &impl ConnectionTrait, id: ParameterId) -> Result<Option<Parameter>, StoreError> {
     load_one(db, id, Lock::None).await
 }
@@ -90,21 +119,25 @@ pub async fn find_option_parameter(
     Ok(Some(ParameterId::from_uuid(read.uuid(&row.parameter_id)?)))
 }
 
-/// Every parameter of `heap_id`, archived ones included, by name ignoring case, then by ID.
+/// Every parameter of `heap_id`, archived ones included, by name ignoring case, then by ID: the heap's own, and the
+/// team parameters it has a use row for, as the heap sees them. Of a team parameter, `weight` is the heap's, and
+/// `archived_at` is the team's, or else the time the heap stopped using it, so a parameter in use in this heap is
+/// exactly one that isn't archived. Never pass one of those to [`update_parameter`]; read it with [`lock_parameter`].
 ///
 /// Sorted here rather than in SQL, because MySQL and SQLite order text differently by default.
 pub async fn list_parameters(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Vec<Parameter>, StoreError> {
     load_heap(db, heap_id, Lock::None).await
 }
 
-/// [`list_parameters`] with a locking read, for item writes that check values against the parameters after
+/// [`list_parameters`] (the same projection) with a locking read, for item writes that check values against the parameters after
 /// locking the heap: on MySQL a plain read would see the snapshot from before the lock was granted.
 pub async fn list_parameters_locking(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Vec<Parameter>, StoreError> {
     load_heap(db, heap_id, Lock::Share).await
 }
 
 /// Writes `parameter` with its options and tag links if the stored row still has version `expected`, and returns
-/// it with its new version. Tags it no longer has are marked removed at `now`.
+/// it with its new version. Tags it no longer has are marked removed at `now`. A team parameter's weight is never
+/// written; the heap's is in its use row (see [`update_heap_use`]).
 ///
 /// Returns `None` when the stored version differs; nothing is written then.
 pub async fn update_parameter(
@@ -118,13 +151,15 @@ pub async fn update_parameter(
         ..parameter.clone()
     };
     let id = id_to_db(parameter.id.as_uuid());
-    let row = parameters::ActiveModel {
+    let mut row = parameters::ActiveModel {
         name: Set(saved.name.as_str().to_owned()),
-        weight: Set(i32::from(saved.weight.get())),
         archived_at: Set(saved.archived_at.map(Timestamp::as_millis)),
         version: Set(version_to_db(saved.version, TABLE, &id)?),
         ..Default::default()
     };
+    if matches!(saved.owner, ParameterOwner::Heap(_)) {
+        row.weight = Set(i32::from(saved.weight.get()));
+    }
     let result = parameters::Entity::update_many()
         .set(row)
         .filter(parameters::Column::Id.eq(id.as_str()))
@@ -137,6 +172,107 @@ pub async fn update_parameter(
     sync_options(db, &saved).await?;
     sync_tags(db, saved.id, &saved.tags, now).await?;
     Ok(Some(saved))
+}
+
+/// Every parameter of the team, archived ones included, by name ignoring case, then by ID. The team's own rows, not
+/// as any heap sees them.
+pub async fn list_team_parameters(db: &impl ConnectionTrait, team_id: TeamId) -> Result<Vec<Parameter>, StoreError> {
+    let rows = parameters::Entity::find()
+        .filter(parameters::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
+        .all(db)
+        .await?;
+    let mut parameters = assemble(db, rows, Lock::None).await?;
+    parameters.sort_by_cached_key(|parameter| (parameter.name.to_key(), parameter.id));
+    Ok(parameters)
+}
+
+/// The names, with their IDs, of the parameters in use that are the team's or one of `heap_ids`' own. What a new
+/// name must not repeat, ignoring case.
+pub async fn list_names_in_use(
+    db: &impl ConnectionTrait,
+    team_id: TeamId,
+    heap_ids: &[HeapId],
+) -> Result<Vec<(ParameterId, ParameterName)>, StoreError> {
+    let owned = Condition::any()
+        .add(parameters::Column::TeamId.eq(id_to_db(team_id.as_uuid())))
+        .add(parameters::Column::HeapId.is_in(heap_ids.iter().map(|id| id_to_db(id.as_uuid()))));
+    parameters::Entity::find()
+        .filter(owned)
+        .filter(parameters::Column::ArchivedAt.is_null())
+        .all(db)
+        .await?
+        .into_iter()
+        .map(|row| {
+            let read = RowReader {
+                table: TABLE,
+                id: &row.id,
+            };
+            let name = ParameterName::parse(&row.name).map_err(|e| read.corrupt(e.to_string()))?;
+            Ok((ParameterId::from_uuid(read.uuid(&row.id)?), name))
+        })
+        .collect()
+}
+
+/// The use rows of `parameter_ids`, in every heap, stopped ones included.
+pub async fn list_heap_uses(
+    db: &impl ConnectionTrait,
+    parameter_ids: &[ParameterId],
+) -> Result<Vec<HeapUse>, StoreError> {
+    let mut uses = Vec::new();
+    for chunk in parameter_ids.chunks(IN_LIST_CHUNK) {
+        let rows = heap_parameters::Entity::find()
+            .filter(heap_parameters::Column::ParameterId.is_in(chunk.iter().map(|id| id_to_db(id.as_uuid()))))
+            .all(db)
+            .await?;
+        for row in rows {
+            uses.push(to_use(&row)?);
+        }
+    }
+    uses.sort_by_key(|u| (u.parameter_id, u.heap_id));
+    Ok(uses)
+}
+
+/// The heap's use row for `parameter_id`, read with a lock until the transaction ends, so a use or a stop that
+/// waited for the heap lock reads what the last one wrote.
+pub async fn lock_heap_use(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+) -> Result<Option<HeapUse>, StoreError> {
+    heap_parameters::Entity::find_by_id((id_to_db(heap_id.as_uuid()), id_to_db(parameter_id.as_uuid())))
+        .lock_exclusive()
+        .one(db)
+        .await?
+        .map(|row| to_use(&row))
+        .transpose()
+}
+
+/// Records that the heap uses the parameter from `now`, with `heap_use.weight`. Fails if it has a row already.
+pub async fn insert_heap_use(db: &impl ConnectionTrait, heap_use: &HeapUse, now: Timestamp) -> Result<(), StoreError> {
+    let row = heap_parameters::ActiveModel {
+        heap_id: Set(id_to_db(heap_use.heap_id.as_uuid())),
+        parameter_id: Set(id_to_db(heap_use.parameter_id.as_uuid())),
+        weight: Set(i32::from(heap_use.weight.get())),
+        used_at: Set(now.as_millis()),
+        stopped_at: Set(heap_use.stopped_at.map(Timestamp::as_millis)),
+    };
+    heap_parameters::Entity::insert(row).exec_without_returning(db).await?;
+    Ok(())
+}
+
+/// Writes the weight and the stop time of an existing use row: using again clears `stopped_at`, stopping sets it.
+pub async fn update_heap_use(db: &impl ConnectionTrait, heap_use: &HeapUse) -> Result<(), StoreError> {
+    heap_parameters::Entity::update_many()
+        .col_expr(heap_parameters::Column::Weight, i32::from(heap_use.weight.get()).into())
+        .col_expr(
+            heap_parameters::Column::StoppedAt,
+            heap_use.stopped_at.map(Timestamp::as_millis).into(),
+        )
+        .filter(heap_parameters::Column::HeapId.eq(id_to_db(heap_use.heap_id.as_uuid())))
+        .filter(heap_parameters::Column::ParameterId.eq(id_to_db(heap_use.parameter_id.as_uuid())))
+        .exec(db)
+        .await?;
+    Ok(())
 }
 
 /// The items of `heap_id` that aren't closed and have a value for `parameter_id`, by ID.
@@ -338,9 +474,38 @@ async fn load_one(db: &impl ConnectionTrait, id: ParameterId, lock: Lock) -> Res
 }
 
 async fn load_heap(db: &impl ConnectionTrait, heap_id: HeapId, lock: Lock) -> Result<Vec<Parameter>, StoreError> {
-    let query = parameters::Entity::find().filter(parameters::Column::HeapId.eq(id_to_db(heap_id.as_uuid())));
+    let heap = id_to_db(heap_id.as_uuid());
+    let query = parameters::Entity::find().filter(parameters::Column::HeapId.eq(heap.as_str()));
     let rows = locked(query, lock).all(db).await?;
     let mut parameters = assemble(db, rows, child_lock(lock)).await?;
+
+    let uses = locked(
+        heap_parameters::Entity::find().filter(heap_parameters::Column::HeapId.eq(heap.as_str())),
+        lock,
+    )
+    .all(db)
+    .await?;
+    if !uses.is_empty() {
+        let team_rows = locked(
+            parameters::Entity::find()
+                .filter(parameters::Column::Id.is_in(uses.iter().map(|u| u.parameter_id.as_str()))),
+            lock,
+        )
+        .all(db)
+        .await?;
+        for mut team_parameter in assemble(db, team_rows, child_lock(lock)).await? {
+            let id = id_to_db(team_parameter.id.as_uuid());
+            let heap_use = uses
+                .iter()
+                .find(|u| u.parameter_id == id)
+                .map(to_use)
+                .transpose()?
+                .ok_or_else(|| StoreError::corrupt(USES_TABLE, &id, "a use row of no parameter asked for"))?;
+            team_parameter.weight = heap_use.weight;
+            team_parameter.archived_at = team_parameter.archived_at.or(heap_use.stopped_at);
+            parameters.push(team_parameter);
+        }
+    }
     parameters.sort_by_cached_key(|parameter| (parameter.name.to_key(), parameter.id));
     Ok(parameters)
 }
@@ -426,9 +591,14 @@ fn to_parameter(
         .map(|link| read.uuid(&link.tag_id).map(TagId::from_uuid))
         .collect::<Result<BTreeSet<_>, _>>()?;
     let weight = read.weight(row.weight)?;
+    let owner = match (row.heap_id.as_deref(), row.team_id.as_deref()) {
+        (Some(heap), None) => ParameterOwner::Heap(HeapId::from_uuid(read.uuid(heap)?)),
+        (None, Some(team)) => ParameterOwner::Team(TeamId::from_uuid(read.uuid(team)?)),
+        _ => return Err(read.corrupt("exactly one of heap_id and team_id must be set".to_owned())),
+    };
     Ok(Parameter {
         id: ParameterId::from_uuid(read.uuid(&row.id)?),
-        heap_id: HeapId::from_uuid(read.uuid(&row.heap_id)?),
+        owner,
         name: ParameterName::parse(&row.name).map_err(|e| read.corrupt(e.to_string()))?,
         weight,
         options: in_use,
@@ -437,5 +607,18 @@ fn to_parameter(
         created_at: read.timestamp(row.created_at)?,
         archived_at: read.optional_timestamp(row.archived_at)?,
         version: read.version(row.version)?,
+    })
+}
+
+fn to_use(row: &heap_parameters::Model) -> Result<HeapUse, StoreError> {
+    let read = RowReader {
+        table: USES_TABLE,
+        id: &row.heap_id,
+    };
+    Ok(HeapUse {
+        heap_id: HeapId::from_uuid(read.uuid(&row.heap_id)?),
+        parameter_id: ParameterId::from_uuid(read.uuid(&row.parameter_id)?),
+        weight: read.weight(row.weight)?,
+        stopped_at: read.optional_timestamp(row.stopped_at)?,
     })
 }

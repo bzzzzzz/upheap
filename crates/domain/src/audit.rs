@@ -159,5 +159,7 @@ coded_enum! {
         Merged = "merged",
         Email = "email",
         Url = "url",
+        /// Whether a heap uses a team parameter.
+        Used = "used",
     }
 }

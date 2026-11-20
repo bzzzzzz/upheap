@@ -251,7 +251,8 @@ mod tests {
                 "archived_at",
                 "merged",
                 "email",
-                "url"
+                "url",
+                "used"
             ]
         );
         pinned!(

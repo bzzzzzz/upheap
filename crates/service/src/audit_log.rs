@@ -234,15 +234,7 @@ impl Services {
         for tag in store::tags::list_tags_for_history(&self.db, heap_id).await? {
             names.insert(*tag.id.as_uuid(), tag.name.as_str());
         }
-        for parameter in store::parameters::list_parameters(&self.db, heap_id).await? {
-            names.insert(*parameter.id.as_uuid(), parameter.name.as_str());
-            for option in &parameter.options {
-                names.insert(*option.id.as_uuid(), option.label.as_str());
-            }
-            for option in &parameter.archived_options {
-                names.insert(*option.id.as_uuid(), option.label.as_str());
-            }
-        }
+        insert_parameter_names(names, store::parameters::list_parameters(&self.db, heap_id).await?);
         Ok(())
     }
 
@@ -284,6 +276,10 @@ impl Services {
         for tag in store::tags::list_team_tags(&self.db, team_id).await? {
             names.insert(*tag.id.as_uuid(), tag.name.as_str());
         }
+        insert_parameter_names(
+            &mut names,
+            store::parameters::list_team_parameters(&self.db, team_id).await?,
+        );
         self.insert_user_names(&mut names, &entries).await?;
         self.insert_invite_link_names(&mut names, team_id, &entries).await?;
         let runs = self.find_audit_runs(principal.user_id, &entries).await?;
@@ -807,6 +803,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::MadeBy => "Made by",
         AuditField::Email => "Email",
         AuditField::Url => "Pull request",
+        AuditField::Used => "Used in the heap",
         // Never shown as changes of their own (see `reading`): the phrase names the groups.
         AuditField::Groups => "Groups",
         AuditField::By => "By",
@@ -931,6 +928,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         | AuditField::DisplayName
         | AuditField::BlockedReason
         | AuditField::Weight
+        | AuditField::Used
         | AuditField::NeedWeight
         | AuditField::AgeWeight
         | AuditField::DeadlineWeight
@@ -1027,6 +1025,19 @@ fn describe_how(code: &str) -> Option<&'static str> {
         "already_met" => Some("Already at the goal"),
         "became" => Some("Defined when its note became"),
         _ => None,
+    }
+}
+
+/// Adds the names of `parameters` and their options, in use or archived.
+fn insert_parameter_names(names: &mut Names, parameters: Vec<domain::parameter::Parameter>) {
+    for parameter in parameters {
+        names.insert(*parameter.id.as_uuid(), parameter.name.as_str());
+        for option in &parameter.options {
+            names.insert(*option.id.as_uuid(), option.label.as_str());
+        }
+        for option in &parameter.archived_options {
+            names.insert(*option.id.as_uuid(), option.label.as_str());
+        }
     }
 }
 

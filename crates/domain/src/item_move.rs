@@ -82,7 +82,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, Weight};
+    use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, ParameterOwner, Weight};
     use crate::tag::{NewTag, TagName, TagOwner};
     use crate::{HeapId, Timestamp};
 
@@ -101,7 +101,7 @@ mod tests {
     fn parameter(n: u128, name: &str, options: &[(u128, &str)]) -> Parameter {
         Parameter::new(
             ParameterId::from_uuid(Uuid::from_u128(n)),
-            HeapId::from_uuid(Uuid::nil()),
+            ParameterOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             NewParameter {
                 name: ParameterName::parse(name).expect("valid"),
                 weight: Weight::DEFAULT,

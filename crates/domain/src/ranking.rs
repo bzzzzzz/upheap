@@ -1287,7 +1287,7 @@ mod tests {
         });
         crate::parameter::Parameter::new(
             ParameterId::from_uuid(Uuid::from_u128(50)),
-            crate::HeapId::from_uuid(Uuid::nil()),
+            crate::parameter::ParameterOwner::Heap(crate::HeapId::from_uuid(Uuid::nil())),
             NewParameter {
                 name: ParameterName::parse("Customer").expect("valid"),
                 weight: Weight::parse(weight.into()).expect("valid"),
