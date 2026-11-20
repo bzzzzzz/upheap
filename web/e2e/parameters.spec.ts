@@ -63,6 +63,35 @@ test("an admin manages a parameter, and its options rank the items", async ({ pa
   await expect(row(page, "Enterprise request")).toContainText("Customer: Free");
 });
 
+test("each option on Parameters and Ranking opens the list filtered by it", async ({ page }) => {
+  await addItem(page, "Free user's request");
+  await addItem(page, "Enterprise request");
+  await addParameter(page, "Customer", 50, ["Enterprise", "Free"]);
+  for (const [title, customer] of [
+    ["Free user's request", "Free"],
+    ["Enterprise request", "Enterprise"],
+  ] as const) {
+    await goTo(page, "Open");
+    await openItem(page, title);
+    await pick(page, "Customer", customer);
+    await expect(itemPane(page).getByRole("button", { name: `Customer: ${customer}`, exact: true })).toBeVisible();
+    await closeItem(page);
+  }
+
+  // An admin's option row has a list link next to the label it edits.
+  await goTo(page, "Parameters");
+  await page.getByRole("link", { name: "Items with Customer: Enterprise" }).click();
+  await expect(page).toHaveURL(/[?&]param=/);
+  await expect(row(page, "Enterprise request")).toBeVisible();
+  await expect(row(page, "Free user's request")).toHaveCount(0);
+
+  // On the Ranking card, the option labels are the links.
+  await goTo(page, "Ranking");
+  await page.getByRole("link", { name: "Items with Customer: Free" }).click();
+  await expect(row(page, "Free user's request")).toBeVisible();
+  await expect(row(page, "Enterprise request")).toHaveCount(0);
+});
+
 test("New parameter opens a form that Cancel closes, and Rename renames the parameter", async ({ page }) => {
   await goTo(page, "Parameters");
   const newParameter = page.getByRole("button", { name: "New parameter" });

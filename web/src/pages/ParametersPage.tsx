@@ -1,4 +1,5 @@
-import { ArrowDown, ArrowUp, Plus } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowDown, ArrowUp, List, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import type { HeapRef } from "../api/client";
@@ -425,6 +426,8 @@ function OptionsEditor({ parameter, heapRef, canEdit }: { parameter: Parameter; 
             canArchive={!changed && options.length > 1}
             isLast={index === options.length - 1}
             heapRef={heapRef}
+            // The link filters by the option's id, so it names the option as saved while its label is being edited.
+            linkLabel={`Items with ${parameter.name}: ${parameter.options.find((o) => o.id === option.id)?.label ?? option.label}`}
             onLabel={(label) => setOptions(options.map((o) => (o.id === option.id ? { ...o, label } : o)))}
             onMove={(by) => move(index, by)}
           />
@@ -481,6 +484,7 @@ function OptionRow({
   canArchive,
   isLast,
   heapRef,
+  linkLabel,
   onLabel,
   onMove,
 }: {
@@ -491,6 +495,8 @@ function OptionRow({
   canArchive: boolean;
   isLast: boolean;
   heapRef: HeapRef;
+  /** The accessible name and tooltip of the link to the list filtered by this option. */
+  linkLabel: string;
   onLabel: (label: string) => void;
   onMove: (by: -1 | 1) => void;
 }) {
@@ -503,6 +509,7 @@ function OptionRow({
   // Options come and go while the row stays mounted, so the pick falls back to the first other option.
   const replacement = others.some((other) => other.id === picked) ? picked : (others[0]?.id ?? "");
   const rank = <span className={rankClass}>{index + 1}</span>;
+  const toList = { to: "/teams/$team/heaps/$heap", params: heapRef, search: { param: option.id } } as const;
 
   if (confirming) {
     return (
@@ -544,9 +551,15 @@ function OptionRow({
   }
   if (!canEdit) {
     return (
-      <li className="flex items-center gap-2 py-1.5 max-sm:py-2.5">
-        {rank}
-        <span className="text-sm font-medium">{option.label}</span>
+      <li>
+        <Link
+          {...toList}
+          aria-label={linkLabel}
+          className="flex items-center gap-2 py-1.5 text-sm font-medium text-param-ink hover:underline max-sm:min-h-11 max-sm:py-2.5"
+        >
+          {rank}
+          {option.label}
+        </Link>
       </li>
     );
   }
@@ -560,6 +573,9 @@ function OptionRow({
         onChange={(e) => onLabel(e.target.value)}
         className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm font-medium text-ink hover:border-line focus:border-line-strong focus:bg-surface pointer-coarse:min-h-11"
       />
+      <Link {...toList} aria-label={linkLabel} title={linkLabel} className={compactButtonClass.icon}>
+        <List aria-hidden="true" className="size-4" />
+      </Link>
       <button
         type="button"
         disabled={index === 0}
