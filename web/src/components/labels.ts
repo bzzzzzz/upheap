@@ -52,11 +52,12 @@ export const GOAL_LABELS: Record<Goal, string> = {
 };
 
 /** The agent states the list filters by, and how the filter names them. */
-export const AGENT_STATES: readonly AgentState[] = ["running", "queued", "waits", "stuck", "none"];
+export const AGENT_STATES: readonly AgentState[] = ["running", "queued", "waits", "watching", "stuck", "none"];
 export const AGENT_STATE_LABELS: Record<AgentState, string> = {
   running: "Running",
   queued: "Queued",
   waits: "Waits for you",
+  watching: "Watching",
   stuck: "Stuck",
   none: "Not with an agent",
 };

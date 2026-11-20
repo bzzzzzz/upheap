@@ -8888,6 +8888,280 @@
           }
         ]
       }
+    },
+    "/api/v1/work/runs/{run}/watch": {
+      "post": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Says the run waits on its own pull request, such as for CI or a bot's review, and needn't stay live. The run ends as\n`watching`, with the address as its one link; it is not a failure, and the turn's failed runs are set back to 0. The\nturn stays open with a watch since now, and `turn_watching` is recorded. The item is out of the queue and not\nwaiting for the person until the loop fires the watch, and its agent state is `watching`. Refused with\n`watch_while_asking` when the item has an open question (an open review request too): it waits for the person then,\nand nothing is written.",
+        "operationId": "watch",
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "description": "The run's ID, from the claim.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_body`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such run, or not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`run_over`: the run has ended or lapsed, or its turn was taken back; or `watch_while_asking`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`field_empty`, `field_too_long` or `field_invalid` (`field` `url`): not an `http` or `https` address of a pull request, `/<owner>/<repo>/pull/<number>`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/work/watches": {
+      "get": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Every open watch on an open item in the given heaps, and the heaps made from their items, as `GET /work/queue`\nreads them: the turn, the item's key, title and heap, the pull request and when the watch began. What the loop\nchecks. Read-only. Any member who may edit items in every given heap may ask.",
+        "operationId": "list_watches",
+        "parameters": [
+          {
+            "name": "heaps",
+            "in": "query",
+            "description": "One to 20 heaps, each `team/heap` by slug, separated by commas. A heap named twice counts once.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "ops/backlog,ops/infra"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Watches"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query` or `invalid_header`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`: the caller can't edit items in a given heap",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A heap outside the caller's teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_fields` (`field` `heaps`): none, more than 20, or one that isn't `team/heap`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/work/watches/{turn}/fire": {
+      "post": {
+        "tags": [
+          "work"
+        ],
+        "summary": "Fires the watch of a turn: under the heap's lock, when the turn is open and has a watch, clears it and adds a\ncomment on the item as the caller, outside any run: `Back from watching <url>:`, a blank line, then `what`. No audit\nentry of its own: the comment's is recorded. The item is in the queue again at its ranked place. Any member who may\nedit items in the heap may fire.",
+        "operationId": "fire_watch",
+        "parameters": [
+          {
+            "name": "turn",
+            "in": "path",
+            "description": "The watching turn's ID, from `GET /work/watches`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FireWatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Fired"
+          },
+          "400": {
+            "description": "`invalid_body`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden`, or from inside a run `run_forbidden`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such turn, or not in the caller's teams",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`watch_over`: the turn has ended or has no watch, and nothing was written; or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`field_empty` or `field_too_long` (`field` `what`, or `body` when the whole comment is too long)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -9132,11 +9406,12 @@
       },
       "AgentState": {
         "type": "string",
-        "description": "Where an item stands with the agents, for the list's `agent` filter.\n\n- `running`: with an agent, and a run is live now.\n- `queued`: with an agent, and no run is live.\n- `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.\n- `stuck`: an open turn whose runs keep failing.\n- `none`: no open turn.",
+        "description": "Where an item stands with the agents, for the list's `agent` filter.\n\n- `running`: with an agent, and a run is live now.\n- `queued`: with an agent, and no run is live.\n- `waits`: an open turn that waits for the person: an open question, or a blocker that is gone.\n- `watching`: with an agent, whose run ended by watching a pull request; not in the queue until the watch fires.\n- `stuck`: an open turn whose runs keep failing.\n- `none`: no open turn.",
         "enum": [
           "running",
           "queued",
           "waits",
+          "watching",
           "stuck",
           "none"
         ]
@@ -9300,6 +9575,7 @@
           "turn_taken_back",
           "turn_reached",
           "turn_handed_back",
+          "turn_watching",
           "turn_retried",
           "turn_redone",
           "tag_created",
@@ -10426,6 +10702,20 @@
             ],
             "format": "int64",
             "description": "When the run's agent tool started, in UTC milliseconds. Set once: a later value for a run that has one is\nignored."
+          }
+        },
+        "additionalProperties": false
+      },
+      "FireWatchRequest": {
+        "type": "object",
+        "description": "What came while a pull request was watched.",
+        "required": [
+          "what"
+        ],
+        "properties": {
+          "what": {
+            "type": "string",
+            "description": "One markdown line per thing that came, which the server adds to the comment after `Back from watching <url>:`:\nchecked as a comment body is, and short enough for the whole comment to fit."
           }
         },
         "additionalProperties": false
@@ -14080,14 +14370,15 @@
       },
       "RunEnd": {
         "type": "string",
-        "description": "How a run ended.\n\n- `reached`: it said the turn's goal was reached, and the check passed.\n- `asked`: it asked one or more questions, so the person has the item.\n- `failed`: it ended without either, or nobody heard from it for 30 minutes.\n- `taken_back`: the person took the turn back while the run was live. Not a failure.\n- `handed_back`: it found nothing to do and handed the turn back. Not a failure.\n- `limited`: the run stopped because the account hit the agent tool's usage limit. Not a failure.",
+        "description": "How a run ended.\n\n- `reached`: it said the turn's goal was reached, and the check passed.\n- `asked`: it asked one or more questions, so the person has the item.\n- `failed`: it ended without either, or nobody heard from it for 30 minutes.\n- `taken_back`: the person took the turn back while the run was live. Not a failure.\n- `handed_back`: it found nothing to do and handed the turn back. Not a failure.\n- `limited`: the run stopped because the account hit the agent tool's usage limit. Not a failure.\n- `watching`: the run waits on its own pull request, which is its one link; the turn stays open with a watch. Not a\n  failure.",
         "enum": [
           "reached",
           "asked",
           "failed",
           "taken_back",
           "handed_back",
-          "limited"
+          "limited",
+          "watching"
         ]
       },
       "RunLink": {
@@ -15292,6 +15583,74 @@
               "null"
             ],
             "description": "Why the latest failed run failed; `null` when that is not known."
+          }
+        }
+      },
+      "Watch": {
+        "type": "object",
+        "description": "An open watch on an open item: the pull request its turn waits on.",
+        "required": [
+          "turn_id",
+          "key",
+          "title",
+          "heap",
+          "url",
+          "since"
+        ],
+        "properties": {
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap"
+          },
+          "key": {
+            "type": "string",
+            "description": "Five characters, unique within the heap.",
+            "example": "k3x9a"
+          },
+          "since": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds: when the watch began. Only what is newer brings the item back."
+          },
+          "title": {
+            "type": "string"
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The watching turn, which `POST /work/watches/{turn}/fire` names."
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "WatchRequest": {
+        "type": "object",
+        "description": "Ends a run by watching its own pull request.",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The pull request: `http` or `https`, then `<host>/<owner>/<repo>/pull/<number>`, with one trailing `/` allowed.",
+            "example": "https://github.com/acme/app/pull/12"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Watches": {
+        "type": "object",
+        "description": "The open watches of some heaps.",
+        "required": [
+          "watches"
+        ],
+        "properties": {
+          "watches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Watch"
+            }
           }
         }
       },

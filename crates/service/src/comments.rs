@@ -6,9 +6,11 @@
 
 use domain::audit::AuditAction;
 use domain::comment::{Comment, CommentBody, number_comment};
+use domain::heap::Heap;
+use domain::item::Item;
 use domain::permission::Permission;
-use domain::{CommentId, ItemId};
-use store::{StoreError, TransactionTrait};
+use domain::{CommentId, ItemId, Timestamp};
+use store::{ConnectionTrait, StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap_write, find_item_locking_in};
 use crate::audit::describe_new_comment;
@@ -38,28 +40,10 @@ impl Services {
         // Read again under the heap lock, with locking reads: on MySQL a plain read would see the snapshot fixed by
         // the first read above, not what committed while this waited for the lock.
         let item = find_item_locking_in(&txn, item_id, access.heap.id, found.version).await?;
-        let comments = store::comments::list_comments_locking(&txn, item.id).await?;
-        let number = number_comment(&comments)?;
-
         let now = self.now();
-        let comment = Comment::new(
-            CommentId::from_uuid(self.new_id(now)),
-            item.id,
-            number,
-            body,
-            principal.user_id,
-            now,
-        );
-        store::comments::insert_comment(&txn, &comment).await?;
-        let entry = self.item_audit_entry(
-            &access.heap,
-            principal,
-            AuditAction::CommentAdded,
-            &item,
-            describe_new_comment(&comment),
-            now,
-        );
-        store::audit::insert_audit_entry(&txn, &entry).await?;
+        let comment = self
+            .write_comment(&txn, &access.heap, principal, &item, body, now)
+            .await?;
         let children = ItemChildren::read_locking(&txn, item.id).await?;
         let view = build_item_view(&txn, &access.heap, &access.membership, item, children, now).await?;
         txn.commit().await.map_err(StoreError::from)?;
@@ -72,5 +56,39 @@ impl Services {
             "comment added"
         );
         Ok(view)
+    }
+
+    /// Numbers and inserts a comment on `item` by the caller, with its audit entry. The caller holds the lock of
+    /// `heap`, the item's.
+    pub(crate) async fn write_comment(
+        &self,
+        txn: &impl ConnectionTrait,
+        heap: &Heap,
+        principal: Principal,
+        item: &Item,
+        body: CommentBody,
+        now: Timestamp,
+    ) -> Result<Comment, ServiceError> {
+        let comments = store::comments::list_comments_locking(txn, item.id).await?;
+        let number = number_comment(&comments)?;
+        let comment = Comment::new(
+            CommentId::from_uuid(self.new_id(now)),
+            item.id,
+            number,
+            body,
+            principal.user_id,
+            now,
+        );
+        store::comments::insert_comment(txn, &comment).await?;
+        let entry = self.item_audit_entry(
+            heap,
+            principal,
+            AuditAction::CommentAdded,
+            item,
+            describe_new_comment(&comment),
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
+        Ok(comment)
     }
 }

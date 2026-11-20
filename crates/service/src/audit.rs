@@ -278,6 +278,11 @@ pub(crate) fn describe_hand_back(turn: &Turn, reason: &str) -> Value {
     json!({ AuditField::Goal.code(): turn.goal.code(), AuditField::Reason.code(): reason })
 }
 
+/// A turn a run left to watch the pull request `url`, for its `turn_watching` entry.
+pub(crate) fn describe_watch(turn: &Turn, url: &str) -> Value {
+    json!({ AuditField::Goal.code(): turn.goal.code(), AuditField::Url.code(): url })
+}
+
 /// A turn the person sent back for changes, for its `turn_redone` entry: the redone turn's goal, the stage the item
 /// moved from and to, and the person's line.
 pub(crate) fn describe_redone(turn: &Turn, before: Stage, after: Stage, line: &str) -> Value {

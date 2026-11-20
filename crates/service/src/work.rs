@@ -1,32 +1,34 @@
 //! The agent's queue and its runs: what to work on next, claiming it, and how a run ends.
 //!
 //! A run is claimed from the queue of some heaps, holds one item for as long as it is heard from, and ends by
-//! reaching the turn's goal, by asking a question, by failing, by handing the turn back, or by the person taking
-//! it back. A turn whose item is already at its goal is never claimed: the claim ends it as reached. There is no
+//! reaching the turn's goal, by asking a question, by failing, by handing the turn back, by watching a pull request
+//! (the turn stays open, with a watch the loop checks), or by the person taking it back. A turn whose item is already at its goal is never claimed: the claim ends it as reached. There is no
 //! lock to give up: a run nobody has heard from for [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and
 //! is written as failed the next time a claim, its own `finish` or a take back touches it (architecture.md, Runs).
 
 use std::collections::{HashMap, HashSet};
 
 use domain::audit::AuditAction;
+use domain::comment::CommentBody;
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPriority};
 use domain::item::{Item, Kind, NewItem, Stage, StateKind};
 use domain::list_view::ListView;
 use domain::permission::Permission;
+use domain::question::QuestionState;
 use domain::run::{
-    LAPSE_FAILURE, MAX_QUEUE_HEAPS, Run, RunEnd, RunError, RunForbidden, RunLink, RunReached, RunResult, STARTED_BOOST,
-    default_failure, reached_check, reported_goal,
+    LAPSE_FAILURE, MAX_QUEUE_HEAPS, PullRequestLink, Run, RunEnd, RunError, RunForbidden, RunLink, RunReached,
+    RunResult, STARTED_BOOST, default_failure, reached_check, reported_goal,
 };
 use domain::step::StepState;
 use domain::team::Team;
-use domain::turn::{TakeBackWhy, Turn};
+use domain::turn::{TakeBackWhy, Turn, Watch};
 use domain::validation::Field;
 use domain::{HeapId, ItemId, RunId, Timestamp, TurnId, ValidationError};
 use store::{ConnectionTrait, StoreError, TransactionTrait};
 
-use crate::access::{authorize_heap, ensure_active, find_item_locking_in};
-use crate::audit::{GoalMetHow, describe_hand_back, describe_new_turn, describe_reached};
+use crate::access::{authorize_heap, authorize_heap_write, ensure_active, find_item_locking_in};
+use crate::audit::{GoalMetHow, describe_hand_back, describe_new_turn, describe_reached, describe_watch};
 use crate::items::{OpenRanking, rank_open_items};
 use crate::waiting::list_gone_blockers;
 use crate::{Principal, ServiceError, Services};
@@ -74,6 +76,16 @@ pub struct WaitingInHeap {
     pub team: Team,
     /// At least 1.
     pub count: u32,
+}
+
+/// An open watch: the turn that has it, and the item, heap and team the turn is in.
+#[derive(Debug)]
+pub struct WatchView {
+    pub turn: Turn,
+    pub watch: Watch,
+    pub item: Item,
+    pub heap: Heap,
+    pub team: Team,
 }
 
 /// A run with the item it holds.
@@ -434,6 +446,137 @@ impl Services {
             "turn handed back"
         );
         Ok(view)
+    }
+
+    /// Says the run `run_id` waits on its own pull request `url`: the run ends as watching, with the link as its one
+    /// link, and the turn stays open with a watch since now, so the item leaves the queue until the watch fires. Not a
+    /// failure: the turn's failed runs are set back to 0. No question or run of the turn is touched.
+    ///
+    /// Fails with [`RunError::Over`] when the run has ended or lapsed or its turn was taken back, and with
+    /// [`RunError::WatchWhileAsking`] when the item has an open question, which makes it the person's.
+    pub async fn watch(
+        &self,
+        principal: Principal,
+        run_id: RunId,
+        url: PullRequestLink,
+    ) -> Result<RunView, ServiceError> {
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (run, heap) = self.lock_run(&txn, principal, run_id).await?;
+        let now = self.now();
+        let turn = self.ensure_live(&txn, &run, now).await?;
+        let asking = store::questions::list_questions_locking(&txn, run.item_id)
+            .await?
+            .iter()
+            .any(|question| question.state() == QuestionState::Open);
+        if asking {
+            return Err(RunError::WatchWhileAsking.into());
+        }
+
+        let ended_run = run.ended_as(RunEnd::Watching, now, None, vec![url.to_run_link()], None);
+        store::runs::end_run(&txn, &ended_run).await?;
+        store::turns::set_failed_runs(&txn, turn.id, 0).await?;
+        let watch = Watch { url, since: now };
+        store::turns::set_turn_watch(&txn, turn.id, Some(&watch)).await?;
+        let in_run = Principal {
+            run: Some(run.id),
+            ..principal
+        };
+        let entry = self.item_audit_entry_for(
+            &heap,
+            in_run,
+            AuditAction::TurnWatching,
+            run.item_id,
+            describe_watch(&turn, watch.url.as_str()),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        let view = self.run_view(&txn, ended_run).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(
+            heap_id = %heap.id,
+            item_id = %run.item_id,
+            run_id = %run_id,
+            turn_id = %turn.id,
+            user_id = %principal.user_id,
+            "turn watching a pull request"
+        );
+        Ok(view)
+    }
+
+    /// Every open watch on an open item of `heaps` (each `team/heap` by slug, as for the queue, with the heaps made
+    /// from their items). Writes nothing. Fails as [`queue_for_agent`](Self::queue_for_agent) does.
+    pub async fn list_watches(&self, principal: Principal, heaps: &[String]) -> Result<Vec<WatchView>, ServiceError> {
+        let heaps = self.resolve_queue_heaps(principal, heaps).await?;
+        let heap_ids: Vec<HeapId> = heaps.iter().map(|queue| queue.heap.id).collect();
+        let watching: Vec<(HeapId, Turn, Watch)> = store::turns::list_open_turns_in_heaps(&self.db, &heap_ids, false)
+            .await?
+            .into_iter()
+            .filter_map(|(heap_id, turn)| turn.watch.clone().map(|watch| (heap_id, turn, watch)))
+            .collect();
+        let item_ids: Vec<ItemId> = watching.iter().map(|(_, turn, _)| turn.item_id).collect();
+        let items: HashMap<ItemId, Item> = store::items::list_items_by_ids(&self.db, &item_ids)
+            .await?
+            .into_iter()
+            .map(|item| (item.id, item))
+            .collect();
+        Ok(watching
+            .into_iter()
+            .filter_map(|(heap_id, turn, watch)| {
+                let item = items.get(&turn.item_id).filter(|item| !item.is_closed())?;
+                let queue = heaps.iter().find(|queue| queue.heap.id == heap_id)?;
+                Some(WatchView {
+                    watch,
+                    item: item.clone(),
+                    heap: queue.heap.clone(),
+                    team: queue.team.clone(),
+                    turn,
+                })
+            })
+            .collect())
+    }
+
+    /// Fires the watch of the turn `turn_id`: clears it and adds a comment on the item, by the caller, saying what
+    /// came, so the item is in the queue again. `what` is the lines the loop found.
+    ///
+    /// Fails with [`ServiceError::NotFound`] for a turn that doesn't exist or isn't in a heap the caller is in, and
+    /// with [`ServiceError::WatchOver`] when the turn has ended or has no watch, writing nothing.
+    pub async fn fire_watch(&self, principal: Principal, turn_id: TurnId, what: &str) -> Result<(), ServiceError> {
+        let what = CommentBody::parse_as(what, Field::What)?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let turn = store::turns::find_turn(&txn, turn_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        let found = store::items::find_item(&txn, turn.item_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        let access = authorize_heap_write(&txn, principal, found.heap_id, Permission::EditItems).await?;
+        let item = find_item_locking_in(&txn, found.id, access.heap.id, found.version).await?;
+        let watch = store::turns::find_open_turn_locking(&txn, item.id)
+            .await?
+            .filter(|open| open.id == turn_id)
+            .and_then(|open| open.watch)
+            .ok_or(ServiceError::WatchOver)?;
+
+        store::turns::set_turn_watch(&txn, turn_id, None).await?;
+        let now = self.now();
+        let body = CommentBody::parse(&format!(
+            "Back from watching {}:\n\n{}",
+            watch.url.as_str(),
+            what.as_str()
+        ))?;
+        self.write_comment(&txn, &access.heap, principal, &item, body, now)
+            .await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(
+            heap_id = %access.heap.id,
+            item_id = %item.id,
+            turn_id = %turn_id,
+            user_id = %principal.user_id,
+            "watch fired"
+        );
+        Ok(())
     }
 
     /// Ends the run `run_id` if it hasn't ended, and records what it cost. What a loop calls when the agent tool
@@ -836,10 +979,14 @@ impl Services {
             })
             .collect();
 
-        // Items an agent could take: an open turn that isn't stuck, no open question and no live run.
+        // Items an agent could take: an open turn that isn't stuck or watching, no open question and no live run.
         let mut by_heap: HashMap<HeapId, HashMap<ItemId, Turn>> = HashMap::new();
         for (heap_id, turn) in turns {
-            if !turn.is_stuck() && !with_question.contains(&turn.item_id) && !live.contains(&turn.item_id) {
+            if !turn.is_stuck()
+                && turn.watch.is_none()
+                && !with_question.contains(&turn.item_id)
+                && !live.contains(&turn.item_id)
+            {
                 by_heap.entry(heap_id).or_default().insert(turn.item_id, turn);
             }
         }

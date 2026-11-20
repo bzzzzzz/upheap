@@ -51,6 +51,7 @@ const RUN_ALLOWED_WRITES: &[(Method, &str)] = &[
     (Method::POST, "/work/runs/{run}/heartbeat"),
     (Method::POST, "/work/runs/{run}/reached"),
     (Method::POST, "/work/runs/{run}/hand-back"),
+    (Method::POST, "/work/runs/{run}/watch"),
     (Method::POST, "/work/runs/{run}/finish"),
 ];
 

@@ -84,6 +84,9 @@ pub enum ServiceError {
     /// A run that can't take the write, or a write a run is refused.
     #[error(transparent)]
     Run(#[from] RunError),
+    /// A watch fired after its turn ended or its watch was cleared.
+    #[error("This watch is over.")]
+    WatchOver,
     /// `work reached` on an item that is not at the turn's goal.
     #[error(transparent)]
     NotReached(#[from] NotReached),
