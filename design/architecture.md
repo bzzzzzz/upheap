@@ -265,11 +265,20 @@ The tables and columns are in the migrations. These are the conventions they fol
   checks it on every read. Both kinds share one table, so `item_tags`, parameter links, saved views and tag orders
   name either by ID with one foreign key, and a team tag needs no copy per heap: a rename is one row written. A
   heap's tags are its own and its team's, read together.
+- **A parameter is owned by a heap or by a team:** exactly one of `parameters.heap_id` and `parameters.team_id` is
+  set, and the store checks it on every read. A heap's use of a team parameter is a row in `heap_parameters` with the
+  heap's weight, rather than a weight on the parameter, which would be one number for every heap; stopping sets
+  `stopped_at` and using again clears it, so the weight survives. The store reads a heap's parameters as its own plus
+  the team parameters it has a use row for, with that weight, and archived when the team archived the parameter or
+  the heap stopped using it. Ranking, item values, filters, saved views, moves and the audit's names read that, so
+  they see a used team parameter as the heap's own, and one a heap doesn't use isn't there.
 - **Case-insensitive uniqueness** (tag names per owner) is a lowercased key column with a unique index rather than a
   collation, because MySQL compares case-insensitively by default and SQLite doesn't. Where an index can't express
   the rule, as for parameter names, which must be unique only among parameters in use, the service checks under the
   heap lock. So it is for a name across the two kinds of tag: no heap tag in use may share a name with a team tag of
   its team, which the tag writes check under the locks of [Cycle detection and locking](#cycle-detection-and-locking).
+  The same holds for a parameter's name across a team's parameters and the parameters of its heaps, which the
+  parameter writes check under those locks.
 - **A merged heap tag** keeps its row: `tags.merged_into` names the team tag it was merged into (`NULL` for a tag in
   use), and its `name_key` becomes a space and its own ID, which frees the name for a new heap tag, keeps the key
   unique, and can't match a name looked up, since names are trimmed. Its name and description stay, so the history of
@@ -279,7 +288,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   for it.
 - **The heap's ranking policy** is its row: the need, age, deadline, value and tags weights on `heaps`, plus each
   parameter's weight, and the heap's tag order. The weights and the order change together through one endpoint, in
-  one transaction under the heap lock. The tag order is a JSON list of tag IDs on `heaps.tag_order`, the highest
+  one transaction under the heap lock. The policy includes the weights of the team parameters the heap uses, which
+  are on its use rows. The tag order is a JSON list of tag IDs on `heaps.tag_order`, the highest
   first (`NULL` when empty), rather than a rank column on `tags` or a table of its own: it belongs to the heap, it is
   saved under the heap's version with the weights, and a tag shared by several heaps (a team tag) can then sit at its
   own place in each heap's order without a schema change. A tag the list doesn't name is unranked.
@@ -483,7 +493,10 @@ a fixed time.
    team, and their IDs are UUIDv7, rising with time, so the lowest stays the lowest while the servers' clocks agree to
    within the age of the team's first heap; every team tag write locks it exclusively), and two team tag writes on
    that heap too. In a team with no heaps a team tag write locks the team row instead, which making the first heap
-   waits for (it checks the row's key), and there is no item write to deadlock with. So no two tags take one name. The lock order stays ascending. A merge does a
+   waits for (it checks the row's key), and there is no item write to deadlock with. So no two tags take one name.
+   A team parameter write takes the same locks as a team tag write, since archiving a team parameter or one of its
+   options reads and writes items in every heap of the team, and a heap parameter made or renamed takes the shared
+   lock on the team's lowest heap first, so no heap parameter and team parameter take one name. The lock order stays ascending. A merge does a
    handful of queries per item it reaches while it holds every heap lock of the team, so item writes in the team wait
    for it; that is fine for merges of up to a few hundred items, which is the size assumption, and there is no limit.
    The plain reads of a tag write come after its locks, so on MySQL their snapshot sees what committed while it
@@ -527,7 +540,8 @@ a fixed time.
 3. Paths name things by handle: `{team}` and `{heap}` are slugs, `{item}` a key, `{username}` a username. Tags,
    parameters, options and views keep their IDs, checked against the heap in the path (a team tag's in any heap of
    its team). A team's own tags are listed, made and edited under `/teams/{team}/tags`, and a heap's tags list holds
-   both kinds apart. A handle that's malformed or names nothing the caller can see is `404`. Responses carry both
+   both kinds apart. A team's parameters are under `/teams/{team}/parameters`; a heap's parameters list holds the
+   team parameters it uses among its own, marked by `kind`, and the team's others apart in `team_available`. A handle that's malformed or names nothing the caller can see is `404`. Responses carry both
    the `id` and the handle; request bodies refer to other things by ID, since clients have the objects in hand.
    Creating a team or heap takes an optional slug, derived from the name when left out.
 4. Updates are `PATCH` with partial bodies and the expected `version` in `If-Match`. Endpoints that say what
@@ -548,7 +562,7 @@ a fixed time.
 9. Archiving an option switches the open items that have it to the replacement and bumps their versions, so an edit
    made from the old value fails with a version conflict instead of undoing the switch. A closed item keeps the
    archived option; when it's reopened, its values are brought up to date the same way, in the reopening's audit
-   entry.
+   entry. Archiving an option of a team parameter does this in every heap of the team.
 10. A display name change is audited once in each of the user's teams, since the audit log is per team and that is
     where teammates see the name. A user in no team has nowhere to record it.
 11. **A write that merges heap tags into a team tag** (making, renaming or promoting a team tag into a name heap
@@ -765,15 +779,17 @@ a fixed time.
 
 ### Resource scoping
 
-1. Every resource resolves to exactly one team: heap → team; item, heap tag, parameter, option and view → heap →
-   team; a team tag → team. A team tag is the one resource a team owns beside its heaps and members
-   ([decisions.md](decisions.md#44-team-tags-belong-to-the-team-one-row-used-by-every-heap)).
+1. Every resource resolves to exactly one team: heap → team; item, heap tag, heap parameter, option and view →
+   heap → team; a team tag or team parameter → team. A team tag is the first resource a team owns beside its heaps
+   and members ([decisions.md](decisions.md#44-team-tags-belong-to-the-team-one-row-used-by-every-heap)), and a team
+   parameter the second ([decisions.md](decisions.md#45-team-parameters-belong-to-the-team-each-heap-opts-in-and-keeps-its-own-weight)).
    The service resolves the owning team first, then loads the caller's membership in it.
 2. A caller who isn't a member gets `404`, the same as for a resource that doesn't exist, so an outsider can't probe
    for IDs. A member without the permission gets `403`.
 3. Every repository query that loads heap-level data filters by the resolved heap, so an ID from another heap can
    never leak in; one sent in a request body is refused with `422`. A tag ID is checked against the heap's tags, its
-   own and its team's, so a team tag's ID passes in every heap of its team and in no other.
+   own and its team's, so a team tag's ID passes in every heap of its team and in no other. A team parameter's ID passes in a heap that
+   uses it, and for a write on the parameter itself (not its weight there) it is `404` under a heap's path.
 4. Finding users to add (`GET /users`) is for admins of a shared team (everyone is admin of their personal team,
    which doesn't count) and is built so it can't list addresses: a name matches by word prefix, an email only when
    typed in full, and a match shows the email only when the email matched.
@@ -943,7 +959,7 @@ section is how it maps onto this API.
 1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
    task's steps (add, tick, drop, edit), an item's questions (ask, request, review, propose-done) and comments (add,
    list), tags (list, add, edit, promote; a heap's, or the team's with `--team`), parameters (list, add, edit,
-   archive, and their options), heaps (list, pick a default) and signing in. Teams, members, heap settings and
+   archive, and their options; a team's with `--team`, and a heap's `use` and `stop-using` of one), heaps (list, pick a default) and signing in. Teams, members, heap settings and
    saved-view editing stay in the web app. `parameter edit` sends one write per kind of change (name and weight,
    tags, option order), each at the version the last returned, because the API has no single endpoint for them; a
    failure midway leaves the earlier ones saved and the CLI says which.

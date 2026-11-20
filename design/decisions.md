@@ -604,3 +604,25 @@ Refusing a team tag whose name heap tags have, which leaves a team that already 
 and its team's. A team tag write locks every heap of the team, and a merge writes items, parameter links, saved
 views and tag orders in all of them in one transaction. A team tag's history is the team's, not a heap's. A merge
 can't be undone: there is no demoting a team tag back to heap tags.
+
+## 45. Team parameters belong to the team; each heap opts in and keeps its own weight
+
+**Context.** A team that ranks every project by the same thing, such as a customer tier, defined that parameter again
+in each heap, and the copies drifted apart in name and options. Team tags (44) had already given a team a resource of
+its own. A parameter also carries a weight, which is part of one heap's ranking policy.
+
+**Decision.** A parameter is owned by a heap or by its team. A team parameter is one row in `parameters` with
+`team_id` set, whose name, options and their order are edited once for every heap. A heap chooses which of its team's
+parameters to use, and its use of one, with the heap's weight for it, is a row of its own in `heap_parameters`. A heap
+that doesn't use a team parameter doesn't show it: no values, filters, sorts or ranking. A heap parameter and a team
+parameter of the team never share a name.
+
+**Instead of.** A copy of the parameter in each heap kept in step, which multiplies every edit and still lets the
+copies drift. One weight on the team parameter, which takes from each heap its own say in what counts most. Every heap
+getting every team parameter, which puts a parameter in the ranking and on the items of heaps that never asked for it.
+
+**Consequences.** The weight can't live on the parameter, so the store reads a heap's parameters as its own plus the
+team parameters it uses, with the heap's weight in place, and everything that reads a heap's parameters (ranking,
+filters, saved views, moves) is unchanged. A heap stopping its use is refused while its open items hold a value, and a
+team parameter or one of its options is archived across every heap of the team, so a team parameter write locks every
+heap of the team as a team tag write does.
