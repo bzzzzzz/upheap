@@ -6652,7 +6652,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_not_in_heap` or `option_not_in_heap` */
+            /** @description `tag_not_in_team` (`field` `tag`) or `option_not_in_heap` (`param`) */
             422: {
                 headers: {
                     [name: string]: unknown;

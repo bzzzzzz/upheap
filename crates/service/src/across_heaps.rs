@@ -9,7 +9,7 @@ use domain::list_view::ListView;
 use domain::team::Team;
 use domain::{HeapId, ParameterId, TeamId, Timestamp};
 
-use crate::items::{RankedEntry, RankedList, ensure_tags_in_heap};
+use crate::items::{RankedEntry, RankedList};
 use crate::{Principal, ServiceError, Services};
 
 /// Most rows [`Services::list_ranked_across_heaps`] returns, in all groups together. A person has tens to a few
@@ -77,7 +77,7 @@ impl Services {
     /// `requested_as_of` is honoured as [`list_ranked`](Self::list_ranked) honours it. `view` must sort by priority:
     /// the list across heaps has no heap to resolve a sort by parameter against. It filters by tags and options
     /// only with a `team`, which the caller passes; they must be the team's tags and the options of its parameters
-    /// ([`ServiceError::TagNotInHeap`], [`ServiceError::OptionNotInHeap`]). Options of archived team parameters
+    /// ([`ServiceError::TagNotInTeam`], [`ServiceError::OptionNotInHeap`]). Options of archived team parameters
     /// don't filter. A heap that doesn't use every other parameter the options name is left out unranked, as none of
     /// its items can hold a value for it. Filtering picks rows after each heap is ranked, so the merged order is the
     /// unfiltered one with the other rows taken out. Ranking costs one pass over a heap's non-closed items, so heaps
@@ -217,7 +217,14 @@ impl Services {
         };
         if !view.filter.tags.is_empty() {
             let team_tags = store::tags::list_team_tags(&self.db, team).await?;
-            ensure_tags_in_heap(&team_tags, &view.filter.tags)?;
+            if let Some(&tag_id) = view
+                .filter
+                .tags
+                .iter()
+                .find(|id| !team_tags.iter().any(|tag| tag.id == **id))
+            {
+                return Err(ServiceError::TagNotInTeam { tag_id });
+            }
         }
         if view.filter.options.is_empty() {
             return Ok((view.clone(), None));
