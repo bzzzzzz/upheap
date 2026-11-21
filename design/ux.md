@@ -1019,12 +1019,12 @@ exists. Sign in with its password below." (Sign in is selected, "Email or userna
 Password), "Acme SSO didn't share a verified email address, which Upheap needs.", "Acme SSO didn't sign you in. Try
 again.", "That sign-in took too long. Try again." or "Acme SSO can't be reached right now. Try again in a minute." The
 line goes when a form is submitted. When the server signs in through its provider only, the card holds the
-button and the line above it and nothing else: no "or" rule, no switch, no forms, no Forgot your password?; and a
+button and the line above it (and the operator's contact line under a taken email, below) and nothing else: no "or" rule, no switch, no forms, no Forgot your password?; and a
 taken email says "An account with that email already exists and can't sign in through Acme SSO. Ask whoever runs this
 server." The invite page's signed-out state is the same, its button still returning to the invite.
 
 Wherever a page says to ask whoever runs the server (the forgotten-password line, the provider refusal, the reset page,
-a team with no admin), the operator's contact line, when set, shows under it in the same style.
+a team with no admin), the operator's contact line, when set, shows under it as its own line in the muted text style.
 
 A first sign-in through the provider continues at `/login/provider`, in the same card: **Pick a username**, "Signed in
 through Acme SSO as:" with the name and email as plain text, the Username input (the same hint, focused, empty),

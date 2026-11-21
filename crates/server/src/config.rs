@@ -598,13 +598,13 @@ mod tests {
 
     #[test]
     fn reads_the_operator_contact_trimmed_and_none_when_blank() -> anyhow::Result<()> {
-        assert!(with_groups(&[])?.operator_contact.is_none());
+        assert!(config(&BASE)?.operator_contact.is_none());
         assert!(
-            with_groups(&[("UPHEAP_OPERATOR_CONTACT", "  ")])?
+            config(&[BASE[0], BASE[1], ("UPHEAP_OPERATOR_CONTACT", "  ")])?
                 .operator_contact
                 .is_none()
         );
-        let set = with_groups(&[("UPHEAP_OPERATOR_CONTACT", " Ask Sam in #it ")])?;
+        let set = config(&[BASE[0], BASE[1], ("UPHEAP_OPERATOR_CONTACT", " Ask Sam in #it ")])?;
         assert_eq!(set.operator_contact.as_deref(), Some("Ask Sam in #it"));
         Ok(())
     }

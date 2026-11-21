@@ -67,15 +67,16 @@ pub struct PasswordResetAccountDto {
     pub username: String,
 }
 
-/// What the sign-in and reset pages need to know from the server's settings.
+/// Whether this server mails password reset links, and who to ask for one (or for other help only the operator can
+/// give) otherwise.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = PasswordResetOptions)]
 pub struct PasswordResetOptionsDto {
     /// `true` when the server has mail set up, so a signed-out user can ask for a link by email.
     pub by_mail: bool,
     /// Who to ask for a reset link, or other help only whoever runs the server can give, as the operator wrote it.
-    /// Absent when unset.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// `null` when unset.
+    #[serde(default)]
     pub operator_contact: Option<String>,
 }
 
