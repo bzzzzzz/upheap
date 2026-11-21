@@ -645,8 +645,8 @@ what it reaches first.
 items first and leaves the new one with no values. Refusing, which leaves a team that already drifted no way to one
 parameter.
 
-**Consequences.** It can't be undone: there is no demoting a team parameter to heap parameters. The merge doesn't
-carry tag links over yet, so a parameter linked to tags is refused and the admin unlinks them first. Rankings can
+**Consequences.** It can't be undone: there is no demoting a team parameter to heap parameters. Tag links carry
+over as each heap's own links, so suggestions stay where they were. Rankings can
 shift in a heap whose options were in another order, since the options now follow the team parameter's order.
 
 ## 47. The operator is a role on an account, granted only by a server command

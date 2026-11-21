@@ -6790,7 +6790,7 @@
         "tags": [
           "parameters"
         ],
-        "summary": "Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins\nonly. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a\n`parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team\nparameter at the weight it had, and each item's value moves to the option with the same label; for an open item\nwhose option the team parameter has archived, that is the option in use it was replaced by (`switched`). A\nparameter linked to tags can't be merged: `parameter_merge_linked` names them. Repeating the write on a team\nparameter the heap uses succeeds and changes nothing.",
+        "summary": "Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins\nonly. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a\n`parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team\nparameter at the weight it had, and each item's value moves to the option with the same label; for an open item\nwhose option the team parameter has archived, that is the option in use it was replaced by (`switched`). The tags\na parameter is linked to become its heap's links to the team parameter, for that heap only (`linked_tags`).\nRepeating the write on a team parameter the heap uses succeeds and changes nothing.",
         "operationId": "make_team_parameter",
         "parameters": [
           {
@@ -6864,7 +6864,7 @@
             }
           },
           "409": {
-            "description": "`parameter_merge_unconfirmed`, `parameter_merge_linked`, `parameter_archived` or `heap_archived`",
+            "description": "`parameter_merge_unconfirmed`, `parameter_archived` or `heap_archived`",
             "content": {
               "application/json": {
                 "schema": {
@@ -14797,6 +14797,7 @@
           "items",
           "added_options",
           "switched",
+          "linked_tags",
           "starting"
         ],
         "properties": {
@@ -14818,6 +14819,13 @@
             "format": "int32",
             "description": "Items with a value for the parameter, open or closed.",
             "minimum": 0
+          },
+          "linked_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The names of the tags linked to it, by name: each becomes its heap's link to the team parameter, for that heap only."
           },
           "parameter_id": {
             "type": "string",

@@ -233,8 +233,8 @@ When one of its options matches an option the team parameter has archived, the r
 open items get the option in use that Silver was replaced by, while closed ones keep Silver. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
 whose options were in another order." and the quiet line "The items keep their history. This can't be undone."; the
 buttons are Cancel and Make team parameter ("Making…"). Success closes it with a toast, "“Customer tier” is a team
-parameter now: 3 items in 2 heaps keep their values.". A parameter linked to tags is refused with no dialog: the server's
-message ("Unlink the tags first: …") shows under the card's heading, as a failed archive does.
+parameter now: 3 items in 2 heaps keep their values.". A row says "links billing, urgent" for the tags whose links its heap
+keeps.
 
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
 parameter" to a screen reader), its weight read as "Weight {n}", its options read-only, the team's tags that suggest

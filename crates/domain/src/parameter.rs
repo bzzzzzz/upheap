@@ -248,7 +248,8 @@ impl Parameter {
     }
 
     /// The heap parameter as its team's: the same parameter, options and history, with no weight of its own, since each
-    /// heap that uses a team parameter weights it for itself. Fails if it is archived or already a team's.
+    /// heap that uses a team parameter weights it for itself. It has no tag links of its own: its links continue as
+    /// its heap's own links, which the merge writes. Fails if it is archived or already a team's.
     pub fn into_team(&self, team_id: TeamId) -> Result<Self, ParameterError> {
         self.ensure_in_use()?;
         if self.is_team_owned() {
@@ -257,6 +258,7 @@ impl Parameter {
         Ok(Self {
             owner: ParameterOwner::Team(team_id),
             weight: Weight::OFF,
+            tags: BTreeSet::new(),
             ..self.clone()
         })
     }

@@ -95,6 +95,8 @@ pub struct ParameterMergeReachEntryDto {
     /// Its options in use that match an option the team parameter has archived: open items on them get the option in
     /// use that one was replaced by. Empty for the one the merge starts from.
     pub switched: Vec<ParameterMergeSwitchDto>,
+    /// The names of the tags linked to it, by name: each becomes its heap's link to the team parameter, for that heap only.
+    pub linked_tags: Vec<String>,
     /// Whether it is the one the merge starts from.
     pub starting: bool,
 }
