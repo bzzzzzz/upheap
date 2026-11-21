@@ -33,6 +33,9 @@ pub enum ValidationError {
     /// A weights save or preview names a parameter more than once.
     #[error("each parameter may be listed once")]
     DuplicateParameter,
+    /// A change of a heap's tag links names a tag to link and to unlink.
+    #[error("a tag may not be both linked and unlinked")]
+    TagLinkedAndUnlinked,
     /// A weights save names a tag more than once in the tag order.
     #[error("each tag may be listed once in the tag order")]
     DuplicateTag,

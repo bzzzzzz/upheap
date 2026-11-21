@@ -7,6 +7,7 @@ import {
   useCanGoBack,
   useMatch,
   useParams,
+  useNavigate,
   useRouter,
   useRouterState,
   useSearch,
@@ -39,6 +40,8 @@ import type { Me } from "../api/schema";
 import { useHeap, useSetHeapArchived } from "../api/queries/heaps";
 import { useMe, useDecisions, useWaiting } from "../api/queries/me";
 import { AddItemDialog } from "../components/AddItem";
+import { Kbd, WIDE_HINT } from "../components/Kbd";
+import { KeysHelp } from "../components/KeysHelp";
 import { ConnectionBanner } from "../components/ConnectionBanner";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
 import { HeapSwitcher, openItemCount } from "../components/HeapSwitcher";
@@ -72,6 +75,42 @@ export function AppLayout() {
     if (heapId !== undefined) recordRecentHeap(heapId);
   }, [heapId]);
 
+  // The keys that work anywhere in the app (ux.md, Keyboard): `?` shows them all, `g` then `o` or `c` goes to the heap's
+  // Open or Closed. `g` waits for the next key, which either completes it or cancels it, and is not otherwise handled.
+  const navigate = useNavigate();
+  const [helpOpen, setHelpOpen] = useState(false);
+  const goingTo = useRef(false);
+  const shellTeam = shellHeap?.team;
+  const shellHeapSlug = shellHeap?.heap;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      // Any key after `g` ends the wait, also one handled elsewhere or typed in a field.
+      const second = goingTo.current;
+      goingTo.current = false;
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (event.key === "?") {
+        event.preventDefault();
+        setHelpOpen(true);
+      } else if (
+        second &&
+        shellTeam &&
+        shellHeapSlug &&
+        (event.key === "o" || event.key === "c") &&
+        !document.querySelector("[role=dialog]")
+      ) {
+        event.preventDefault();
+        const views = heapViews({ team: shellTeam, heap: shellHeapSlug }, false);
+        void navigate(event.key === "o" ? { to: views.open.to, params: views.open.params } : views.closed);
+      } else if (event.key === "g" && shellTeam) {
+        goingTo.current = true;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [shellTeam, shellHeapSlug, navigate]);
+
   return (
     // On a wide screen the shell is one centred block, at most the sidebar plus the content column plus the item
     // pane wide (15rem + 48rem + 26rem + padding), whether or not an item is open, so opening or closing one never
@@ -98,6 +137,7 @@ export function AppLayout() {
           </div>
         </div>
       </ListSearchProvider>
+      <KeysHelp isOpen={helpOpen} onOpenChange={setHelpOpen} />
     </ToastProvider>
   );
 }
@@ -174,12 +214,14 @@ function NavLink({
   label,
   current,
   count,
+  hint,
   ...link
-}: LinkProps & { icon: LucideIcon; label: ReactNode; current?: boolean; count?: number }) {
+}: LinkProps & { icon: LucideIcon; label: ReactNode; current?: boolean; count?: number; hint?: string }) {
   return (
     <Link {...link} {...(current && { "data-status": "active", "aria-current": "page" })} className={navItemClass}>
       <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">{label}</span>
+      {hint && <Kbd className={`${WIDE_HINT} ${count === undefined ? "ml-auto" : ""}`}>{hint}</Kbd>}
       {count !== undefined && (
         <span aria-hidden="true" className="ml-auto hidden font-normal text-muted tabular-nums lg:inline">
           {count}
@@ -338,8 +380,8 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
 
       {views && (
         <nav aria-label="Heap views" className="flex flex-col gap-1 lg:gap-0.5">
-          <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} />
-          <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
+          <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} hint="G O" />
+          <NavLink {...views.closed} icon={CircleCheck} label="Closed" hint="G C" />
           <NavLink {...views.activity} icon={Activity} label="Activity" />
           <NavLink {...views.data} icon={ChartColumn} label="Data" />
           <NavLink {...views.settings} icon={Settings} label="Settings" />

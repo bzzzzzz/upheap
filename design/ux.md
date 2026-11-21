@@ -23,8 +23,8 @@ The app is one React app whose layout changes with the width: **phone** under 64
 3. **At your fingertips.** Whatever is used several times a session is visible without opening anything: the ranked
    list, Add, state changes, search. On a phone it sits within thumb reach at the bottom.
 4. **One step ahead.** Whatever the user is likely to do next is one click away. Everything they can do with what's
-   on screen is at most two obvious clicks away (open, then act). Keyboard shortcuts come later, on top of this,
-   not instead of it ([Later: keyboard](#later-keyboard)).
+   on screen is at most two obvious clicks away (open, then act). Keyboard shortcuts come on top of this, not
+   instead of it ([Keyboard](#keyboard)).
 5. **Only where it pays.** Being one step ahead is for the moments when the next step is clear and saves real
    effort, or prevents a loss. Elsewhere the app just does the thing and stays quiet. Each suggestion, extra
    button or explanatory line costs attention on every visit, and a screen full of them reads as noise. Before
@@ -200,10 +200,10 @@ edited and merged entries, each naming the tag, and a merge lists each heap's ta
 (12 items), Support's “Billing” (3 items)". Adding or renaming a heap tag to a team tag's name is refused under the
 field: "“security” is a team tag of Acme. Use it on items here instead."
 
-**The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, Make a team tag, or a
-rename into a name heap tags have) is refused by the server with the list of what it would merge, and the app asks
-first, in a dialog on a wide screen and a bottom sheet on a phone. It is headed "Make “billing” a team tag?" or "Rename
-“old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
+**The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, Create team tag in a team
+parameter's picker, Make a team tag, or a rename into a name heap tags have) is refused by the server with the list of
+what it would merge, and the app asks first, in a dialog on a wide screen and a bottom sheet on a phone. It is headed
+"Make “billing” a team tag?" or "Rename “old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
 "archived" and, for Make a team tag, "this heap" marked. Under the rows a total says "{n items} in {m heaps} will
 carry the team tag.", then the description the team tag will have, and the quiet line "The items keep their history.
 This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button reads
@@ -237,9 +237,11 @@ parameter now: 3 items in 2 heaps keep their values.". A parameter linked to tag
 message ("Unlink the tags first: …") shows under the card's heading, as a failed archive does.
 
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
-parameter" to a screen reader), its weight read as "Weight {n}", its options and tags read-only, a line saying the
-weight is set on the Ranking page and the name and options on the Team page (both links), and Stop using for an admin
-(an error from the server shows under it). A card headed "{n} parameters of the team {team}", with a Team page link in
+parameter" to a screen reader), its weight read as "Weight {n}", its options read-only, the team's tags that suggest
+it read-only, and the heap's own tags that suggest it, which an admin edits in place (each change is saved at once), a
+line saying the weight is set on the Ranking page and the name and options on the Team page (both links), and Stop
+using for an admin (an error from the server shows under it). A card headed "{n} parameters of the team {team}", with a
+Team page link in
 its header, lists the team's others, each with its name, its options and a Use button for an admin; with none it says
 "{team} has no other team parameters. Make them on the Team page.". Using one gives it the weight it had, or 10.
 
@@ -342,8 +344,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    a few seconds. Changes made in the item save silently and have no undo. The toast sits over the open item, so Sent
    to an agent can offer Undo from inside a phone's sheet; the Add dialog and the other sheets stay above it.
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `s` starts
-   (an open or blocked item), `x` marks done and `a` sends one step to an agent, where the robot button shows; `N`
-   and `/` stay. Tab goes the state button, Done, the robot, then the row's link, then its tags and parameter chips.
+   (an open or blocked item), `b` blocks (an open or in-progress item, with no reason, as the swipe does), `x` marks
+   done and `a` sends one step to an agent, where the robot button shows; `N` and `/` stay. Tab goes the state
+   button, Done, the robot, then the row's link, then its tags and parameter chips.
 5. On a touch screen, swiping a row right marks it done; swiping left offers Agent (where the robot button would
    show, sending one step at once as the button does), In progress and Blocked.
 6. Saved views are hidden in the web app for now, and `view=` in the URL is ignored: a views bar duplicated the
@@ -517,7 +520,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    also back into the future, and not cleared; it has no steps and no Send to an agent button. Stage lists as written and with context, and defined on
    a task only (a note says "Defined needs a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
-   change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
+   change, next. The arrow keys walk too while the focus is on the pane or its header, not in a field, so Space and
+   Page Up / Page Down scroll a long item there. On a phone the sheet closes and the next row is one tap away, so the
+   sheet has no Next button.
 8. The key (`k3x9a`) in the header, with a link icon after it, is the button that copies the item's short link
    (`/h/<team>/<heap>/<key>`), named "Copy link to k3x9a", with "Copy link" on hover. The header stays in view, so the
    icon turns into a check for 2 s to confirm, and a screen reader hears "Link copied"; a copy that fails (no
@@ -972,10 +977,11 @@ Archive or Unarchive, History), then Tags, the team's own, used in every heap of
 rows that are edited in place, with "Changes in every heap of {team}." under the form and the same History; a name
 that heap tags of the team have opens the merge confirm, see Tags), then Parameters, the team's own, which each heap
 chooses to use (a New parameter button that opens the add form without a weight, and a card per parameter like a
-heap's, with a line "Used in Launch and Support" or "Not used in any heap yet"; archiving an option there names the
-heaps whose open items switch), then Members with a search whose results are a
-listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
-line saying why the only admin can't leave. Removing a member says what happens: "They lose access to Launch and
+heap's, with the team tags that suggest it, picked from the team's tags alone or made there (Create
+team tag “…”, which links the new team tag), a line "Used in Launch and Support" or "Not used in any heap yet"; archiving an option there names the heaps whose open items switch), then Members with a
+search whose results are a listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge,
+Make admin or Make member and Remove, and Leave team or a line saying why the only admin can't leave. Removing a member
+says what happens: "They lose access to Launch and
 Support. Their items stay." It's confirmed inline on a wide screen and in the member's actions sheet on a phone,
 where heap rows are 52 px and open the heap, and a member's ⋯ opens a sheet headed "Sam Ortiz · @sam · Member".
 
@@ -1354,16 +1360,21 @@ to an open History at once, and to a closed one by the time it is opened.
 The Playwright golden paths run on phone (Pixel 7 emulation) and tablet (iPad emulation) projects as well as desktop
 Chromium, against the real server.
 
-## Later: keyboard
+## Keyboard
 
-The wide screen gets shortcuts once the screens work without them, shown in the MainKeyboard board:
+The wide screen shows its keys, and `?` lists them all:
 
-1. Hints on the controls they trigger: `N` on Add item, `/` in the search box, `S` `B` `X` on a row's Start, Block
-   and Done, `G O` and `G C` beside Open and Closed, `⌘↵` on Add in the Add dialog.
+1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
+   the search box, `S` `B` `X` at the end of the focused row, `G O` and `G C` beside Open and Closed in the sidebar,
+   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
-3. A hint bar under the list with the keys for what's on screen, and `?` for all of them.
-4. ⌘K in the sidebar: find any item by title or key in every heap; Tab acts on the highlighted item (start, done,
-   due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching
-   every heap needs a server search endpoint; today's search filters only the loaded list.
+3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
+   `S` `B` `X` when a row can change state, `N`, `/`, and `G C` with no item open; walking and closing with one open;
+   selecting in select mode. It ends with `?`, All keys.
+4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Wherever the sidebar shows a heap, `G`
+   then `O` goes to its Open list, closing an open item, and `G` then `C` to its Closed page; any other key after `G`
+   cancels it. Keys are ignored in a field.
 
-The keys that are already built (`N`, `/`, ↑ ↓, Enter, `x`, `⌘↵`) keep working. They just aren't shown yet.
+Later: ⌘K in the sidebar finds any item by title or key in every heap; Tab acts on the highlighted item (start,
+done, due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching
+every heap needs a server search endpoint; today's search filters only the loaded list.

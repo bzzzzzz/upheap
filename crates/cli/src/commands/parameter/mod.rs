@@ -30,7 +30,11 @@ fn find_own_parameter<'p>(
     list: &'p ParameterListDto,
     heap: &HeapHandle,
 ) -> Result<&'p ParameterDto, CliError> {
-    let parameter = find_parameter(name, list, heap)?;
+    ensure_own(find_parameter(name, list, heap)?, heap)
+}
+
+/// `parameter` itself when the heap owns it; a team's is a usage error, since the team changes it.
+fn ensure_own<'p>(parameter: &'p ParameterDto, heap: &HeapHandle) -> Result<&'p ParameterDto, CliError> {
     if parameter.kind == ParameterKindDto::Team {
         return Err(UsageError::TeamParameterInHeap {
             name: parameter.name.clone(),
