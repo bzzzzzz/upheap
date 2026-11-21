@@ -760,10 +760,11 @@ a fixed time.
      operator confirms by hand with `upheap-server user confirm <username or email>`, which needs no mail and records
      `email_confirmed` (`made_by: operator`) unless the address already was.
      A mistyped address is corrected with `POST /auth/confirmation-address` (login, password and the new address, no
-     session): it counts and verifies like a sign-in, under the same limit, and only works for an account that is
+     session): it counts and verifies like a sign-in, under the same limit (keyed by the address, so a changed address
+     starts a fresh count), and only works for an account that is
      still unconfirmed (a confirmed one fails like a wrong password). In one transaction it sets the address (still
-     unconfirmed, since nothing proved it), cancels the working reset link, so a link mailed to the wrong mailbox
-     can't give the account to its owner, makes a new confirmation link (cancelling the earlier one) and records
+     unconfirmed, since nothing proved it), cancels the working reset link, so whoever reads the wrong mailbox can't
+     take the account with one, makes a new confirmation link (cancelling the earlier one) and records
      `email_changed`; the link is mailed after commit. An address another account has answers the same `202` and
      changes, mails and records nothing.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
