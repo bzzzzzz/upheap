@@ -168,3 +168,111 @@ async fn flags_for_a_heap_parameter_are_refused_with_team_before_any_request() -
     expect_that!(list["parameters"], eq(&json!([])));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn promoting_a_heap_parameter_prints_the_reach_and_goes_ahead_when_confirmed() -> Result<()> {
+    // Arrange: Tier in A (the default heap) and in B, linked to nothing, with an item in each.
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    server
+        .send(&ada, "POST", "/teams/ada/heaps", Some(json!({ "name": "Beta" })))
+        .await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    for (heap, name, options) in [
+        (HEAP, "Tier", ["--option", "Gold"]),
+        ("ada/beta", "tier", ["--option", "Platinum"]),
+    ] {
+        let made = cli
+            .run(&["parameter", "add", name, "--heap", heap, options[0], options[1]])
+            .await;
+        assert!(made.exited(0), "parameter add: {}", made.stderr);
+    }
+    let added = cli
+        .run(&[
+            "item",
+            "add",
+            "Chase",
+            "--heap",
+            "ada/beta",
+            "--parameter",
+            "tier=Platinum",
+            "-q",
+        ])
+        .await;
+    assert!(added.exited(0), "item add: {}", added.stderr);
+
+    // Act
+    let refused = cli.run(&["parameter", "promote", "Tier"]).await;
+    let as_json = cli.run(&["parameter", "promote", "Tier", "--json"]).await;
+    let (_, after) = refused
+        .stderr
+        .split_once("To go ahead, run:\n")
+        .expect("the refusal names a command");
+    let command: Vec<&str> = after
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .skip(1)
+        .collect();
+    let promoted = cli.run(&command).await;
+    let again = cli.run(&command).await;
+    let list = cli.run(&["parameter", "list", "--team", "ada"]).await;
+    let in_beta = cli.run(&["parameter", "list", "--heap", "ada/beta"]).await;
+
+    // Assert
+    expect_that!(refused.exited(3), eq(true));
+    expect_that!(
+        refused.stderr,
+        starts_with(
+            "error: Making \"Tier\" a team parameter of ada merges these heap parameters into it (parameter_merge_unconfirmed):\n  \
+             personal  Tier  0 items  (this heap)\n  \
+             beta      tier  1 item  adds Platinum\n\
+             Each heap keeps its weight. Rankings can shift in a heap whose options were in another order.\n\
+             This can't be undone. To go ahead, run:\n"
+        )
+    );
+    expect_that!(as_json.exited(3), eq(true));
+    let body: Value = serde_json::from_str(&as_json.stderr)?;
+    expect_that!(body["code"], eq("parameter_merge_unconfirmed"));
+    expect_that!(
+        body["parameter_merge_reach"]["entries"].as_array().map(Vec::len),
+        some(eq(2))
+    );
+    expect_that!(promoted.exited(0), eq(true));
+    expect_that!(promoted.stdout, eq("Made \"Tier\" a team parameter of ada.\n"));
+    expect_that!(again.exited(0), eq(true));
+    expect_that!(again.stdout, eq("\"Tier\" is already a team parameter of ada.\n"));
+    expect_that!(list.stdout, eq("Tier  Gold, Platinum\n"));
+    expect_that!(in_beta.stdout, eq("Tier  Gold, Platinum  team\n"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn promoting_a_parameter_linked_to_tags_is_refused_with_the_servers_message() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    let made = cli.run(&["tag", "add", "billing"]).await;
+    assert!(made.exited(0), "tag add: {}", made.stderr);
+    let made = cli
+        .run(&["parameter", "add", "Tier", "--option", "Gold", "--tag", "billing"])
+        .await;
+    assert!(made.exited(0), "parameter add: {}", made.stderr);
+
+    // Act
+    let refused = cli.run(&["parameter", "promote", "Tier"]).await;
+
+    // Assert
+    expect_that!(refused.exited(3), eq(true));
+    expect_that!(
+        refused.stderr,
+        eq(
+            "error: Unlink the tags first: team parameters can't be linked to tags yet. Personal's \u{201c}Tier\u{201d}: billing. (parameter_merge_linked)\n"
+        )
+    );
+    Ok(())
+}

@@ -4,21 +4,28 @@
 //! Every write locks the heap first, like every other heap write, then the parameter, and reads the parameter
 //! under its lock. Names are unique among the heap's parameters in use, which the heap lock makes safe to check.
 //! Parameters and options are archived, never deleted.
+//!
+//! A heap parameter can be made its team's, and the team's same-named heap parameters merge into it, once the caller
+//! has confirmed the reach: the parameters it takes in, and how many items have a value for each. Like a team tag
+//! merge, that writes in every heap of the team, so it takes every heap lock (design/architecture.md, Cycle detection
+//! and locking).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::heap::Heap;
+use domain::item::Item;
+use domain::list_view::SortKey;
 use domain::parameter::{
-    NewParameter, OptionLabel, Parameter, ParameterError, ParameterName, ParameterOption, ParameterOwner,
-    ParameterPatch, Weight,
+    NewParameter, OptionLabel, OptionMerge, OptionSwitch, Parameter, ParameterError, ParameterName, ParameterOption,
+    ParameterOwner, ParameterPatch, Weight, reach_text,
 };
 use domain::permission::{
     ParameterAction, ParameterListAction, Permission, allowed_parameter_actions, allowed_parameter_list_actions,
     allowed_team_parameter_actions, allowed_team_parameter_list_actions,
 };
 use domain::team::Role;
-use domain::{HeapId, OptionId, ParameterId, TagId, TeamId, Timestamp, Version};
+use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, TeamId, Timestamp, Version};
 use serde_json::Value;
 use store::audit::NewAuditEntry;
 use store::parameters::HeapUse;
@@ -26,9 +33,10 @@ use store::{ConnectionTrait, DatabaseTransaction, StoreError, TransactionTrait};
 
 use crate::access::{
     authorize_heap, authorize_heap_write, authorize_heap_write_under_team, authorize_team, begin_team_write,
-    lower_team_heap,
+    ensure_active, lower_team_heap,
 };
-use crate::audit::{describe_new_parameter, diff_heap_use, diff_parameters, diff_switched_value};
+use crate::audit::{describe_new_parameter, diff_heap_use, diff_items, diff_parameters, diff_switched_value};
+use crate::auth::sha256_hex;
 use crate::items::{ensure_tags_in_use, load_heap_tags};
 use crate::{Principal, ServiceError, Services};
 
@@ -84,6 +92,51 @@ pub struct TeamParameterDraft {
     pub name: ParameterName,
     /// Highest priority first.
     pub options: Vec<OptionLabel>,
+}
+
+/// The heap parameters a merge into a team parameter takes in, and what they hold: what the caller confirms before it
+/// (architecture.md, API §11).
+#[derive(Clone, Debug)]
+pub struct ParameterMergeReach {
+    /// Names this reach: a client that confirms with it has seen exactly these parameters, counts and options.
+    pub token: String,
+    /// The parameter the merge starts from first, then the others by heap name, then heap ID.
+    pub entries: Vec<ParameterReachEntry>,
+}
+
+/// One heap parameter in a [`ParameterMergeReach`].
+#[derive(Clone, Debug)]
+pub struct ParameterReachEntry {
+    pub heap: Heap,
+    /// As written, before the merge.
+    pub parameter: Parameter,
+    /// Items with a value for it, whatever their state.
+    pub items: u32,
+    /// The labels of its options the team parameter doesn't have yet. Empty for the one the merge starts from.
+    pub added: Vec<OptionLabel>,
+    /// The options of it in use that match an option the team parameter has archived: open items on them get the
+    /// option in use that one resolves to. Empty for the one the merge starts from.
+    pub switched: Vec<OptionSwitch>,
+    /// Whether it is the one the merge starts from.
+    pub starting: bool,
+}
+
+/// A parameter that stops a merge because it is linked to tags.
+#[derive(Clone, Debug)]
+pub struct LinkedParameter {
+    pub heap: String,
+    /// Whether the heap is archived, so its parameter can't be edited to unlink the tags until it is unarchived.
+    pub heap_archived: bool,
+    pub parameter: String,
+    /// By name.
+    pub tags: Vec<String>,
+}
+
+/// A heap parameter that merges into the one a merge starts from, with its heap and how its options map.
+struct MergedParameter {
+    heap: Heap,
+    parameter: Parameter,
+    merge: OptionMerge,
 }
 
 /// Whose parameter a write is about: a heap's, or a team's.
@@ -462,6 +515,119 @@ impl Services {
         self.with_heaps(team_id, entry).await
     }
 
+    /// Makes a heap parameter its team's, in place: the same parameter, with its options and values, which the team's
+    /// heaps then use, each at the weight it had. Every other parameter in use of the team's heaps (archived heaps
+    /// included) with the same name, ignoring case, merges into it: each item's value moves to the option of the
+    /// same label, ignoring case, options it lacks are added, and the merged parameter is archived. The heap the
+    /// parameter was made in, and the heaps of those merged, use the team parameter at their old weights.
+    ///
+    /// That can't be undone, so it needs `confirm`, the token of the reach: without it, or with a stale one, the write
+    /// fails with [`ServiceError::ParameterMergeUnconfirmed`] and the current reach, even when there is nothing to
+    /// merge. A parameter among them linked to tags fails it first with [`ServiceError::ParameterMergeLinked`], as
+    /// team parameters can't be linked to tags.
+    ///
+    /// Repeating the write once it went through, on a team parameter the heap uses, changes nothing and returns it,
+    /// without a confirmation.
+    ///
+    /// The parameter must be a parameter of `heap_id`, else [`ServiceError::NotFound`], in use
+    /// ([`ParameterError::Archived`]), in a heap that isn't archived ([`ServiceError::HeapArchived`]).
+    ///
+    /// Each item whose value moves gets an entry in its heap's log; the team's log gets one listing what was taken in.
+    /// Saved views of the merged parameters' heaps filter and sort by the team parameter's options. Size assumption: a
+    /// handful of queries per item reached under every heap lock of the team, so item writes in the team wait for it.
+    /// That is fine for up to a few hundred items; there is no limit.
+    pub async fn make_team_parameter(
+        &self,
+        principal: Principal,
+        heap_id: HeapId,
+        parameter_id: ParameterId,
+        confirm: Option<&str>,
+    ) -> Result<TeamParameterEntry, ServiceError> {
+        let team_id = store::heaps::find_heap(&self.db, heap_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?
+            .team_id;
+        let (txn, membership, heaps) =
+            begin_team_write(&self.db, principal, team_id, Permission::ConfigureHeap).await?;
+        let heap = heaps
+            .iter()
+            .find(|heap| heap.id == heap_id)
+            .ok_or(ServiceError::NotFound)?;
+        ensure_active(heap)?;
+        let found = store::parameters::lock_parameter(&txn, parameter_id)
+            .await?
+            .ok_or(ServiceError::NotFound)?;
+        if found.owner == ParameterOwner::Team(team_id) {
+            // Repeating the write after it went through: the parameter is the team's and the heap uses it. Nothing
+            // changes and no confirmation is needed.
+            if found.is_archived() {
+                return Err(ParameterError::Archived { parameter_id }.into());
+            }
+            let used = store::parameters::lock_heap_use(&txn, heap_id, parameter_id)
+                .await?
+                .is_some_and(|heap_use| heap_use.stopped_at.is_none());
+            if !used {
+                return Err(ServiceError::NotFound);
+            }
+            txn.rollback().await.map_err(StoreError::from)?;
+            let allowed_actions = allowed_team_parameter_actions(&found, membership.role);
+            return self
+                .with_heaps(
+                    team_id,
+                    ParameterEntry {
+                        parameter: found,
+                        allowed_actions,
+                    },
+                )
+                .await;
+        }
+        let start = Some(found)
+            .filter(|parameter| parameter.owner == ParameterOwner::Heap(heap_id))
+            .ok_or(ServiceError::NotFound)?;
+        if start.is_archived() {
+            return Err(ParameterError::Archived { parameter_id }.into());
+        }
+
+        let now = self.now();
+        let (team_parameter, others) = self
+            .plan_parameter_merge(&txn, team_id, &heaps, heap_id, &start, now)
+            .await?;
+        let (reach, values) = parameter_reach_of(&txn, heap, &start, &others).await?;
+        ensure_no_tag_links(&txn, &reach.entries).await?;
+        if confirm != Some(reach.token.as_str()) {
+            return Err(ServiceError::ParameterMergeUnconfirmed { reach });
+        }
+
+        let saved = store::parameters::update_parameter(&txn, &team_parameter, start.version, now)
+            .await?
+            .ok_or_else(|| locked_row_changed("parameters", &parameter_id.to_string()))?;
+        self.merge_into_team_parameter(
+            &txn,
+            principal,
+            team_id,
+            &saved,
+            start.weight,
+            heap,
+            &others,
+            &values,
+            &reach,
+            now,
+        )
+        .await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        tracing::info!(%team_id, %heap_id, %parameter_id, user_id = %principal.user_id, merged = others.len(), "heap parameter made a team parameter");
+        let allowed_actions = allowed_team_parameter_actions(&saved, membership.role);
+        self.with_heaps(
+            team_id,
+            ParameterEntry {
+                parameter: saved,
+                allowed_actions,
+            },
+        )
+        .await
+    }
+
     /// Makes the heap use a parameter of its team, and returns the heap's parameters. The first use gives the parameter
     /// the default weight; using it again after stopping restores the weight it had. A parameter the heap uses
     /// already succeeds and changes nothing. An archived parameter ([`ParameterError::Archived`]), a parameter that
@@ -596,6 +762,193 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(txn, &entry).await?;
+        Ok(())
+    }
+
+    /// The team parameter `start` becomes, with the options of every other parameter in use of `heaps` that has its
+    /// name taken in, and those others, by heap name then heap ID. Read under the locks, so the others are locked too.
+    async fn plan_parameter_merge(
+        &self,
+        txn: &DatabaseTransaction,
+        team_id: TeamId,
+        heaps: &[Heap],
+        start_heap: HeapId,
+        start: &Parameter,
+        now: Timestamp,
+    ) -> Result<(Parameter, Vec<MergedParameter>), ServiceError> {
+        let heap_ids: Vec<HeapId> = heaps.iter().map(|heap| heap.id).collect();
+        let key = start.name.to_key();
+        let mut others = Vec::new();
+        for (id, name) in store::parameters::list_names_in_use(txn, team_id, &heap_ids).await? {
+            if id == start.id || name.to_key() != key {
+                continue;
+            }
+            // The query and the name rule leave only the other heaps' parameters in use here: anything else is a row
+            // the rule should have kept out.
+            let parameter = store::parameters::lock_parameter(txn, id)
+                .await?
+                .ok_or_else(|| StoreError::corrupt("parameters", &id.to_string(), "a listed parameter is gone"))?;
+            let ParameterOwner::Heap(heap_id) = parameter.owner else {
+                return Err(
+                    StoreError::corrupt("parameters", &id.to_string(), "a team parameter named like a heap's").into(),
+                );
+            };
+            if heap_id == start_heap || parameter.is_archived() {
+                return Err(StoreError::corrupt(
+                    "parameters",
+                    &id.to_string(),
+                    "two parameters in use with one name in a heap",
+                )
+                .into());
+            }
+            let heap = heaps.iter().find(|heap| heap.id == heap_id).ok_or_else(|| {
+                StoreError::corrupt("parameters", &id.to_string(), "a heap parameter of no heap of its team")
+            })?;
+            others.push((heap.clone(), parameter));
+        }
+        others.sort_by(|a, b| (a.0.name.as_str(), a.0.id).cmp(&(b.0.name.as_str(), b.0.id)));
+
+        let mut team_parameter = start.into_team(team_id)?;
+        let mut merged = Vec::with_capacity(others.len());
+        for (heap, parameter) in others {
+            let merge = team_parameter.merge_options(&parameter, || OptionId::from_uuid(self.new_id(now)))?;
+            team_parameter = merge.merged.clone();
+            merged.push(MergedParameter { heap, parameter, merge });
+        }
+        Ok((team_parameter, merged))
+    }
+
+    /// Writes everything a merge does besides the team parameter itself, which the caller has saved as `team_parameter`:
+    /// the heaps' use rows, the items' values, the heaps' saved views, the merged parameters archived, and the
+    /// team's log entry. `values` are the values of the reach's parameters; `start_weight` is the weight the team
+    /// parameter had in `start_heap`.
+    #[allow(clippy::too_many_arguments)] // The merge's inputs, all read by the caller under the locks.
+    async fn merge_into_team_parameter(
+        &self,
+        txn: &DatabaseTransaction,
+        principal: Principal,
+        team_id: TeamId,
+        team_parameter: &Parameter,
+        start_weight: Weight,
+        start_heap: &Heap,
+        others: &[MergedParameter],
+        values: &[(ItemId, ParameterId, OptionId)],
+        reach: &ParameterMergeReach,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
+        write_heap_use(txn, start_heap.id, team_parameter.id, start_weight, now).await?;
+        for other in others {
+            write_heap_use(txn, other.heap.id, team_parameter.id, other.parameter.weight, now).await?;
+            self.move_values(txn, principal, team_id, team_parameter, other, values, now)
+                .await?;
+            move_views(txn, team_parameter.id, other).await?;
+            let archived = other.parameter.archive(now).ok_or_else(|| {
+                StoreError::corrupt(
+                    "parameters",
+                    &other.parameter.id.to_string(),
+                    "a merged parameter is archived",
+                )
+            })?;
+            store::parameters::update_parameter(txn, &archived, other.parameter.version, now)
+                .await?
+                .ok_or_else(|| locked_row_changed("parameters", &other.parameter.id.to_string()))?;
+        }
+        let listed: Vec<Value> = reach
+            .entries
+            .iter()
+            .map(|entry| {
+                serde_json::json!({
+                    "heap": entry.heap.id.to_string(),
+                    "parameter": entry.parameter.id.to_string(),
+                    "name": entry.parameter.name.as_str(),
+                    "weight": entry.parameter.weight.get(),
+                    "items": entry.items,
+                    "added": entry.added.iter().map(OptionLabel::as_str).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        let entry = self.parameter_audit_entry(
+            team_id,
+            None,
+            principal,
+            AuditAction::ParameterMerged,
+            team_parameter,
+            serde_json::json!({ AuditField::Merged.code(): listed }),
+            now,
+        );
+        store::audit::insert_audit_entry(txn, &entry).await?;
+        Ok(())
+    }
+
+    /// Moves each item's value for the merged parameter to the team parameter's option it became, and records it in
+    /// the item's heap's log. A value on an option that is archived in the team parameter goes to the option in use
+    /// it resolves to when the item is open, as archiving an option does for open items.
+    #[allow(clippy::too_many_arguments)] // The merge's inputs, all read by the caller under the locks.
+    async fn move_values(
+        &self,
+        txn: &DatabaseTransaction,
+        principal: Principal,
+        team_id: TeamId,
+        team_parameter: &Parameter,
+        other: &MergedParameter,
+        values: &[(ItemId, ParameterId, OptionId)],
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
+        let mut item_ids: Vec<ItemId> = values
+            .iter()
+            .filter(|(_, parameter, _)| *parameter == other.parameter.id)
+            .map(|(item, _, _)| *item)
+            .collect();
+        item_ids.sort();
+        for item_id in item_ids {
+            let item = store::items::find_item(txn, item_id)
+                .await?
+                .ok_or_else(|| StoreError::corrupt("items", &item_id.to_string(), "an item with a value is missing"))?;
+            let Some(&old) = item.parameters.get(&other.parameter.id) else {
+                continue;
+            };
+            let mapped = other.merge.option_map.get(&old).copied().ok_or_else(|| {
+                StoreError::corrupt(
+                    "item_parameter_values",
+                    &item_id.to_string(),
+                    "a value of no option of its parameter",
+                )
+            })?;
+            let option = if item.state.kind().is_closed() {
+                mapped
+            } else {
+                team_parameter
+                    .resolve(mapped)
+                    .map(|resolved| resolved.option.id)
+                    .ok_or(ParameterError::OptionNotInParameter {
+                        parameter_id: team_parameter.id,
+                        option_id: mapped,
+                    })?
+            };
+            let mut parameters = item.parameters.clone();
+            parameters.remove(&other.parameter.id);
+            parameters.insert(team_parameter.id, option);
+            let edited = Item {
+                parameters,
+                ..item.clone()
+            };
+            store::items::update_item(txn, &edited, item.version, now)
+                .await?
+                .ok_or_else(|| locked_row_changed("items", &item_id.to_string()))?;
+            let entry = NewAuditEntry {
+                id: self.new_id(now),
+                team_id,
+                heap_id: Some(item.heap_id),
+                actor: principal.user_id,
+                action: AuditAction::ParameterMerged,
+                entity_type: EntityType::Item,
+                entity_id: *item.id.as_uuid(),
+                diff: diff_items(&item, &edited),
+                run_id: None,
+                created_at: now,
+            };
+            store::audit::insert_audit_entry(txn, &entry).await?;
+        }
         Ok(())
     }
 
@@ -926,6 +1279,152 @@ impl Services {
             created_at: now,
         }
     }
+}
+
+/// A row the merge holds the lock for changed under it, which the locks rule out.
+fn locked_row_changed(table: &'static str, id: &str) -> ServiceError {
+    StoreError::corrupt(table, id, "a row changed under the lock of its heap").into()
+}
+
+/// The reach of a merge starting from `start` in `start_heap` into `others`, and the values of the parameters in it.
+async fn parameter_reach_of(
+    db: &impl ConnectionTrait,
+    start_heap: &Heap,
+    start: &Parameter,
+    others: &[MergedParameter],
+) -> Result<(ParameterMergeReach, Vec<(ItemId, ParameterId, OptionId)>), ServiceError> {
+    let ids: Vec<ParameterId> = std::iter::once(start.id)
+        .chain(others.iter().map(|other| other.parameter.id))
+        .collect();
+    let values = store::items::list_parameter_values(db, &ids).await?;
+    let count = |id: ParameterId| {
+        let items: BTreeSet<ItemId> = values
+            .iter()
+            .filter(|(_, parameter, _)| *parameter == id)
+            .map(|(item, _, _)| *item)
+            .collect();
+        u32::try_from(items.len()).unwrap_or(u32::MAX)
+    };
+    let mut entries = vec![ParameterReachEntry {
+        heap: start_heap.clone(),
+        parameter: start.clone(),
+        items: count(start.id),
+        added: Vec::new(),
+        switched: Vec::new(),
+        starting: true,
+    }];
+    entries.extend(others.iter().map(|other| ParameterReachEntry {
+        heap: other.heap.clone(),
+        parameter: other.parameter.clone(),
+        items: count(other.parameter.id),
+        added: other.merge.added.clone(),
+        switched: other.merge.switched.clone(),
+        starting: false,
+    }));
+    let text = reach_text(entries.iter().map(|entry| {
+        (
+            entry.parameter.id,
+            entry.items,
+            entry.added.as_slice(),
+            entry.switched.as_slice(),
+        )
+    }));
+    // The first 8 bytes of the SHA-256: 16 hex digits, enough to tell one reach from another.
+    let token = sha256_hex(&text).chars().take(16).collect();
+    Ok((ParameterMergeReach { token, entries }, values))
+}
+
+/// Refuses a merge that takes in a parameter linked to tags, naming each with its tags. Nothing carries tag links over
+/// to a team parameter yet.
+async fn ensure_no_tag_links(db: &impl ConnectionTrait, entries: &[ParameterReachEntry]) -> Result<(), ServiceError> {
+    let mut linked = Vec::new();
+    for entry in entries.iter().filter(|entry| !entry.parameter.tags.is_empty()) {
+        let mut tags = Vec::new();
+        for tag_id in &entry.parameter.tags {
+            let tag = store::tags::find_tag(db, *tag_id).await?.ok_or_else(|| {
+                StoreError::corrupt(
+                    "parameter_tags",
+                    &entry.parameter.id.to_string(),
+                    "a link to a missing tag",
+                )
+            })?;
+            tags.push(tag.name.as_str().to_owned());
+        }
+        tags.sort();
+        linked.push(LinkedParameter {
+            heap: entry.heap.name.as_str().to_owned(),
+            heap_archived: entry.heap.is_archived(),
+            parameter: entry.parameter.name.as_str().to_owned(),
+            tags,
+        });
+    }
+    if linked.is_empty() {
+        return Ok(());
+    }
+    Err(ServiceError::ParameterMergeLinked { linked })
+}
+
+/// Makes `heap_id` use the team parameter `parameter_id` at `weight`, from `now`.
+async fn write_heap_use(
+    txn: &DatabaseTransaction,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+    weight: Weight,
+    now: Timestamp,
+) -> Result<(), ServiceError> {
+    store::parameters::ensure_heap_use(txn, heap_id, parameter_id, now).await?;
+    let before = store::parameters::lock_heap_use(txn, heap_id, parameter_id)
+        .await?
+        .ok_or_else(|| {
+            StoreError::corrupt(
+                "heap_parameters",
+                &parameter_id.to_string(),
+                "a use row just written is gone",
+            )
+        })?;
+    let after = HeapUse {
+        weight,
+        stopped_at: None,
+        ..before
+    };
+    store::parameters::update_heap_use(txn, &after).await?;
+    Ok(())
+}
+
+/// Points the saved views of the merged parameter's heap at the team parameter: the options it filters by become the
+/// ones they merged into, and a sort by the merged parameter becomes a sort by the team parameter. Like a tag merge,
+/// views get no entries.
+async fn move_views(
+    txn: &DatabaseTransaction,
+    team_parameter: ParameterId,
+    other: &MergedParameter,
+) -> Result<(), ServiceError> {
+    for mut view in store::saved_views::list_saved_views(txn, other.heap.id).await? {
+        let filter = &view.list_view.filter;
+        let sorted = view.list_view.sort == SortKey::Parameter(other.parameter.id);
+        if !sorted
+            && filter
+                .options
+                .is_disjoint(&other.merge.option_map.keys().copied().collect())
+        {
+            continue;
+        }
+        let expected = view.version;
+        view.list_view.filter.options = view
+            .list_view
+            .filter
+            .options
+            .iter()
+            .map(|option| other.merge.option_map.get(option).copied().unwrap_or(*option))
+            .collect();
+        if sorted {
+            view.list_view.sort = SortKey::Parameter(team_parameter);
+        }
+        store::saved_views::update_saved_view(txn, &view, expected)
+            .await?
+            .ok_or_else(|| locked_row_changed("saved_views", &view.id.to_string()))?;
+    }
+    Ok(())
 }
 
 /// The heap's parameters in use, by name, with what `role` may do with each.

@@ -153,7 +153,7 @@ async fn items_show_every_parameter_in_use_set_or_unset() -> Result<()> {
     );
     expect_that!(
         parameters.body["parameters"][1]["allowed_actions"],
-        eq(&json!(["edit", "archive", "view_history"]))
+        eq(&json!(["edit", "archive", "make_team", "view_history"]))
     );
     expect_that!(customer["weight"], eq(&json!(10)));
     Ok(())

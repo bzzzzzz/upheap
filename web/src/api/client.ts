@@ -2,7 +2,7 @@
 // imported from `./schema` under their own names.
 import createClient, { type Middleware } from "openapi-fetch";
 
-import type { MergeReach, paths, Problem } from "./schema";
+import type { MergeReach, ParameterMergeReach, paths, Problem } from "./schema";
 
 /** The list view parameters of the ranked list, without `as_of`. */
 export type ListViewQuery = Omit<
@@ -32,6 +32,8 @@ export class ApiProblem extends Error {
   readonly mergeReach: MergeReach | undefined;
   /** Seconds to wait before trying again, from the `Retry-After` header of a `429`. */
   readonly retryAfter: number | undefined;
+  /** What making a heap parameter a team parameter would merge, on `parameter_merge_unconfirmed`. */
+  readonly parameterMergeReach: ParameterMergeReach | undefined;
 
   constructor(
     status: number,
@@ -42,6 +44,7 @@ export class ApiProblem extends Error {
     requestId?: string,
     mergeReach?: MergeReach,
     retryAfter?: number,
+    parameterMergeReach?: ParameterMergeReach,
   ) {
     super(message);
     this.status = status;
@@ -51,6 +54,7 @@ export class ApiProblem extends Error {
     this.requestId = requestId;
     this.mergeReach = mergeReach;
     this.retryAfter = retryAfter;
+    this.parameterMergeReach = parameterMergeReach;
   }
 }
 
@@ -151,6 +155,7 @@ function toProblem(error: unknown, response: Response): ApiProblem {
       requestId,
       error.merge_reach ?? undefined,
       retryAfter,
+      error.parameter_merge_reach ?? undefined,
     );
   }
   if (isProxyFailure(response)) {

@@ -38,13 +38,15 @@ struct TagPathId {
     tag_id: Uuid,
 }
 
-/// `confirm_reach`, on the writes that may merge heap tags into a team tag.
+/// `confirm_reach`, on the writes that may merge heap tags into a team tag, and the one that makes a heap parameter a
+/// team parameter.
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
-struct ConfirmReachQuery {
-    /// The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the
-    /// heap tags it would merge are still those, with the same item counts.
-    confirm_reach: Option<String>,
+pub(crate) struct ConfirmReachQuery {
+    /// The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with, or of the
+    /// `parameter_merge_reach` of `parameter_merge_unconfirmed`: the write goes on if what it would merge is still
+    /// that, with the same item counts.
+    pub(crate) confirm_reach: Option<String>,
 }
 
 pub(crate) fn to_merge_reach_dto(reach: &MergeReach) -> MergeReachDto {

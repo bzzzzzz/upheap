@@ -49,6 +49,7 @@ coded_enum! {
         ParameterCreated = "parameter_created",
         ParameterUpdated = "parameter_updated",
         ParameterArchived = "parameter_archived",
+        ParameterMerged = "parameter_merged",
         OptionArchived = "option_archived",
         InviteLinkCreated = "invite_link_created",
         InviteLinkRevoked = "invite_link_revoked",

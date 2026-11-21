@@ -58,7 +58,7 @@ impl TeamTagWrite<'_> {
             _ => None,
         };
         match lines {
-            Some(lines) => CliError::TagWriteRefused { lines, source: err },
+            Some(lines) => CliError::WriteRefused { lines, source: err },
             None => CliError::Client(err),
         }
     }

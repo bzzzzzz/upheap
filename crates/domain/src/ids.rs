@@ -163,6 +163,7 @@ mod tests {
                 "parameter_created",
                 "parameter_updated",
                 "parameter_archived",
+                "parameter_merged",
                 "option_archived",
                 "invite_link_created",
                 "invite_link_revoked",

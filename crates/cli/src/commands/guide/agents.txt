@@ -84,7 +84,8 @@ The usual order of work
    `upheap parameter add` and `upheap parameter edit`, and their options with `upheap parameter option add`, `edit`
    and `archive`. A team's parameters, which its heaps may use, are the same commands with `--team <slug>`; a heap
    takes one with `upheap parameter use` and drops it with `upheap parameter stop-using`, and its weight is set with
-   `upheap heap weights`.
+   `upheap heap weights`. `upheap parameter promote` makes a heap's parameter the team's and merges the team's
+   same-named ones into it; it is the person's call, since it can't be undone.
 4. When a call is the person's to make, don't guess: ask with `upheap question ask`, with --choice for each answer
    when you can list them, or with `upheap question request` for something only they can do. The item then waits
    for them, and their answer reads back in `upheap item show`. When they answer in the conversation, record it

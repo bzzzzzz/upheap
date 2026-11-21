@@ -148,8 +148,9 @@ pub async fn list_parameters_locking(db: &impl ConnectionTrait, heap_id: HeapId)
 }
 
 /// Writes `parameter` with its options and tag links if the stored row still has version `expected`, and returns
-/// it with its new version. Tags it no longer has are marked removed at `now`. A team parameter's weight is never
-/// written; the heap's is in its use row (see [`update_heap_use`]).
+/// it with its new version. Tags it no longer has are marked removed at `now`. A team parameter's own weight is
+/// written as `0`, never the heap's: the heap's is in its use row (see [`update_heap_use`]). The owner is written
+/// too, which is how a heap parameter becomes its team's (`Parameter::into_team`).
 ///
 /// Returns `None` when the stored version differs; nothing is written then.
 pub async fn update_parameter(
@@ -169,9 +170,14 @@ pub async fn update_parameter(
         version: Set(version_to_db(saved.version, TABLE, &id)?),
         ..Default::default()
     };
-    if matches!(saved.owner, ParameterOwner::Heap(_)) {
-        row.weight = Set(i32::from(saved.weight.get()));
-    }
+    (row.heap_id, row.team_id, row.weight) = match saved.owner {
+        ParameterOwner::Heap(heap) => (
+            Set(Some(id_to_db(heap.as_uuid()))),
+            Set(None),
+            Set(i32::from(saved.weight.get())),
+        ),
+        ParameterOwner::Team(team) => (Set(None), Set(Some(id_to_db(team.as_uuid()))), Set(0)),
+    };
     let result = parameters::Entity::update_many()
         .set(row)
         .filter(parameters::Column::Id.eq(id.as_str()))
