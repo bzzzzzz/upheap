@@ -79,7 +79,7 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
     await expect(fields.getByRole("term").last()).toHaveText("Added");
     await expect(fields.getByRole("button", { name: /^Added/ })).toHaveCount(0);
   } else {
-    await expect(fields).not.toContainText("Added");
+    await expect(fields.getByRole("term").filter({ hasText: "Added" })).toHaveCount(0);
   }
   const history = await openHistory(page);
   await expect(history).toContainText("In progress");

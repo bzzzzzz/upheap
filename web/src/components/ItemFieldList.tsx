@@ -19,7 +19,7 @@ import { SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
 import { tagChipColor } from "./tagColor";
 import { useFocusAfterRender } from "./useFocusAfterRender";
-import { useUserName } from "./userName";
+import { useUserNameAtStart } from "./userName";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
 
@@ -28,11 +28,10 @@ const NOT_SET = "";
 
 /**
  * The item's fields as labelled values (ux.md, The item §16): Need, Effort and Impact in three columns, then Due (a
- * reminder's Date), Tags and each parameter in a row, and on a phone who added it. Each value is a button that opens its editor, when the item can be
- * edited: a popover under the value on a wide screen and a tablet, a sheet on a phone, but for Tags, which turns into
- * the tag picker in place. A change saves at once. An unset
- * effort, impact or due date the server says holds the rank back is marked, as that is where to fix it. Without `edit`
- * the values are only text.
+ * reminder's Date), Tags and each parameter in a row, and on a phone who added it. Each value is a button that opens
+ * its editor, when the item can be edited: a popover under the value on a wide screen and a tablet, a sheet on a phone,
+ * but for Tags, which turns into the tag picker in place. A change saves at once. An unset effort, impact or due date
+ * the server says holds the rank back is marked, as that is where to fix it. Without `edit` the values are only text.
  */
 export function ItemFieldList({
   heapRef,
@@ -51,7 +50,6 @@ export function ItemFieldList({
   const reminder = item.kind === "reminder";
   const heldBack = new Set(entry?.held_back_by.map((held) => held.gap));
   const due = item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : null;
-  const onPhone = useMedia(PHONE);
 
   return (
     <section
@@ -244,7 +242,7 @@ export function ItemFieldList({
             />
           );
         })}
-        {onPhone && <AddedRow item={item} />}
+        <AddedRow item={item} />
       </dl>
     </section>
   );
@@ -255,13 +253,12 @@ export function ItemFieldList({
  * own, the age alone when nobody can be named), as History's line is easy to miss there. Plain text, never an editor.
  */
 function AddedRow({ item }: { item: Item }) {
-  const by = useUserName(item.created_by);
-  const who = by && `${by.charAt(0).toUpperCase()}${by.slice(1)} · `;
+  const by = useUserNameAtStart(item.created_by);
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 sm:hidden">
       <dt className="w-24 shrink-0 text-xs text-muted">Added</dt>
       <dd className="min-w-0 flex-1 text-sm break-words text-ink">
-        {who}
+        {by && `${by} · `}
         <time dateTime={new Date(item.created_at).toISOString()}>{item.created_label}</time>
       </dd>
     </div>

@@ -637,8 +637,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
     each, with the label on the left. On a phone the last row is Added, "Sam · 4 days ago" ("You · …" for your own,
-    the age alone when nobody can be named): plain text, never an editor, as wider screens keep it on History's line
-    alone (point 10). A parameter's label is violet. An unset effort, impact or due date reads "Set
+    the age alone when nobody can be named), in plain text that
+    never opens an editor. Wider screens show it only on History's line (point 10). A parameter's label is violet. An unset effort, impact or due date reads "Set
     effort", "Set impact", "Set due" (a parameter "Set <name>") in muted text; when the server's held-back lines
     (point 9) name it, it is marked with an amber pill. With a mouse a value has no border at rest, a tint and ▾ when
     pointed at or focused; on a touch screen the ▾ always shows and the value is 44 px tall. A click opens a popover
