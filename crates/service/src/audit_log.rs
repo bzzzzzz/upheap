@@ -13,6 +13,7 @@ use domain::item::{Due, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
 use domain::question::QuestionKind;
 use domain::step::StepState;
+use domain::tag::TagColor;
 use domain::team::Role;
 use domain::text_diff::{WordDiff, diff_words};
 use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
@@ -895,6 +896,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::QuestionKind => coded(|code| QuestionKind::from_code(code).map(QuestionKind::label)),
         AuditField::Need => coded(|code| Need::from_code(code).map(Need::label)),
         AuditField::Effort | AuditField::Impact => coded(|code| Size::from_code(code).map(Size::label)),
+        AuditField::Color => coded(|code| TagColor::from_code(code).map(TagColor::label)),
         AuditField::Role => coded(|code| Role::from_code(code).map(Role::label)),
         AuditField::StepPlace => shown(Form::Place),
         AuditField::Step => shown(Form::Step),
@@ -934,7 +936,6 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         | AuditField::Line
         | AuditField::Reason
         | AuditField::Key
-        | AuditField::Color
         | AuditField::Name
         | AuditField::DisplayName
         | AuditField::BlockedReason

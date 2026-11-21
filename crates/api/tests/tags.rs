@@ -438,7 +438,7 @@ async fn changing_a_colour_bumps_the_version_and_shows_in_the_history() -> Resul
     expect_that!(
         history.body["entries"][0]["changes"],
         eq(&json!([
-            { "field": "color", "label": "Colour", "before": "rose", "after": "teal", "text_diff": null },
+            { "field": "color", "label": "Colour", "before": "Rose", "after": "Teal", "text_diff": null },
         ]))
     );
     Ok(())

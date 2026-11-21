@@ -2,10 +2,10 @@ import type { ItemTag } from "../api/schema";
 import { tagButtonColor } from "./tagColor";
 
 /**
- * An item's tags in a list row, in the order the server sends them, as outlined chips in the tag's own colour (violet is kept for parameters).
- * Each chip is a toggle button that adds the tag to the list's tag filter or, when it is in `active`, removes it;
- * active chips keep their colour and get an accent ring (ux.md, The list). The button sits above the row's link, so pressing it
- * doesn't open the item.
+ * An item's tags in a list row, in the order the server sends them, as outlined chips in the tag's own colour (violet
+ * is kept for parameters). Each chip is a toggle button that adds the tag to the list's tag filter or, when it is in
+ * `active`, removes it; active chips keep their colour and get an accent ring (ux.md, The list). The button sits above
+ * the row's link, so pressing it doesn't open the item.
  */
 export function TagChips({
   tags,

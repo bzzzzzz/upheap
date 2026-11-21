@@ -1,6 +1,7 @@
 //! A colour for every tag (`tags.color`, a code from the palette). The column is `NOT NULL`; it has a default, which
 //! only lets `ADD COLUMN` work on rows that already exist, since SQLite can't add a `NOT NULL` column without one and
-//! can't drop the default after. Every existing row is then given a colour, merged heap tags too (never shown).
+//! can't drop the default after. Every existing row is then given a colour, merged heap tags too (never shown), but
+//! a merged tag is not counted: the server's pick skips them.
 //!
 //! The order: for each team, its tags in `(created_at, id)` order each take the least used colour among the team's
 //! tags given one so far, the first in palette order on a tie. Then for each heap, its tags in the same order count the
@@ -29,6 +30,7 @@ enum Tags {
     TeamId,
     CreatedAt,
     Color,
+    MergedInto,
 }
 
 #[derive(DeriveIden)]
@@ -88,7 +90,7 @@ async fn backfill(db: &impl ConnectionTrait) -> Result<(), DbErr> {
     let rows = db
         .query_all(
             &Query::select()
-                .columns([Tags::Id, Tags::HeapId, Tags::TeamId])
+                .columns([Tags::Id, Tags::HeapId, Tags::TeamId, Tags::MergedInto])
                 .from(Tags::Table)
                 .order_by(Tags::CreatedAt, Order::Asc)
                 .order_by(Tags::Id, Order::Asc)
@@ -96,14 +98,16 @@ async fn backfill(db: &impl ConnectionTrait) -> Result<(), DbErr> {
         )
         .await?;
 
+    // Each tag's id and whether it is merged, which is given a colour but doesn't count toward a heap's.
     let mut team_tags: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut heap_tags: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut heap_tags: BTreeMap<String, Vec<(String, bool)>> = BTreeMap::new();
     for row in rows {
         let id: String = row.try_get("", "id")?;
         let heap: Option<String> = row.try_get("", "heap_id")?;
         let team: Option<String> = row.try_get("", "team_id")?;
+        let merged: Option<String> = row.try_get("", "merged_into")?;
         match (heap, team) {
-            (Some(heap), None) => heap_tags.entry(heap).or_default().push(id),
+            (Some(heap), None) => heap_tags.entry(heap).or_default().push((id, merged.is_some())),
             (None, Some(team)) => team_tags.entry(team).or_default().push(id),
             _ => {
                 return Err(DbErr::Migration(format!(
@@ -126,8 +130,13 @@ async fn backfill(db: &impl ConnectionTrait) -> Result<(), DbErr> {
             .get(&heap)
             .ok_or_else(|| DbErr::Migration(format!("a tag names the missing heap {heap}")))?;
         let mut counts = team_counts.get(team).copied().unwrap_or_default();
-        for id in ids {
-            set_color(db, &id, take_least_used(&mut counts)).await?;
+        for (id, merged) in ids {
+            if merged {
+                let mut uncounted = counts;
+                set_color(db, &id, take_least_used(&mut uncounted)).await?;
+            } else {
+                set_color(db, &id, take_least_used(&mut counts)).await?;
+            }
         }
     }
     Ok(())

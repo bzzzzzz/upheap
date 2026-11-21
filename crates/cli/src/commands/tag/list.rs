@@ -22,9 +22,9 @@ pub struct ListArgs {
     pub shared: SharedArgs,
 }
 
-/// Lists the tags, each name followed by its colour and its whole description, indented, so a reader can tell what each tag is for
-/// without `--json`. In a heap the team's tags come in the same list by name, marked `team`, after the colour. `--quiet` prints the
-/// names one per line and `--json` the server's body.
+/// Lists the tags, each name followed by its colour and its whole description, indented, so a reader can tell what
+/// each tag is for without `--json`. In a heap the team's tags come in the same list by name, marked `team`, after the
+/// colour. `--quiet` prints the names one per line and `--json` the server's body.
 pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let heap_name = match &args.team {
         Some(_) => None,

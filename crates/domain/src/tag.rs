@@ -68,6 +68,22 @@ coded_enum! {
     }
 }
 
+impl TagColor {
+    /// The colour as people read it, in audit entries.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Blue => "Blue",
+            Self::Sky => "Sky",
+            Self::Teal => "Teal",
+            Self::Green => "Green",
+            Self::Lime => "Lime",
+            Self::Rose => "Rose",
+            Self::Pink => "Pink",
+            Self::Grey => "Grey",
+        }
+    }
+}
+
 /// The colour a new tag gets among tags whose colours are `used`: the least used one, the first in palette order
 /// when several are.
 pub fn pick_color(used: impl IntoIterator<Item = TagColor>) -> TagColor {

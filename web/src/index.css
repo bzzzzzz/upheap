@@ -66,7 +66,8 @@
   --avatar-5: #e0f2fe;
   --avatar-5-ink: #075985;
   /* Tag colours (ux.md, Principles): the border, the text and the text under the pointer, per colour. The border is
-   * the same in both modes. Violet, amber and red are left out, so parameters, the accent and overdue keep their meaning. */
+   * the same in both modes. Violet, amber and red are left out, so parameters, the accent and overdue keep their
+   * meaning. */
   --tag-blue: #3b82f6;
   --tag-blue-ink: #1d4ed8;
   --tag-blue-ink-hover: #1e40af;

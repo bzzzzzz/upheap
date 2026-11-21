@@ -596,8 +596,25 @@ async fn a_team_tag_gets_a_colour_and_a_colour_edit_is_returned_and_audited() ->
     expect_that!(
         log.body["entries"][0]["changes"],
         eq(&json!([
-            { "field": "color", "label": "Colour", "before": first["color"], "after": "teal", "text_diff": null },
+            { "field": "color", "label": "Colour", "before": "Blue", "after": "Teal", "text_diff": null },
         ]))
     );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heap_tag_without_a_colour_counts_the_tags_of_its_team() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let team_tag = w.new_team_tag("docs").await?;
+
+    // Act
+    w.app.new_tag_id(&w.session, &w.first, "ops").await?;
+    let listed = w.heap_tags(&w.first).await?;
+
+    // Assert
+    expect_that!(listed.body["tags"][0]["color"].is_string(), eq(true));
+    expect_that!(listed.body["tags"][0]["color"], not(eq(&team_tag["color"])));
     Ok(())
 }

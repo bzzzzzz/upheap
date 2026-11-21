@@ -243,8 +243,8 @@ function MakeTeamTag({ tag, heap, team, teamName }: { tag: Tag; heap: HeapSummar
 }
 
 /**
- * The tag's name, description and colour, saved together. Saving, Cancel or Escape close the form; Save with nothing changed
- * just closes it. A newer version from the server (someone else's edit) replaces what's typed.
+ * The tag's name, description and colour, saved together. Saving, Cancel or Escape close the form; Save with nothing
+ * changed just closes it. A newer version from the server (someone else's edit) replaces what's typed.
  */
 function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; onClose: () => void }) {
   const update = useUpdateTagIn(settings.scope);

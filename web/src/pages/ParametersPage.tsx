@@ -30,6 +30,7 @@ import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { TagPicker } from "../components/TagPicker";
+import { tagChipColor } from "../components/tagColor";
 import { TeamMark } from "../components/TeamMark";
 import { teamName } from "../components/teamName";
 import { useToast } from "../components/UndoToast";
@@ -805,7 +806,7 @@ function LinkedTags({ parameter, heapRef, canEdit }: { parameter: CardParameter;
           {linked.map((tag) => (
             <li
               key={tag.id}
-              className="inline-flex h-[26px] items-center rounded-full border border-line bg-sunken px-2.5 text-[13px] font-medium"
+              className={`inline-flex h-[26px] items-center rounded-full border bg-transparent px-2.5 text-[13px] font-medium ${tagChipColor(tag.color)}`}
             >
               {tag.name}
             </li>
