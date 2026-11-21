@@ -345,7 +345,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    to an agent can offer Undo from inside a phone's sheet; the Add dialog and the other sheets stay above it.
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `s` starts
    (an open or blocked item), `b` blocks (an open or in-progress item, with no reason, as the swipe does), `x` marks
-   done and `a` sends one step to an agent, where the robot button shows; `N` and `/` stay. Tab goes the state button, Done, the robot, then the row's link, then its tags and parameter chips.
+   done and `a` sends one step to an agent, where the robot button shows; `N` and `/` stay. Tab goes the state
+   button, Done, the robot, then the row's link, then its tags and parameter chips.
 5. On a touch screen, swiping a row right marks it done; swiping left offers Agent (where the robot button would
    show, sending one step at once as the button does), In progress and Blocked.
 6. Saved views are hidden in the web app for now, and `view=` in the URL is ignored: a views bar duplicated the
