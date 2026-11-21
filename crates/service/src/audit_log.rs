@@ -419,12 +419,18 @@ fn present_page(
         .map(|entry| {
             let about_actor = entry.entity_id == *entry.actor.as_uuid();
             let (phrase, names_entity) = describe_phrase(entry.action, entry.entity_type, about_actor, &entry.diff);
+            // An operator's account change reads as about the account and doesn't name the operator.
+            let actor = if is_operators_account_change(entry.action, &entry.diff) {
+                UserId::from_uuid(entry.entity_id)
+            } else {
+                entry.actor
+            };
             AuditEntryView {
                 id: entry.id,
                 created_at: entry.created_at,
                 created_label: describe_time(entry.created_at, tz),
-                actor: entry.actor,
-                actor_name: names.get(*entry.actor.as_uuid()).unwrap_or("Unknown user").to_owned(),
+                actor,
+                actor_name: names.get(*actor.as_uuid()).unwrap_or("Unknown user").to_owned(),
                 action: entry.action,
                 phrase,
                 names_entity,
@@ -472,6 +478,14 @@ fn describe_phrase(
     {
         return (Cow::Borrowed("was made an admin by whoever runs the server"), false);
     }
+    if is_operators_account_change(action, diff) {
+        let phrase = match action {
+            AuditAction::AccountDeactivated => "was turned off by whoever runs the server",
+            AuditAction::AccountReactivated => "was turned back on by whoever runs the server",
+            _ => "had a reset link made by whoever runs the server",
+        };
+        return (Cow::Borrowed(phrase), false);
+    }
     let (lead, key) = match action {
         AuditAction::GroupMemberAdded => ("joined through", AuditField::Groups),
         AuditAction::GroupMemberRemoved => ("left: no longer in", AuditField::Groups),
@@ -490,6 +504,15 @@ fn describe_phrase(
         None => return (Cow::Borrowed(phrase), names_entity),
     };
     (Cow::Owned(format!("{lead} the {noun} group")), names_entity)
+}
+
+/// Whether the entry is an operator turning an account off or on, or making it a reset link. Its actor is the
+/// operator, or the person for the server's shell, and the entity is the account, which the line is about.
+fn is_operators_account_change(action: AuditAction, diff: &Value) -> bool {
+    matches!(
+        action,
+        AuditAction::AccountDeactivated | AuditAction::AccountReactivated | AuditAction::PasswordResetLinkMade
+    ) && diff.get(AuditField::MadeBy.code()).and_then(Value::as_str) == Some("operator")
 }
 
 /// What `action` says, read after the actor's name, and whether the entity's name follows it. `about_actor` is
@@ -557,6 +580,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::EmailChangeAsked, _) => ("asked to change their email address", false),
         (AuditAction::EmailChanged, _) => ("changed their email address", false),
         (AuditAction::EmailConfirmed, _) => ("confirmed their email address", false),
+        (AuditAction::OperatorGranted, _) => ("was made an operator", false),
+        (AuditAction::OperatorRemoved, _) => ("was no longer an operator", false),
     }
 }
 
@@ -600,7 +625,9 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::AccountDeactivated
         | AuditAction::AccountReactivated
         | AuditAction::EmailChangeAsked
-        | AuditAction::EmailConfirmed => DiffShape::Created,
+        | AuditAction::EmailConfirmed
+        | AuditAction::OperatorGranted
+        | AuditAction::OperatorRemoved => DiffShape::Created,
         AuditAction::MemberRemoved | AuditAction::MemberLeft | AuditAction::GroupMemberRemoved => DiffShape::Ended,
         AuditAction::UserUpdated
         | AuditAction::TeamUpdated
@@ -1689,6 +1716,39 @@ mod tests {
             made_by("robot"),
             elements_are![eq(&change("made_by", "Made by", None, Some("robot")))]
         );
+    }
+
+    #[gtest]
+    fn an_operators_account_change_reads_as_about_the_account() {
+        let operator = json!({ "made_by": "operator" });
+        let phrase = |action, diff: &Value| describe_phrase(action, EntityType::User, false, diff);
+
+        expect_that!(
+            phrase(AuditAction::AccountDeactivated, &operator),
+            eq(&(Cow::Borrowed("was turned off by whoever runs the server"), false))
+        );
+        expect_that!(
+            phrase(AuditAction::AccountReactivated, &operator),
+            eq(&(Cow::Borrowed("was turned back on by whoever runs the server"), false))
+        );
+        expect_that!(
+            phrase(AuditAction::PasswordResetLinkMade, &operator),
+            eq(&(Cow::Borrowed("had a reset link made by whoever runs the server"), false))
+        );
+        // The provider's own pushes keep their words.
+        expect_that!(
+            phrase(AuditAction::AccountDeactivated, &json!({})).0,
+            eq("was turned off by the sign-in provider")
+        );
+
+        // The line names the account, not the operator who is the entry's actor.
+        let mut made = entry(AuditAction::AccountDeactivated, EntityType::User, operator);
+        made.entity_id = Uuid::from_u128(4);
+        let mut names = Names::default();
+        names.insert(Uuid::from_u128(3), "Ana Lee");
+        names.insert(Uuid::from_u128(4), "Bo Park");
+        let page = present_page(vec![made], None, &names, &HashMap::new(), &TimeZone::UTC);
+        expect_that!(page.entries[0].actor_name, eq("Bo Park"));
     }
 
     #[gtest]

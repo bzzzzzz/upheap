@@ -186,6 +186,7 @@ impl TestServer {
                 group_teams: service::group_teams::GroupTeams::default(),
                 scim: None,
                 operator_contact: None,
+                base_url: "http://localhost".to_owned(),
             },
         )
         .with_random(random);

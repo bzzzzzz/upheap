@@ -526,7 +526,8 @@ impl Services {
     }
 
     /// Opens a session for the user, the one place every sign-in, registration and password reset does. Refuses with
-    /// [`ServiceError::AccountDeactivated`] when the provider has deactivated the person (see [`crate::scim`]).
+    /// [`ServiceError::AccountDeactivated`] when the provider has deactivated the person (see [`crate::scim`]), and with
+    /// [`ServiceError::AccountTurnedOff`] when an operator has turned the account off. Sets the user's last sign-in.
     pub(crate) async fn open_session(
         &self,
         db: &impl store::ConnectionTrait,
@@ -540,6 +541,7 @@ impl Services {
             .checked_add(self.settings.session_ttl)
             .ok_or(ServiceError::Invalid(domain::ValidationError::TimestampOutOfRange))?;
         store::sessions::insert_session(db, &token.to_hash(), user.id, now, expires_at, id_token).await?;
+        store::users::touch_last_sign_in(db, user.id, now).await?;
         Ok(SessionGrant {
             token,
             user,

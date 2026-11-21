@@ -66,6 +66,8 @@ What it is not:
    ends all the user's sign-ins, personal tokens included. The operator can set a line that says who they are and how
    to reach them, and the sign-in page shows it, so someone who forgot their password knows whom to ask.
 7. A password change and a reset are in the audit log, without the password, and only the user sees them.
+8. The person who runs the server can see every account, turn a local one off and on, and make a reset link, from the
+   web, once the server's command has made them an operator. Only that command grants or removes the role.
 
 ## Email
 

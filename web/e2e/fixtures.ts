@@ -314,7 +314,7 @@ export async function expectFitsWidth(page: Page, name: string) {
 
 /** A page the app's navigation leads to. Context, Tags, Parameters and Ranking are tabs of the heap's Settings. */
 export type AppPage =
-  "Open" | "Closed" | "Activity" | "Settings" | "Context" | "Tags" | "Parameters" | "Ranking" | "Account";
+  "Open" | "Closed" | "Activity" | "Settings" | "Context" | "Tags" | "Parameters" | "Ranking" | "Account" | "Accounts";
 
 /**
  * Goes to one of the app's pages through its navigation, wherever the layout puts it: the sidebar on a wide screen,

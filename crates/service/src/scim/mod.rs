@@ -654,6 +654,7 @@ impl Services {
                         let diff = json!({ AuditField::EndedSignIns.code(): ended_sign_ins });
                         self.record_account_change(
                             txn,
+                            Principal { user_id, run: None },
                             user_id,
                             personal_team,
                             AuditAction::AccountDeactivated,
@@ -665,6 +666,7 @@ impl Services {
                 } else if off_before {
                     self.record_account_change(
                         txn,
+                        Principal { user_id, run: None },
                         user_id,
                         personal_team,
                         AuditAction::AccountReactivated,
@@ -752,11 +754,15 @@ impl Services {
         Ok(personal_team)
     }
 
-    /// Writes an account entry for a change the provider made, in the person's personal team, with the person as the
-    /// actor: no account did it.
-    async fn record_account_change(
+    /// Writes an account entry about `user_id` in their personal team, with `actor` as its actor. A change the
+    /// provider made has the person as the actor: no account did it.
+    // One more than clippy likes: the actor is a different account from the person for an operator's entries, and
+    // the personal team is already locked and known to each caller, so none of them is worth a type of its own.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn record_account_change(
         &self,
         txn: &impl ConnectionTrait,
+        actor: Principal,
         user_id: UserId,
         personal_team: TeamId,
         action: AuditAction,
@@ -764,7 +770,7 @@ impl Services {
         now: Timestamp,
     ) -> Result<(), ServiceError> {
         let entry = self.team_audit_entry(
-            Principal { user_id, run: None },
+            actor,
             personal_team,
             action,
             EntityType::User,
@@ -878,19 +884,30 @@ impl Services {
         db: &impl ConnectionTrait,
         user_id: UserId,
     ) -> Result<(), ServiceError> {
+        if store::users::is_turned_off(db, user_id).await? {
+            tracing::info!(%user_id, "sign-in refused: an operator turned the account off");
+            return Err(ServiceError::AccountTurnedOff);
+        }
         let (Some(_), Some(oidc)) = (&self.settings.scim, &self.settings.oidc) else {
             return Ok(());
         };
         let Some(subject) = store::identities::find_identity_subject(db, oidc.issuer(), user_id).await? else {
             return Ok(());
         };
-        match self.scim_person(db, &subject).await? {
-            Some(person) if !person.active => {
-                tracing::info!(%user_id, "sign-in refused: the provider deactivated the account");
-                Err(ServiceError::AccountDeactivated)
-            }
-            _ => Ok(()),
+        if self.is_scim_inactive(db, &subject).await? {
+            tracing::info!(%user_id, "sign-in refused: the provider deactivated the account");
+            return Err(ServiceError::AccountDeactivated);
         }
+        Ok(())
+    }
+
+    /// Whether the pushes make the person who is `subject` at the provider inactive.
+    pub(crate) async fn is_scim_inactive(
+        &self,
+        db: &impl ConnectionTrait,
+        subject: &str,
+    ) -> Result<bool, ServiceError> {
+        Ok(matches!(self.scim_person(db, subject).await?, Some(person) if !person.active))
     }
 
     // Resources.

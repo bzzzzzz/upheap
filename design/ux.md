@@ -995,6 +995,55 @@ it, when it ended or who revoked it and when, and how many joined; on a phone th
 The team's Activity, shown to admins like other membership lines, says "Ana made an invite link", "Ben revoked Ana's
 invite link" and "Sam joined through Ana's invite link". It marks an agent's change like the heap's Activity does.
 
+## Accounts
+
+Accounts is the page of an operator of the server, the person the server's `user make-operator` command made one. It
+lists every account, so on a server without mail they can make a reset link for someone who forgot their password,
+and turn a local account off and on. Anyone else sees no entry and gets the not-found page at `/accounts`, since the
+server answers `404` to everything on it.
+
+**Where it sits.** An entry with a shield icon, shown only to an operator: in the sidebar and the tablet's rail above
+Teams and Account, and on a phone as a row in More above Teams. Like Teams and Account, the page keeps the shell
+without a heap.
+
+**The page** follows the settings layout ([Rules](#rules) §3): the title "Accounts" and one line, "Every account on
+this server.", a search field and a filter (All accounts, Active, Deactivated, Unconfirmed, Operators) as a select, then
+the rows. The server sends the whole list, ordered by name, and the page searches (name, username and email, ignoring
+case, as it is typed) and filters it in the browser, since a server has tens to a few hundred accounts. It shows the
+first 50 matches, and **Load more** adds 50. No match says "No accounts match."; loading and errors read as on the other
+settings pages. A row is the Team page's member row: initials avatar, name, "@username · email", small labels for
+Provider, Unconfirmed, Deactivated and Operator, the last sign-in on the right ("3 days ago" as the Sign-ins card says
+it, or "Never"), and a ⋯. A deactivated account is dimmed and stays in the list.
+
+**Actions** are in the ⋯, a menu on a wide screen and a tablet and a sheet on a phone:
+
+- **Make reset link**, for a local, active account other than your own, and only while password sign-in is on. The link
+  opens under the row (in the sheet on a phone) in a read-only field with **Copy**, as an invite link's does, and a
+  copy the browser refuses leaves the link in the field; **Done** closes it. The link is shown once and kept nowhere.
+- **Deactivate…**, for a local, active account other than your own, asks first, inline under the row (in the sheet on a
+  phone), with what ends: "Turn off Sam Ortiz's account? 2 sign-ins and 1 personal token end. Their items and teams
+  stay." with **Deactivate** and **Cancel**. The counts are read when the entry is chosen. The row then shows
+  Deactivated.
+- **Reactivate**, for a deactivated local account, acts at once and offers Undo in a toast, "Sam Ortiz's account is back
+  on.", which turns it off again with no question, since nothing is left to end.
+- **History**, for every account, opens the account's history under the row (in the sheet on a phone), the History
+  card's list of the account, read with the operator's wording.
+
+The ⋯ shows what the account's `allowed_actions` allow. A provider account, and your own row, have History only: the
+identity provider owns a provider account's state, and the server refuses turning yourself off. Focus goes back to the row's ⋯ after Done or Cancel. Errors show under the row.
+
+**What the person sees.** Signing in to an account that was turned off says "Whoever runs this server has turned off
+your account." and, under it, the operator's contact line when one is set. Their other tabs fall to sign-in on the next
+request, since every session of theirs ended.
+
+**History wording.** The History card of the person and the operator's list read the same entries, worded for the
+reader. For the operator, who did it is named: "Reset link made by Ana Lee.", "Deactivated by Ana Lee. 3 sign-ins
+ended.", "Reactivated by Ana Lee.", and for a command run on the server "Reset link made from the server.",
+"Deactivated from the server. 3 sign-ins ended." and "Reactivated from the server.". The person reads "Reset link made
+by whoever runs the server.", "Turned off by whoever runs the server. 3 sign-ins ended." and "Turned back on by
+whoever runs the server.". Both read "Made an operator from the server." and "Operator role removed from the server.".
+The provider's entries and every other entry read the same for both.
+
 ## Sign in and create account
 
 A card on a wide screen and the bare form on a phone, with a Sign in / Create account switch. Sign in takes "Email
@@ -1252,7 +1301,7 @@ Make a token. The secret lives only in the page's state, so leaving the page dro
 
 Account's last card, after Command line and before Sign out, is headed "History" and holds one collapsed disclosure,
 "Changes to your account", like the ones on a tag or a member, with the same chevron and touch target. It loads only
-when opened, and lists the user's password events, their address changes, the sign-in provider turning the account off and back on, and
+when opened, and lists the user's password events, their address changes, the sign-in provider or an operator turning the account off and back on, the operator role given or taken away, and
 their own heap priority changes, newest first, each a sentence from the server and its time: "Password changed. 2
 other sign-ins ended.", "Reset link made by whoever runs the server.", "Reset link sent by mail, as asked on the
 sign-in page.", "Password set with a reset link. 3 sign-ins ended.", "Address change to sam@new.example asked. A link was mailed there.", "Address changed from sam@old.example to sam@new.example.", "Turned off by your sign-in provider. 3 sign-ins

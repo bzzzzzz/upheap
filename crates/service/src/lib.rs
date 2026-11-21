@@ -24,6 +24,7 @@ pub mod me;
 mod moves;
 pub mod oauth;
 pub mod oidc;
+pub mod operators;
 pub mod parameters;
 pub mod password_reset;
 mod personal;
@@ -82,10 +83,14 @@ pub struct Settings {
     pub scim: Option<scim::ScimSettings>,
     /// Who to ask, shown where the web app or a mail says to ask whoever runs the server.
     pub operator_contact: Option<String>,
+    /// `BASE_URL`, without a trailing slash: the address links the server shows start with, such as the reset link
+    /// an operator makes.
+    pub base_url: String,
 }
 
 impl Default for Settings {
-    /// Registration closed, 30-day sessions, the default sign-in limit, no provider, no group-managed team and no SCIM.
+    /// Registration closed, 30-day sessions, the default sign-in limit, no provider, no group-managed team, no SCIM and
+    /// `http://localhost:8080` as the base URL.
     fn default() -> Self {
         Self {
             allow_registration: false,
@@ -96,6 +101,7 @@ impl Default for Settings {
             group_teams: group_teams::GroupTeams::default(),
             scim: None,
             operator_contact: None,
+            base_url: "http://localhost:8080".to_owned(),
         }
     }
 }
@@ -192,6 +198,11 @@ impl Services {
     /// Who to ask, as the operator wrote it, if they set one.
     pub fn operator_contact(&self) -> Option<&str> {
         self.settings.operator_contact.as_deref()
+    }
+
+    /// The address links the server shows start with: `BASE_URL`, without a trailing slash.
+    pub fn base_url(&self) -> &str {
+        &self.settings.base_url
     }
 
     /// Refuses with [`ServiceError::PasswordSignInOff`] when the provider is the only way in.

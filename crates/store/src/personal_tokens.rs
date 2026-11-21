@@ -7,7 +7,7 @@ use domain::oauth::RevokeReason;
 use domain::personal_token::LAST_USED_PRECISION;
 use domain::{PersonalTokenId, Timestamp, UserId};
 use sea_orm::sea_query::Condition;
-use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 
 use crate::StoreError;
 use crate::codes::{RowReader, id_to_db, revoke_reason_to_db};
@@ -97,6 +97,20 @@ pub async fn list_live_personal_tokens(
         .into_iter()
         .map(to_token)
         .collect()
+}
+
+/// How many live tokens the user has at `now`.
+pub async fn count_live_personal_tokens(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    now: Timestamp,
+) -> Result<u64, StoreError> {
+    let count = personal_tokens::Entity::find()
+        .filter(personal_tokens::Column::UserId.eq(id_to_db(user_id.as_uuid())))
+        .filter(is_live(now))
+        .count(db)
+        .await?;
+    Ok(count)
 }
 
 /// Revokes the token at `now` and returns whether this call did (`false` when it was revoked already).

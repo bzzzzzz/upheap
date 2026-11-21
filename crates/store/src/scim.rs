@@ -227,6 +227,28 @@ pub async fn list_external_ids(db: &impl ConnectionTrait) -> Result<BTreeSet<Str
         .collect())
 }
 
+/// The external IDs whose every user is inactive: the people the pushes turn off. One query, no groups.
+pub async fn list_inactive_external_ids(db: &impl ConnectionTrait) -> Result<BTreeSet<String>, StoreError> {
+    let rows = scim_users::Entity::find()
+        .select_only()
+        .column(scim_users::Column::ExternalId)
+        .column(scim_users::Column::Active)
+        .filter(scim_users::Column::ExternalId.is_not_null())
+        .into_tuple::<(String, bool)>()
+        .all(db)
+        .await?;
+    let active: BTreeSet<&str> = rows
+        .iter()
+        .filter(|(_, active)| *active)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    Ok(rows
+        .iter()
+        .filter(|(id, _)| !active.contains(id.as_str()))
+        .map(|(id, _)| id.clone())
+        .collect())
+}
+
 /// Users in creation order, those whose `field` equals `value` when a filter is given, from `offset`, at most `limit`.
 pub async fn list_users(
     db: &impl ConnectionTrait,

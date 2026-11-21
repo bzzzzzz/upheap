@@ -728,6 +728,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operator/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every account on the server, by display name ignoring case, then username. Not paged: a server has tens to a few
+         *     hundred accounts, so a client searches and filters the list itself. For operators only.
+         */
+        get: operations["list_accounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/accounts/{user_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turns a local account off: it can't sign in, and every sign-in it has ends (web sessions, sign-ins of clients and
+         *     personal tokens). Its items, teams and memberships stay. An account that is off already answers with
+         *     `ended_sign_ins` 0 and records nothing. For operators only.
+         */
+        post: operations["deactivate_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/accounts/{user_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The account's history, newest first, as the person's own (`/me/history`) but worded for an operator: who turned
+         *     the account off or made a reset link is named. For operators only.
+         */
+        get: operations["get_account_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/accounts/{user_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turns a local account back on. The sign-ins that ended stay ended. An account that isn't off answers `204` and
+         *     records nothing. For operators only.
+         */
+        post: operations["reactivate_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/accounts/{user_id}/reset-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Makes a password reset link for the account, which works once, for an hour, and cancels the account's earlier
+         *     link. The link is in this response only. For operators only.
+         */
+        post: operations["make_reset_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/accounts/{user_id}/sign-ins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many live sign-ins and personal tokens turning the account off would end, to say so before asking. For
+         *     operators only.
+         */
+        get: operations["count_sign_ins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/password-resets": {
         parameters: {
             query?: never;
@@ -2185,6 +2306,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description What turning an account off did. */
+        AccountDeactivated: {
+            /**
+             * Format: int32
+             * @description How many sign-ins ended: web sessions, sign-ins of clients and personal tokens. 0 for an account that was off
+             *     already.
+             */
+            ended_sign_ins: number;
+        };
         /** @description One event in the account's history. */
         AccountEvent: {
             /**
@@ -2204,13 +2334,18 @@ export interface components {
          * @description What happened to the account.
          * @enum {string}
          */
-        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "heap_priority_changed" | "email_change_asked" | "email_changed" | "email_confirmed";
+        AccountEventKind: "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "heap_priority_changed" | "email_change_asked" | "email_changed" | "email_confirmed" | "operator_granted" | "operator_removed";
         /** @description A page of the caller's account history, newest first. */
         AccountHistory: {
             entries: components["schemas"]["AccountEvent"][];
             /** @description Pass as `cursor` for the next page; `null` on the last page. */
             next_cursor?: string | null;
         };
+        /**
+         * @description How an account signs in.
+         * @enum {string}
+         */
+        AccountKind: "local" | "provider";
         /** @description A row of the list across heaps. */
         AcrossHeapsItem: {
             /**
@@ -2378,7 +2513,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "parameter_merged" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed" | "email_confirmed";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "parameter_merged" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed" | "email_confirmed" | "operator_granted" | "operator_removed";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -3634,6 +3769,8 @@ export interface components {
         Me: {
             /** @description What the user may do with their account, such as signing out and making teams. */
             allowed_actions: components["schemas"]["MeAction"][];
+            /** @description Whether the user is an operator of the server, who reads every account and turns local ones off and on. */
+            operator: boolean;
             teams: components["schemas"]["TeamSummary"][];
             user: components["schemas"]["User"];
         };
@@ -3791,6 +3928,48 @@ export interface components {
             /** @description The app path the sign-in started from, to go to next, if it started from one. */
             redirect?: string | null;
             user: components["schemas"]["User"];
+        };
+        /** @description An account in the operator's list. */
+        OperatorAccount: {
+            allowed_actions: components["schemas"]["OperatorAccountAction"][];
+            /** @description Whether the address is confirmed. */
+            confirmed: boolean;
+            /** @description Whether an operator turned a local account off, or the provider turned a provider account off. */
+            deactivated: boolean;
+            display_name: string;
+            email: string;
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["AccountKind"];
+            /**
+             * Format: int64
+             * @description UTC milliseconds: when a session was last opened for the account. `null` until one is.
+             */
+            last_sign_in_at?: number | null;
+            /** @description How long ago, in the request's timezone: "3 days ago". `null` when the account never signed in. */
+            last_sign_in_label?: string | null;
+            /** @description Whether the account is an operator. */
+            operator: boolean;
+            username: string;
+        };
+        /**
+         * @description What the caller may do about an account in the list.
+         * @enum {string}
+         */
+        OperatorAccountAction: "make_reset_link" | "deactivate" | "reactivate" | "history";
+        /** @description Every account on the server, by display name ignoring case, then username. */
+        OperatorAccountList: {
+            accounts: components["schemas"]["OperatorAccount"][];
+        };
+        /** @description A reset link just made. This is the only time it is shown. */
+        OperatorResetLink: {
+            /**
+             * Format: int64
+             * @description UTC milliseconds.
+             */
+            expires_at: number;
+            /** @description The whole link: `{base_url}/reset/{token}`. Works once, for an hour, and cancels the account's earlier link. */
+            url: string;
         };
         /** @description One option of a new arrangement. */
         OptionArrangement: {
@@ -4595,6 +4774,16 @@ export interface components {
             login: string;
             password: string;
         };
+        /** @description What turning an account off would end. */
+        SignInsToEnd: {
+            /** Format: int32 */
+            personal_tokens: number;
+            /**
+             * Format: int32
+             * @description Live web sessions and sign-ins of clients such as the CLI.
+             */
+            sign_ins: number;
+        };
         /** @description Where to send the browser to end the person's session at the identity provider too. */
         SignedOut: {
             /** @description The provider's end session endpoint, with the ID token hint, the client and where to come back to (`/login`). */
@@ -5168,9 +5357,11 @@ export interface components {
     headers: never;
     pathItems: never;
 }
+export type AccountDeactivated = components['schemas']['AccountDeactivated'];
 export type AccountEvent = components['schemas']['AccountEvent'];
 export type AccountEventKind = components['schemas']['AccountEventKind'];
 export type AccountHistory = components['schemas']['AccountHistory'];
+export type AccountKind = components['schemas']['AccountKind'];
 export type AcrossHeapsItem = components['schemas']['AcrossHeapsItem'];
 export type AcrossHeapsList = components['schemas']['AcrossHeapsList'];
 export type AddCommentRequest = components['schemas']['AddCommentRequest'];
@@ -5297,6 +5488,10 @@ export type OidcPending = components['schemas']['OidcPending'];
 export type OidcProvider = components['schemas']['OidcProvider'];
 export type OidcRegisterRequest = components['schemas']['OidcRegisterRequest'];
 export type OidcRegistered = components['schemas']['OidcRegistered'];
+export type OperatorAccount = components['schemas']['OperatorAccount'];
+export type OperatorAccountAction = components['schemas']['OperatorAccountAction'];
+export type OperatorAccountList = components['schemas']['OperatorAccountList'];
+export type OperatorResetLink = components['schemas']['OperatorResetLink'];
 export type OptionArrangement = components['schemas']['OptionArrangement'];
 export type OriginInput = components['schemas']['OriginInput'];
 export type Parameter = components['schemas']['Parameter'];
@@ -5362,6 +5557,7 @@ export type SearchRow = components['schemas']['SearchRow'];
 export type SendToAgentRequest = components['schemas']['SendToAgentRequest'];
 export type SetPasswordRequest = components['schemas']['SetPasswordRequest'];
 export type SignInRequest = components['schemas']['SignInRequest'];
+export type SignInsToEnd = components['schemas']['SignInsToEnd'];
 export type SignedOut = components['schemas']['SignedOut'];
 export type Size = components['schemas']['Size'];
 export type Stage = components['schemas']['Stage'];
@@ -7007,6 +7203,298 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OAuthError"];
+                };
+            };
+        };
+    };
+    list_accounts: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorAccountList"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller isn't an operator */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deactivate_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account's `id`, from the list. */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountDeactivated"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller isn't an operator, or there is no such account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `account_provider_managed`: the sign-in provider owns the account's state; `own_account`: the caller's own account */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_account_history: {
+        parameters: {
+            query?: {
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /** @description The account's `id`, from the list. */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountHistory"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller isn't an operator, or there is no such account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reactivate_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account's `id`, from the list. */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Turned back on, or wasn't off */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller isn't an operator, or there is no such account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `account_provider_managed`: the sign-in provider owns the account's state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    make_reset_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account's `id`, from the list. */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorResetLink"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `password_sign_in_off`; `account_turned_off`: an operator turned the account off */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller isn't an operator, or there is no such account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `account_provider_managed`: the sign-in provider owns the account's state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    count_sign_ins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account's `id`, from the list. */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignInsToEnd"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The caller isn't an operator, or there is no such account */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };

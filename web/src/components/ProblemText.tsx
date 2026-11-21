@@ -11,6 +11,9 @@ export const NETWORK_EDIT_MESSAGES: Record<string, string> = {
 export const ACCOUNT_DEACTIVATED =
   "Your organisation has turned off your access to Upheap. Ask your administrator to turn it back on.";
 
+/** What a person whose account whoever runs the server turned off is told, signing in with a password. */
+export const ACCOUNT_TURNED_OFF = "Whoever runs this server has turned off your account.";
+
 /**
  * What to tell the user for problem codes they can act on, by `code`, or by `code.field` where the field changes the
  * words. Anything else shows the server's title.
@@ -46,6 +49,7 @@ const MESSAGES: Record<string, string> = {
   invalid_credentials: "That email or username and password don't match an account.",
   registration_closed: "This server isn't taking new accounts.",
   account_deactivated: ACCOUNT_DEACTIVATED,
+  account_turned_off: ACCOUNT_TURNED_OFF,
   // The Password card on Account. An empty new password has its own words in the card.
   "field_empty.current_password": "Enter your current password.",
   wrong_password: "That isn't your current password.",

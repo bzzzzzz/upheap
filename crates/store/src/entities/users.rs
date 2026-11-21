@@ -12,6 +12,9 @@ pub struct Model {
     pub created_at: i64,
     pub version: i32,
     pub unconfirmed_since: Option<i64>,
+    pub operator_since: Option<i64>,
+    pub deactivated_at: Option<i64>,
+    pub last_sign_in_at: Option<i64>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

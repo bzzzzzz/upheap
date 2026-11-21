@@ -207,7 +207,9 @@ impl Services {
         // A deactivation expired the code at its own `now`, which another server's clock may put after this one's, so
         // the person's state is checked too. Refused as the expired code it is, in the token endpoint's own format.
         match self.refuse_deactivated(&txn, code.user_id).await {
-            Err(ServiceError::AccountDeactivated) => return Err(GrantError::CodeExpired.into()),
+            Err(ServiceError::AccountDeactivated | ServiceError::AccountTurnedOff) => {
+                return Err(GrantError::CodeExpired.into());
+            }
             other => other?,
         }
         let family_id = TokenFamilyId::from_uuid(self.new_id(now));

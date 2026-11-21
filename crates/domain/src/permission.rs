@@ -69,7 +69,9 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::AccountReactivated
         | AuditAction::EmailChangeAsked
         | AuditAction::EmailChanged
-        | AuditAction::EmailConfirmed => Permission::ManageTeam,
+        | AuditAction::EmailConfirmed
+        | AuditAction::OperatorGranted
+        | AuditAction::OperatorRemoved => Permission::ManageTeam,
         AuditAction::HeapCreated
         | AuditAction::HeapUpdated
         | AuditAction::HeapArchived

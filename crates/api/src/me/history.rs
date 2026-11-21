@@ -28,6 +28,8 @@ fn to_kind_dto(kind: AccountEventKind) -> AccountEventKindDto {
         AccountEventKind::EmailChangeAsked => AccountEventKindDto::EmailChangeAsked,
         AccountEventKind::EmailChanged => AccountEventKindDto::EmailChanged,
         AccountEventKind::EmailConfirmed => AccountEventKindDto::EmailConfirmed,
+        AccountEventKind::OperatorGranted => AccountEventKindDto::OperatorGranted,
+        AccountEventKind::OperatorRemoved => AccountEventKindDto::OperatorRemoved,
     }
 }
 
@@ -41,7 +43,7 @@ fn to_account_event_dto(event: AccountEvent) -> AccountEventDto {
     }
 }
 
-fn to_account_history_dto(page: AccountHistoryPage) -> AccountHistoryDto {
+pub(crate) fn to_account_history_dto(page: AccountHistoryPage) -> AccountHistoryDto {
     AccountHistoryDto {
         entries: page.entries.into_iter().map(to_account_event_dto).collect(),
         next_cursor: page.next.map(format_cursor),

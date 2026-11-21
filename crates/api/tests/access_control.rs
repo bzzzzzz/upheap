@@ -35,6 +35,9 @@ enum Access {
     SignedInWithMail,
     /// Any signed-in user; nothing is scoped to a team.
     SignedIn,
+    /// Operators only. Nobody here is one, so every signed-in caller gets `not_found`; `operators.rs` tests the
+    /// endpoints themselves.
+    Operator,
     /// Members of the heap's team holding `permission`. Writes are refused while the heap is archived.
     Heap { permission: Permission, writes: bool },
     /// Members of the team holding `permission`.
@@ -95,6 +98,8 @@ enum Target {
     /// An account of its own, signed in when the caller is, so a request that replaces the caller's session (a
     /// password change) doesn't end the caller's shared one.
     OwnAccount,
+    /// An account's ID in `{user_id}`.
+    AnAccount,
     /// The shared team, with its version for `If-Match`.
     Team,
     /// A new user, added to the shared team as a member, in `{username}`.
@@ -249,7 +254,7 @@ struct Endpoint {
 }
 
 fn endpoints() -> Vec<Endpoint> {
-    use Access::{Heap, Mail, Provider, Public, SharedTeam, SignedIn, SignedInWithMail, Team};
+    use Access::{Heap, Mail, Operator, Provider, Public, SharedTeam, SignedIn, SignedInWithMail, Team};
     use Permission::{ConfigureHeap, EditItems, LeaveTeam, ManageHeaps, ManageTeam, ViewHeap, ViewTeam};
     let view = Heap {
         permission: ViewHeap,
@@ -499,6 +504,54 @@ fn endpoints() -> Vec<Endpoint> {
             "/me/history",
             SignedIn,
             Target::OwnAccount,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/operator/accounts",
+            Operator,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/operator/accounts/{user_id}/sign-ins",
+            Operator,
+            Target::AnAccount,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/operator/accounts/{user_id}/deactivate",
+            Operator,
+            Target::AnAccount,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/operator/accounts/{user_id}/reactivate",
+            Operator,
+            Target::AnAccount,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::POST,
+            "/operator/accounts/{user_id}/reset-link",
+            Operator,
+            Target::AnAccount,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/operator/accounts/{user_id}/history",
+            Operator,
+            Target::AnAccount,
             RequestBody::Empty,
             StatusCode::OK,
         ),
@@ -1314,11 +1367,17 @@ fn expected_outcome(endpoint: &Endpoint, caller: Caller, archived: bool) -> Outc
             return Outcome::problem(StatusCode::UNAUTHORIZED, "unauthenticated");
         }
         Access::SignedInWithMail => return Outcome::problem(StatusCode::NOT_FOUND, "not_found"),
-        Access::SignedIn | Access::Heap { .. } | Access::Team { .. } | Access::SharedTeam { .. } | Access::OwnRun
+        Access::SignedIn
+        | Access::Operator
+        | Access::Heap { .. }
+        | Access::Team { .. }
+        | Access::SharedTeam { .. }
+        | Access::OwnRun
             if matches!(caller, Caller::Anonymous) =>
         {
             return Outcome::problem(StatusCode::UNAUTHORIZED, "unauthenticated");
         }
+        Access::Operator => return Outcome::problem(StatusCode::NOT_FOUND, "not_found"),
         Access::SignedIn => return Outcome::success(endpoint.success),
         Access::OwnRun => {
             return if matches!(caller, Caller::Outsider) {
@@ -2236,6 +2295,9 @@ impl World {
                     Some(_) => Some(self.new_user().await?.0),
                     None => None,
                 };
+            }
+            Target::AnAccount => {
+                path = path.replace("{user_id}", "7a1f9c2e-0d0b-4f5e-9a39-6c1e5d2b8f40");
             }
             Target::FreshSession => {
                 session = match account {
