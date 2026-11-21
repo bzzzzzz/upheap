@@ -677,7 +677,6 @@ async fn item_list_all_heaps_doesnt_go_with_the_one_heap_flags_and_sends_nothing
 
     for flags in [
         &["--heap", "ada/personal"][..],
-        &["--tag", "Infra"],
         &["--closed"],
         &["--view", "mine"],
         &["--sort", "due"],
@@ -693,6 +692,67 @@ async fn item_list_all_heaps_doesnt_go_with_the_one_heap_flags_and_sends_nothing
         expect_that!(listed.stdout, eq(""), "{flags:?}");
         expect_that!(listed.stderr, contains_substring("--all-heaps"), "{flags:?}");
     }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_all_heaps_tag_needs_a_team_and_sends_nothing_without_one() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_two_heaps(&server).await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let listed = cli.run(&["item", "list", "--all-heaps", "--tag", "Infra"]).await;
+
+    // Assert
+    expect_that!(listed.exited(2), eq(true));
+    expect_that!(listed.stdout, eq(""));
+    expect_that!(listed.stderr, contains_substring("--tag with --all-heaps needs --team"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_list_all_heaps_team_tag_keeps_the_items_with_that_team_tag() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_two_heaps(&server).await?;
+    let tag = server
+        .send(&ada, "POST", "/teams/ada/tags", Some(json!({ "name": "Security" })))
+        .await?;
+    let tagged = server
+        .add_item(
+            &ada,
+            "ada/ops",
+            json!({ "title": "Rotate keys", "tag_ids": [tag["id"]] }),
+        )
+        .await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+
+    // Act
+    let listed = cli
+        .run(&[
+            "item",
+            "list",
+            "-q",
+            "--all-heaps",
+            "--team",
+            "ada",
+            "--tag",
+            "security",
+        ])
+        .await;
+    let unknown = cli
+        .run(&["item", "list", "-q", "--all-heaps", "--team", "ada", "--tag", "nope"])
+        .await;
+
+    // Assert
+    let key = tagged["key"].as_str().context("key")?;
+    expect_that!(listed.stdout, eq(&format!("ada/ops/{key}\n")));
+    expect_that!(unknown.exited(0), eq(false));
+    expect_that!(unknown.stdout, eq(""));
     Ok(())
 }
 

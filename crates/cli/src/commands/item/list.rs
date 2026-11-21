@@ -8,16 +8,16 @@ use api_types::items::{
 };
 use api_types::list_view::{BlockedLayoutDto, ListViewDto, RemindersModeDto, SortDto, StateModeDto};
 use api_types::parameters::ParameterListDto;
-use api_types::tags::TagListDto;
+use api_types::tags::{TagListDto, TeamTagListDto};
 use api_types::turns::{AgentStateDto, GoalDto};
 use api_types::views::SavedViewListDto;
 use api_types::waiting::ItemHeapDto;
 use clap::{Args, ValueEnum};
 
 use crate::client::NO_QUERY;
-use crate::commands::heap_api::{HeapApi, named_heap, resolve_heap_handle};
+use crate::commands::heap_api::{HeapApi, TeamApi, named_heap, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
-use crate::lookup::{find_view, matches_text, resolve_parameter, resolve_tags};
+use crate::lookup::{find_team_tag, find_view, matches_text, resolve_parameter, resolve_tags};
 use crate::output::{Cell, Mode, Output, Tone, shorten};
 use crate::{App, CliError};
 
@@ -41,7 +41,7 @@ pub struct ListArgs {
     #[arg(value_name = "TEXT", conflicts_with = "json")]
     pub text: Option<String>,
     /// Every open item of every heap you can use, in one ranked list, each with its heap. In place of one heap's list
-    #[arg(long, conflicts_with_all = ["name", "view", "tag", "closed", "sort", "sort_parameter", "reminders"])]
+    #[arg(long, conflicts_with_all = ["name", "view", "closed", "sort", "sort_parameter", "reminders"])]
     pub all_heaps: bool,
     /// With --all-heaps, only this team's heaps, by its slug
     #[arg(long, value_name = "TEAM", requires = "all_heaps")]
@@ -55,7 +55,8 @@ pub struct ListArgs {
     /// A saved view of the heap, by name or ID. Flags given with it change what it shows
     #[arg(long, value_name = "VIEW")]
     pub view: Option<String>,
-    /// Keep items with any of these tags, by name. Repeat for more
+    /// Keep items with any of these tags, by name. Repeat for more. With --all-heaps, needs --team and takes that
+    /// team's tags
     #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
     /// Keep items with any of these needs: idea, nice_to_have, expected, critical. Repeat or separate with commas
@@ -182,9 +183,27 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
 /// `--all-heaps`: `GET /me/items` with the view flags given. `--quiet` prints `team/heap/key`, which every item
 /// command accepts.
 async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
+    if !args.tag.is_empty() && args.team.is_none() {
+        return Err(UsageError::AllHeapsTagWithoutTeam.into());
+    }
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
     let gone = args.blocker.is_some();
+    let tag = match &args.team {
+        Some(team) if !args.tag.is_empty() => {
+            let api = TeamApi {
+                client: &client,
+                token: &token,
+                team,
+            };
+            let tags = api.get::<TeamTagListDto>(&["tags"]).await?;
+            args.tag
+                .iter()
+                .map(|name| find_team_tag(name, &tags.value, team).map(|tag| tag.id))
+                .collect::<Result<_, _>>()?
+        }
+        _ => Vec::new(),
+    };
     let query = AcrossHeapsQuery {
         team: args.team.clone(),
         as_of: None,
@@ -196,9 +215,11 @@ async fn list_across_heaps(args: &ListArgs, app: &App, out: &mut Output) -> Resu
         },
         blocked: if gone { Some(StateModeDto::Shown) } else { args.blocked },
         blocked_layout: args.blocked_layout,
+        tag,
         effort: args.effort.clone(),
         impact: args.impact.clone(),
         need: args.need.clone(),
+        param: Vec::new(),
         agent: args.agent.clone(),
         going_to: args.going_to.clone(),
     };

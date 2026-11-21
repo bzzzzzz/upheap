@@ -453,3 +453,256 @@ async fn a_heaps_priority_leaves_the_order_within_the_heap_alone() -> Result<()>
     expect_that!(titles(&list, "ranked"), elements_are![eq("High"), eq("Low")]);
     Ok(())
 }
+
+/// A team parameter `Tier` with options Gold and Silver, used by `first` only, and a team tag `Ops`; items in both
+/// heaps of the team. Returns the pieces the filter tests name.
+struct TeamFilterWorld {
+    app: TestApp,
+    session: String,
+    team: String,
+    first: String,
+    second: String,
+    tag: String,
+    tier: String,
+    gold: String,
+}
+
+async fn team_filter_world() -> Result<TeamFilterWorld> {
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let (team, first) = app.shared_heap(&session).await?;
+    let team_url = app.team_url(&team).await?;
+    let second = make_heap(&app, &session, &team, "Second").await?;
+    let tag = app
+        .send(
+            Method::POST,
+            &format!("{team_url}/tags"),
+            Some(&session),
+            Some(json!({ "name": "Ops" })),
+        )
+        .await?;
+    anyhow::ensure!(tag.status == StatusCode::CREATED, "team tag failed: {}", tag.body);
+    let parameter = app
+        .send(
+            Method::POST,
+            &format!("{team_url}/parameters"),
+            Some(&session),
+            Some(json!({ "name": "Tier", "options": ["Gold", "Silver"] })),
+        )
+        .await?;
+    anyhow::ensure!(
+        parameter.status == StatusCode::CREATED,
+        "team parameter failed: {}",
+        parameter.body
+    );
+    let used = app
+        .send(
+            Method::POST,
+            &format!(
+                "{}/parameters/{}/use",
+                app.heap_url(&first).await?,
+                parameter.body["id"].as_str().context("parameter id")?
+            ),
+            Some(&session),
+            None,
+        )
+        .await?;
+    anyhow::ensure!(used.status == StatusCode::OK, "use failed: {}", used.body);
+    let option = |label: &str| {
+        parameter.body["options"]
+            .as_array()
+            .and_then(|options| options.iter().find(|o| o["label"] == label))
+            .and_then(|o| o["id"].as_str())
+            .map(str::to_owned)
+            .context("option")
+    };
+    let (gold, silver) = (option("Gold")?, option("Silver")?);
+    let parameter_id = parameter.body["id"].as_str().context("parameter id")?;
+    let tag_id = tag.body["id"].as_str().context("tag id")?.to_owned();
+    for (heap, title, need, tagged, value) in [
+        (&first, "A gold", "critical", true, Some(&gold)),
+        (&first, "A silver", "expected", false, Some(&silver)),
+        (&first, "A gold tagged", "idea", true, Some(&gold)),
+        (&second, "B tagged", "expected", true, None),
+        (&second, "B plain", "critical", false, None),
+    ] {
+        let mut body = json!({ "title": title, "need": need });
+        if tagged {
+            body["tag_ids"] = json!([tag_id]);
+        }
+        if let Some(option) = value {
+            body["parameter_values"] = json!({ parameter_id: option });
+        }
+        app.new_item(&session, heap, body).await?;
+    }
+    let tier = parameter_id.to_owned();
+    Ok(TeamFilterWorld {
+        app,
+        session,
+        team,
+        first,
+        second,
+        tag: tag_id,
+        tier,
+        gold,
+    })
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_team_parameters_option_keeps_the_items_of_the_heaps_that_use_it_in_the_unfiltered_order() -> Result<()> {
+    // Arrange
+    let w = team_filter_world().await?;
+
+    // Act
+    let all = across(&w.app, &w.session, "?team=shared").await?;
+    let filtered = across(&w.app, &w.session, &format!("?team=shared&param={}", w.gold)).await?;
+
+    // Assert
+    let in_all: Vec<String> = titles(&all, "ranked")
+        .into_iter()
+        .filter(|title| title.starts_with("A gold"))
+        .collect();
+    expect_that!(in_all.len(), eq(2));
+    expect_that!(titles(&filtered, "ranked"), eq(&in_all));
+    expect_that!(filtered["count"], eq(&json!(2)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_team_tag_keeps_the_tagged_items_of_every_heap_in_the_unfiltered_order() -> Result<()> {
+    // Arrange
+    let w = team_filter_world().await?;
+
+    // Act
+    let all = across(&w.app, &w.session, "?team=shared").await?;
+    let filtered = across(&w.app, &w.session, &format!("?team=shared&tag={}", w.tag)).await?;
+
+    // Assert
+    let in_all: Vec<String> = titles(&all, "ranked")
+        .into_iter()
+        .filter(|title| title.contains("tagged") || title == "A gold")
+        .collect();
+    expect_that!(in_all.len(), eq(3));
+    expect_that!(titles(&filtered, "ranked"), eq(&in_all));
+    expect_that!(filtered["count"], eq(&json!(3)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_tag_or_option_that_isnt_the_teams_is_refused_with_a_team() -> Result<()> {
+    // Arrange
+    let w = team_filter_world().await?;
+    let heap_tag = w.app.new_tag_id(&w.session, &w.first, "Local").await?;
+    let heap_parameter = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/parameters", w.app.heap_url(&w.first).await?),
+            Some(&w.session),
+            Some(json!({ "name": "Own", "options": ["One"] })),
+        )
+        .await?;
+    anyhow::ensure!(
+        heap_parameter.status == StatusCode::CREATED,
+        "heap parameter failed: {}",
+        heap_parameter.body
+    );
+    let heap_option = heap_parameter.body["options"][0]["id"].as_str().context("option")?;
+
+    for (query, code) in [
+        (format!("?team=shared&tag={heap_tag}"), "tag_not_in_heap"),
+        (
+            "?team=shared&tag=00000000-0000-0000-0000-000000000000".to_owned(),
+            "tag_not_in_heap",
+        ),
+        (format!("?team=shared&param={heap_option}"), "option_not_in_heap"),
+        (format!("?param={}", w.gold), "invalid_query"),
+        (format!("?tag={}", w.tag), "invalid_query"),
+    ] {
+        // Act
+        let response = w
+            .app
+            .send(Method::GET, &format!("/api/v1/me/items{query}"), Some(&w.session), None)
+            .await?;
+
+        // Assert
+        expect_that!(response.body["code"], eq(&json!(code)), "{query}");
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_archived_team_parameters_option_is_accepted_and_filters_nothing() -> Result<()> {
+    // Arrange
+    let w = team_filter_world().await?;
+    let team_url = w.app.team_url(&w.team).await?;
+    let parameter = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{team_url}/parameters"),
+            Some(&w.session),
+            Some(json!({ "name": "Size", "options": ["Big"] })),
+        )
+        .await?;
+    anyhow::ensure!(
+        parameter.status == StatusCode::CREATED,
+        "team parameter failed: {}",
+        parameter.body
+    );
+    let id = parameter.body["id"].as_str().context("parameter id")?;
+    let big = parameter.body["options"][0]["id"].as_str().context("option")?;
+    let archived = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{team_url}/parameters/{id}/archive"),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+    anyhow::ensure!(archived.status == StatusCode::OK, "archive failed: {}", archived.body);
+
+    // Act
+    let all = across(&w.app, &w.session, "?team=shared").await?;
+    let filtered = across(&w.app, &w.session, &format!("?team=shared&param={big}")).await?;
+
+    // Assert
+    expect_that!(titles(&filtered, "ranked"), eq(&titles(&all, "ranked")));
+    expect_that!(filtered["count"], eq(&all["count"]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heap_that_stopped_using_a_team_parameter_has_no_rows_under_its_option() -> Result<()> {
+    // Arrange: a stopped use reads as an archived parameter in that heap, whose options its own list ignores.
+    let w = team_filter_world().await?;
+    let second_url = w.app.heap_url(&w.second).await?;
+    for action in ["use", "stop-using"] {
+        let response = w
+            .app
+            .send(
+                Method::POST,
+                &format!("{second_url}/parameters/{}/{action}", w.tier),
+                Some(&w.session),
+                None,
+            )
+            .await?;
+        anyhow::ensure!(response.status == StatusCode::OK, "{action} failed: {}", response.body);
+    }
+
+    // Act
+    let filtered = across(&w.app, &w.session, &format!("?team=shared&param={}", w.gold)).await?;
+
+    // Assert
+    expect_that!(
+        titles(&filtered, "ranked"),
+        elements_are![eq("A gold"), eq("A gold tagged")]
+    );
+    Ok(())
+}

@@ -215,8 +215,10 @@ async fn get_waiting(
 /// Every heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row
 /// carries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score
 /// in its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap
-/// name, then the item's position in its heap. The view takes no tag, parameter or sort; `team`, a team's slug,
-/// limits the list to that team's heaps, and a team you aren't in is `not_found`. At most 500 rows come back,
+/// name, then the item's position in its heap. The view takes no sort; `team`, a team's slug, limits the list to that
+/// team's heaps, and a team you aren't in is `not_found`. `tag` and `param` filter by that team's tags and its team
+/// parameters' options, and are refused without `team` (`invalid_query`); a heap that doesn't use a team parameter
+/// named has no rows. At most 500 rows come back,
 /// pinned first; `count` is the true total. Read-only, for any member.
 #[utoipa::path(get, path = "/me/items", tag = "me", security(("session" = [])),
     params(AcrossHeapsQuery, TimeZoneHeader),
@@ -225,6 +227,7 @@ async fn get_waiting(
         (status = 400, description = "`invalid_query`", body = Problem),
         (status = 401, description = "`unauthenticated`", body = Problem),
         (status = 404, description = "`not_found`", body = Problem),
+        (status = 422, description = "`tag_not_in_heap` or `option_not_in_heap`", body = Problem),
     ))]
 async fn get_items(
     State(state): State<AppState>,
@@ -238,6 +241,12 @@ async fn get_items(
         .transpose()
         .map_err(ServiceError::from)?;
     let view = query.to_view().map_err(ServiceError::from)?;
+    if query.team.is_none() && (!query.tag.is_empty() || !query.param.is_empty()) {
+        return Err(ApiError::BadRequest {
+            code: "invalid_query",
+            detail: "tag and param need team".to_owned(),
+        });
+    }
     let team = match &query.team {
         Some(raw) => {
             let handle = crate::paths::handle(raw)?;

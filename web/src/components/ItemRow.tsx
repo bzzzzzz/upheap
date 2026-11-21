@@ -78,8 +78,7 @@ export function rowOf(key: string) {
  * Shift it selects the rows up to it; Shift+↑ and Shift+↓ move to the next row and select it.
  *
  * Another page can show the row for its own list: `link` opens the item there instead of over its heap's list,
- * `heapLabel` says which heap it is in, and without `filters` the row shows no tag or parameter chips, as there is no
- * filter for them to join.
+ * `heapLabel` says which heap it is in, and without `filters` the row shows no tag or parameter chips.
  */
 export function ItemRow({
   entry,

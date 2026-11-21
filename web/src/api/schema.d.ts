@@ -456,8 +456,10 @@ export interface paths {
          *     Every heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row
          *     carries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score
          *     in its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap
-         *     name, then the item's position in its heap. The view takes no tag, parameter or sort; `team`, a team's slug,
-         *     limits the list to that team's heaps, and a team you aren't in is `not_found`. At most 500 rows come back,
+         *     name, then the item's position in its heap. The view takes no sort; `team`, a team's slug, limits the list to that
+         *     team's heaps, and a team you aren't in is `not_found`. `tag` and `param` filter by that team's tags and its team
+         *     parameters' options, and are refused without `team` (`invalid_query`); a heap that doesn't use a team parameter
+         *     named has no rows. At most 500 rows come back,
          *     pinned first; `count` is the true total. Read-only, for any member.
          */
         get: operations["get_items"];
@@ -2155,7 +2157,7 @@ export interface components {
             hidden_count: number;
             /**
              * Format: int32
-             * @description How many items are in progress, over all heaps, whatever the view and its filters leave out.
+             * @description How many items are in progress, summed over the heaps listed, whatever the view and its filters leave out.
              */
             in_progress_count: number;
             /**
@@ -6183,12 +6185,20 @@ export interface operations {
                 blocked?: components["schemas"]["StateMode"];
                 /** @description Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`. */
                 blocked_layout?: components["schemas"]["BlockedLayout"];
+                /** @description Keep items with any of these tags, comma-separated. Only with `team`, and tags of that team. */
+                tag?: string[];
                 /** @description Keep items with any of these efforts, comma-separated. */
                 effort?: components["schemas"]["Size"][];
                 /** @description Keep items with any of these impacts, comma-separated. */
                 impact?: components["schemas"]["Size"][];
                 /** @description Keep items with any of these needs, comma-separated. */
                 need?: components["schemas"]["Need"][];
+                /**
+                 * @description Options of the parameters of `team`, comma-separated, and only with `team`. For each parameter they belong
+                 *     to, keep items with any of its options listed. An archived option keeps the items that switched to its
+                 *     replacement. Heaps that don't use every parameter named have no rows.
+                 */
+                param?: string[];
                 /** @description Keep items in any of these agent states, comma-separated. */
                 agent?: components["schemas"]["AgentState"][];
                 /**
@@ -6234,6 +6244,15 @@ export interface operations {
             };
             /** @description `not_found` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_heap` or `option_not_in_heap` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

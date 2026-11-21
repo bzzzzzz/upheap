@@ -154,9 +154,19 @@ export function parseListSearch(raw: Record<string, unknown>): ListSearch {
  */
 export type AcrossSearch = Pick<
   ListSearch,
-  "open" | "in_progress" | "blocked" | "blocked_layout" | "need" | "effort" | "impact" | "agent" | "going_to"
+  | "open"
+  | "in_progress"
+  | "blocked"
+  | "blocked_layout"
+  | "tag"
+  | "need"
+  | "effort"
+  | "impact"
+  | "param"
+  | "agent"
+  | "going_to"
 > & {
-  /** The slug of the team whose heaps the list is limited to. */
+  /** The slug of the team whose heaps the list is limited to. `tag` and `param` are that team's, and need it. */
   team?: string;
   item?: string;
   /** The open item is shown full screen (ux.md, The item). Only with an item. */
@@ -165,15 +175,18 @@ export type AcrossSearch = Pick<
 
 /** Keeps only what the page across heaps has of [`parseListSearch`], and the open item. */
 export function parseAcrossSearch(raw: Record<string, unknown>): AcrossSearch {
-  const { open, in_progress, blocked, blocked_layout, need, effort, impact, agent, going_to } = parseListSearch(raw);
+  const { open, in_progress, blocked, blocked_layout, tag, need, effort, impact, param, agent, going_to } =
+    parseListSearch(raw);
   const search = {
     open,
     in_progress,
     blocked,
     blocked_layout,
+    tag,
     need,
     effort,
     impact,
+    param,
     agent,
     going_to,
     team: list(raw.team),

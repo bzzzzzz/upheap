@@ -843,22 +843,22 @@ brought to a stable state that now wait for the person; under it is the history 
 ## All items
 
 The page at `/all`: every open item of the person's active heaps in one ranked list, the server's (`GET /me/items`:
-the item's score in its heap times the person's priority for that heap). It has no sort, saved views, tag or parameter
-filter, heap filter, position numbers or reminders to come.
+the item's score in its heap times the person's priority for that heap). It has no sort, saved views, heap filter,
+position numbers or reminders to come, and a tag or parameter filter only with a team chosen (§7).
 
 1. The heading is "All items · 12" (no count at zero) and under it a quiet line, "All your heaps, most important
    first." The groups are the list's: the pinned one titled as there, "Up next" only under a pinned one, and Blocked.
    Past 500 rows, "Showing the 500 most important of n." sits under the list.
 2. A row is the list's row, with the name of its heap, quiet, after the tags on a tablet or wide screen and first on the
    second line on a phone; the team's name follows after " · " only when the person is in more than one team. It shows
-   no tag or parameter chips, as there is no filter for them to join. Start, Pause, Unblock, Done, the robot, `x`, `s`,
+   no tag or parameter chips. Start, Pause, Unblock, Done, the robot, `x`, `s`,
    `a`, the swipes and Undo work as in the list, in the item's own heap. Done offers no start of the next item.
 3. An item opens over the list as on a heap's list (a pane, a panel, a sheet), and nothing switches heap. The address
    is `/all?item=<team>/<heap>/<key>`, as a key is only unique within its heap, and a value that isn't that opens
    nothing. The pane's ↑ and ↓ walk the rows on screen, across heaps, and its position is the one in this list. Closing goes back, or to `/all` with the rest of
    the search, and gives the focus to the row.
 4. The toolbar is the search and Filters. The panel has Show (Open, In progress and Blocked, each Pinned, Shown or
-   Hidden, and the shown blocked items grouped or mixed in) and Narrow down: Need, Effort, Impact, Agent and Going to. Its chips, Reset
+   Hidden, and the shown blocked items grouped or mixed in) and Narrow down: Need, Effort, Impact, Agent and Going to (with a team chosen, also Tags and the team's parameters, §7). Its chips, Reset
    all and the hidden note are the list's. The panel can't say how many items the filters leave out of the total, so it
    shows the number the view matches. The view is in the address.
 5. Add opens the Add dialog in the heap the shell keeps (the one opened last), with the need, effort and impact
@@ -880,7 +880,11 @@ filter, heap filter, position numbers or reminders to come.
    team's count; the line under it reads "<team>'s heaps, most important first." ("Your personal team's heaps, most
    important first." for a personal team); rows show the heap's name alone, with no " · <team>". Add goes to the kept
    heap if it is in that team, else the team's first active heap, and is disabled when the team has none, as the phone's + and
-   the shell's heap follow. "Nothing open in your heaps." stays the empty line.
+   the shell's heap follow. "Nothing open in your heaps." stays the empty line. With a team chosen, Narrow down also
+   has "Tags (any)", the team's tags where a heap list shows its tags, and, after Impact, a row for each team parameter
+   in use ("<name> (any)"), with the "(archived, ignored)" rows for chosen options of archived ones, all as a heap
+   list shows them; their chips and the count in Filters work as there. Choosing another team or All teams drops
+   them. A heap that doesn't use a parameter chosen has no rows.
 8. A team the person isn't in (never joined, left, or no such team) is the page's error with "You're not in this team."
    in place of the server's message, with no controls and no fallback to all teams.
 

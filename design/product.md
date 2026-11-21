@@ -240,7 +240,7 @@ What it is not:
    options. A team parameter is one parameter for the whole team: its name, options and their order are set once and
    change in every heap that uses it. Each heap chooses which of its team's parameters to use, and weights each on its
    own, so the weight is part of the heap's ranking. A heap parameter and a team parameter of the team never share a
-   name.
+   name. A team parameter's options also filter the list across the team's heaps.
 2. The order of a parameter's options determines their relative priority within that parameter. Each parameter also
    has a weight controlling its influence relative to the heap's other factors (Priority §1).
 3. A heap's custom parameter can be linked to one or more of its heap's tags, the team's included. When a user adds
@@ -337,6 +337,7 @@ A supporting view.
 5. In a heap, a team tag works wherever a heap tag does: on items, in the list's filter, in saved views, in the tag
    order and in a parameter's links. A person needn't know which kind a tag is to use it, and can see which kind it
    is.
+6. A team's tags also filter the list across the team's heaps.
 
 ### Manage parameters
 
