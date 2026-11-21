@@ -152,6 +152,22 @@ export function ItemPane({
         {...drag.paneProps}
         // Escape leaves full screen and keeps the item open; the page's own Escape (closing the item) sees it handled.
         onKeyDown={(event) => {
+          // ↑ ↓ walk the list while focus is on the pane itself or its top bar, not in a field or a button of the body.
+          const target = event.target as HTMLElement;
+          if (
+            (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.altKey &&
+            !event.shiftKey &&
+            (target === event.currentTarget || target.closest("[data-pane-bar]"))
+          ) {
+            event.preventDefault();
+            event.currentTarget
+              .querySelector<HTMLElement>(`a[data-walk="${event.key === "ArrowUp" ? "previous" : "next"}"]`)
+              ?.click();
+            return;
+          }
           if (full && event.key === "Escape" && !event.defaultPrevented && !document.querySelector("[role=dialog]")) {
             event.preventDefault();
             fullScreen.leave();
@@ -166,6 +182,7 @@ export function ItemPane({
         {/* The top bar is what drags (the pane's scroll padding keeps what is scrolled to out from under it): down to close the phone's sheet, right to close the tablet's panel. */}
         <div
           {...drag.handleProps}
+          data-pane-bar=""
           className="sticky top-0 z-10 flex items-center gap-2 bg-surface px-4 pt-3 pb-2 sm:px-5 sm:pt-5"
         >
           {drag.enabled && (
@@ -301,6 +318,7 @@ function WalkLink({
       // The list beside or under the pane keeps its place.
       resetScroll={false}
       aria-label={label}
+      data-walk={label === "Previous item" ? "previous" : "next"}
       onClick={onWalk}
       className={className}
     >

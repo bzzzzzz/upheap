@@ -23,8 +23,8 @@ The app is one React app whose layout changes with the width: **phone** under 64
 3. **At your fingertips.** Whatever is used several times a session is visible without opening anything: the ranked
    list, Add, state changes, search. On a phone it sits within thumb reach at the bottom.
 4. **One step ahead.** Whatever the user is likely to do next is one click away. Everything they can do with what's
-   on screen is at most two obvious clicks away (open, then act). Keyboard shortcuts come later, on top of this,
-   not instead of it ([Later: keyboard](#later-keyboard)).
+   on screen is at most two obvious clicks away (open, then act). Keyboard shortcuts come on top of this, not
+   instead of it ([Keyboard](#keyboard)).
 5. **Only where it pays.** Being one step ahead is for the moments when the next step is clear and saves real
    effort, or prevents a loss. Elsewhere the app just does the thing and stays quiet. Each suggestion, extra
    button or explanatory line costs attention on every visit, and a screen full of them reads as noise. Before
@@ -344,8 +344,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    a few seconds. Changes made in the item save silently and have no undo. The toast sits over the open item, so Sent
    to an agent can offer Undo from inside a phone's sheet; the Add dialog and the other sheets stay above it.
 4. Tapping or clicking a row opens the item. Keyboard on a wide screen: up and down move, Enter opens, `s` starts
-   (an open or blocked item), `x` marks done and `a` sends one step to an agent, where the robot button shows; `N`
-   and `/` stay. Tab goes the state button, Done, the robot, then the row's link, then its tags and parameter chips.
+   (an open or blocked item), `b` blocks (an open or in-progress item, with no reason, as the swipe does), `x` marks
+   done and `a` sends one step to an agent, where the robot button shows; `N` and `/` stay. Tab goes the state
+   button, Done, the robot, then the row's link, then its tags and parameter chips.
 5. On a touch screen, swiping a row right marks it done; swiping left offers Agent (where the robot button would
    show, sending one step at once as the button does), In progress and Blocked.
 6. Saved views live in the Filters panel, in a Views section that comes first (before Sort by in the phone sheet), not
@@ -524,7 +525,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    also back into the future, and not cleared; it has no steps and no Send to an agent button. Stage lists as written and with context, and defined on
    a task only (a note says "Defined needs a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
-   change, next. On a phone the sheet closes and the next row is one tap away, so the sheet has no Next button.
+   change, next. The arrow keys walk too while the focus is on the pane or its header, not in a field, so Space and
+   Page Up / Page Down scroll a long item there. On a phone the sheet closes and the next row is one tap away, so the
+   sheet has no Next button.
 8. The key (`k3x9a`) in the header, with a link icon after it, is the button that copies the item's short link
    (`/h/<team>/<heap>/<key>`), named "Copy link to k3x9a", with "Copy link" on hover. The header stays in view, so the
    icon turns into a check for 2 s to confirm, and a screen reader hears "Link copied"; a copy that fails (no
@@ -1313,16 +1316,21 @@ to an open History at once, and to a closed one by the time it is opened.
 The Playwright golden paths run on phone (Pixel 7 emulation) and tablet (iPad emulation) projects as well as desktop
 Chromium, against the real server.
 
-## Later: keyboard
+## Keyboard
 
-The wide screen gets shortcuts once the screens work without them, shown in the MainKeyboard board:
+The wide screen shows its keys, and `?` lists them all:
 
-1. Hints on the controls they trigger: `N` on Add item, `/` in the search box, `S` `B` `X` on a row's Start, Block
-   and Done, `G O` and `G C` beside Open and Closed, `⌘↵` on Add in the Add dialog.
+1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
+   the search box, `S` `B` `X` at the end of the focused row, `G O` and `G C` beside Open and Closed in the sidebar,
+   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
-3. A hint bar under the list with the keys for what's on screen, and `?` for all of them.
-4. ⌘K in the sidebar: find any item by title or key in every heap; Tab acts on the highlighted item (start, done,
-   due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching
-   every heap needs a server search endpoint; today's search filters only the loaded list.
+3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
+   `S` `B` `X` when a row can change state, `N`, `/`, and `G C` with no item open; walking and closing with one open;
+   selecting in select mode. It ends with `?`, All keys.
+4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Wherever the sidebar shows a heap, `G`
+   then `O` goes to its Open list, closing an open item, and `G` then `C` to its Closed page; any other key after `G`
+   cancels it. Keys are ignored in a field.
 
-The keys that are already built (`N`, `/`, ↑ ↓, Enter, `x`, `⌘↵`) keep working. They just aren't shown yet.
+Later: ⌘K in the sidebar finds any item by title or key in every heap; Tab acts on the highlighted item (start,
+done, due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching
+every heap needs a server search endpoint; today's search filters only the loaded list.

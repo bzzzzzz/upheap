@@ -40,6 +40,7 @@ import {
   viewChanges,
   type ListSearch,
 } from "../components/listView";
+import { Kbd } from "../components/Kbd";
 import { HeapNotFound } from "../components/NotFound";
 import { RequestId } from "../components/RequestId";
 
@@ -318,6 +319,36 @@ function ListPage({
   const listed = everyEntry(list.data).length;
   const shown = pinned.length + ranked.length + blocked.length + coming.length;
   const narrowed = search.trim() !== "" || filters > 0;
+  // The keys the hint bar shows for what's on screen (ux.md, Keyboard).
+  const canChange = [...pinned, ...ranked, ...blocked].some((entry) =>
+    entry.item.allowed_actions.includes("change_state"),
+  );
+  const hints: { keys: string; label: string }[] = select
+    ? [
+        { keys: "⇧ ↑ ↓", label: "Select" },
+        { keys: "Esc", label: "Done selecting" },
+      ]
+    : itemKey !== undefined
+      ? [
+          { keys: "↑ ↓", label: "Walk" },
+          { keys: "Esc", label: "Close" },
+          ...(heap.archived ? [] : [{ keys: "N", label: "Add" }]),
+          { keys: "/", label: "Search" },
+        ]
+      : [
+          { keys: "↑ ↓", label: "Move" },
+          { keys: "↵", label: "Open" },
+          ...(canChange
+            ? [
+                { keys: "S", label: "Start" },
+                { keys: "B", label: "Block" },
+                { keys: "X", label: "Done" },
+              ]
+            : []),
+          ...(heap.archived ? [] : [{ keys: "N", label: "Add" }]),
+          { keys: "/", label: "Search" },
+          { keys: "G C", label: "Closed" },
+        ];
   // A tag or parameter chip in a row joins the view's filter, or leaves it when it is in it already.
   const rowFilters: RowFilters = {
     tags: new Set(splitList(view.tag)),
@@ -417,6 +448,22 @@ function ListPage({
       </div>
 
       {hidden_count > 0 && <HiddenNote count={hidden_count} view={view} onViewChange={onViewChange} />}
+
+      <section
+        aria-label="Keys on this screen"
+        className="sticky bottom-0 hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-canvas/95 py-2 text-xs text-muted lg:pointer-fine:flex"
+      >
+        {hints.map(({ keys, label }) => (
+          <span key={keys} className="flex items-center gap-1.5">
+            <Kbd>{keys}</Kbd>
+            {label}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5">
+          <Kbd>?</Kbd>
+          All keys
+        </span>
+      </section>
     </main>
   );
 }

@@ -90,13 +90,13 @@ test("the sidebar's Open count follows adding an item and closing one", async ({
   test.skip((page.viewportSize()?.width ?? 0) < 1024, "Only the sidebar shows the count.");
 
   const open = page.getByRole("navigation", { name: "Heap views" }).getByRole("link", { name: "Open", exact: true });
-  await expect(open).toHaveText(/^Open\s*0$/);
+  await expect(open).toHaveText(/^Open\s*(G O)?\s*0$/);
   await addItem(page, "Water the plants");
   await addItem(page, "Feed the cat");
-  await expect(open).toHaveText(/^Open\s*2$/);
+  await expect(open).toHaveText(/^Open\s*(G O)?\s*2$/);
   await markDoneFromList(page, "Feed the cat");
   await expect(row(page, "Feed the cat")).toHaveCount(0);
-  await expect(open).toHaveText(/^Open\s*1$/);
+  await expect(open).toHaveText(/^Open\s*(G O)?\s*1$/);
 });
 
 /** Opens the heap switcher from whichever button the width shows, and returns its panel. */

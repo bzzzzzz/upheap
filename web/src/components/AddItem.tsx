@@ -19,6 +19,7 @@ import { itemProblem } from "./itemProblems";
 import { SIZE_LABELS, SIZES } from "./labels";
 import { itemAddress, listQueryFor, matchesSearch, placeOf, splitList, type ListSearch } from "./listView";
 import { PHONE, useMedia } from "./media";
+import { Kbd, WIDE_HINT } from "./Kbd";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { PopoverSheet } from "./PopoverSheet";
@@ -590,14 +591,18 @@ export function AddItemDialog({
       Add another
     </label>
   );
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const submitKeys = mac ? "⌘↵" : "Ctrl ↵";
   const addButton = (
     <button
       type="submit"
       disabled={!canAdd}
-      title="⌘↵"
-      className="h-11 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:opacity-40"
+      title={submitKeys}
+      aria-keyshortcuts={mac ? "Meta+Enter" : "Control+Enter"}
+      className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:opacity-40"
     >
       Add
+      <Kbd className={`${WIDE_HINT} items-center border-canvas/30 bg-transparent text-canvas/70`}>{submitKeys}</Kbd>
     </button>
   );
 
