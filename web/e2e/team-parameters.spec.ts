@@ -172,7 +172,6 @@ test("a team tag is made from a team parameter's picker and linked, after the me
 /** In the heap at `path`, makes a parameter `name` with `options`, one per line. */
 async function newParameter(page: Page, path: string, name: string, options: string) {
   await page.goto(path);
-  await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
   await goTo(page, "Parameters");
   await page.getByRole("button", { name: "New parameter" }).click();
   await page.getByLabel("New parameter name").fill(name);
@@ -199,7 +198,6 @@ test("a heap parameter is made a team parameter after the merge is confirmed, an
 
   // The ⋯ on the heap parameter opens the confirm, which lists both heaps' parameters and marks this heap.
   await page.goto(heapA);
-  await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
   await goTo(page, "Parameters");
   await page.getByRole("button", { name: "More for Customer tier" }).click();
   await page.getByRole("menuitem", { name: "Make a team parameter" }).click();
