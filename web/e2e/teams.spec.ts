@@ -116,6 +116,7 @@ test("a heap is added with or without a link name, and a taken one is said under
   await expect(link).toHaveAttribute("aria-invalid", "true");
   await expect(link).toHaveAccessibleDescription("That's taken. Pick another.");
   await expect(link).toBeFocused();
+  await link.press("End");
   await link.pressSequentially("-2");
   await expect(link).not.toHaveAttribute("aria-invalid");
 });

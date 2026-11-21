@@ -3,7 +3,7 @@ import { ChevronRight, Ellipsis, History, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type Ref } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
-import { ApiProblem, isNotFound } from "../api/client";
+import { isNotFound } from "../api/client";
 import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
 import { useOidcProvider } from "../api/queries/auth";
 import { useCreateHeap, useUpdateHeap } from "../api/queries/heaps";
@@ -29,8 +29,9 @@ import { PHONE, useMedia } from "../components/media";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
 import { NewHeapLink } from "../components/NewHeapLink";
+import { useNameAndLinkFields } from "../components/useNameAndLinkFields";
 import { OperatorContact } from "../components/OperatorContact";
-import { ProblemText, problemMessage } from "../components/ProblemText";
+import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { useTeamName } from "../components/teamName";
@@ -221,41 +222,18 @@ function HeapsSection({ team, phone }: { team: Team; phone: boolean }) {
   );
 }
 
-type HeapField = "name" | "slug";
-
 /**
  * Name and Link name for a new heap, as Create team has them. The server makes the link name from the name when it's
  * left out, so the new link shows only once one is typed.
  */
 function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
   const create = useCreateHeap(team);
-  const [values, setValues] = useState<Record<HeapField, string>>({ name: "", slug: "" });
-  const formRef = useRef<HTMLFormElement>(null);
-  const { error } = create;
-  const errorField: HeapField | undefined =
-    error instanceof ApiProblem && (error.field === "name" || error.field === "slug") ? error.field : undefined;
+  const { formRef, field, name, slug, otherError } = useNameAndLinkFields(create);
 
-  // After a failed submit, focus goes to the input the problem is about.
-  useEffect(() => {
-    const input = errorField && formRef.current?.elements.namedItem(errorField);
-    if (input instanceof HTMLInputElement) input.focus();
-  }, [error, errorField]);
-
-  const slug = values.slug.trim();
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    create.mutate({ name: values.name, ...(slug !== "" && { slug }) }, { onSuccess: onClose });
+    create.mutate({ name, ...(slug !== "" && { slug }) }, { onSuccess: onClose });
   };
-
-  const field = (name: HeapField) => ({
-    name,
-    value: values[name],
-    error: errorField === name && error ? problemMessage(error) : undefined,
-    onChange: (value: string) => {
-      setValues((current) => ({ ...current, [name]: value }));
-      if (errorField === name) create.reset();
-    },
-  });
 
   return (
     <form
@@ -287,7 +265,7 @@ function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
           />
         </div>
       </div>
-      {error && !errorField && <ProblemText error={error} className="text-overdue-ink" />}
+      {otherError && <ProblemText error={otherError} className="text-overdue-ink" />}
       <div className="flex flex-wrap items-center gap-2.5">
         <span className="min-w-0 flex-1 text-xs break-words text-muted max-sm:basis-full max-sm:text-[13px]">
           {slug !== "" && <NewHeapLink team={team} slug={slug} />}

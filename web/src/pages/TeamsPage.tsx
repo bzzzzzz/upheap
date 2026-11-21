@@ -1,15 +1,15 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
-import { ApiProblem } from "../api/client";
 import type { Me } from "../api/schema";
 import { useMe } from "../api/queries/me";
 import { useCreateTeam } from "../api/queries/teams";
 import { compactButtonClass } from "../components/buttons";
 import { Field } from "../components/Field";
-import { ProblemText, problemMessage } from "../components/ProblemText";
+import { ProblemText } from "../components/ProblemText";
 import { useReturnFocus } from "../components/useConfirmation";
 import { teamName } from "../components/teamName";
+import { useNameAndLinkFields } from "../components/useNameAndLinkFields";
 import { plural } from "../components/words";
 
 /** The caller's teams, and Create team, which opens a form for a new one (S-teams, WideTeams). */
@@ -92,8 +92,6 @@ function TeamRow({ team, label, several }: { team: Me["teams"][number]; label: s
 }
 
 /** The fields of a new team, named as the API names them, so a problem's `field` says which one it's about. */
-type TeamField = "name" | "slug";
-
 /**
  * Name and Link name for a new team. The server makes the link name from the name when it's left out, so the note
  * names the link only once one is typed.
@@ -101,38 +99,16 @@ type TeamField = "name" | "slug";
 function CreateTeamForm({ onClose }: { onClose: () => void }) {
   const create = useCreateTeam();
   const navigate = useNavigate();
-  const [values, setValues] = useState<Record<TeamField, string>>({ name: "", slug: "" });
-  const formRef = useRef<HTMLFormElement>(null);
-  const { error } = create;
-  const errorField: TeamField | undefined =
-    error instanceof ApiProblem && (error.field === "name" || error.field === "slug") ? error.field : undefined;
-
-  // After a failed submit, focus goes to the input the problem is about.
-  useEffect(() => {
-    const input = errorField && formRef.current?.elements.namedItem(errorField);
-    if (input instanceof HTMLInputElement) input.focus();
-  }, [error, errorField]);
+  const { formRef, field, name, slug, otherError } = useNameAndLinkFields(create);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const slug = values.slug.trim();
     create.mutate(
-      { name: values.name, ...(slug !== "" && { slug }) },
+      { name, ...(slug !== "" && { slug }) },
       { onSuccess: (team) => void navigate({ to: "/teams/$team", params: { team: team.slug } }) },
     );
   };
 
-  const field = (name: TeamField) => ({
-    name,
-    value: values[name],
-    error: errorField === name && error ? problemMessage(error) : undefined,
-    onChange: (value: string) => {
-      setValues((current) => ({ ...current, [name]: value }));
-      if (errorField === name) create.reset();
-    },
-  });
-
-  const slug = values.slug.trim();
   return (
     <form
       ref={formRef}
@@ -163,7 +139,7 @@ function CreateTeamForm({ onClose }: { onClose: () => void }) {
           />
         </div>
       </div>
-      {error && !errorField && <ProblemText error={error} className="text-overdue-ink" />}
+      {otherError && <ProblemText error={otherError} className="text-overdue-ink" />}
       <div className="flex flex-wrap items-center gap-2.5">
         <span className="min-w-0 flex-1 text-xs break-words text-muted max-sm:basis-full max-sm:text-[13px]">
           {slug === "" ? "You'll be its admin." : `/teams/${slug} · you'll be its admin`}

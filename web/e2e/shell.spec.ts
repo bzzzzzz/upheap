@@ -149,6 +149,20 @@ test("a heap made from the switcher takes the link name given", async ({ page })
   await heaps.getByRole("button", { name: "Add heap" }).click();
   await expect(page).toHaveURL(/\/heaps\/veg$/);
   await expect(page.getByRole("button", { name: "Switch heap: Garden" })).toBeVisible();
+
+  // The same link name again is taken: the error is under Link name, which gets focus, and typing clears it.
+  const again = await openSwitcher(page);
+  await again.getByRole("button", { name: /^New heap in / }).click();
+  await again.getByLabel(/^Name of the new heap in /).fill("Allotment");
+  const link = again.getByLabel(/^Link name of the new heap in /);
+  await link.fill("veg");
+  await again.getByRole("button", { name: "Add heap" }).click();
+  await expect(link).toHaveAttribute("aria-invalid", "true");
+  await expect(link).toHaveAccessibleDescription("That's taken. Pick another.");
+  await expect(link).toBeFocused();
+  await link.press("End");
+  await link.pressSequentially("-2");
+  await expect(link).not.toHaveAttribute("aria-invalid");
 });
 
 test("a short list of heaps has no search and no Recent", async ({ page }) => {
