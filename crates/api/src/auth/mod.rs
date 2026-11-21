@@ -97,6 +97,9 @@ async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInReq
 
 /// Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no
 /// sign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.
+/// With the right password it also counts against the account's address changes, five in 15 minutes, shared with
+/// `POST /me/email-changes`: a changed address doesn't start that count over, so it limits the addresses an account
+/// mails.
 ///
 /// Only for a server with mail set up, and only for an account that hasn't confirmed its address: a confirmed
 /// account fails as a wrong password does. The earlier confirmation link and any password reset link stop working.

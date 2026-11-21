@@ -16,6 +16,9 @@ export interface paths {
         /**
          * Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no
          *     sign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.
+         *     With the right password it also counts against the account's address changes, five in 15 minutes, shared with
+         *     `POST /me/email-changes`: a changed address doesn't start that count over, so it limits the addresses an account
+         *     mails.
          * @description Only for a server with mail set up, and only for an account that hasn't confirmed its address: a confirmed
          *     account fails as a wrong password does. The earlier confirmation link and any password reset link stop working.
          *     An address another account has answers the same as a free one, and nothing changes.
@@ -412,8 +415,9 @@ export interface paths {
          *     caller's own current address is treated like a free one.
          *
          *     Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
-         *     is checked. Unlike a password change, a success doesn't start the count over, so the limit, five in 15 minutes,
-         *     also limits the mails a session sends. A wrong current password also adds one to the account's sign-in attempts.
+         *     is checked. A wrong current password also adds one to the account's sign-in attempts. Asks with the right password
+         *     are limited per account, five in 15 minutes, shared with `POST /auth/confirmation-address`: a new session or a
+         *     success doesn't start that count over, so it limits the addresses an account mails.
          */
         post: operations["request_email_change"];
         delete?: never;
@@ -6115,7 +6119,7 @@ export interface operations {
             /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
             429: {
                 headers: {
-                    /** @description Seconds until the session may try again */
+                    /** @description Seconds until the session or account may try again */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

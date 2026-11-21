@@ -460,6 +460,60 @@ async fn changing_the_address_is_limited_like_signing_in() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn changed_addresses_dont_start_the_accounts_address_changes_over() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, "ada@exmaple.test").await?;
+    for n in 0..5 {
+        let changed = change_address(&app, "ada", PASSWORD, &format!("ada{n}@example.test")).await?;
+        assert_eq!(changed.status, StatusCode::ACCEPTED);
+    }
+    common::wait_for_mails(dir.path(), 6).await?;
+
+    // Act
+    let sixth = change_address(&app, "ada", PASSWORD, EMAIL).await?;
+
+    // Assert
+    expect_that!(sixth.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(problem_code(&sixth), eq("too_many_attempts"));
+    expect_that!(sixth.headers.contains_key("retry-after"), eq(true));
+    expect_that!(std::fs::read_dir(dir.path())?.count(), eq(6));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn corrections_before_confirming_count_against_changes_asked_after() -> Result<()> {
+    // Arrange: five corrections, then the last one's link confirms and signs in.
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, "ada@exmaple.test").await?;
+    for n in 0..5 {
+        change_address(&app, "ada", PASSWORD, &format!("ada{n}@example.test")).await?;
+    }
+    let confirmed = confirm(&app, &token_of_mail(dir.path(), 6).await?).await?;
+    let session = confirmed.session_cookie.clone().context("no session cookie")?;
+
+    // Act
+    let asked = app
+        .send(
+            Method::POST,
+            "/api/v1/me/email-changes",
+            Some(&session),
+            Some(json!({ "email": EMAIL, "current_password": PASSWORD })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(confirmed.status, eq(StatusCode::OK), "{}", confirmed.body);
+    expect_that!(asked.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(problem_code(&asked), eq("too_many_attempts"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_confirmed_account_cant_change_its_address_this_way() -> Result<()> {
     // Arrange
     let dir = tempfile::tempdir()?;

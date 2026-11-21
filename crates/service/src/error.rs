@@ -54,6 +54,9 @@ pub enum ServiceError {
     /// The email address used up its password reset requests for now.
     #[error("too many reset requests for this address; try again in {}", in_minutes(*retry_after))]
     TooManyResetRequests { retry_after: Duration },
+    /// The account used up its address changes for now, which each mail a link.
+    #[error("too many address changes for this account; try again in {}", in_minutes(*retry_after))]
+    TooManyAddressChanges { retry_after: Duration },
     #[error("an account with this email already exists")]
     EmailTaken,
     /// Another user or team has the username or team slug, or another heap of the team has the heap slug. `hint` is

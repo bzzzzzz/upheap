@@ -18,15 +18,32 @@ use crate::auth::{SessionToken, random_token, run_blocking, sha256_hex, verify_p
 use crate::{MailSettings, Principal, ServiceError, Services};
 
 impl Services {
+    /// Counts an address change of the account, which mails a link, and refuses it with
+    /// [`ServiceError::TooManyAddressChanges`] once the account has used up its changes for now. Shared by a change
+    /// asked from Account and a correction on the Check your mail card, with the sign-in limit's numbers. Keyed by
+    /// the user, so neither a changed address nor a new session starts it over, and never cleared, so it runs out
+    /// with its window.
+    pub(crate) async fn count_address_change(&self, user_id: UserId) -> Result<(), ServiceError> {
+        self.count_sign_in_attempt(&sha256_hex(&format!("address-change:{user_id}")))
+            .await
+            .map_err(|error| match error {
+                ServiceError::TooManySignInAttempts { retry_after } => {
+                    ServiceError::TooManyAddressChanges { retry_after }
+                }
+                other => other,
+            })
+    }
+
     /// Asks to change the caller's email address to `email`, with a link mailed to it. `session` is the caller's
     /// own web session.
     ///
     /// Fails with [`ServiceError::NotFound`] when the server has no mail set up, before anything else. An empty
     /// `current_password` or `email`, or an `email` that isn't an address, fails with a [`ValidationError`] before
     /// anything is counted. Then the attempt is counted per session, as a password change counts it, and one past
-    /// the limit fails with [`ServiceError::TooManySignInAttempts`]. Unlike a password change a success doesn't
-    /// clear the count, so it also limits the mails a session sends. A wrong password, or a user with none, fails
-    /// with [`ServiceError::WrongPassword`], changes nothing and adds one to the account's sign-in count.
+    /// the limit fails with [`ServiceError::TooManySignInAttempts`]. A wrong password, or a user with none, fails
+    /// with [`ServiceError::WrongPassword`], changes nothing and adds one to the account's sign-in count. The right
+    /// one is counted as an address change of the account ([`Services::count_address_change`]), whether the address
+    /// is free or taken, so the answer still says nothing about accounts.
     ///
     /// With the right password the answer is the same whether another account has the address or not, so it
     /// reveals nothing about accounts, and so is the history entry. Either way, in one transaction, the user's
@@ -69,6 +86,7 @@ impl Services {
             tracing::info!(user_id = %user.id, "email change rejected");
             return Err(ServiceError::WrongPassword);
         }
+        self.count_address_change(user.id).await?;
 
         let taken = store::users::find_user_by_email(&self.db, &new_email)
             .await?

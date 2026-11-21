@@ -15,7 +15,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no\nsign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.",
+        "summary": "Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no\nsign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.\nWith the right password it also counts against the account's address changes, five in 15 minutes, shared with\n`POST /me/email-changes`: a changed address doesn't start that count over, so it limits the addresses an account\nmails.",
         "description": "Only for a server with mail set up, and only for an account that hasn't confirmed its address: a confirmed\naccount fails as a wrong password does. The earlier confirmation link and any password reset link stop working.\nAn address another account has answers the same as a free one, and nothing changes.",
         "operationId": "change_confirmation_address",
         "requestBody": {
@@ -1147,7 +1147,7 @@
           "me"
         ],
         "summary": "Asks to change the caller's email address: a link is mailed to the new address, and the address changes when the\nlink is applied (`POST /email-changes/{token}`). Takes the session cookie only, never a bearer token: it is the\nperson's decision in their browser, as a password change is.",
-        "description": "Answers `202` with no body whether or not another account has the new address, so it reveals nothing about\naccounts; the mail is sent after the answer. The link works once, for a day, and a newer ask cancels it. The\ncaller's own current address is treated like a free one.\n\nTries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password\nis checked. Unlike a password change, a success doesn't start the count over, so the limit, five in 15 minutes,\nalso limits the mails a session sends. A wrong current password also adds one to the account's sign-in attempts.",
+        "description": "Answers `202` with no body whether or not another account has the new address, so it reveals nothing about\naccounts; the mail is sent after the answer. The link works once, for a day, and a newer ask cancels it. The\ncaller's own current address is treated like a free one.\n\nTries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password\nis checked. A wrong current password also adds one to the account's sign-in attempts. Asks with the right password\nare limited per account, five in 15 minutes, shared with `POST /auth/confirmation-address`: a new session or a\nsuccess doesn't start that count over, so it limits the addresses an account mails.",
         "operationId": "request_email_change",
         "requestBody": {
           "content": {
@@ -1211,7 +1211,7 @@
                   "type": "integer",
                   "format": "int64"
                 },
-                "description": "Seconds until the session may try again"
+                "description": "Seconds until the session or account may try again"
               }
             },
             "content": {
