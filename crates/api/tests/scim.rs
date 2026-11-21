@@ -886,6 +886,75 @@ async fn a_sign_in_takes_its_groups_from_the_pushed_record_and_a_person_pushed_f
 
 #[gtest]
 #[tokio::test]
+async fn a_person_registered_under_sub_is_moved_to_the_subject_claim_so_a_push_by_it_applies_at_the_sign_in()
+-> Result<()> {
+    // Arrange: Sam registers while identities are keyed on `sub`.
+    let h = harness().await?;
+    first_sign_in(&h, sam()).await?;
+    // The server then keys identities on `oid`, and the provider pushes Sam by it into `engineering`.
+    let app = h
+        .plain
+        .with_scim_groups(
+            h.provider.settings()?.with_subject_claim("oid"),
+            &[("ops", &["engineering"])],
+            TOKEN,
+        )
+        .await?;
+    let h = Harness { app, ..h };
+    let scim_sam = push_user(&h, "sam@example.test", Some("oid-sam"), true).await?;
+    push_group(&h, "engineering", &[&scim_sam]).await?;
+
+    // Act: Sam signs in, the token saying no groups at all.
+    let (answered, _) = sign_in(&h, sam().with_claim("oid", json!("oid-sam"))).await?;
+    let session = answered.session_cookie.context("no session")?;
+
+    // Assert
+    expect_that!(in_ops(&me(&h.app, &session).await?), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_deactivated_person_registered_under_sub_is_moved_and_ended_at_the_refused_sign_in() -> Result<()> {
+    // Arrange: Sam registers while identities are keyed on `sub`, and keeps a session.
+    let h = harness().await?;
+    let session = first_sign_in(&h, sam()).await?;
+    let user_id = user_id_of(&me(&h.app, &session).await?)?;
+    // The server then keys identities on `oid`, and the provider pushes Sam by it, inactive.
+    let app = h
+        .plain
+        .with_scim_groups(
+            h.provider.settings()?.with_subject_claim("oid"),
+            &[("ops", &["engineering"])],
+            TOKEN,
+        )
+        .await?;
+    let h = Harness { app, ..h };
+    push_user(&h, "sam@example.test", Some("oid-sam"), false).await?;
+
+    // Act
+    let (refused, _) = sign_in(&h, sam().with_claim("oid", json!("oid-sam"))).await?;
+
+    // Assert: the sign-in is refused, and the earlier session is ended and the turn-off recorded.
+    expect_that!(
+        refused
+            .headers
+            .get(header::LOCATION)
+            .and_then(|value| value.to_str().ok()),
+        some(eq(&format!(
+            "{}/login?sign_in_error=account_deactivated",
+            oidc::APP_URL
+        )))
+    );
+    expect_that!(refused.session_cookie, none());
+    expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
+    let actions = provider_entries(&h, &user_id).await?;
+    expect_that!(actions, elements_are![eq("account_deactivated")]);
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn deactivating_a_person_with_no_linked_account_changes_nothing_in_upheap() -> Result<()> {
     // Arrange: Ana has a local account, no provider identity, and the same address the provider has for her.
     let h = harness().await?;

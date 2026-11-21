@@ -550,8 +550,8 @@ Putting SCIM under `/api/v1` in Upheap's own shapes, which no provider speaks. M
 user, which would need a username Upheap can't ask for.
 
 **Consequences.** The SCIM URL is configured at every provider, so it can't move without breaking their setups. A
-provider whose SCIM can't carry the OIDC subject, as Entra ID's pairwise `sub`, can't be linked until sign-in matches
-on another claim.
+provider whose `sub` SCIM can't carry, as Entra ID's pairwise `sub`, is linked through another claim of the ID token
+(`UPHEAP_OIDC_SUBJECT_CLAIM`, `oid` for Entra).
 
 ## 43. An item moves to another team with its rows; its history stays where it was recorded
 

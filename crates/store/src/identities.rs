@@ -1,8 +1,9 @@
 //! Identities at an OpenID Connect provider: which user is which subject there (architecture.md, Authentication and
-//! authorization). The provider is the issuer string as configured.
+//! authorization). The provider is the issuer string as configured, and the subject is the value of the configured
+//! subject claim of the ID token.
 
 use domain::{Timestamp, UserId};
-use sea_orm::sea_query::Query;
+use sea_orm::sea_query::{Expr, Query};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
 
 use crate::StoreError;
@@ -48,6 +49,23 @@ pub async fn find_identity_user(
         read.uuid(&row.user_id).map(UserId::from_uuid)
     })
     .transpose()
+}
+
+/// Re-keys the identity `from_subject` at `provider` to `to_subject`. The row count is ignored: when a concurrent
+/// sign-in of the same person moved it first, this is a no-op.
+pub async fn move_identity(
+    db: &impl ConnectionTrait,
+    provider: &str,
+    from_subject: &str,
+    to_subject: &str,
+) -> Result<(), StoreError> {
+    user_identities::Entity::update_many()
+        .col_expr(user_identities::Column::Subject, Expr::value(to_subject))
+        .filter(user_identities::Column::Provider.eq(provider))
+        .filter(user_identities::Column::Subject.eq(from_subject))
+        .exec(db)
+        .await?;
+    Ok(())
 }
 
 /// Whether `user_id` has an identity at a provider.

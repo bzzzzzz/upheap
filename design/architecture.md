@@ -620,8 +620,9 @@ a fixed time.
    - **Discovery is fetched on every start and callback,** not cached and not at startup: sign-ins are rare, keys
      rotate, and a provider that is down never stops the server or local sign-in.
    - **Matching is by `(issuer, subject)`, never by email.** `user_identities` ties a user to the subject at the
-     issuer string as configured. A known identity gets a normal session; name and email aren't refreshed from the
-     provider later.
+     issuer string as configured. The subject is the claim `UPHEAP_OIDC_SUBJECT_CLAIM` names (`sub` by default). An
+     identity still keyed on the token's `sub` is re-keyed to the claim at sign-in, in the known person's transaction.
+     A known identity gets a normal session; name and email aren't refreshed from the provider later.
    - **A new identity needs a verified email that no account has,** read from the ID token's claims; an email that
      matches a local account is refused rather than linked ([decisions.md](decisions.md) §38). The callback keeps the
      verified name and email on the row for 15 more minutes and sends the browser to the username step, which makes
@@ -651,8 +652,9 @@ a fixed time.
      the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step runs the sync after making the
      user. A SCIM write can't find that user until it commits, so the username step locks the SCIM rows with the
      person's subject before it makes the user: it and a SCIM write to one of them run one after the other, and the
-     session is refused after a deactivation or ended by one that comes after it. A record being created with the
-     subject, or moved onto it, has no such row yet. On MySQL the lock's gap lock makes that write wait, and the SCIM
+     session is refused after a deactivation or ended by one that comes after it. The re-keying takes the same subject
+     locks as the username step, in the same order; when the person is already deactivated it still commits, and ends
+     their sign-ins as a push would. A record being created with the subject, or moved onto it, has no such row yet. On MySQL the lock's gap lock makes that write wait, and the SCIM
      user writes run at READ COMMITTED so that after the wait they see the account; on Postgres both sides also take
      an advisory lock on the subject. Password sign-in, invite registration and reset never sync.
    - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)

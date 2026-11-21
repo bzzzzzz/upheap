@@ -34,9 +34,10 @@ pub struct Config {
     /// `LOG_FORMAT`: `json` (default) or `pretty`.
     pub log_format: LogFormat,
     /// `UPHEAP_OIDC_ISSUER`, `UPHEAP_OIDC_CLIENT_ID`, `UPHEAP_OIDC_CLIENT_SECRET` and `UPHEAP_OIDC_LABEL`, all or
-    /// none, `UPHEAP_OIDC_SCOPES`, default `openid email profile`, and `UPHEAP_OIDC_GROUPS_CLAIM`, default `groups`:
-    /// the provider people may sign in through, and `UPHEAP_OIDC_PROVIDER_LOGOUT`, default `false`: whether signing
-    /// out of the web app also signs out at the provider. No request is made to it at startup.
+    /// none, `UPHEAP_OIDC_SCOPES`, default `openid email profile`, `UPHEAP_OIDC_GROUPS_CLAIM`, default `groups`, and
+    /// `UPHEAP_OIDC_SUBJECT_CLAIM`, default `sub`, the ID token claim an account is matched on: the provider people
+    /// may sign in through, and `UPHEAP_OIDC_PROVIDER_LOGOUT`, default `false`: whether signing out of the web app
+    /// also signs out at the provider. No request is made to it at startup.
     pub oidc: Option<OidcSettings>,
     /// `UPHEAP_OIDC_GROUP_TEAMS`: a JSON object from team slug to the provider groups whose members the team has.
     /// Empty when unset. The slugs are checked against the teams once the database is up, not here.
@@ -192,7 +193,8 @@ fn oidc_settings(lookup: &impl Fn(&str) -> Option<String>, base_url: &str) -> an
     // The issuer is kept as given: the ID token's `iss` must equal it byte for byte.
     let settings = OidcSettings::new(issuer, client_id, client_secret, label, &scopes, base_url)
         .context("UPHEAP_OIDC_ISSUER, UPHEAP_OIDC_LABEL or BASE_URL is not usable for the OpenID Connect provider")?
-        .with_groups_claim(&lookup("UPHEAP_OIDC_GROUPS_CLAIM").unwrap_or_default());
+        .with_groups_claim(&lookup("UPHEAP_OIDC_GROUPS_CLAIM").unwrap_or_default())
+        .with_subject_claim(&lookup("UPHEAP_OIDC_SUBJECT_CLAIM").unwrap_or_default());
     Ok(Some(settings))
 }
 
@@ -485,6 +487,21 @@ mod tests {
             message,
             "UPHEAP_OIDC_PROVIDER_LOGOUT must be true or false, not \"yes\""
         );
+        Ok(())
+    }
+
+    #[test]
+    fn the_subject_claim_defaults_to_sub_and_is_trimmed() -> anyhow::Result<()> {
+        let claim = |extra: &[(&'static str, &'static str)]| -> anyhow::Result<String> {
+            Ok(with_groups(extra)?
+                .oidc
+                .context("a provider")?
+                .subject_claim()
+                .to_owned())
+        };
+        assert_eq!(claim(&[])?, "sub");
+        assert_eq!(claim(&[("UPHEAP_OIDC_SUBJECT_CLAIM", "   ")])?, "sub");
+        assert_eq!(claim(&[("UPHEAP_OIDC_SUBJECT_CLAIM", " oid ")])?, "oid");
         Ok(())
     }
 

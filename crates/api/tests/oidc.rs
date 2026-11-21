@@ -385,6 +385,74 @@ async fn an_email_the_provider_doesnt_vouch_for_is_refused() -> Result<()> {
     Ok(())
 }
 
+/// The harness of `h`, with the same database and provider, and identities keyed on the claim `oid`.
+fn keyed_on_oid(h: Harness) -> Result<Harness> {
+    let app = h.plain.with_oidc(h.provider.settings()?.with_subject_claim("oid"));
+    Ok(Harness { app, ..h })
+}
+
+#[gtest]
+#[tokio::test]
+async fn with_another_subject_claim_a_person_is_known_by_it_and_not_by_their_sub() -> Result<()> {
+    let h = keyed_on_oid(harness().await?)?;
+
+    let started = begin(&h.app, None).await?;
+    let first = finish(&h, &started, sam().with_claim("oid", json!("oid-sam"))).await?;
+    expect_that!(location(&first)?, eq(&format!("{APP_URL}/login/provider")));
+    let registered = register(&h.app, &started.request.state, "sam").await?;
+    assert_eq!(registered.status, StatusCode::CREATED, "{}", registered.body);
+    let first_session = registered.session_cookie.context("no session cookie")?;
+
+    // Entra's `sub` differs per app, so the same person can come with another one.
+    let started = begin(&h.app, None).await?;
+    let other_sub = Claims::verified("another-sub", EMAIL, "Sam Doe").with_claim("oid", json!("oid-sam"));
+    let second = finish(&h, &started, other_sub).await?;
+    expect_that!(location(&second)?, eq(&format!("{APP_URL}/")));
+    let second_session = second.session_cookie.context("no session cookie")?;
+
+    expect_that!(
+        me(&h.app, &second_session).await?.body["user"]["id"],
+        eq(&me(&h.app, &first_session).await?.body["user"]["id"])
+    );
+    expect_that!(h.app.count_rows("users").await?, eq(1));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_token_without_the_subject_claim_is_refused_and_nothing_is_made() -> Result<()> {
+    let h = keyed_on_oid(harness().await?)?;
+
+    let started = begin(&h.app, None).await?;
+    let answered = finish(&h, &started, sam()).await?;
+
+    expect_that!(location(&answered)?, eq(&refusal_location("provider_refused")));
+    expect_that!(h.app.count_rows("users").await?, eq(0));
+    expect_that!(h.app.count_rows("user_identities").await?, eq(0));
+    expect_that!(h.app.count_rows("oidc_sign_ins").await?, eq(0));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_identity_made_under_sub_moves_to_the_subject_claim_at_the_next_sign_in() -> Result<()> {
+    let h = harness().await?;
+    let registered = sign_up(&h, None, "sam").await?;
+    let session = registered.session_cookie.context("no session cookie")?;
+    let user_id = me(&h.app, &session).await?.body["user"]["id"].clone();
+
+    let h = keyed_on_oid(h)?;
+    let started = begin(&h.app, None).await?;
+    let answered = finish(&h, &started, sam().with_claim("oid", json!("oid-sam"))).await?;
+
+    expect_that!(location(&answered)?, eq(&format!("{APP_URL}/")));
+    let session = answered.session_cookie.context("no session cookie")?;
+    expect_that!(me(&h.app, &session).await?.body["user"]["id"], eq(&user_id));
+    expect_that!(h.app.count_rows("users").await?, eq(1));
+    expect_that!(h.app.count_rows("user_identities").await?, eq(1));
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn a_sign_in_the_provider_refused_or_that_took_too_long_is_refused() -> Result<()> {

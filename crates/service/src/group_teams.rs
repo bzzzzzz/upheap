@@ -87,12 +87,7 @@ pub enum Groups {
 /// list of strings, or one string, is known. A missing claim beside `_claim_names` naming it is Entra ID's overage:
 /// the groups are too many for the token and live behind another request that isn't made.
 pub fn read_groups(id_token: &str, claim: &str) -> Groups {
-    let payload = id_token
-        .split('.')
-        .nth(1)
-        .and_then(|part| URL_SAFE_NO_PAD.decode(part).ok())
-        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
-    let Some(Value::Object(payload)) = payload else {
+    let Some(payload) = token_payload(id_token) else {
         return Groups::Unknown("missing");
     };
     match payload.get(claim) {
@@ -111,6 +106,19 @@ pub fn read_groups(id_token: &str, claim: &str) -> Groups {
             Groups::Unknown("overflowed")
         }
         None => Groups::Unknown("missing"),
+    }
+}
+
+/// The payload of an ID token given as its compact form, when it is a JSON object. The token's signature is not
+/// checked here: the caller has checked it.
+pub(crate) fn token_payload(id_token: &str) -> Option<serde_json::Map<String, Value>> {
+    let bytes = id_token
+        .split('.')
+        .nth(1)
+        .and_then(|part| URL_SAFE_NO_PAD.decode(part).ok())?;
+    match serde_json::from_slice::<Value>(&bytes).ok()? {
+        Value::Object(payload) => Some(payload),
+        _ => None,
     }
 }
 
