@@ -3878,6 +3878,7 @@ export interface components {
         };
         /** @description An account in the operator's list. */
         OperatorAccount: {
+            allowed_actions: components["schemas"]["OperatorAccountAction"][];
             /** @description Whether the address is confirmed. */
             confirmed: boolean;
             /** @description Whether an operator turned a local account off, or the provider turned a provider account off. */
@@ -3898,6 +3899,11 @@ export interface components {
             operator: boolean;
             username: string;
         };
+        /**
+         * @description What the caller may do about an account in the list.
+         * @enum {string}
+         */
+        OperatorAccountAction: "make_reset_link" | "deactivate" | "reactivate" | "history";
         /** @description Every account on the server, by display name ignoring case, then username. */
         OperatorAccountList: {
             accounts: components["schemas"]["OperatorAccount"][];
@@ -5419,6 +5425,7 @@ export type OidcProvider = components['schemas']['OidcProvider'];
 export type OidcRegisterRequest = components['schemas']['OidcRegisterRequest'];
 export type OidcRegistered = components['schemas']['OidcRegistered'];
 export type OperatorAccount = components['schemas']['OperatorAccount'];
+export type OperatorAccountAction = components['schemas']['OperatorAccountAction'];
 export type OperatorAccountList = components['schemas']['OperatorAccountList'];
 export type OperatorResetLink = components['schemas']['OperatorResetLink'];
 export type OptionArrangement = components['schemas']['OptionArrangement'];
@@ -7214,7 +7221,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `account_provider_managed`: the sign-in provider owns the account's state */
+            /** @description `account_provider_managed`: the sign-in provider owns the account's state; `own_account`: the caller's own account */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7359,7 +7366,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `password_sign_in_off` */
+            /** @description `password_sign_in_off`; `account_turned_off`: an operator turned the account off */
             403: {
                 headers: {
                     [name: string]: unknown;

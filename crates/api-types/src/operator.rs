@@ -15,6 +15,21 @@ pub enum AccountKindDto {
     Provider,
 }
 
+/// What the caller may do about an account in the list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = OperatorAccountAction)]
+pub enum OperatorAccountActionDto {
+    /// `POST .../reset-link`: a local, active account, on a server with password sign-in.
+    MakeResetLink,
+    /// `POST .../deactivate`: a local, active account that isn't the caller's own.
+    Deactivate,
+    /// `POST .../reactivate`: a local account an operator turned off, not the caller's own.
+    Reactivate,
+    /// `GET .../history`: every account.
+    History,
+}
+
 /// An account in the operator's list.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = OperatorAccount)]
@@ -34,6 +49,7 @@ pub struct OperatorAccountDto {
     pub last_sign_in_at: Option<i64>,
     /// How long ago, in the request's timezone: "3 days ago". `null` when the account never signed in.
     pub last_sign_in_label: Option<String>,
+    pub allowed_actions: Vec<OperatorAccountActionDto>,
 }
 
 /// Every account on the server, by display name ignoring case, then username.

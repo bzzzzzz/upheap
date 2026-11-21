@@ -3,7 +3,6 @@ import { useId, useRef, useState } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { Me, OperatorAccount, SignInsToEnd } from "../api/schema";
-import { useOidcProvider } from "../api/queries/auth";
 import { useMe } from "../api/queries/me";
 import {
   useDeactivateAccount,
@@ -203,20 +202,20 @@ function AccountRow({ account, you, phone }: { account: OperatorAccount; you: bo
   const countSignIns = useSignInsToEnd();
   const deactivate = useDeactivateAccount();
   const reactivate = useReactivateAccount();
-  const passwordSignIn = useOidcProvider().data?.password_sign_in !== false;
   const [panel, setPanel] = useState<Panel | null>(null);
   const [sheet, setSheet] = useState(false);
   // After Done or Cancel, focus goes back to the ⋯ the panel came from. A phone's sheet gives it back itself.
   const { ref: moreButton, returnFocus } = useReturnFocus<HTMLButtonElement>(panel !== null);
   const name = `${account.display_name}${you ? " (you)" : ""}`;
-  const manageable = account.kind === "local" && !you;
+  // The server says which actions the account allows; the page only labels them.
+  const allowed = new Set(account.allowed_actions);
   const actions: { id: RowAction; label: string }[] = [
-    ...(manageable && !account.deactivated && passwordSignIn
-      ? [{ id: "link", label: "Make reset link" } as const]
+    ...(allowed.has("make_reset_link") ? [{ id: "link", label: "Make reset link" } as const] : []),
+    ...(allowed.has("deactivate") ? [{ id: "deactivate", label: "Deactivate…" } as const] : []),
+    ...(allowed.has("reactivate") ? [{ id: "reactivate", label: "Reactivate" } as const] : []),
+    ...(allowed.has("history")
+      ? [{ id: "history", label: panel?.kind === "history" ? "Hide history" : "History" } as const]
       : []),
-    ...(manageable && !account.deactivated ? [{ id: "deactivate", label: "Deactivate…" } as const] : []),
-    ...(manageable && account.deactivated ? [{ id: "reactivate", label: "Reactivate" } as const] : []),
-    { id: "history", label: panel?.kind === "history" ? "Hide history" : "History" },
   ];
 
   const resetRequests = () => {

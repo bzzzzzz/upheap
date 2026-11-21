@@ -33,6 +33,19 @@ pub enum AccountKind {
     Provider,
 }
 
+/// What an operator may do about an account in the list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccountAction {
+    /// Make a reset link: a local, active account, on a server with password sign-in.
+    MakeResetLink,
+    /// Turn it off: a local, active account that isn't the operator's own.
+    Deactivate,
+    /// Turn it back on: a local account an operator turned off, not the operator's own.
+    Reactivate,
+    /// Read its history: every account.
+    History,
+}
+
 /// An account as an operator sees it in the list.
 #[derive(Debug)]
 pub struct Account {
@@ -44,6 +57,8 @@ pub struct Account {
     pub operator: bool,
     /// When a session was last opened for the account; `None` until one is.
     pub last_sign_in_at: Option<Timestamp>,
+    /// What the caller may do about it, by the rules the actions themselves enforce.
+    pub allowed_actions: Vec<AccountAction>,
 }
 
 /// What turning an account off would end.
@@ -63,6 +78,13 @@ pub enum Deactivation {
     AlreadyOff,
 }
 
+/// Which operator role change to make.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RoleChange {
+    Grant,
+    Remove,
+}
+
 /// What a write that may find its work done did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Applied {
@@ -72,8 +94,9 @@ pub enum Applied {
 }
 
 impl Services {
-    /// Fails with [`ServiceError::NotFound`] unless the caller is an operator.
-    pub(crate) async fn require_operator(&self, principal: Principal) -> Result<(), ServiceError> {
+    /// Fails with [`ServiceError::NotFound`] unless the caller is an operator. An operator endpoint calls it before
+    /// reading its request, so a non-operator learns nothing from a malformed one.
+    pub async fn require_operator(&self, principal: Principal) -> Result<(), ServiceError> {
         if store::users::is_operator(&self.db, principal.user_id).await? {
             Ok(())
         } else {
@@ -123,14 +146,29 @@ impl Services {
         for record in store::users::list_accounts(&self.db).await? {
             let subject = identities.get(&record.user.id);
             let provider_off = subject.is_some_and(|subject| provider_inactive.contains(subject));
-            accounts.push(Account {
-                kind: if subject.is_some() {
-                    AccountKind::Provider
+            let kind = if subject.is_some() {
+                AccountKind::Provider
+            } else {
+                AccountKind::Local
+            };
+            let own = matches!(by, Operator::Account(principal) if principal.user_id == record.user.id);
+            let mut allowed_actions = Vec::new();
+            if kind == AccountKind::Local && !own {
+                if record.turned_off {
+                    allowed_actions.push(AccountAction::Reactivate);
                 } else {
-                    AccountKind::Local
-                },
+                    if self.settings.password_sign_in {
+                        allowed_actions.push(AccountAction::MakeResetLink);
+                    }
+                    allowed_actions.push(AccountAction::Deactivate);
+                }
+            }
+            allowed_actions.push(AccountAction::History);
+            accounts.push(Account {
+                kind,
                 confirmed: !record.unconfirmed,
                 deactivated: record.turned_off || provider_off,
+                allowed_actions,
                 operator: record.operator,
                 last_sign_in_at: record.last_sign_in_at,
                 user: record.user,
@@ -165,10 +203,14 @@ impl Services {
     /// that records it. The account, its items, teams and memberships stay. An account that is off already answers
     /// [`Deactivation::AlreadyOff`] and records nothing.
     ///
-    /// Fails with [`ServiceError::AccountProviderManaged`] for a provider account, whose state the provider owns.
-    /// Turning off one's own account is allowed.
+    /// Fails with [`ServiceError::AccountProviderManaged`] for a provider account, whose state the provider owns, and
+    /// with [`ServiceError::OwnAccount`] for an operator's own account, which would lock them out. The shell can turn
+    /// off any local account.
     pub async fn deactivate_account(&self, by: Operator, user_id: UserId) -> Result<Deactivation, ServiceError> {
         self.authorize_operator(by).await?;
+        if matches!(by, Operator::Account(principal) if principal.user_id == user_id) {
+            return Err(ServiceError::OwnAccount);
+        }
         let user = self.find_account(user_id).await?;
         self.refuse_provider_account(user.id).await?;
         let personal_team = self.load_personal_team(&self.db, &user).await?;
@@ -233,7 +275,8 @@ impl Services {
     /// Makes a reset link for the account `user_id`, as [`Services::create_password_reset_link`] does, with the
     /// caller as the entry's actor. The link is in the answer and nowhere else.
     ///
-    /// Fails with [`ServiceError::AccountProviderManaged`] for a provider account, whose state the provider owns.
+    /// Fails with [`ServiceError::AccountProviderManaged`] for a provider account, whose state the provider owns, and
+    /// with [`ServiceError::AccountTurnedOff`] for an account an operator turned off, which the link couldn't sign in.
     pub async fn create_operator_reset_link(
         &self,
         principal: Principal,
@@ -243,30 +286,39 @@ impl Services {
         self.ensure_password_sign_in()?;
         let user = self.find_account(user_id).await?;
         self.refuse_provider_account(user.id).await?;
+        if store::users::is_turned_off(&self.db, user.id).await? {
+            return Err(ServiceError::AccountTurnedOff);
+        }
         self.make_reset_link(user, "operator", principal.user_id).await
     }
 
     /// Makes the account `login` names an operator. For the server's shell, the only way to. Fails with
     /// [`ServiceError::NotFound`] when no account has that name. An operator already answers [`Applied::Unchanged`].
     pub async fn grant_operator(&self, login: &str) -> Result<(User, Applied), ServiceError> {
-        self.change_operator(login, AuditAction::OperatorGranted).await
+        self.change_operator(login, RoleChange::Grant).await
     }
 
     /// Takes the operator role from the account `login` names. For the server's shell. Someone who isn't an
     /// operator answers [`Applied::Unchanged`].
     pub async fn remove_operator(&self, login: &str) -> Result<(User, Applied), ServiceError> {
-        self.change_operator(login, AuditAction::OperatorRemoved).await
+        self.change_operator(login, RoleChange::Remove).await
     }
 
-    async fn change_operator(&self, login: &str, action: AuditAction) -> Result<(User, Applied), ServiceError> {
+    async fn change_operator(&self, login: &str, change: RoleChange) -> Result<(User, Applied), ServiceError> {
         let user = self.find_account_by_login(login).await?;
         let personal_team = self.load_personal_team(&self.db, &user).await?;
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         store::teams::lock_team(&txn, personal_team).await?;
-        let changed = match action {
-            AuditAction::OperatorGranted => store::users::set_operator(&txn, user.id, now).await?,
-            _ => store::users::clear_operator(&txn, user.id).await?,
+        let (changed, action) = match change {
+            RoleChange::Grant => (
+                store::users::set_operator(&txn, user.id, now).await?,
+                AuditAction::OperatorGranted,
+            ),
+            RoleChange::Remove => (
+                store::users::clear_operator(&txn, user.id).await?,
+                AuditAction::OperatorRemoved,
+            ),
         };
         if !changed {
             return Ok((user, Applied::Unchanged));

@@ -833,7 +833,10 @@ a fixed time.
      few hundred accounts, and the page searches and filters it in the browser (that changes when a server has
      thousands). An account is a **provider** account when it has an identity at the configured provider, and a
      **local** one otherwise; an operator turns off and on, and makes reset links for, local accounts only, and a
-     provider account answers `409 account_provider_managed`, since the provider owns its state.
+     provider account answers `409 account_provider_managed`, since the provider owns its state. Each listed account
+     carries `allowed_actions`, worked out by the same rules the actions enforce: an operator can't turn off their own
+     account through the API (`409 own_account`; the shell can), and a reset link for an account an operator turned
+     off answers `403 account_turned_off`, since the link couldn't sign in.
      `users.last_sign_in_at` is set wherever a session is opened (`open_session`) and shown in the list.
    - An **operator's deactivation** sets `users.deactivated_at` where SCIM's keeps its state in `scim_users`. In one
      transaction, after locking the person's personal team as SCIM does (sign-ins open a session under that lock), it

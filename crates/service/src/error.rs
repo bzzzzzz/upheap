@@ -46,6 +46,9 @@ pub enum ServiceError {
     /// An operator action on an account whose state the sign-in provider owns.
     #[error("the account is managed by the sign-in provider")]
     AccountProviderManaged,
+    /// An operator turning off their own account, which would lock them out.
+    #[error("an operator can't turn off their own account")]
+    OwnAccount,
     #[error("email or password is wrong")]
     InvalidCredentials,
     /// The right password for an account that hasn't confirmed its address, on a server with mail set up. A new link

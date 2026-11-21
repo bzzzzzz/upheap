@@ -2475,7 +2475,7 @@
             }
           },
           "409": {
-            "description": "`account_provider_managed`: the sign-in provider owns the account's state",
+            "description": "`account_provider_managed`: the sign-in provider owns the account's state; `own_account`: the caller's own account",
             "content": {
               "application/json": {
                 "schema": {
@@ -2703,7 +2703,7 @@
             }
           },
           "403": {
-            "description": "`password_sign_in_off`",
+            "description": "`password_sign_in_off`; `account_turned_off`: an operator turned the account off",
             "content": {
               "application/json": {
                 "schema": {
@@ -14796,9 +14796,16 @@
           "kind",
           "confirmed",
           "deactivated",
-          "operator"
+          "operator",
+          "allowed_actions"
         ],
         "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorAccountAction"
+            }
+          },
           "confirmed": {
             "type": "boolean",
             "description": "Whether the address is confirmed."
@@ -14843,6 +14850,16 @@
             "type": "string"
           }
         }
+      },
+      "OperatorAccountAction": {
+        "type": "string",
+        "description": "What the caller may do about an account in the list.",
+        "enum": [
+          "make_reset_link",
+          "deactivate",
+          "reactivate",
+          "history"
+        ]
       },
       "OperatorAccountList": {
         "type": "object",

@@ -190,6 +190,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::AccountProviderManaged => {
             simple(StatusCode::CONFLICT, "account_provider_managed", Category::Conflict)
         }
+        ServiceError::OwnAccount => simple(StatusCode::CONFLICT, "own_account", Category::Conflict),
         ServiceError::EmailNotConfirmed => simple(StatusCode::FORBIDDEN, "email_not_confirmed", Category::Permission),
         ServiceError::InvalidCredentials => {
             simple(StatusCode::UNAUTHORIZED, "invalid_credentials", Category::Permission)

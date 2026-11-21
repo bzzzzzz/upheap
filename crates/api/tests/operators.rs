@@ -329,3 +329,57 @@ async fn signing_in_sets_the_last_sign_in() -> Result<()> {
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_non_operator_gets_not_found_for_a_malformed_history_query_too() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register("ada@example.test").await?;
+    let id = user_id(&app, &session).await?;
+
+    // Act
+    let bad_cursor = get(&app, &session, &format!("/operator/accounts/{id}/history?cursor=x")).await?;
+    let bad_limit = get(&app, &session, &format!("/operator/accounts/{id}/history?limit=many")).await?;
+
+    // Assert
+    expect_that!(bad_cursor.status, eq(StatusCode::NOT_FOUND));
+    expect_that!(bad_limit.status, eq(StatusCode::NOT_FOUND));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_list_says_which_actions_each_account_allows_and_the_endpoints_hold_to_it() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register_as("ada@example.test", "Ada Lee").await?;
+    app.services.grant_operator("ada").await?;
+    let (_bo, _) = app.register_as("bo@example.test", "Bo Park").await?;
+    let (cy, _) = app.register_as("cy@example.test", "Cy Moe").await?;
+    let ada_id = user_id(&app, &ada).await?;
+    let cy_id = user_id(&app, &cy).await?;
+    post(&app, &ada, &format!("/operator/accounts/{cy_id}/deactivate")).await?;
+
+    // Act
+    let listed = get(&app, &ada, "/operator/accounts").await?;
+    let own_off = post(&app, &ada, &format!("/operator/accounts/{ada_id}/deactivate")).await?;
+    let link_for_off = post(&app, &ada, &format!("/operator/accounts/{cy_id}/reset-link")).await?;
+
+    // Assert
+    let accounts = listed.body["accounts"].as_array().context("no accounts")?;
+    let actions: Vec<Value> = accounts.iter().map(|a| a["allowed_actions"].clone()).collect();
+    expect_that!(
+        actions,
+        eq(&vec![
+            json!(["history"]),
+            json!(["make_reset_link", "deactivate", "history"]),
+            json!(["reactivate", "history"]),
+        ])
+    );
+    expect_that!(own_off.status, eq(StatusCode::CONFLICT));
+    expect_that!(own_off.body["code"], eq(&json!("own_account")));
+    expect_that!(link_for_off.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(link_for_off.body["code"], eq(&json!("account_turned_off")));
+    Ok(())
+}

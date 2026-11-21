@@ -1023,8 +1023,8 @@ it, or "Never"), and a ⋯. A deactivated account is dimmed and stays in the lis
 - **History**, for every account, opens the account's history under the row (in the sheet on a phone), the History
   card's list of the account, read with the operator's wording.
 
-A provider account, and your own row, have History only: the identity provider owns a provider account's state, and
-the page doesn't offer turning yourself off. Focus goes back to the row's ⋯ after Done or Cancel. Errors show under the row.
+The ⋯ shows what the account's `allowed_actions` allow. A provider account, and your own row, have History only: the
+identity provider owns a provider account's state, and the server refuses turning yourself off. Focus goes back to the row's ⋯ after Done or Cancel. Errors show under the row.
 
 **What the person sees.** Signing in to an account that was turned off says "Whoever runs this server has turned off
 your account." and, under it, the operator's contact line when one is set. Their other tabs fall to sign-in on the next

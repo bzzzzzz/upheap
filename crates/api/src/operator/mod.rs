@@ -4,8 +4,8 @@
 
 use api_types::me::{AccountHistoryDto, AccountHistoryQueryDto};
 use api_types::operator::{
-    AccountDeactivatedDto, AccountKindDto, OperatorAccountDto, OperatorAccountListDto, OperatorResetLinkDto,
-    SignInsToEndDto,
+    AccountDeactivatedDto, AccountKindDto, OperatorAccountActionDto, OperatorAccountDto, OperatorAccountListDto,
+    OperatorResetLinkDto, SignInsToEndDto,
 };
 use axum::Json;
 use axum::extract::State;
@@ -14,7 +14,7 @@ use domain::UserId;
 use domain::due::describe_ago;
 use jiff::tz::TimeZone;
 use serde::Deserialize;
-use service::operators::{Account, AccountKind, Deactivation, Operator};
+use service::operators::{Account, AccountAction, AccountKind, Deactivation, Operator};
 use utoipa::IntoParams;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
@@ -59,6 +59,16 @@ fn to_account_dto(account: Account, as_of: domain::Timestamp, tz: &TimeZone) -> 
         operator: account.operator,
         last_sign_in_at: account.last_sign_in_at.map(domain::Timestamp::as_millis),
         last_sign_in_label: account.last_sign_in_at.map(|at| describe_ago(at, as_of, tz)),
+        allowed_actions: account
+            .allowed_actions
+            .iter()
+            .map(|action| match action {
+                AccountAction::MakeResetLink => OperatorAccountActionDto::MakeResetLink,
+                AccountAction::Deactivate => OperatorAccountActionDto::Deactivate,
+                AccountAction::Reactivate => OperatorAccountActionDto::Reactivate,
+                AccountAction::History => OperatorAccountActionDto::History,
+            })
+            .collect(),
     }
 }
 
@@ -118,7 +128,7 @@ async fn count_sign_ins(
         (status = 200, body = AccountDeactivatedDto),
         (status = 401, description = "`unauthenticated`", body = Problem),
         (status = 404, description = "The caller isn't an operator, or there is no such account", body = Problem),
-        (status = 409, description = "`account_provider_managed`: the sign-in provider owns the account's state", body = Problem),
+        (status = 409, description = "`account_provider_managed`: the sign-in provider owns the account's state; `own_account`: the caller's own account", body = Problem),
     ))]
 async fn deactivate_account(
     State(state): State<AppState>,
@@ -166,7 +176,7 @@ async fn reactivate_account(
     responses(
         (status = 200, body = OperatorResetLinkDto),
         (status = 401, description = "`unauthenticated`", body = Problem),
-        (status = 403, description = "`password_sign_in_off`", body = Problem),
+        (status = 403, description = "`password_sign_in_off`; `account_turned_off`: an operator turned the account off", body = Problem),
         (status = 404, description = "The caller isn't an operator, or there is no such account", body = Problem),
         (status = 409, description = "`account_provider_managed`: the sign-in provider owns the account's state", body = Problem),
     ))]
@@ -200,8 +210,11 @@ async fn get_account_history(
     CurrentUser(principal): CurrentUser,
     ClientTimeZone(tz): ClientTimeZone,
     ApiPath(AccountParams { user_id }): ApiPath<AccountParams>,
-    ApiQuery(query): ApiQuery<AccountHistoryQueryDto>,
+    query: Result<ApiQuery<AccountHistoryQueryDto>, ApiError>,
 ) -> Result<Json<AccountHistoryDto>, ApiError> {
+    // The role first, so a non-operator gets 404 for a bad query too.
+    state.services.require_operator(principal).await?;
+    let ApiQuery(query) = query?;
     let after = query.cursor.as_deref().map(parse_cursor).transpose()?;
     let page = state
         .services
