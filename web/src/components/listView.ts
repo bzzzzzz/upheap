@@ -263,6 +263,13 @@ export function searchOfView(view: ListView): ListSearch {
 export const viewInputOf = (search: ListSearch): ListViewInput =>
   toListQuery({ ...search, agent: undefined, going_to: undefined });
 
+/**
+ * Whether the saved view holds the list's settings, the agent filters aside: what updating it would save is what it
+ * has.
+ */
+export const holdsSettings = (view: ListView, search: ListSearch) =>
+  JSON.stringify(toListQuery(searchOfView(view))) === JSON.stringify(viewInputOf(search));
+
 /** Whether the list on screen shows exactly what the saved view does, agent filters included. */
 export const isCurrentView = (view: ListView, search: ListSearch) =>
   JSON.stringify(toListQuery(searchOfView(view))) === JSON.stringify(toListQuery(search));

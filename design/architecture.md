@@ -583,8 +583,8 @@ a fixed time.
    other admin); a parameter with its options and tag links; `GET /me` with the caller's teams and heaps and their
    counts.
 8. Saved views belong to the heap, not to whoever saved them: every member sees, changes and archives them, as with
-   tags. An archived view is left out of the list and refuses edits; there is no unarchive, since saving the view
-   again is as quick.
+   tags. An archived view is left out of the list and refuses edits until it's unarchived, which keeps its ID, so
+   Undo after archiving gives back the same view a CLI's `--view <id>` names.
 9. Archiving an option switches the open items that have it to the replacement and bumps their versions, so an edit
    made from the old value fails with a version conflict instead of undoing the switch. A closed item keeps the
    archived option; when it's reopened, its values are brought up to date the same way, in the reopening's audit

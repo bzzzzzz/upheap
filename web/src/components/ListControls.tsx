@@ -20,6 +20,7 @@ import {
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
 import { ViewsSection } from "./SavedViews";
+import { Section } from "./Section";
 import { teamName } from "./teamName";
 import {
   DEFAULT_MODES,
@@ -225,7 +226,7 @@ export function ListControls({
               view={view}
               onChange={onChange}
               onApplied={() => phone && close()}
-              onArchived={close}
+              onLeave={close}
               enabled={panel === "filters"}
             />
             <hr className="border-line" />
@@ -630,18 +631,6 @@ function PanelFooter({
         Done
       </button>
     </div>
-  );
-}
-
-export function Section({ title, children }: { title: string; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="flex flex-col gap-3">
-      <h3 id={id} className="text-xs font-semibold tracking-wide text-muted uppercase">
-        {title}
-      </h3>
-      {children}
-    </section>
   );
 }
 

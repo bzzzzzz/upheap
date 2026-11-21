@@ -87,8 +87,11 @@ test("a view is renamed and updated to the list's settings", async ({ page }) =>
   await expect(panel.getByRole("button", { name: "Anything", exact: true })).toBeVisible();
   await panel.getByRole("button", { name: "More for Anything" }).click();
   await page.getByRole("menuitem", { name: "Update to current settings" }).click();
+  // Updating closes the panel, so its toast can be seen and heard.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText("Updated Anything.")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Anything, current view", exact: true })).toBeVisible();
+  const reopened = await openFilters(page);
+  await expect(reopened.getByRole("button", { name: "Anything, current view", exact: true })).toBeVisible();
 });
 
 test("an archived view comes back with Undo", async ({ page }) => {

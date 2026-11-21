@@ -29,7 +29,7 @@ The design docs are indexed in [design/README.md](design/README.md).
   parameter; it counts in the ranking and its reasons, and the list filters and sorts by it.
 - Teams: create teams, add members by name or email, make admins, remove members or leave; a team always keeps an
   admin. Admins create, rename, archive and unarchive heaps; an archived heap is read-only.
-- Saved views (API only for now; the web app hides them): name a list view (states, sort, filters) and the whole
+- Saved views: name a list view (states, sort, filters) and the whole
   team gets it. Change one, save it as a new view, or archive views nobody needs.
 - Optimistic concurrency (`If-Match`), audit entries for every write, problem+json errors with stable codes.
 - Audit log: the history of each item, tag, parameter, saved view, heap and member, and Activity pages per heap and

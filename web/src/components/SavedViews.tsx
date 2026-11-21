@@ -12,10 +12,10 @@ import {
   useUpdateSavedView,
 } from "../api/queries/views";
 import { compactButtonClass } from "./buttons";
-import { Section } from "./ListControls";
-import { isCurrentView, searchOfView, viewInputOf, type ListSearch } from "./listView";
+import { holdsSettings, isCurrentView, searchOfView, viewInputOf, type ListSearch } from "./listView";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { problemMessage, ProblemText } from "./ProblemText";
+import { Section } from "./Section";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
@@ -27,21 +27,22 @@ const rowClass =
  * The heap's saved views (ux.md, The list §6): tap one to apply it, name the list's settings as a new one, and rename,
  * update or archive a view from its ⋯. The server's `allowed_actions` say which of those show. Applying calls
  * `onChange` with the view's settings, which replace the list's, the agent filters included, and then `onApplied`.
- * Archiving calls `onArchived`, which closes the panel: the open panel keeps the page out of reach, its Undo toast too.
+ * Updating and archiving call `onLeave` first, which closes the panel: the open panel keeps the page out of reach,
+ * the toast that says how it went too.
  */
 export function ViewsSection({
   heapRef,
   view,
   onChange,
   onApplied,
-  onArchived,
+  onLeave,
   enabled,
 }: {
   heapRef: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
   onApplied: () => void;
-  onArchived: () => void;
+  onLeave: () => void;
   /** Whether to load the views: while the panel is open. */
   enabled: boolean;
 }) {
@@ -68,20 +69,25 @@ export function ViewsSection({
   const failed = (error: Error) =>
     setToast({ message: problemMessage(error), error: true, requestId: requestIdOf(error) });
 
-  const refresh = (saved: SavedView) =>
-    // `mutateAsync`, not `mutate` with callbacks: the toast can outlive the panel, and TanStack drops a call's
-    // callbacks once the component that made it has unmounted.
-    update
+  // `mutateAsync`, not `mutate` with callbacks: the panel closes first, and TanStack drops a call's callbacks once
+  // the component that made it has unmounted.
+  const refresh = (saved: SavedView) => {
+    onLeave();
+    void update
       .mutateAsync({ view: saved, patch: { view: viewInputOf(view) } })
       .then(() => setToast({ message: `Updated ${saved.name}.` }), failed);
-  const remove = (saved: SavedView) =>
-    archive.mutateAsync(saved).then(() => {
-      setToast({
-        message: `Archived ${saved.name}.`,
-        undo: () => void unarchive.mutateAsync(saved).then(undefined, failed),
-      });
-      onArchived();
-    }, failed);
+  };
+  const remove = (saved: SavedView) => {
+    onLeave();
+    void archive.mutateAsync(saved).then(
+      () =>
+        setToast({
+          message: `Archived ${saved.name}.`,
+          undo: () => void unarchive.mutateAsync(saved).then(undefined, failed),
+        }),
+      failed,
+    );
+  };
 
   if (!views.data) {
     return (
@@ -124,13 +130,14 @@ export function ViewsSection({
               key={saved.id}
               saved={saved}
               current={isCurrentView(saved.view, view)}
+              holdsSettings={holdsSettings(saved.view, view)}
               onApply={() => {
                 onChange(searchOfView(saved.view));
                 onApplied();
               }}
               onRename={() => open(saved.id)}
-              onUpdate={() => void refresh(saved)}
-              onArchive={() => void remove(saved)}
+              onUpdate={() => refresh(saved)}
+              onArchive={() => remove(saved)}
             />
           ),
         )}
@@ -170,6 +177,7 @@ export function ViewsSection({
 function ViewRow({
   saved,
   current,
+  holdsSettings,
   onApply,
   onRename,
   onUpdate,
@@ -177,6 +185,8 @@ function ViewRow({
 }: {
   saved: SavedView;
   current: boolean;
+  /** Whether the view already holds the list's settings, so updating it would change nothing. */
+  holdsSettings: boolean;
   onApply: () => void;
   onRename: () => void;
   onUpdate: () => void;
@@ -212,7 +222,7 @@ function ViewRow({
                   Rename…
                 </MenuEntry>
               )}
-              {can("edit") && !current && (
+              {can("edit") && !holdsSettings && (
                 <MenuEntry id="update" onAction={onUpdate}>
                   Update to current settings
                 </MenuEntry>
