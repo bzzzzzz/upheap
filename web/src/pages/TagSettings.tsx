@@ -16,8 +16,7 @@ import { useToast } from "../components/UndoToast";
 import { useReturnFocus } from "../components/useConfirmation";
 import { RequestId } from "../components/RequestId";
 import { problemMessage } from "../components/ProblemText";
-import { plural } from "../components/words";
-import { MergeConfirm } from "./MergeConfirm";
+import { carriedBy, madeTeamTag, MergeConfirm } from "./MergeConfirm";
 import { cardClass, cardTitleClass, inputClass } from "./settingsForm";
 
 const chipShape =
@@ -42,13 +41,6 @@ export type TagSettings = {
 /** The reach a team tag's write was refused with because it would merge heap tags, or nothing for any other error. */
 const mergeReachOf = (error: unknown): MergeReach | undefined =>
   error instanceof ApiProblem && error.code === "tag_merge_unconfirmed" ? error.mergeReach : undefined;
-
-/** The toast after a confirmed merge: how many items in how many heaps carry the team tag. */
-const carriedBy = (reach: MergeReach) =>
-  `${plural(
-    reach.heaps.reduce((sum, reached) => sum + reached.items, 0),
-    "item",
-  )} in ${plural(reach.heaps.length, "heap")} carry it.`;
 
 /** "New tag" for a heap's tags, "New team tag" for a team's; the inputs' names follow it. */
 export function NewTagForm({ settings }: { settings: TagSettings }) {
@@ -117,7 +109,7 @@ export function NewTagForm({ settings }: { settings: TagSettings }) {
           description={body.description}
           settings={settings}
           onDone={(confirmed) => {
-            showToast({ message: `“${name}” is a team tag now: ${carriedBy(confirmed)}` });
+            showToast({ message: madeTeamTag(name, confirmed) });
             setName("");
             setDescription("");
             setReach(null);
@@ -232,7 +224,7 @@ function MakeTeamTag({ tag, heap, team, teamName }: { tag: Tag; heap: HeapSummar
           promotingHeapId={heap.id}
           settings={settings}
           onDone={(confirmed) => {
-            showToast({ message: `“${tag.name}” is a team tag now: ${carriedBy(confirmed)}` });
+            showToast({ message: madeTeamTag(tag.name, confirmed) });
             setReach(null);
           }}
           onClose={() => setReach(null)}

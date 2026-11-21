@@ -14,6 +14,16 @@ import { useMergeReachConfirm, type Send } from "./useMergeReachConfirm";
 /** What the write does: makes a team tag, or renames one into a name heap tags have. */
 export type MergeAct = { kind: "make"; name: string } | { kind: "rename"; from: string; to: string };
 
+/** The end of the toast after a confirmed merge: how many items in how many heaps carry the team tag. */
+export const carriedBy = (reach: MergeReach) =>
+  `${plural(
+    reach.heaps.reduce((sum, reached) => sum + reached.items, 0),
+    "item",
+  )} in ${plural(reach.heaps.length, "heap")} carry it.`;
+
+/** The toast after a confirmed merge made `name` a team tag. */
+export const madeTeamTag = (name: string, reach: MergeReach) => `“${name}” is a team tag now: ${carriedBy(reach)}`;
+
 const badgeClass = "rounded-full bg-sunken px-2 py-0.5 text-xs text-muted";
 
 /**

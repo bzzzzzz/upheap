@@ -198,10 +198,10 @@ edited and merged entries, each naming the tag, and a merge lists each heap's ta
 (12 items), Support's “Billing” (3 items)". Adding or renaming a heap tag to a team tag's name is refused under the
 field: "“security” is a team tag of Acme. Use it on items here instead."
 
-**The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, Make a team tag, or a
-rename into a name heap tags have) is refused by the server with the list of what it would merge, and the app asks
-first, in a dialog on a wide screen and a bottom sheet on a phone. It is headed "Make “billing” a team tag?" or "Rename
-“old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
+**The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, Create team tag in a team
+parameter's picker, Make a team tag, or a rename into a name heap tags have) is refused by the server with the list of
+what it would merge, and the app asks first, in a dialog on a wide screen and a bottom sheet on a phone. It is headed
+"Make “billing” a team tag?" or "Rename “old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
 "archived" and, for Make a team tag, "this heap" marked. Under the rows a total says "{n items} in {m heaps} will
 carry the team tag.", then the description the team tag will have, and the quiet line "The items keep their history.
 This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button reads
@@ -972,8 +972,8 @@ Archive or Unarchive, History), then Tags, the team's own, used in every heap of
 rows that are edited in place, with "Changes in every heap of {team}." under the form and the same History; a name
 that heap tags of the team have opens the merge confirm, see Tags), then Parameters, the team's own, which each heap
 chooses to use (a New parameter button that opens the add form without a weight, and a card per parameter like a
-heap's, with the team tags that suggest it, picked from the team's tags alone, a line "Used in Launch and Support" or
-"Not used in any heap yet"; archiving an option there names the heaps whose open items switch), then Members with a
+heap's, with the team tags that suggest it, picked from the team's tags alone or made there (Create
+team tag “…”, which links the new team tag), a line "Used in Launch and Support" or "Not used in any heap yet"; archiving an option there names the heaps whose open items switch), then Members with a
 search whose results are a listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge,
 Make admin or Make member and Remove, and Leave team or a line saying why the only admin can't leave. Removing a member
 says what happens: "They lose access to Launch and
