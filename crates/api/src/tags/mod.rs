@@ -78,6 +78,7 @@ fn to_tag_dto(view: TagView) -> TagDto {
         heap_id,
         name: tag.name.as_str().to_owned(),
         description: tag.description.map(|d| d.as_str().to_owned()),
+        color: tag.color.into(),
         version: tag.version.get(),
         allowed_actions: view.allowed_actions.into_iter().map(TagActionDto::from).collect(),
     }

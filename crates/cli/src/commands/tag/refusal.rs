@@ -3,6 +3,7 @@
 
 use api_types::problem::MergeReachDto;
 use api_types::teams::TeamDto;
+use domain::tag::TagColor;
 
 use crate::client::ClientError;
 use crate::commands::heap_api::TeamApi;
@@ -24,6 +25,7 @@ pub(crate) enum TeamTagWrite<'a> {
         name: &'a str,
         /// As typed: `-` stays `-`.
         description: Option<&'a str>,
+        color: Option<TagColor>,
     },
     /// `tag promote <tag> --heap <heap>`, where the heap tag is named `tag_name`.
     Promote {
@@ -41,6 +43,7 @@ pub(crate) enum TeamTagWrite<'a> {
         /// As typed: `-` stays `-`.
         description: Option<&'a str>,
         no_description: bool,
+        color: Option<TagColor>,
     },
 }
 
@@ -121,10 +124,14 @@ impl TeamTagWrite<'_> {
                 team,
                 name,
                 description,
+                color,
             } => {
                 let mut flags = vec![format!("--team {}", shell_quoted(team))];
                 if let Some(text) = description {
                     flags.push(format!("--description {}", shell_quoted(text)));
+                }
+                if let Some(color) = color {
+                    flags.push(format!("--color {}", color.code()));
                 }
                 ("add", *name, flags)
             }
@@ -135,6 +142,7 @@ impl TeamTagWrite<'_> {
                 name,
                 description,
                 no_description,
+                color,
                 ..
             } => {
                 let mut flags = vec![match scope {
@@ -149,6 +157,9 @@ impl TeamTagWrite<'_> {
                 }
                 if *no_description {
                     flags.push("--no-description".to_owned());
+                }
+                if let Some(color) = color {
+                    flags.push(format!("--color {}", color.code()));
                 }
                 ("edit", *tag, flags)
             }
@@ -236,6 +247,7 @@ mod tests {
             team: "ada",
             name: "Big rock",
             description: Some("it's - big"),
+            color: None,
         };
 
         expect_that!(
@@ -245,11 +257,27 @@ mod tests {
     }
 
     #[gtest]
+    fn a_colour_given_is_repeated() {
+        let write = TeamTagWrite::Add {
+            team: "ada",
+            name: "ops",
+            description: None,
+            color: Some(TagColor::Rose),
+        };
+
+        expect_that!(
+            write.command("t0k"),
+            eq("upheap tag add ops --team ada --color rose --confirm t0k")
+        );
+    }
+
+    #[gtest]
     fn a_description_from_stdin_stays_a_dash() {
         let write = TeamTagWrite::Add {
             team: "ada",
             name: "ops",
             description: Some("-"),
+            color: None,
         };
 
         expect_that!(
@@ -264,6 +292,7 @@ mod tests {
             team: "ada",
             name: "-ops",
             description: None,
+            color: None,
         };
 
         expect_that!(
@@ -298,6 +327,7 @@ mod tests {
             name: Some("operations"),
             description: None,
             no_description: true,
+            color: None,
         };
         let in_team = TeamTagWrite::Edit {
             tag: "ops",
@@ -307,6 +337,7 @@ mod tests {
             name: Some("two words"),
             description: Some("Ops work"),
             no_description: false,
+            color: None,
         };
 
         expect_that!(
@@ -337,6 +368,7 @@ mod tests {
             team: "ada",
             name: "billing",
             description: None,
+            color: None,
         };
 
         verify_that!(
@@ -362,6 +394,7 @@ mod tests {
             name: Some("operations"),
             description: None,
             no_description: false,
+            color: None,
         };
         let describe = TeamTagWrite::Edit {
             tag: "ops",
@@ -371,6 +404,7 @@ mod tests {
             name: None,
             description: Some("x"),
             no_description: false,
+            color: None,
         };
         let promote = TeamTagWrite::Promote {
             tag: "x",

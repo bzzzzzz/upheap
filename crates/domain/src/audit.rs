@@ -120,6 +120,7 @@ coded_enum! {
         Name = "name",
         DisplayName = "display_name",
         Description = "description",
+        Color = "color",
         Context = "context",
         State = "state",
         BlockedBy = "blocked_by",

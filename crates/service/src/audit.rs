@@ -458,6 +458,7 @@ fn tag_fields(tag: &Tag) -> Map<String, Value> {
         AuditField::Description.code().into(),
         json!(tag.description.as_ref().map(|d| d.as_str())),
     );
+    fields.insert(AuditField::Color.code().into(), json!(tag.color.code()));
     fields
 }
 

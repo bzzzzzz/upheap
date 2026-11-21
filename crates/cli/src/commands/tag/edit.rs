@@ -1,8 +1,10 @@
-//! `upheap tag edit <tag>`: rename a tag or change its description.
+//! `upheap tag edit <tag>`: rename a tag or change its description or colour.
 
 use api_types::tags::{TagDto, TagKindDto, TagListDto, TagPatchDto, TeamTagListDto};
 use clap::Args;
+use domain::tag::TagColor;
 
+use super::color_parser;
 use super::refusal::{EditScope, TeamTagWrite};
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, TeamApi, named_heap, read_description, resolve_heap_handle};
@@ -26,6 +28,9 @@ pub struct EditArgs {
     /// Clear the description
     #[arg(long)]
     pub no_description: bool,
+    /// A new colour
+    #[arg(long, value_name = "COLOR", value_parser = color_parser())]
+    pub color: Option<TagColor>,
     /// Find the tag among this team's tags instead of a heap's: the team's slug
     #[arg(long, value_name = "TEAM", conflicts_with = "name")]
     pub team: Option<String>,
@@ -41,7 +46,7 @@ pub struct EditArgs {
 impl EditArgs {
     /// Whether any field flag is given.
     fn has_changes(&self) -> bool {
-        self.name.is_some() || self.description.is_some() || self.no_description
+        self.name.is_some() || self.description.is_some() || self.no_description || self.color.is_some()
     }
 }
 
@@ -50,7 +55,7 @@ impl EditArgs {
 pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     if !args.has_changes() {
         if out.mode() == Mode::Human {
-            out.line("Nothing to change: give --name, --description or --no-description.")?;
+            out.line("Nothing to change: give --name, --description, --no-description or --color.")?;
         }
         return Ok(());
     }
@@ -68,6 +73,7 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
     let patch = TagPatchDto {
         name: args.name.clone(),
         description,
+        color: args.color.map(Into::into),
     };
     if let Some(team) = &args.team {
         let api = TeamApi {
@@ -124,6 +130,7 @@ async fn edit_team_tag(
         name: args.name.as_deref(),
         description: args.description.as_deref(),
         no_description: args.no_description,
+        color: args.color,
     };
     let id = tag.id.to_string();
     let edited = match api

@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 
-use domain::tag::{Tag, TagDescription, TagName, TagOwner};
+use domain::tag::{Tag, TagColor, TagDescription, TagName, TagOwner};
 use domain::{HeapId, TagId, TeamId, Version};
 use sea_orm::sea_query::{Expr, ExprTrait};
 use sea_orm::{
@@ -251,6 +251,7 @@ fn to_row(tag: &Tag) -> Result<tags::ActiveModel, StoreError> {
         name: Set(tag.name.as_str().to_owned()),
         name_key: Set(tag.name.to_key()),
         description: Set(tag.description.as_ref().map(|d| d.as_str().to_owned())),
+        color: Set(tag.color.code().to_owned()),
         created_at: Set(tag.created_at.as_millis()),
         // A tag written through the domain type is in use; `mark_merged` is what merges one.
         merged_into: Set(None),
@@ -276,6 +277,7 @@ fn to_tag(row: tags::Model) -> Result<Tag, StoreError> {
         owner,
         name: TagName::parse(&row.name).map_err(|e| read.corrupt(e.to_string()))?,
         description,
+        color: TagColor::from_code(&row.color).ok_or_else(|| read.corrupt(format!("unknown color {}", row.color)))?,
         created_at: read.timestamp(row.created_at)?,
         version: read.version(row.version)?,
     })

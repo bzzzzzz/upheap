@@ -54,6 +54,7 @@ mod m20261219_000048_turn_watches;
 mod m20261220_000049_email_confirmations;
 mod m20261221_000050_team_parameters;
 mod m20261222_000051_revoke_reasons;
+mod m20261223_000052_tag_colors;
 
 pub struct Migrator;
 
@@ -112,6 +113,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261220_000049_email_confirmations::Migration),
             Box::new(m20261221_000050_team_parameters::Migration),
             Box::new(m20261222_000051_revoke_reasons::Migration),
+            Box::new(m20261223_000052_tag_colors::Migration),
         ]
     }
 }

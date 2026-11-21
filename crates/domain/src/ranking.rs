@@ -1375,7 +1375,9 @@ mod tests {
             crate::tag::NewTag {
                 name: crate::tag::TagName::parse(name).expect("valid"),
                 description: None,
+                color: None,
             },
+            crate::tag::TagColor::Blue,
             day(0),
         )
     }

@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::ids::coded_enum;
 use crate::text::{parse_optional, parse_required};
 use crate::validation::{Field, ValidationError};
 use crate::{HeapId, TagId, TeamId, Timestamp, Version};
@@ -52,11 +53,42 @@ impl TagDescription {
     }
 }
 
+coded_enum! {
+    /// A tag's colour, one of a fixed palette. Declared in palette order, which is the order a colour is picked in.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum TagColor {
+        Blue = "blue",
+        Sky = "sky",
+        Teal = "teal",
+        Green = "green",
+        Lime = "lime",
+        Rose = "rose",
+        Pink = "pink",
+        Grey = "grey",
+    }
+}
+
+/// The colour a new tag gets among tags whose colours are `used`: the least used one, the first in palette order
+/// when several are.
+pub fn pick_color(used: impl IntoIterator<Item = TagColor>) -> TagColor {
+    let used: Vec<TagColor> = used.into_iter().collect();
+    let mut picked = (TagColor::Blue, usize::MAX);
+    for color in TagColor::ALL {
+        let count = used.iter().filter(|u| **u == color).count();
+        if count < picked.1 {
+            picked = (color, count);
+        }
+    }
+    picked.0
+}
+
 /// The fields of a new tag.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewTag {
     pub name: TagName,
     pub description: Option<TagDescription>,
+    /// `None` when the server picks it.
+    pub color: Option<TagColor>,
 }
 
 /// A partial edit. An outer `None` leaves the field unchanged; `Some(None)` clears the description.
@@ -64,6 +96,7 @@ pub struct NewTag {
 pub struct TagPatch {
     pub name: Option<TagName>,
     pub description: Option<Option<TagDescription>>,
+    pub color: Option<TagColor>,
 }
 
 /// Who owns a tag: one heap, or a whole team and so all its heaps.
@@ -79,17 +112,20 @@ pub struct Tag {
     pub owner: TagOwner,
     pub name: TagName,
     pub description: Option<TagDescription>,
+    pub color: TagColor,
     pub created_at: Timestamp,
     pub version: Version,
 }
 
 impl Tag {
-    pub fn new(id: TagId, owner: TagOwner, fields: NewTag, now: Timestamp) -> Self {
+    /// A new tag with `color`, which the caller resolved: `fields.color`, or the one it picked when that is `None`.
+    pub fn new(id: TagId, owner: TagOwner, fields: NewTag, color: TagColor, now: Timestamp) -> Self {
         Self {
             id,
             owner,
             name: fields.name,
             description: fields.description,
+            color,
             created_at: now,
             version: Version::INITIAL,
         }
@@ -101,6 +137,7 @@ impl Tag {
         let edited = Self {
             name: patch.name.clone().unwrap_or_else(|| self.name.clone()),
             description: patch.description.clone().unwrap_or_else(|| self.description.clone()),
+            color: patch.color.unwrap_or(self.color),
             ..self.clone()
         };
         (edited != *self).then_some(edited)
@@ -160,11 +197,13 @@ mod tests {
         let fields = NewTag {
             name: TagName::parse("Infra").expect("valid"),
             description: None,
+            color: None,
         };
         Tag::new(
             TagId::from_uuid(Uuid::nil()),
             TagOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             fields,
+            TagColor::Blue,
             Timestamp::from_millis(0).expect("in range"),
         )
     }
@@ -203,9 +242,38 @@ mod tests {
         let patch = TagPatch {
             name: Some(TagName::parse("Infra").expect("valid")),
             description: Some(None),
+            color: Some(TagColor::Blue),
         };
 
         expect_that!(sample_tag().apply_patch(&patch), none());
+    }
+
+    #[gtest]
+    fn a_new_colour_changes_the_tag() {
+        let patch = TagPatch {
+            color: Some(TagColor::Teal),
+            ..TagPatch::default()
+        };
+
+        expect_that!(
+            sample_tag().apply_patch(&patch).map(|t| t.color),
+            some(eq(TagColor::Teal))
+        );
+    }
+
+    #[gtest]
+    fn the_least_used_colour_is_picked_and_ties_go_to_the_first_in_the_palette() {
+        expect_that!(pick_color([]), eq(TagColor::Blue));
+        expect_that!(pick_color([TagColor::Blue]), eq(TagColor::Sky));
+        expect_that!(
+            pick_color([TagColor::Blue, TagColor::Sky, TagColor::Blue]),
+            eq(TagColor::Teal)
+        );
+        expect_that!(pick_color(TagColor::ALL), eq(TagColor::Blue));
+        expect_that!(
+            pick_color(TagColor::ALL.into_iter().chain([TagColor::Blue])),
+            eq(TagColor::Sky)
+        );
     }
 
     #[gtest]

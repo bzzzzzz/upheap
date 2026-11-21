@@ -2,7 +2,9 @@
 
 use api_types::tags::{CreateTagDto, TagDto};
 use clap::Args;
+use domain::tag::TagColor;
 
+use super::color_parser;
 use super::refusal::TeamTagWrite;
 use crate::commands::heap_api::{HeapApi, TeamApi, named_heap, read_description, resolve_heap_handle};
 use crate::commands::{HeapArgs, SharedArgs};
@@ -19,6 +21,9 @@ pub struct AddArgs {
     /// What the tag is for. `-` reads all of stdin
     #[arg(long, value_name = "TEXT")]
     pub description: Option<String>,
+    /// The tag's colour. Left out, the least used one among the tags the new tag sits among
+    #[arg(long, value_name = "COLOR", value_parser = color_parser())]
+    pub color: Option<TagColor>,
     /// Add a team tag, which every heap of the team has: the team's slug. Heap tags of the team with this name merge
     /// into it
     #[arg(long, value_name = "TEAM", conflicts_with = "name")]
@@ -48,6 +53,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
     let body = CreateTagDto {
         name: args.name.clone(),
         description,
+        color: args.color.map(Into::into),
     };
     let (added, line) = match (&args.team, heap_name) {
         (Some(team), _) => {
@@ -60,6 +66,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
                 team,
                 name: &args.name,
                 description: args.description.as_deref(),
+                color: args.color,
             };
             let confirm = args.confirm.as_deref();
             let added = match api.post_confirming::<TagDto>(&["tags"], &body, confirm).await {

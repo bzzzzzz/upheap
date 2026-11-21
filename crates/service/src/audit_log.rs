@@ -779,6 +779,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::DisplayName => "Display name",
         AuditField::Description if matches!(entity_type, EntityType::Item) => "Context",
         AuditField::Description => "Description",
+        AuditField::Color => "Colour",
         AuditField::Context => "Context",
         AuditField::State => "State",
         AuditField::BlockedBy => "Blocked by",
@@ -933,6 +934,7 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         | AuditField::Line
         | AuditField::Reason
         | AuditField::Key
+        | AuditField::Color
         | AuditField::Name
         | AuditField::DisplayName
         | AuditField::BlockedReason

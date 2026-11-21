@@ -2,7 +2,7 @@
 //! description, items still carry it, and a team can then have tags of its own.
 
 use anyhow::{Context, Result};
-use domain::tag::{NewTag, Tag, TagDescription, TagName, TagOwner};
+use domain::tag::{NewTag, Tag, TagColor, TagDescription, TagName, TagOwner};
 use domain::{TagId, TeamId, Timestamp};
 use googletest::prelude::*;
 use store::{ConnectionTrait, DatabaseConnection, Statement};
@@ -112,7 +112,9 @@ async fn existing_tags_stay_heap_tags_and_a_team_can_have_its_own() -> Result<()
         NewTag {
             name: TagName::parse("Ops")?,
             description: None,
+            color: None,
         },
+        TagColor::Blue,
         Timestamp::from_millis(0).context("in range")?,
     );
     store::tags::insert_tag(&db, &team_tag).await?;

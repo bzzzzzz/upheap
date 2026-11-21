@@ -85,6 +85,8 @@ pub enum Field {
     Description,
     DisplayName,
     Name,
+    /// A tag's colour.
+    Color,
     /// An option of a custom parameter.
     Label,
     /// A search text.
@@ -168,6 +170,7 @@ impl Field {
             Self::Description => "description",
             Self::DisplayName => "display_name",
             Self::Name => "name",
+            Self::Color => "color",
             Self::Label => "label",
             Self::Query => "query",
             Self::Username => "username",

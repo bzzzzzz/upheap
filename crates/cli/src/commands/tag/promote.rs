@@ -52,6 +52,7 @@ pub async fn run(args: PromoteArgs, app: &App, out: &mut Output) -> Result<(), C
     let body = CreateTagDto {
         name: tag.name.clone(),
         description: tag.description.clone(),
+        color: Some(tag.color),
     };
     let api = TeamApi {
         client: &client,

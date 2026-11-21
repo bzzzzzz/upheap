@@ -42,7 +42,7 @@ async fn tag_list_prints_each_tag_with_its_whole_description_and_quiet_prints_na
     expect_that!(
         human.stdout,
         eq(
-            "Infra\nOps\n  Operations work\n  and on-call,    all of it, however long the line runs past the width a table would cut it at\n"
+            "Infra  blue\nOps  sky\n  Operations work\n  and on-call,    all of it, however long the line runs past the width a table would cut it at\n"
         )
     );
     expect_that!(quiet.stdout, eq("Infra\nOps\n"));
@@ -187,6 +187,32 @@ async fn tag_edit_renames_a_tag_found_ignoring_case() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn tag_add_with_a_colour_keeps_it_and_tag_edit_changes_it() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let added = cli.run(&["tag", "add", "Ops", "--color", "rose"]).await;
+    let listed = cli.run(&["tag", "list"]).await;
+    let edited = cli.run(&["tag", "edit", "Ops", "--color", "teal"]).await;
+    let relisted = cli.run(&["tag", "list"]).await;
+    let refused = cli.run(&["tag", "add", "Docs", "--color", "mauve"]).await;
+
+    // Assert
+    expect_that!(added.exited(0), eq(true));
+    expect_that!(listed.stdout, contains_substring("Ops  rose\n"));
+    expect_that!(edited.stdout, eq("Updated tag \"Ops\".\n"));
+    expect_that!(relisted.stdout, contains_substring("Ops  teal\n"));
+    expect_that!(refused.exited(2), eq(true));
+    expect_that!(refused.stderr, contains_substring("rose"));
+    expect_that!(tags(&server, &ada).await?.len(), eq(2));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn tag_edit_by_id_clears_the_description() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
@@ -241,7 +267,7 @@ async fn tag_edit_with_nothing_to_change_makes_no_request() -> Result<()> {
     // Assert
     expect_that!(
         human.stdout,
-        eq("Nothing to change: give --name, --description or --no-description.\n")
+        eq("Nothing to change: give --name, --description, --no-description or --color.\n")
     );
     expect_that!(human.exited(0), eq(true));
     expect_that!((quiet.stdout.as_str(), quiet.exited(0)), eq(("", true)));
