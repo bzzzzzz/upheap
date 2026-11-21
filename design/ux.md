@@ -348,15 +348,19 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    and `/` stay. Tab goes the state button, Done, the robot, then the row's link, then its tags and parameter chips.
 5. On a touch screen, swiping a row right marks it done; swiping left offers Agent (where the robot button would
    show, sending one step at once as the button does), In progress and Blocked.
-6. Saved views are hidden in the web app for now, and `view=` in the URL is ignored: a views bar duplicated the
-   Filters panel, which has no place for saving one yet. The API keeps them, for the CLI's `--view`. When they
-   return, "Save as view…" goes in the Filters panel.
-7. One Filters panel holds what the list shows and its filters: Show (Open, In progress, Blocked as Pinned, Shown or
+6. Saved views live in the Filters panel, in a Views section that comes first (before Sort by in the phone sheet), not
+   in a bar. Tapping a view applies it: its Show settings, sort and filters replace the list's in the URL, the agent
+   filters are cleared and the search stays. On a phone this also closes the sheet. A view whose settings equal the
+   list's has a check. "Save as view…" names the current settings in place. Each view's ⋯ offers Rename…, Update to
+   current settings (when the list differs from it) and Archive, which has Undo in a toast. The URL holds the
+   settings, never a view, so links keep what they showed. The controls show only where the server allows them. The
+   All items page has no saved views.
+7. One Filters panel holds the saved views, what the list shows and its filters: Views (point 6), Show (Open, In progress, Blocked as Pinned, Shown or
    Hidden, a dot on a changed one; shown blocked items in their own group or mixed in; Reminders to come, Hidden or
    Shown, point 16), then Narrow down (tags, with the team's tags beside the heap's and marked with the team icon, need,
    effort, impact, parameters, agent state, going to), with Reset all, "6 of 14 items" and Done. It's a popover from a tablet up and a sheet
    on a phone. The toolbar is search, Sort by, Filters and Select (point 19); on a phone it's search and an icon Filters button, with Select in the top bar, and the
-   sheet, "Filters & sort", starts with the sort and ends with "Show 6 items". The Filters button counts the filters
+   sheet, "Filters & sort", starts with the views, then the sort and ends with "Show 6 items". The Filters button counts the filters
    and changed settings, amber while any are on; on a phone, where the sort is out of sight in the sheet, it counts a
    sort other than Priority too ("Filters and sort, 1 on"). The list updates live behind the panel.
 8. Under the toolbar a chip takes off each filter ("Need: Critical") or changed setting ("Blocked: shown"), with
