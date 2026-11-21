@@ -2,8 +2,9 @@
 //! `GET /teams/{team}/heaps/{heap}/parameters`, or with `--team` the team's, from `GET /teams/{team}/parameters`.
 
 use api_types::parameters::{OptionDto, ParameterDto, ParameterKindDto, ParameterListDto, TeamParameterListDto};
-use api_types::tags::{TagDto, TagListDto};
+use api_types::tags::{TagDto, TagListDto, TeamTagListDto};
 use clap::Args;
+use uuid::Uuid;
 
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, TeamApi, named_heap, resolve_heap_handle};
@@ -55,10 +56,22 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
                         "No team parameters in {team} yet; add one with `upheap parameter add <name> --team {team}`."
                     ))?;
                 } else {
+                    // The tag names cost a request, so only a parameter linked to tags asks for them.
+                    let tags = if list.parameters.iter().any(|parameter| !parameter.tag_ids.is_empty()) {
+                        api.get::<TeamTagListDto>(&["tags"]).await?.value.tags
+                    } else {
+                        Vec::new()
+                    };
                     let rows: Vec<Vec<Cell>> = list
                         .parameters
                         .iter()
-                        .map(|p| vec![Cell::new(p.name.clone()), options_cell(&p.options)])
+                        .map(|p| {
+                            vec![
+                                Cell::new(p.name.clone()),
+                                options_cell(&p.options),
+                                for_tags_cell(&p.tag_ids, &tags),
+                            ]
+                        })
                         .collect();
                     for line in out.render_table(&rows) {
                         out.table_line("", &line)?;
@@ -92,7 +105,8 @@ pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliE
             } else {
                 // The tag names cost a request, so only a parameter linked to tags asks for them.
                 let tags = if list.parameters.iter().any(|parameter| !parameter.tag_ids.is_empty()) {
-                    api.get::<TagListDto>(&["tags"], NO_QUERY).await?.value.tags
+                    let listed = api.get::<TagListDto>(&["tags"], NO_QUERY).await?.value;
+                    listed.tags.into_iter().chain(listed.team_tags).collect()
                 } else {
                     Vec::new()
                 };
@@ -123,23 +137,37 @@ fn options_cell(options: &[OptionDto]) -> Cell {
     }
 }
 
-/// A parameter's name, its options in use, and, dim, `team` for a team parameter or the tags it is for.
-fn row(parameter: &ParameterDto, tags: &[TagDto]) -> Vec<Cell> {
-    let options = options_cell(&parameter.options);
-    let names: Vec<&str> = parameter
-        .tag_ids
+/// `for` and the names of the tags among `tags` that `ids` has, or `None` when there are none.
+fn for_tags(ids: &[Uuid], tags: &[TagDto]) -> Option<String> {
+    let names: Vec<&str> = ids
         .iter()
         .filter_map(|id| tags.iter().find(|tag| tag.id == *id))
         .map(|tag| tag.name.as_str())
         .collect();
+    (!names.is_empty()).then(|| format!("for {}", names.join(", ")))
+}
+
+fn for_tags_cell(ids: &[Uuid], tags: &[TagDto]) -> Cell {
+    for_tags(ids, tags).map_or_else(Cell::default, |text| Cell::toned(text, Tone::Dim))
+}
+
+/// A parameter's name, its options in use, and, dim, the tags it is for, after `team` for a team parameter. A team
+/// parameter's tags are its team's and the heap's own.
+fn row(parameter: &ParameterDto, tags: &[TagDto]) -> Vec<Cell> {
     let tags = if parameter.kind == ParameterKindDto::Team {
-        Cell::toned("team", Tone::Dim)
-    } else if names.is_empty() {
-        Cell::default()
+        let text = match for_tags(&parameter.tag_ids, tags) {
+            Some(names) => format!("team, {names}"),
+            None => "team".to_owned(),
+        };
+        Cell::toned(text, Tone::Dim)
     } else {
-        Cell::toned(format!("for {}", names.join(", ")), Tone::Dim)
+        for_tags_cell(&parameter.tag_ids, tags)
     };
-    vec![Cell::new(parameter.name.clone()), options, tags]
+    vec![
+        Cell::new(parameter.name.clone()),
+        options_cell(&parameter.options),
+        tags,
+    ]
 }
 
 /// The footer that says archived parameters are left out, when there are any.

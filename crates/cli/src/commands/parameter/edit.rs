@@ -6,8 +6,8 @@
 //! version the last one returned. A failure after the first write leaves the earlier ones saved, and says which.
 
 use api_types::parameters::{
-    ArrangeOptionsDto, LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto, ParameterPatchDto,
-    TeamParameterDto, TeamParameterListDto, TeamParameterPatchDto,
+    ArrangeOptionsDto, ChangeHeapTagLinksDto, LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto,
+    ParameterPatchDto, TeamParameterDto, TeamParameterListDto, TeamParameterPatchDto,
 };
 use api_types::tags::{TagListDto, TeamTagListDto};
 use std::collections::BTreeSet;
@@ -415,8 +415,8 @@ async fn edit_team_parameter(args: &EditArgs, team: &str, api: &TeamApi<'_>, out
 }
 
 /// The edit of the heap's own links to a team parameter it uses: its tags, which suggest the parameter in this heap
-/// only. The heap's links have no version, so the write says what they end up as, and the tag sets tell whether
-/// anything changed. `--json` prints the heap's parameters as the server answers.
+/// only. The heap's links have no version, so the write names the tags to link and to unlink, and the tag sets tell
+/// whether anything changed. `--json` prints the heap's parameters as the server answers.
 async fn edit_heap_links(
     args: &EditArgs,
     parameter: &ParameterDto,
@@ -427,10 +427,14 @@ async fn edit_heap_links(
     let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
     let added = resolve_tags(&args.tag, &tags.value, heap).map_err(LookupError::offering_add)?;
     let removed = resolve_tags(&args.untag, &tags.value, heap)?;
-    let tag_ids = changed_links(args, parameter.heap_tag_ids.iter().copied(), added, &removed)?;
+    ensure_not_both(args, &added, &removed)?;
     let id = parameter.id.to_string();
+    let body = ChangeHeapTagLinksDto {
+        link: added,
+        unlink: removed,
+    };
     let done = api
-        .put_declared::<ParameterListDto>(&["parameters", &id, "heap-tags"], &LinkTagsDto { tag_ids })
+        .post::<ParameterListDto>(&["parameters", &id, "heap-tags"], &body)
         .await?;
     match out.mode() {
         Mode::Json => out.json(&done.body)?,
@@ -463,13 +467,19 @@ fn changed_links(
     added: Vec<Uuid>,
     removed: &[Uuid],
 ) -> Result<Vec<Uuid>, CliError> {
-    if let Some(position) = added.iter().position(|id| removed.contains(id)) {
-        return Err(UsageError::TagAndUntag {
+    ensure_not_both(args, &added, removed)?;
+    Ok(merge_tag_ids(current, added, removed))
+}
+
+/// A usage error when a tag is both added and removed.
+fn ensure_not_both(args: &EditArgs, added: &[Uuid], removed: &[Uuid]) -> Result<(), CliError> {
+    match added.iter().position(|id| removed.contains(id)) {
+        Some(position) => Err(UsageError::TagAndUntag {
             name: args.tag.get(position).cloned().unwrap_or_default(),
         }
-        .into());
+        .into()),
+        None => Ok(()),
     }
-    Ok(merge_tag_ids(current, added, removed))
 }
 
 /// What to tell on stderr when a write failed after others were saved: what was saved, what wasn't, and the flags

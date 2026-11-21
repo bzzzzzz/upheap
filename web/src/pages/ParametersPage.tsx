@@ -818,7 +818,13 @@ function HeapLinkedTags({
   const editable = inHeap ? (canLink ? inHeap.heap_tag_ids : null) : canEdit ? parameter.tag_ids : null;
   const save: LinkSave = inHeap
     ? {
-        mutate: (tagIds) => linkHeap.mutate({ parameterId: parameter.id, tagIds }),
+        // The heap's links are written per tag: send the difference between the links now and the new ones.
+        mutate: (tagIds) =>
+          linkHeap.mutate({
+            parameterId: parameter.id,
+            link: tagIds.filter((id) => !inHeap.heap_tag_ids.includes(id)),
+            unlink: inHeap.heap_tag_ids.filter((id) => !tagIds.includes(id)),
+          }),
         isPending: linkHeap.isPending,
         error: linkHeap.error,
       }

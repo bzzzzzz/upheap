@@ -197,7 +197,18 @@ async fn a_team_parameter_is_linked_to_team_tags_and_a_heap_links_its_own_tags()
     let heap_linked = cli.run(&["parameter", "edit", "Tier", "--tag", "support"]).await;
     let repeated = cli.run(&["parameter", "edit", "Tier", "--tag", "support"]).await;
     let both = parameter(&cli).await?;
-    let heap_unlinked = cli.run(&["parameter", "edit", "Tier", "--untag", "support"]).await;
+    let heap_list = cli.run(&["parameter", "list"]).await;
+    let team_list = cli.run(&["parameter", "list", "--team", "ada"]).await;
+    let swapped = cli
+        .run(&["parameter", "edit", "Tier", "--tag", "billing", "--untag", "support"])
+        .await;
+    let swapped_again = cli
+        .run(&["parameter", "edit", "Tier", "--tag", "billing", "--untag", "support"])
+        .await;
+    let heap_relinked = cli.run(&["parameter", "edit", "Tier", "--tag", "support"]).await;
+    let heap_unlinked = cli
+        .run(&["parameter", "edit", "Tier", "--untag", "billing", "--untag", "support"])
+        .await;
     let team_unlinked = cli
         .run(&["parameter", "edit", "Tier", "--team", "ada", "--untag", "billing"])
         .await;
@@ -219,6 +230,14 @@ async fn a_team_parameter_is_linked_to_team_tags_and_a_heap_links_its_own_tags()
     expect_that!(both["tag_ids"].as_array().map(Vec::len), some(eq(2)));
     expect_that!(both["team_tag_ids"].as_array().map(Vec::len), some(eq(1)));
     expect_that!(both["heap_tag_ids"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(heap_list.stdout, eq("Tier  no options  team, for billing, support\n"));
+    expect_that!(team_list.stdout, eq("Tier  no options  for billing\n"));
+    expect_that!(
+        swapped.stdout,
+        eq("Updated the tags of team parameter \"Tier\" in this heap.\n")
+    );
+    expect_that!(swapped_again.stdout, eq("No change to team parameter \"Tier\".\n"));
+    expect_that!(heap_relinked.exited(0), eq(true));
     expect_that!(heap_unlinked.exited(0), eq(true));
     expect_that!(team_unlinked.exited(0), eq(true));
     expect_that!(none["tag_ids"], eq(&json!([])));
