@@ -2,7 +2,10 @@
 
 mod oidc;
 
-use api_types::auth::{ConfirmationSentDto, RegisterRequest, RegistrationOptionsDto, SignInRequest, SignedOut};
+use api_types::auth::{
+    ChangeConfirmationAddressRequest, ConfirmationAddressDto, ConfirmationSentDto, RegisterRequest,
+    RegistrationOptionsDto, SignInRequest, SignedOut,
+};
 use api_types::me::UserDto;
 use axum::Json;
 use axum::extract::State;
@@ -24,6 +27,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(registration_options))
         .routes(routes!(register))
         .routes(routes!(sign_in))
+        .routes(routes!(change_confirmation_address))
         .routes(routes!(sign_out))
         .merge(oidc::routes())
 }
@@ -89,6 +93,37 @@ async fn sign_in(State(state): State<AppState>, ApiJson(body): ApiJson<SignInReq
     let cookies = &state.cookies;
     let grant = state.services.sign_in(&body.login, &body.password).await?;
     Ok(signed_in(StatusCode::OK, &grant, cookies))
+}
+
+/// Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no
+/// sign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.
+///
+/// Only for a server with mail set up, and only for an account that hasn't confirmed its address: a confirmed
+/// account fails as a wrong password does. The earlier confirmation link and any password reset link stop working.
+/// An address another account has answers the same as a free one, and nothing changes.
+#[utoipa::path(post, path = "/auth/confirmation-address", tag = "auth", request_body = ChangeConfirmationAddressRequest,
+    responses(
+        (status = 202, description = "The address is set and a link is mailed to it, or another account has the address and nothing changed", body = ConfirmationAddressDto),
+        (status = 401, description = "`invalid_credentials`: no such account, a wrong password, or an account that is confirmed", body = Problem),
+        (status = 403, description = "`csrf_header_missing`, or `password_sign_in_off`: the server signs in through its provider only", body = Problem),
+        (status = 404, description = "The server has no mail set up", body = Problem),
+        (status = 422, description = "`field_empty` (`field` `login`, `password` or `email`), or `email_invalid`; not counted as an attempt", body = Problem),
+        (status = 429, description = "`too_many_attempts`; `Retry-After` gives the seconds to wait", body = Problem,
+            headers(("Retry-After" = i64, description = "Seconds until the account may try again"))),
+    ))]
+async fn change_confirmation_address(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<ChangeConfirmationAddressRequest>,
+) -> Result<Response, ApiError> {
+    let changed = state
+        .services
+        .change_unconfirmed_address(&body.login, &body.password, &body.email)
+        .await?;
+    let body = ConfirmationAddressDto {
+        email: changed.email.as_str().to_owned(),
+        username: changed.username.to_string(),
+    };
+    Ok((StatusCode::ACCEPTED, axum::Json(body)).into_response())
 }
 
 /// Ends the current session. Succeeds when there is none.

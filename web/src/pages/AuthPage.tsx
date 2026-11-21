@@ -104,7 +104,7 @@ export type RegisterRequest = {
  *
  * On a server with mail set up, Create account answers with no sign-in, and a sign-in with the right password for an
  * account that hasn't confirmed its address is refused: either way the card shows Check your mail (`CheckMail`) in
- * place of the forms, with Send it again.
+ * place of the forms, with Send it again and Change it for a mistyped address.
  */
 export function AuthPage({
   notice,
@@ -253,10 +253,6 @@ export function AuthPage({
           login={checkMail.login}
           password={checkMail.password}
           onSignedIn={onSignedIn}
-          onWrongAddress={() => {
-            setCheckMail(undefined);
-            register.reset();
-          }}
         />
       </AuthCard>
     );

@@ -15,3 +15,14 @@ export function useConfirmEmail(token: string) {
     onSuccess: () => removeUserQueries(queryClient),
   });
 }
+
+/**
+ * Sets the address of an account that hasn't confirmed it, with the account's login and password, and mails a new link
+ * there. The answer names the address and the account's username, whether or not the address changed.
+ */
+export function useChangeConfirmationAddress() {
+  return useMutation({
+    mutationFn: async (body: { login: string; password: string; email: string }) =>
+      unwrap(await api.POST("/api/v1/auth/confirmation-address", { body })),
+  });
+}

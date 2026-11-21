@@ -208,25 +208,7 @@ impl Services {
         if password.is_empty() {
             return Err(ValidationError::Empty { field: Field::Password }.into());
         }
-        let (user, attempts_key) = self.find_sign_in_user(login).await?;
-        if let Some(key) = &attempts_key {
-            self.count_sign_in_attempt(key).await?;
-        }
-        let stored_hash = match &user {
-            Some(user) => store::users::find_password_hash(&self.db, user.id).await?,
-            None => None,
-        };
-        let known = stored_hash.is_some();
-        let hash = stored_hash
-            .or_else(|| DUMMY_HASH.clone())
-            .ok_or_else(|| ServiceError::PasswordHashing("no dummy hash".into()))?;
-        let password = password.to_owned();
-        let verified = run_blocking(move || Ok(verify_password(&password, &hash))).await?;
-
-        let Some(user) = user.filter(|_| known && verified) else {
-            tracing::info!("sign-in rejected");
-            return Err(ServiceError::InvalidCredentials);
-        };
+        let (user, attempts_key) = self.verify_login(login, password).await?;
         if let Some(mail) = &self.mail
             && !store::users::is_email_confirmed(&self.db, user.id).await?
         {
@@ -242,13 +224,42 @@ impl Services {
         txn.commit().await.map_err(StoreError::from)?;
         // The session exists by now, so failing to clear the count mustn't fail the sign-in; the count then just
         // runs out with its window.
-        if let Some(key) = &attempts_key
-            && let Err(error) = store::sign_in_attempts::clear_sign_in_attempts(&self.db, key).await
-        {
+        if let Err(error) = store::sign_in_attempts::clear_sign_in_attempts(&self.db, &attempts_key).await {
             tracing::warn!(?error, "can't clear sign-in attempts");
         }
         tracing::info!(user_id = %grant.user.id, "user signed in");
         Ok(grant)
+    }
+
+    /// Finds the account `login` names, counts the attempt under the account's key and checks the password, for a
+    /// sign-in or a call that takes the same credentials. Returns the account and its attempts key.
+    ///
+    /// Unknown logins and wrong passwords fail the same way, with [`ServiceError::InvalidCredentials`], after the
+    /// same amount of work, and the attempt stays counted. One past the limit fails with
+    /// [`ServiceError::TooManySignInAttempts`] before the password is checked.
+    pub(crate) async fn verify_login(&self, login: &str, password: &str) -> Result<(User, String), ServiceError> {
+        let (user, attempts_key) = self.find_sign_in_user(login).await?;
+        if let Some(key) = &attempts_key {
+            self.count_sign_in_attempt(key).await?;
+        }
+        let stored_hash = match &user {
+            Some(user) => store::users::find_password_hash(&self.db, user.id).await?,
+            None => None,
+        };
+        let known = stored_hash.is_some();
+        let hash = stored_hash
+            .or_else(|| DUMMY_HASH.clone())
+            .ok_or_else(|| ServiceError::PasswordHashing("no dummy hash".into()))?;
+        let password = password.to_owned();
+        let verified = run_blocking(move || Ok(verify_password(&password, &hash))).await?;
+
+        match (user.filter(|_| known && verified), attempts_key) {
+            (Some(user), Some(key)) => Ok((user, key)),
+            _ => {
+                tracing::info!("sign-in rejected");
+                Err(ServiceError::InvalidCredentials)
+            }
+        }
     }
 
     /// The account `login` names, by email address when it has an `@` (a username can't) and by username otherwise,

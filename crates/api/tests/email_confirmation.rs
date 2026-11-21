@@ -341,3 +341,180 @@ async fn without_mail_registering_signs_in_and_an_unconfirmed_account_signs_in()
     expect_that!(registered.status, eq(StatusCode::CREATED));
     Ok(())
 }
+
+async fn change_address(app: &TestApp, login: &str, password: &str, email: &str) -> Result<TestResponse> {
+    app.send(
+        Method::POST,
+        "/api/v1/auth/confirmation-address",
+        None,
+        Some(json!({ "login": login, "password": password, "email": email })),
+    )
+    .await
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_unconfirmed_account_changes_its_address_and_confirms_the_new_link() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, "ada@exmaple.test").await?;
+    let first = token_of_mail(dir.path(), 1).await?;
+
+    // Act
+    let changed = change_address(&app, "ada@exmaple.test", PASSWORD, "  Ada@Example.test ").await?;
+    let mails = common::wait_for_mails(dir.path(), 2).await?;
+    let second = token_in(&mails[1])?;
+    let old = confirm(&app, &first).await?;
+    let confirmed = confirm(&app, &second).await?;
+    let cookie = confirmed.session_cookie.clone().context("no session cookie")?;
+    let signed_in = sign_in(&app, EMAIL, PASSWORD).await?;
+    let history = app.send(Method::GET, "/api/v1/me/history", Some(&cookie), None).await?;
+
+    // Assert
+    expect_that!(changed.status, eq(StatusCode::ACCEPTED), "{}", changed.body);
+    expect_that!(changed.body, eq(&json!({ "email": EMAIL, "username": "ada" })));
+    expect_that!(mails[1], contains_substring("To: ada@example.test"));
+    expect_that!(problem_code(&old), eq("confirmation_link_cancelled"));
+    expect_that!(confirmed.status, eq(StatusCode::OK), "{}", confirmed.body);
+    expect_that!(signed_in.status, eq(StatusCode::OK));
+    let entries = history.body["entries"].as_array().cloned().unwrap_or_default();
+    let kinds: Vec<_> = entries.iter().filter_map(|entry| entry["kind"].as_str()).collect();
+    expect_that!(kinds, elements_are![eq(&"email_confirmed"), eq(&"email_changed")]);
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_taken_address_answers_the_same_and_changes_nothing() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, "ada@exmaple.test").await?;
+    let first = token_of_mail(dir.path(), 1).await?;
+    let other = register(&app, "grace@example.test").await?;
+    common::wait_for_mails(dir.path(), 2).await?;
+
+    // Act
+    let changed = change_address(&app, "ada", PASSWORD, "grace@example.test").await?;
+    let mailed = std::fs::read_dir(dir.path())?.count();
+    let confirmed = confirm(&app, &first).await?;
+    let signed_in = sign_in(&app, "ada@exmaple.test", PASSWORD).await?;
+
+    // Assert
+    expect_that!(other.status, eq(StatusCode::ACCEPTED));
+    expect_that!(changed.status, eq(StatusCode::ACCEPTED), "{}", changed.body);
+    expect_that!(
+        changed.body,
+        eq(&json!({ "email": "grace@example.test", "username": "ada" }))
+    );
+    expect_that!(mailed, eq(2));
+    // The earlier link wasn't cancelled, and the account still has the address it was made with.
+    expect_that!(confirmed.status, eq(StatusCode::OK), "{}", confirmed.body);
+    expect_that!(signed_in.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn changing_the_address_with_a_wrong_password_is_refused_and_mails_nothing() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, "ada@exmaple.test").await?;
+    common::wait_for_mails(dir.path(), 1).await?;
+
+    // Act
+    let changed = change_address(&app, "ada", "not the password", EMAIL).await?;
+    let refused = sign_in(&app, "ada@exmaple.test", PASSWORD).await?;
+
+    // Assert
+    expect_that!(changed.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(problem_code(&changed), eq("invalid_credentials"));
+    expect_that!(problem_code(&refused), eq("email_not_confirmed"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn changing_the_address_is_limited_like_signing_in() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, "ada@exmaple.test").await?;
+
+    // Act
+    let mut statuses = Vec::new();
+    for _ in 0..5 {
+        statuses.push(change_address(&app, "ada", "not the password", EMAIL).await?.status);
+    }
+    let limited = change_address(&app, "ada", PASSWORD, EMAIL).await?;
+
+    // Assert
+    expect_that!(statuses, each(eq(&StatusCode::UNAUTHORIZED)));
+    expect_that!(limited.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(problem_code(&limited), eq("too_many_attempts"));
+    expect_that!(limited.headers.contains_key("retry-after"), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_confirmed_account_cant_change_its_address_this_way() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, EMAIL).await?;
+    app.services.confirm_email_by_operator("ada").await?;
+
+    // Act
+    let changed = change_address(&app, "ada", PASSWORD, "grace@example.test").await?;
+    let signed_in = sign_in(&app, EMAIL, PASSWORD).await?;
+
+    // Assert
+    expect_that!(changed.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(problem_code(&changed), eq("invalid_credentials"));
+    expect_that!(signed_in.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn without_mail_changing_the_address_is_not_found() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    register(&app, EMAIL).await?;
+
+    // Act
+    let changed = change_address(&app, "ada", PASSWORD, "grace@example.test").await?;
+
+    // Assert
+    expect_that!(changed.status, eq(StatusCode::NOT_FOUND));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn changing_the_address_cancels_a_working_reset_link() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    register(&app, "ada@exmaple.test").await?;
+    let reset = app.make_reset_link("ada").await?;
+
+    // Act
+    change_address(&app, "ada", PASSWORD, EMAIL).await?;
+    let used = app
+        .send(
+            Method::POST,
+            &format!("/api/v1/password-resets/{reset}"),
+            None,
+            Some(json!({ "password": "another long password" })),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(used.status, eq(StatusCode::CONFLICT));
+    expect_that!(problem_code(&used), eq("reset_link_cancelled"));
+    Ok(())
+}
