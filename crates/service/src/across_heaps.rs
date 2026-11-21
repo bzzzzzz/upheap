@@ -1,7 +1,7 @@
 //! One ranked list across all heaps: the items of every active heap the caller may view, merged into the groups of
 //! one list view. The mechanism is in architecture.md, Ranking, Across heaps.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use domain::heap::{Heap, HeapPriority};
 use domain::item::StateKind;
@@ -241,20 +241,18 @@ impl Services {
         if named.is_empty() {
             return Ok((trimmed, None));
         }
-        let uses = store::parameters::list_heap_uses(&self.db, &named).await?;
-        let using = store::heaps::list_heaps_for_teams(&self.db, &[team])
-            .await?
+        // Each (heap, parameter) pair has one use row, so a heap uses every named parameter when it has that many
+        // uses in progress.
+        let mut counts: HashMap<HeapId, usize> = HashMap::new();
+        for heap_use in store::parameters::list_heap_uses(&self.db, &named).await? {
+            if heap_use.stopped_at.is_none() {
+                *counts.entry(heap_use.heap_id).or_default() += 1;
+            }
+        }
+        let using = counts
             .into_iter()
-            .map(|heap| heap.id)
-            .filter(|heap_id| {
-                named.iter().all(|parameter_id| {
-                    uses.iter().any(|heap_use| {
-                        heap_use.heap_id == *heap_id
-                            && heap_use.parameter_id == *parameter_id
-                            && heap_use.stopped_at.is_none()
-                    })
-                })
-            })
+            .filter(|(_, count)| *count == named.len())
+            .map(|(heap_id, _)| heap_id)
             .collect();
         Ok((trimmed, Some(using)))
     }
