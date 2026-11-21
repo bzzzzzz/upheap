@@ -111,7 +111,7 @@ writes run at READ COMMITTED. For Cloud Run with Neon, see [design/operations.md
 | `UPHEAP_OIDC_SUBJECT_CLAIM` | `sub` | The ID token claim an account is matched on. Set `oid` for Microsoft Entra ID, so SCIM can link people. Existing accounts move over at their next sign-in. The claim must be stable and never given to another person: `sub` or `oid`, not an email or user name |
 | `UPHEAP_OIDC_PROVIDER_LOGOUT` | `false` | `true` also signs a person out at the provider when they sign out of the web app, if the provider supports RP-initiated logout. Needs the provider |
 | `UPHEAP_SCIM_TOKEN` | none | The bearer token the provider's SCIM client sends, at least 32 characters; make one with `openssl rand -hex 32`. Needs the provider. Unset, there are no SCIM endpoints. See [Provisioning over SCIM](#provisioning-over-scim) |
-| `UPHEAP_OPERATOR_CONTACT` | none | One line of plain text, at most 200 characters, shown on the sign-in, reset and team pages wherever they say to ask whoever runs the server: who that is and how to reach them, such as `Ask Sam in #it`. Public: anyone who opens the sign-in page sees it |
+| `UPHEAP_OPERATOR_CONTACT` | none | One line of plain text, at most 200 characters, shown on the sign-in, reset and team pages wherever they say to ask whoever runs the server, and in the mail that tells the old address it was changed: who that is and how to reach them, such as `Ask Sam in #it`. Public: anyone who opens the sign-in page sees it |
 
 ### Signing in through a provider
 
