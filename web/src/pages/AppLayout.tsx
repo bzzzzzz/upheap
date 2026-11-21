@@ -4,6 +4,7 @@
 import {
   Link,
   Outlet,
+  useCanGoBack,
   useMatch,
   useParams,
   useRouter,
@@ -401,8 +402,7 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
  */
 function PhoneBack({ me }: { me: Me }) {
   const router = useRouter();
-  // Read on each render, which every navigation brings, as the shell reads the route.
-  const canGoBack = router.history.canGoBack();
+  const canGoBack = useCanGoBack();
   const kept = keptHeap(me);
   if (!canGoBack && !kept) return null;
   return (

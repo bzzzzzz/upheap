@@ -108,7 +108,8 @@ export function useLeaveTeam(team: Team) {
     mutationFn: async () =>
       ensureOk(await api.POST("/api/v1/teams/{team}/leave", { params: { path: { team: team.slug } } })),
     onSuccess: async () => {
-      await navigate({ to: "/teams" });
+      // In place of the team's page, so Back doesn't lead to a team the user is no longer in.
+      await navigate({ to: "/teams", replace: true });
       queryClient.removeQueries({ queryKey: teamKey(team.slug) });
       for (const { slug } of team.heaps) {
         const heap = { team: team.slug, heap: slug };

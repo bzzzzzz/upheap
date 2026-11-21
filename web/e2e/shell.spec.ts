@@ -368,6 +368,21 @@ test("on a phone, a page outside a heap goes back from the top bar, to the page 
   await expect(linked.getByRole("heading", { name: "Account", level: 1 })).toBeVisible();
   await linked.getByRole("button", { name: "Back", exact: true }).click();
   await expect(linked).toHaveURL(new RegExp(`${heapPath}$`));
+
+  // Once a tab opened from a link has gone on from its page, Back returns there, also to the same team's page.
+  await linked.goto("/teams");
+  await linked
+    .getByRole("link", { name: /^Open / })
+    .first()
+    .click();
+  await expect(linked).toHaveURL(/\/teams\/[^/]+$/);
+  const teamPage = linked.url();
+  await linked.goto(teamPage);
+  await linked.getByRole("button", { name: /^More for / }).click();
+  await linked.getByRole("menuitem", { name: "Activity" }).click();
+  await expect(linked).toHaveURL(/\/teams\/[^/]+\/activity$/);
+  await linked.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(linked).toHaveURL(teamPage);
 });
 
 test("Sign out is on the Account page, not in the navigation", async ({ page }) => {
