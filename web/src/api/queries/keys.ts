@@ -13,6 +13,7 @@ export const rankedViewKey = (heap: HeapRef, view: ListViewQuery) => [...rankedK
 export const blockerCandidatesKey = (heap: HeapRef) => [...rankedKey(heap), "blocker-candidates"] as const;
 export const closedKey = (heap: HeapRef) => ["closed", heap.team, heap.heap] as const;
 export const tagsKey = (heap: HeapRef) => ["tags", heap.team, heap.heap] as const;
+export const savedViewsKey = (heap: HeapRef) => ["saved-views", heap.team, heap.heap] as const;
 export const parametersKey = (heap: HeapRef) => ["parameters", heap.team, heap.heap] as const;
 export const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.heap, key] as const;
 export const teamKey = (team: string) => ["team", team] as const;

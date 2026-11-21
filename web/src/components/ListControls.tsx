@@ -19,6 +19,7 @@ import {
 } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
+import { ViewsSection } from "./SavedViews";
 import { teamName } from "./teamName";
 import {
   DEFAULT_MODES,
@@ -217,6 +218,18 @@ export function ListControls({
           )
         }
       >
+        {heapRef && (
+          <>
+            <ViewsSection
+              heapRef={heapRef}
+              view={view}
+              onChange={onChange}
+              onApplied={() => phone && close()}
+              enabled={panel === "filters"}
+            />
+            <hr className="border-line" />
+          </>
+        )}
         {phone && heapRef && <SortSection view={view} parameters={parameters.data} onChange={onChange} />}
         <ShowSection view={view} reminders={heapRef !== undefined} onChange={onChange} />
         <hr className="border-line" />
@@ -619,7 +632,7 @@ function PanelFooter({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+export function Section({ title, children }: { title: string; children: ReactNode }) {
   const id = useId();
   return (
     <section aria-labelledby={id} className="flex flex-col gap-3">
