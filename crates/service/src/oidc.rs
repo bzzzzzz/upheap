@@ -436,7 +436,7 @@ impl Services {
                     if moved_from.is_some() {
                         // The move is kept: rolling it back would leave the identity out of reach of SCIM, and the
                         // person's sessions and tokens valid. What a push does to a linked inactive person is done
-                        // here, the groups this sign-in brought apart, which the pushed state replaces.
+                        // here; their teams were already synced from the pushed state above.
                         self.apply_scim_state_to_moved(&txn, &claims.subject, now).await?;
                         store::oidc_sign_ins::delete_oidc_sign_in(&txn, state_hash).await?;
                         txn.commit().await.map_err(StoreError::from)?;
