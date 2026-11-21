@@ -805,13 +805,38 @@ a fixed time.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
      go: a password change, a reset link made for them (actor: the user, for the reason above), a password set with
      one, an email change asked and one made, an address confirmed, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
-     reset link made for them), and their own heap priority change (recorded here and not in the heap's team, since
-     the value is private to them). `GET /me/history` reads exactly those nine actions for the caller, with no way to name another user or
-     team, so only the user sees them and team admins never do. It is not the team log: the server words each entry
+     reset link made for them), an operator turning them off or on, the operator role given or taken away, and their own heap priority change (recorded here and not in the heap's team, since
+     the value is private to them). `GET /me/history` reads exactly those eleven actions for the caller, with no way to name another user or
+     team, so only the user sees them and team admins never do; an operator reads the same entries of any account
+     (below). It is not the team log: the server words each entry
      as one sentence with no actor ("Password changed. 2 other sign-ins ended.", "You changed your priority for Work
      from 1 to 3.") from the entry's diff, and the sentence is made on reading, so a wording fix reaches old entries.
      A priority entry's diff carries the heap's name at the time of the change; an older entry without one reads the
      heap's current name by its ID, and "a heap" when that is gone. Cookie or bearer token may read it.
+   - The **operator role** is `users.operator_since`, set and cleared only by the server's shell
+     (`upheap-server user make-operator` and `remove-operator`, each recorded as `operator_granted` or
+     `operator_removed` with the person as the actor, and nothing when it changes nothing); no API endpoint sets it.
+     It is read from the database on every operator request, so removing it takes effect on the person's next
+     request, and `GET /me` says whether the caller has it (`operator`). The operator endpoints (`/operator/accounts`:
+     the list, the counts that deactivating would end, deactivate, reactivate, a reset link, and an account's history)
+     answer the plain `404 not_found` to a caller who isn't an operator, before reading anything else, so the pages don't
+     show that operators exist. A team admin has no extra power there. The list is not paged: a server has tens to a
+     few hundred accounts, and the page searches and filters it in the browser (that changes when a server has
+     thousands). An account is a **provider** account when it has an identity at the configured provider, and a
+     **local** one otherwise; an operator turns off and on, and makes reset links for, local accounts only, and a
+     provider account answers `409 account_provider_managed`, since the provider owns its state.
+     `users.last_sign_in_at` is set wherever a session is opened (`open_session`) and shown in the list.
+   - An **operator's deactivation** sets `users.deactivated_at` where SCIM's keeps its state in `scim_users`. In one
+     transaction, after locking the person's personal team as SCIM does (sign-ins open a session under that lock), it
+     sets the column, ends every sign-in with the same `end_sign_ins`, and records `account_deactivated` with
+     `made_by: operator` and the count, the operator as the actor (the shell's has the person, as SCIM's does). The
+     account, its items, teams and memberships stay, and reactivating clears the column and restores nothing. Opening a
+     session for the account (`refuse_deactivated`, which every password sign-in, reset and code exchange passes
+     through) then fails with `403 account_turned_off`, a code of its own beside SCIM's `account_deactivated` so the
+     web can say who turned it off. Repeating either action changes and records nothing. A reset link made by an
+     operator records `made_by: operator` with the operator as the actor. An operator reads an account's history with
+     the same reading as the person's, worded for the operator: who did it is the entry's actor, or "from the server"
+     when the actor is the person themselves for an operator-made entry.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`, and the service layer
    enforces access ([Access control](#access-control)).
 
