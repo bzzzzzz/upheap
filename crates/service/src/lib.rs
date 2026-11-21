@@ -79,6 +79,8 @@ pub struct Settings {
     pub group_teams: group_teams::GroupTeams,
     /// The provider's SCIM access, if the operator set a token. Needs [`Settings::oidc`].
     pub scim: Option<scim::ScimSettings>,
+    /// Who to ask, shown where the web app says to ask whoever runs the server.
+    pub operator_contact: Option<String>,
 }
 
 impl Default for Settings {
@@ -92,6 +94,7 @@ impl Default for Settings {
             oidc: None,
             group_teams: group_teams::GroupTeams::default(),
             scim: None,
+            operator_contact: None,
         }
     }
 }
@@ -183,6 +186,11 @@ impl Services {
     /// Whether local accounts may sign in with a password.
     pub fn password_sign_in(&self) -> bool {
         self.settings.password_sign_in
+    }
+
+    /// Who to ask, as the operator wrote it, if they set one.
+    pub fn operator_contact(&self) -> Option<&str> {
+        self.settings.operator_contact.as_deref()
     }
 
     /// Refuses with [`ServiceError::PasswordSignInOff`] when the provider is the only way in.

@@ -111,6 +111,7 @@ writes run at READ COMMITTED. For Cloud Run with Neon, see [design/operations.md
 | `UPHEAP_OIDC_SUBJECT_CLAIM` | `sub` | The ID token claim an account is matched on. Set `oid` for Microsoft Entra ID, so SCIM can link people. Existing accounts move over at their next sign-in. The claim must be stable and never given to another person: `sub` or `oid`, not an email or user name |
 | `UPHEAP_OIDC_PROVIDER_LOGOUT` | `false` | `true` also signs a person out at the provider when they sign out of the web app, if the provider supports RP-initiated logout. Needs the provider |
 | `UPHEAP_SCIM_TOKEN` | none | The bearer token the provider's SCIM client sends, at least 32 characters; make one with `openssl rand -hex 32`. Needs the provider. Unset, there are no SCIM endpoints. See [Provisioning over SCIM](#provisioning-over-scim) |
+| `UPHEAP_OPERATOR_CONTACT` | none | One line of plain text, at most 200 characters, shown on the sign-in, reset and team pages wherever they say to ask whoever runs the server: who that is and how to reach them, such as `Ask Sam in #it`. Public: anyone who opens the sign-in page sees it |
 
 ### Signing in through a provider
 
@@ -281,6 +282,21 @@ user's account history. It runs no migrations and starts no server, so run it on
 started. Exit codes: `0` confirmed or already confirmed, `2` wrong arguments, `3` no such user, `5` the database can't
 be reached, `1` anything else, a database a version behind included. A reset link, which also arrives by mail,
 confirms the address too.
+
+The server limits how many addresses an account can mail and how many mails an address gets (five in 15 minutes
+each), but not registration: it mails each new address once, and the server can't tell one client from another behind a proxy. On a server open to
+sign-ups, rate-limit `POST /api/v1/auth/register` per client at the reverse proxy, or set `ALLOW_REGISTRATION=false`
+and let people in with invite links. With nginx, for example:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=register:10m rate=1r/m;
+
+location = /api/v1/auth/register {
+    limit_req zone=register burst=5 nodelay;
+    limit_req_status 429;
+    proxy_pass http://upheap;
+}
+```
 
 ### Resetting a password
 

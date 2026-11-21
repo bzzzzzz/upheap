@@ -130,8 +130,10 @@ impl Services {
     /// that isn't an address, fails with a [`ValidationError`] before anything is counted. Then the attempt is counted
     /// and checked as a sign-in's is ([`Services::verify_login`]): past the limit it fails with
     /// [`ServiceError::TooManySignInAttempts`], and an unknown login or a wrong password with
-    /// [`ServiceError::InvalidCredentials`]. A success doesn't clear the count, but the count is keyed by the
-    /// account's address, so a changed address starts a fresh one.
+    /// [`ServiceError::InvalidCredentials`]. With the right password it is also counted as an address change of the
+    /// account ([`Services::count_address_change`]), whether the address is free or taken, and one past that limit
+    /// fails with [`ServiceError::TooManyAddressChanges`]: the sign-in count is keyed by the address, so a changed
+    /// address starts it over, and the account's count is what limits the addresses it mails.
     ///
     /// In one transaction the address is set (a conditional update, so an account that is confirmed fails with
     /// [`ServiceError::InvalidCredentials`] and nothing changes), the account's working password reset link is
@@ -164,6 +166,7 @@ impl Services {
         let new_email = Email::parse(email)?;
 
         let (user, _) = self.verify_login(login, password).await?;
+        self.count_address_change(user.id).await?;
         let personal_team = self.load_personal_team(&self.db, &user).await?;
         let now = self.now();
         let txn = self.db.begin().await.map_err(StoreError::from)?;

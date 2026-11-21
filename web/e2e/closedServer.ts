@@ -15,6 +15,9 @@ import { promisify } from "node:util";
 
 import { PASSWORD, uniqueUser } from "./fixtures";
 
+/** The contact line the closed server's operator set, which the pages that say to ask whoever runs the server show. */
+export const OPERATOR_CONTACT = "Ask Sam in #it, or write to it@example.com";
+
 /** An account the server was seeded with. The password is `PASSWORD`. */
 export type SeededUser = { display_name: string; email: string; username: string };
 
@@ -71,6 +74,7 @@ function serverEnv(baseURL: string, databaseUrl: string, allowRegistration: bool
     BIND_ADDR: `${url.hostname}:${url.port}`,
     BASE_URL: baseURL,
     LOG_FORMAT: "pretty",
+    UPHEAP_OPERATOR_CONTACT: OPERATOR_CONTACT,
     RUST_LOG: "warn",
     ...(mailDirectory && { MAIL_URL: `file://${mailDirectory}`, MAIL_FROM: "Upheap <upheap@example.com>" }),
   };

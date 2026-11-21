@@ -5,6 +5,7 @@ import { ApiProblem } from "../api/client";
 import type { PasswordReset, PasswordResetAccount } from "../api/schema";
 import { usePasswordReset, useResetPassword } from "../api/queries/passwordReset";
 import { Field } from "../components/Field";
+import { OperatorContact } from "../components/OperatorContact";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard, authButtonClass } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
@@ -40,6 +41,7 @@ export function ResetPage({ token }: { token: string }) {
           <p className="text-sm text-ink-soft">
             Check that the whole link was copied, or ask whoever runs this server for a new one.
           </p>
+          <OperatorContact className="text-sm text-ink-soft" />
         </Notice>
       </AuthCard>
     );
@@ -79,6 +81,7 @@ function NotWorking({ state, moveFocus }: { state: Exclude<PasswordReset["state"
         <p className="text-sm text-ink-soft">A newer one was made, or the password or address was changed since.</p>
       )}
       <p className="text-sm text-ink-soft">Ask whoever runs this server for a new one.</p>
+      <OperatorContact className="text-sm text-ink-soft" />
     </Notice>
   );
 }

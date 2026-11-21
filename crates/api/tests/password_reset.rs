@@ -481,7 +481,7 @@ async fn a_mailed_link_sets_a_password_and_unknown_addresses_get_the_same_answer
 
     // Assert
     expect_that!(options.status, eq(StatusCode::OK));
-    expect_that!(options.body, eq(&json!({ "by_mail": true })));
+    expect_that!(options.body, eq(&json!({ "by_mail": true, "operator_contact": null })));
     expect_that!(unknown.status, eq(StatusCode::ACCEPTED));
     expect_that!(unknown.body, eq(&Value::Null));
     expect_that!(known.status, eq(StatusCode::ACCEPTED));
@@ -608,8 +608,31 @@ async fn without_mail_the_request_is_not_found() -> Result<()> {
     let asked = request(&app, EMAIL).await?;
 
     // Assert
-    expect_that!(options.body, eq(&json!({ "by_mail": false })));
+    expect_that!(options.body, eq(&json!({ "by_mail": false, "operator_contact": null })));
     expect_that!(asked.status, eq(StatusCode::NOT_FOUND));
     expect_that!(problem_code(&asked), eq("not_found"));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn the_options_say_who_to_ask_when_the_operator_set_a_contact() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let with_contact = app.with_settings(service::Settings {
+        operator_contact: Some("Ask Sam in #it".to_owned()),
+        ..service::Settings::default()
+    });
+
+    // Act
+    let options = with_contact
+        .send(Method::GET, "/api/v1/password-resets", None, None)
+        .await?;
+
+    // Assert
+    expect_that!(
+        options.body,
+        eq(&json!({ "by_mail": false, "operator_contact": "Ask Sam in #it" }))
+    );
     Ok(())
 }
