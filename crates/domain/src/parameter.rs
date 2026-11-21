@@ -500,7 +500,8 @@ fn ensure_labels_unique(options: &[ParameterOption]) -> Result<(), ParameterErro
 
 /// The text a parameter merge's reach is hashed from: for each parameter in the reach, by parameter ID,
 /// `"<parameter id>:<items>:<labels added, joined by |>:<switches as from>to, joined by |>\n"`. It changes when a
-/// parameter joins or leaves the reach, a count changes or the options it adds or switches change.
+/// parameter joins or leaves the reach, a count changes or the options it adds or switches change. The tags whose
+/// links carry over are left out: links can be edited after the merge, values and options can't be taken back.
 pub fn reach_text<'a>(
     entries: impl IntoIterator<Item = (ParameterId, u32, &'a [OptionLabel], &'a [OptionSwitch])>,
 ) -> String {

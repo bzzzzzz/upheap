@@ -3899,7 +3899,7 @@ export interface components {
              * @description Items with a value for the parameter, open or closed.
              */
             items: number;
-            /** @description The names of the tags linked to it, by name: each becomes its heap's link to the team parameter, for that heap only. */
+            /** @description The names of its tags, sorted: each becomes its heap's link to the team parameter, for that heap only. */
             linked_tags: string[];
             /** Format: uuid */
             parameter_id: string;

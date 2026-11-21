@@ -14825,7 +14825,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The names of the tags linked to it, by name: each becomes its heap's link to the team parameter, for that heap only."
+            "description": "The names of its tags, sorted: each becomes its heap's link to the team parameter, for that heap only."
           },
           "parameter_id": {
             "type": "string",

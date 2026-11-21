@@ -230,11 +230,11 @@ line. It differs in what it lists: it is headed "Make “Customer tier” a team
 starting one first, marked "this heap", then the same-named ones, "archived" where their heap is) shows the heap, the
 parameter as that heap wrote it, its item count and, when it brings options the team parameter lacks, "adds Platinum".
 When one of its options matches an option the team parameter has archived, the row says "moves Silver → Gold": its
-open items get the option in use that Silver was replaced by, while closed ones keep Silver. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
+open items get the option in use that Silver was replaced by, while closed ones keep Silver. A row whose parameter
+is linked to tags says "links billing, urgent": its heap keeps those links to the team parameter. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
 whose options were in another order." and the quiet line "The items keep their history. This can't be undone."; the
 buttons are Cancel and Make team parameter ("Making…"). Success closes it with a toast, "“Customer tier” is a team
-parameter now: 3 items in 2 heaps keep their values.". A row says "links billing, urgent" for the tags whose links its heap
-keeps.
+parameter now: 3 items in 2 heaps keep their values.".
 
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
 parameter" to a screen reader), its weight read as "Weight {n}", its options read-only, the team's tags that suggest
