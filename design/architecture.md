@@ -264,7 +264,8 @@ The tables and columns are in the migrations. These are the conventions they fol
 - **A tag is owned by a heap or by a team:** exactly one of `tags.heap_id` and `tags.team_id` is set, and the store
   checks it on every read. Both kinds share one table, so `item_tags`, parameter links, saved views and tag orders
   name either by ID with one foreign key, and a team tag needs no copy per heap: a rename is one row written. A
-  heap's tags are its own and its team's, read together.
+  heap's tags are its own and its team's, read together. Every tag has a `color`, a code from a fixed palette; a tag made
+  without one gets the least used among the tags it sits among.
 - **A parameter is owned by a heap or by a team:** exactly one of `parameters.heap_id` and `parameters.team_id` is
   set, and the store checks it on every read. A heap's use of a team parameter is a row in `heap_parameters` with the
   heap's weight, rather than a weight on the parameter, which would be one number for every heap; stopping sets

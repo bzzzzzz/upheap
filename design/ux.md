@@ -11,7 +11,9 @@ The app is one React app whose layout changes with the width: **phone** under 64
 ## Principles
 
 1. **Consistent look.** One set of tokens: stone neutrals, amber for "in progress" and for the next action, teal
-   for done, red only for a firm due date that's overdue, violet only for parameters, grey for tags. A control
+   for done, red only for a firm due date that's overdue, violet only for parameters. Tags take their own colour from an
+   eight-colour palette (blue, sky, teal, green, lime, rose, pink, grey) on the chip's border and text, with no fill;
+   violet, amber and red are left out of it, so parameters, the accent and overdue keep their meaning. A control
    looks the same wherever it appears: S M L XL buttons, the due choices and the tag chips are identical in the item
    pane, the Add dialog and their phone sheets.
 2. **Predictable layout.** Every screen keeps the same areas in the same places. Wide: sidebar, then the list,
@@ -185,7 +187,9 @@ archived heaps too; an error shows under the card.
 
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags of this heap" whose rows read as the tag's name in a chip and its description
-(or "No description"); an edit button on the row turns it into the form (name, description, Save, Cancel, History),
+(or "No description"), the chip in the tag's colour; an edit button on the row turns it into the form (name, description,
+Colour, Save, Cancel, History), where Colour is a row of eight round swatches, the picked one ringed, with a chip under
+them that previews the name in that colour (on a phone two rows of four),
 highlighted in the accent. Beside it a ⋯ holds Make a team tag, for anyone who may edit the tag (so not in an archived
 heap). A second card, "{n} tags of the team {team}", with a Team page link in its header, lists the
 team's tags the same way, with History, and edits them in place: the form adds "Changes in every heap of {team}."
@@ -312,7 +316,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    after the title. Dropped steps don't count, and a task without an open or ticked step shows nothing.
 2. Custom parameters with a value show as violet "Name: Option" chips ("Energy: Low") after the tags on a wide
    screen, and on their own line under the contributors on a phone or tablet. Unset parameters don't show. Violet is
-   kept for parameters everywhere, so they read apart from tags (grey) and due dates.
+   kept for parameters everywhere, so they read apart from tags (outlined, in their own colours) and due dates.
 3. A row starts with three fixed slots, from a tablet up, so titles line up; a slot the person can't use stays
    empty. First the **state button**: Start (a play circle) on an open row, Unblock (a red closed padlock in a
    circle, drawn open while the row is hovered or focused, and always with a finger) on a blocked row, Pause (an
@@ -387,7 +391,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 
 17. A tag in a row filters the list. Clicking it adds the tag to the tag filter (items with any of its tags), and
     clicking it again takes it off; the usual chip under the toolbar follows. While a tag is in the filter, its chips
-    in every row are outlined in the accent. A parameter chip ("Energy: Low") does the same with its option: it joins
+    in every row keep their colour and get an accent ring. A parameter chip ("Energy: Low") does the same with its option: it joins
     the parameter filter, and is outlined in violet while it's on. Tags and parameters on the item, Waiting for me and
     the closed list are plain text, and so is a chip of an archived parameter.
 18. Sort by offers Priority, Due soonest, Most needed, Smallest effort and Largest impact, then each custom parameter
@@ -638,8 +642,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     picked one clears it), the due choices (staying open while an exact date is chosen), the date or the parameter's
     options. A pick saves at once and closes it, and focus goes back to the value. Tags are the exception, as the one
     field with many values: a click turns the row itself into the tag picker, on every screen, its box focused, with
-    no popover or sheet. It offers the team's tags beside the heap's, marked with the team icon, and Create makes a heap
-    tag. Its matches float under it on a wide screen and a tablet, and sit in the flow in a phone's
+    no popover or sheet. It offers the team's tags beside the heap's, marked with the team icon and each with a small dot in
+    its colour, and Create makes a heap tag, which the server colours. Its matches float under it on a wide screen and a tablet, and sit in the flow in a phone's
     item sheet. Each add, create or remove saves at once and keeps it open for the next; it has no Done. Escape or
     Enter in the empty box closes it with focus back on the value (Escape with text only clears it), and so does
     leaving it, with focus left where it went. Without `edit` (a reader, an archived heap, a closed item) the values
