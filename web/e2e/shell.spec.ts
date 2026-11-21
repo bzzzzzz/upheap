@@ -53,6 +53,20 @@ test("every page fits the screen, with the navigation for its width", async ({ p
     await goTo(page, name);
     await expect(page.getByRole("main")).toBeVisible();
     await expectFitsWidth(page, name);
+    if (width >= 1024) {
+      // Every page fills the room beside the sidebar, as the list does: its content runs to the block's right-hand
+      // padding. The block is at most 92rem wide and centred.
+      const blockRight = Math.round(Math.min(width, (width + 92 * 16) / 2));
+      await expect
+        .poll(
+          async () => {
+            const main = await page.getByRole("main").boundingBox();
+            return blockRight - Math.round((main?.x ?? 0) + (main?.width ?? 0));
+          },
+          { message: `${name} stops short of the right edge` },
+        )
+        .toBeLessThanOrEqual(32);
+    }
   }
 });
 
