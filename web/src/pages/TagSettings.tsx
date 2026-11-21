@@ -44,7 +44,7 @@ const mergeReachOf = (error: unknown): MergeReach | undefined =>
   error instanceof ApiProblem && error.code === "tag_merge_unconfirmed" ? error.mergeReach : undefined;
 
 /** The toast after a confirmed merge: how many items in how many heaps carry the team tag. */
-const carriedBy = (reach: MergeReach) =>
+export const carriedBy = (reach: MergeReach) =>
   `${plural(
     reach.heaps.reduce((sum, reached) => sum + reached.items, 0),
     "item",
