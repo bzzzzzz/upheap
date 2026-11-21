@@ -50,6 +50,8 @@ enum Access {
 #[derive(Clone, Copy)]
 enum Target {
     Nothing,
+    /// The text to search for, in the query.
+    Search,
     Heap,
     /// The shared heap, with its version for `If-Match`.
     HeapVersion,
@@ -426,9 +428,9 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::GET,
-            "/me/search?q=rotate",
+            "/me/search",
             SignedIn,
-            Target::Nothing,
+            Target::Search,
             RequestBody::Empty,
             StatusCode::OK,
         ),
@@ -1970,6 +1972,7 @@ impl World {
         let mut code = None;
         match endpoint.target {
             Target::Nothing | Target::Heap => {}
+            Target::Search => path.push_str("?q=rotate"),
             Target::HeapVersion => {
                 let heap = self
                     .app
