@@ -19,7 +19,7 @@ import { itemProblem } from "./itemProblems";
 import { SIZE_LABELS, SIZES } from "./labels";
 import { itemAddress, listQueryFor, matchesSearch, placeOf, splitList, type ListSearch } from "./listView";
 import { PHONE, useMedia } from "./media";
-import { Kbd, WIDE_HINT } from "./Kbd";
+import { Kbd, MAC, WIDE_HINT } from "./Kbd";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { PopoverSheet } from "./PopoverSheet";
@@ -196,6 +196,7 @@ export function AddItemDialog({
   view,
   search = "",
   acrossHeaps = false,
+  title: initialTitle,
   onClose,
 }: {
   heapRef: HeapRef;
@@ -208,6 +209,8 @@ export function AddItemDialog({
    * heap's list isn't its place there, so none is looked up, and Open it opens the item over that list.
    */
   acrossHeaps?: boolean;
+  /** The title to start with, which counts as typed. */
+  title?: string;
   onClose: () => void;
 }) {
   const phone = useMedia(PHONE);
@@ -236,7 +239,7 @@ export function AddItemDialog({
   const prefill = usePrefill(heapRef, view);
   const [addAnother, setAddAnother] = useAddAnother();
   // What the user has set, over the view's prefill, which belongs to the heap on screen.
-  const [edits, setEdits] = useState<Partial<Draft>>({});
+  const [edits, setEdits] = useState<Partial<Draft>>(initialTitle === undefined ? {} : { title: initialTitle });
   // The edits of the add on its way, until the server answers. While they're untouched there's nothing unsaved.
   const [sent, setSent] = useState<Partial<Draft> | null>(null);
   const draft: Draft = { ...EMPTY, ...(onScreen ? prefill : {}), ...edits };
@@ -591,14 +594,13 @@ export function AddItemDialog({
       Add another
     </label>
   );
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-  const submitKeys = mac ? "⌘↵" : "Ctrl ↵";
+  const submitKeys = MAC ? "⌘↵" : "Ctrl ↵";
   const addButton = (
     <button
       type="submit"
       disabled={!canAdd}
       title={submitKeys}
-      aria-keyshortcuts={mac ? "Meta+Enter" : "Control+Enter"}
+      aria-keyshortcuts={MAC ? "Meta+Enter" : "Control+Enter"}
       className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:opacity-40"
     >
       Add

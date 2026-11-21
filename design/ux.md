@@ -1317,7 +1317,7 @@ The wide screen shows its keys, and `?` lists them all:
 
 1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
    the search box, `S` `B` `X` at the end of the focused row, `G O` and `G C` beside Open and Closed in the sidebar,
-   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog.
+   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog, `⌘K` (`Ctrl K`) on Find in the sidebar.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
 3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
    `S` `B` `X` when a row can change state, `N`, `/`, and `G C` with no item open; walking and closing with one open;
@@ -1326,6 +1326,7 @@ The wide screen shows its keys, and `?` lists them all:
    then `O` goes to its Open list, closing an open item, and `G` then `C` to its Closed page; any other key after `G`
    cancels it. Keys are ignored in a field.
 
-Later: ⌘K in the sidebar finds any item by title or key in every heap; Tab acts on the highlighted item (start,
-done, due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching
-every heap needs a server search endpoint; today's search filters only the loaded list.
+5. `⌘K` (`Ctrl K` off a Mac) anywhere, or Find at the top of the sidebar, opens Find. It finds items by title or
+   key in every heap (the server's search, open items first), goes to a heap, and adds "Add “text” as a new item" to
+   the heap on screen. ↑ ↓ and Enter open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy
+   link, as the item allows), and Shift+Tab goes back.
