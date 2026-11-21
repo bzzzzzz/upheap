@@ -83,7 +83,8 @@ DATABASE_URL="sqlite://heap.db?mode=rwc" BASE_URL=http://localhost:8080 ./upheap
 
 In production, put a TLS-terminating reverse proxy in front, set `BASE_URL` to its `https://` address, and point
 `DATABASE_URL` at Postgres (`postgres://user:pass@host/db`) or MySQL (`mysql://user:pass@host/db`) if you want more
-than SQLite. For Cloud Run with Neon, see [design/operations.md](design/operations.md).
+than SQLite. MySQL needs row-based or mixed binary logging (`binlog_format`, ROW by default), because SCIM user
+writes run at READ COMMITTED. For Cloud Run with Neon, see [design/operations.md](design/operations.md).
 
 ### Configuration
 

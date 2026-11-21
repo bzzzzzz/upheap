@@ -165,8 +165,8 @@ pub async fn lock_users_by_external_id(db: &impl ConnectionTrait, external_id: &
 /// so a write that gives a user this external ID and a first sign-in of the person with that subject run one after
 /// the other. [`lock_users_by_external_id`] can't do that there: Postgres doesn't lock rows that don't match yet.
 /// On MySQL that lock's gap lock already covers it, and SQLite has one writer, so this does nothing on either.
-/// A transaction takes at most one, so two never wait on each other in a cycle; a hash collision only makes two
-/// people's writes take turns.
+/// A transaction takes at most one, after the SCIM rows and before any personal team, so it adds no cycle; a hash
+/// collision only makes two people's writes take turns.
 pub async fn lock_external_id(db: &impl ConnectionTrait, external_id: &str) -> Result<(), StoreError> {
     if db.get_database_backend() != DbBackend::Postgres {
         return Ok(());
