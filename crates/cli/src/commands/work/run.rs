@@ -1625,6 +1625,7 @@ mod tests {
                 item_key: None,
                 highest: None,
                 merge_reach: None,
+                parameter_merge_reach: None,
                 request_id: None,
             }),
             body: String::new(),

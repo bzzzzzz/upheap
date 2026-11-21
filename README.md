@@ -408,6 +408,7 @@ cargo run -p cli -- tag promote infra                           # make the heap'
 cargo run -p cli -- item add "Patch the VPN" --tag network --create-tags   # adds the tag network if the heap hasn't got it
 cargo run -p cli -- parameter list                              # a heap's parameters and their options
 cargo run -p cli -- parameter add Area --option Backend --option Frontend  # an admin adds one; --weight, --tag; edit and archive too
+cargo run -p cli -- parameter promote Area                      # make the heap's parameter the team's; the refusal prints the merge and the command to confirm it
 cargo run -p cli -- parameter option archive Area Backend --replace-with Frontend  # open items with it move to the other
 cargo run -p cli -- item edit k3x9a --parameter Area=Backend    # set one; --no-parameter Area clears it
 cargo run -p cli -- guide show                                  # every command and its flags in one read, with instructions for agents
