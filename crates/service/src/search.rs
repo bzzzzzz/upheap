@@ -35,11 +35,7 @@ impl Services {
     /// that key comes first; then open items, newest created first; then closed items, most recently closed first.
     /// At most [`MAX_SEARCH_ROWS`] rows are returned, and `truncated` says whether more matched. Read-only; any
     /// signed-in user may ask, and nobody sees a heap outside their teams.
-    ///
-    /// Case is folded by the database's `LOWER`: Unicode on Postgres and MySQL, ASCII only on SQLite. The match is a
-    /// `LIKE` scan narrowed to the caller's heaps, which holds while a person sees thousands of items at most; when
-    /// it no longer holds, search moves to per-database full-text indexes (decisions.md, Portable SQL). The heaps
-    /// go in one `IN` list, which holds while a person views far fewer heaps than a backend's bound-parameter limit.
+    /// How the match folds case and what size it holds for: [`store::items::search_items`].
     pub async fn search_items(&self, principal: Principal, text: &str) -> Result<SearchResults, ServiceError> {
         self.search_items_capped(principal, text, MAX_SEARCH_ROWS).await
     }

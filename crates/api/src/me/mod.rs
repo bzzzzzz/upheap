@@ -286,7 +286,7 @@ async fn get_items(
 
 /// Items found by title or key in every active heap the signed-in user can view, closed ones included. `q` is
 /// trimmed, and matched as a case-insensitive substring of the title (`%` and `_` match only themselves; case folding
-/// is the database's, ASCII only on SQLite) or as an exact key. The item with that key comes first, then open items,
+/// is the database's: ASCII only on SQLite, and MySQL also ignores accents) or as an exact key. The item with that key comes first, then open items,
 /// newest created first, then closed items, most recently closed first. At most 50 rows come back, and `truncated`
 /// says whether more matched. A blank `q` matches every title. Read-only, for any member.
 #[utoipa::path(get, path = "/me/search", tag = "me", security(("session" = [])),

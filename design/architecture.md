@@ -468,7 +468,7 @@ a fixed time.
    text escaped so they match only themselves. An item whose key is exactly the text comes first, then open items,
    newest created first, then closed items, most recently closed first. At most 50 rows come back, and `truncated`
    says whether more matched. Case folding is the database's `LOWER`: Unicode on Postgres and MySQL, ASCII only on
-   SQLite. It is `LIKE`, not full-text, by [decision 12](decisions.md#12-portable-sql-over-per-database-features):
+   SQLite, and MySQL's collation also ignores accents. It is `LIKE`, not full-text, by [decision 12](decisions.md#12-portable-sql-over-per-database-features):
    a person sees thousands of items at most, and the scan is narrowed to their heaps by the `heap_id` index.
 7. If heaps grow beyond this size, the list's search moves to the server with per-database full-text indexes behind a
    `q=` parameter; if a person's items outgrow `LIKE`, the search across heaps moves to full-text indexes too.

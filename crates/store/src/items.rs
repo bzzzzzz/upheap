@@ -406,7 +406,7 @@ pub async fn list_closed_items(
 /// closed ones, most recently closed first.
 ///
 /// The match is `LOWER(title) LIKE LOWER(pattern)`, which scans the heaps' items (the `heap_id` indexes only narrow it
-/// to them) and folds case as the database's `LOWER` does: Unicode on Postgres and MySQL, ASCII only on SQLite. It
+/// to them) and folds case as the database's `LOWER` does: Unicode on Postgres and MySQL, ASCII only on SQLite; on MySQL the column's collation also ignores accents. It
 /// holds while a person sees thousands of items at most; after that it moves to per-database full-text indexes.
 /// `heap_ids` go in one `IN` list, which holds while a person views far fewer heaps than a backend's bound-parameter
 /// limit; chunk it when that stops being true.
