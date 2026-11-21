@@ -19,6 +19,7 @@ import type { Me } from "../api/schema";
 import { useCreateHeap } from "../api/queries/heaps";
 import { useTeam } from "../api/queries/teams";
 import { readFoldedTeams, readRecentHeaps, writeFoldedTeams } from "./heapSwitcherStorage";
+import { Kbd } from "./Kbd";
 import { PHONE, TOUCH, useMedia } from "./media";
 import { NewHeapLink } from "./NewHeapLink";
 import { PopoverSheet } from "./PopoverSheet";
@@ -53,9 +54,6 @@ const RECENT_SHOWN = 4;
 export const rowClass = `${sheetRowClass} sm:min-h-9 sm:gap-2.5 sm:rounded-lg sm:px-2.5 sm:text-sm sm:pointer-coarse:min-h-11 data-[focused]:bg-sunken`;
 /** Under a team's fold header in the popover, rows start where the header's name does, past its chevron. */
 const indentClass = "sm:pl-7";
-/** A key's name beside what it does. */
-const kbdClass =
-  "shrink-0 rounded-[5px] border border-line-strong bg-surface px-1.5 text-[11px] font-normal text-ink-soft";
 export const currentRowClass = "bg-accent-soft font-semibold";
 /** Recent on a phone: chips in a row that scrolls sideways. */
 const chipClass =
@@ -531,11 +529,7 @@ function HeapItem({
           </span>
           {teamLabel && <span className="shrink-0 text-[13px] font-normal text-muted sm:text-xs">{teamLabel}</span>}
           {count && <OpenCount count={heap.open_count} />}
-          {enterHint && isFocused && (
-            <kbd aria-hidden="true" className={kbdClass}>
-              ↵
-            </kbd>
-          )}
+          {enterHint && isFocused && <Kbd>↵</Kbd>}
           <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink sm:w-4">
             {current && <Check className="size-4" strokeWidth={3} />}
           </span>
