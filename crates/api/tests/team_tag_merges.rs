@@ -392,6 +392,67 @@ async fn views_parameters_and_tag_orders_follow_the_merge() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_heaps_link_to_a_team_parameter_follows_the_merge_in_that_heap_only() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let billing = w.heap_tag(&w.a, "billing").await?;
+    w.heap_tag(&w.b, "billing").await?;
+    let parameter = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/parameters", w.team_path),
+            Some(&w.session),
+            Some(json!({ "name": "Customer" })),
+        )
+        .await?
+        .body;
+    for heap in [&w.a, &w.b] {
+        let used = w
+            .app
+            .send(
+                Method::POST,
+                &format!("{}/parameters/{}/use", w.app.heap_url(heap).await?, id(&parameter)),
+                Some(&w.session),
+                None,
+            )
+            .await?;
+        anyhow::ensure!(used.status == StatusCode::OK, "use failed: {}", used.body);
+    }
+    let heap_url = w.app.heap_url(&w.a).await?;
+    let linked = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{heap_url}/parameters/{}/heap-tags", id(&parameter)),
+            Some(&w.session),
+            Some(json!({ "link": [billing] })),
+        )
+        .await?;
+    anyhow::ensure!(linked.status == StatusCode::OK, "link failed: {}", linked.body);
+
+    // Act
+    let refused = w.make_team_tag(json!({ "name": "billing" }), None).await?;
+    let token = refused.body["merge_reach"]["token"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let made = w.make_team_tag(json!({ "name": "billing" }), Some(&token)).await?;
+    let team_tag = id(&made.body).to_owned();
+    let in_a = w.get(&format!("{heap_url}/parameters")).await?;
+    let in_b = w.get(&format!("{}/parameters", w.app.heap_url(&w.b).await?)).await?;
+
+    // Assert
+    expect_that!(made.status, eq(StatusCode::CREATED));
+    expect_that!(in_a.body["parameters"][0]["heap_tag_ids"], eq(&json!([team_tag])));
+    expect_that!(in_a.body["parameters"][0]["tag_ids"], eq(&json!([team_tag])));
+    expect_that!(in_a.body["parameters"][0]["team_tag_ids"], eq(&json!([])));
+    expect_that!(in_b.body["parameters"][0]["tag_ids"], eq(&json!([])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_reach_that_changed_is_refused_again_with_a_new_token() -> Result<()> {
     // Arrange
     let w = world().await?;

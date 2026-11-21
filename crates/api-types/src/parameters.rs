@@ -18,6 +18,8 @@ pub enum ParameterActionDto {
     Archive,
     /// A heap parameter: make it the team's, merging the team's same-named heap parameters into it.
     MakeTeam,
+    /// A team parameter in a heap: link the heap's tags to it.
+    LinkTags,
     /// A team parameter in a heap: stop the heap using it.
     StopUsing,
     ViewHistory,
@@ -29,6 +31,7 @@ impl From<ParameterAction> for ParameterActionDto {
             ParameterAction::Edit => Self::Edit,
             ParameterAction::Archive => Self::Archive,
             ParameterAction::MakeTeam => Self::MakeTeam,
+            ParameterAction::LinkTags => Self::LinkTags,
             ParameterAction::StopUsing => Self::StopUsing,
             ParameterAction::ViewHistory => Self::ViewHistory,
         }
@@ -109,8 +112,18 @@ pub struct ParameterDto {
     pub options: Vec<OptionDto>,
     /// Archived options, in the order they were archived.
     pub archived_options: Vec<ArchivedOptionDto>,
-    /// The tags whose items the parameter is suggested for.
+    /// Every tag whose items the parameter is suggested for in this heap: for a team parameter, the team's links
+    /// and the heap's own.
     pub tag_ids: Vec<Uuid>,
+    /// A team parameter's links to the team's tags, which suggest it in every heap that uses it. Empty for a heap
+    /// parameter.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub team_tag_ids: Vec<Uuid>,
+    /// This heap's own links to a team parameter, which suggest it in this heap only. Empty for a heap parameter.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub heap_tag_ids: Vec<Uuid>,
     /// UTC milliseconds; `null` while the parameter is in use.
     pub archived_at: Option<i64>,
     /// Send back in `If-Match` when editing.
@@ -147,7 +160,7 @@ pub struct TeamParameterDto {
     pub options: Vec<OptionDto>,
     /// Archived options, in the order they were archived.
     pub archived_options: Vec<ArchivedOptionDto>,
-    /// Always empty for now.
+    /// The team's tags the parameter is suggested for, in every heap that uses it.
     pub tag_ids: Vec<Uuid>,
     /// UTC milliseconds; `null` while the parameter is in use.
     pub archived_at: Option<i64>,
@@ -256,6 +269,20 @@ pub struct ArchiveOptionDto {
 #[serde(deny_unknown_fields)]
 #[schema(as = LinkTagsRequest)]
 pub struct LinkTagsDto {
-    /// Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all.
+    /// At most 50. Replaces the links: a heap parameter's, with tags of the same heap; a team parameter's, with tags
+    /// of the team; a heap's links to a team parameter, with tags of the heap (its own or its team's). `[]` unlinks
+    /// them all.
     pub tag_ids: Vec<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ChangeHeapTagLinksRequest)]
+pub struct ChangeHeapTagLinksDto {
+    /// Tags of the heap (its own or its team's) to link to the parameter. One linked already stays linked.
+    #[serde(default)]
+    pub link: Vec<Uuid>,
+    /// Tags to unlink from it. One not linked is left as it is. None may also be in `link`.
+    #[serde(default)]
+    pub unlink: Vec<Uuid>,
 }

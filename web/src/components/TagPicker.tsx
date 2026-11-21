@@ -2,26 +2,39 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "rea
 import { Popover } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
-import type { ItemTag } from "../api/schema";
+import type { ItemTag, MergeReach } from "../api/schema";
 import { useMe } from "../api/queries/me";
-import { heapTags, useCreateTagIn, useTags } from "../api/queries/tags";
+import { heapTags, useCreateTagIn, useTags, useTeamTags } from "../api/queries/tags";
+import { madeTeamTag, MergeConfirm } from "../pages/MergeConfirm";
+import { TagProblem } from "../pages/TagSettings";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 import { RequestId } from "./RequestId";
 import { teamName } from "./teamName";
 import { tagChipColor, tagDotColor } from "./tagColor";
 import { TeamMark } from "./TeamMark";
+import { useToast } from "./UndoToast";
 
 const MAX_SUGGESTIONS = 6;
+
+/** Stands in for a heap while the picker lists a team's tags, so the heap's tags are asked for nothing. */
+const NO_HEAP: HeapRef = { team: "", heap: "" };
+
+/** Where the picker's tags come from, and where a new one is made: a heap's own and its team's, or one team's alone. */
+type TagSource = { heapRef: HeapRef; team?: never } | { team: string; heapRef?: never };
 
 /**
  * Picks tags for an item. Typing filters the heap's tags and its team's; Enter adds the highlighted one, or creates a new tag
  * when nothing matches the typed name exactly. Backspace in the empty input removes the last tag.
+ *
+ * With `team` instead of `heapRef`, it lists that team's tags only and the new tag is a team tag. A name that heap tags
+ * of the team have opens the merge confirm first (design/ux.md, Tags); Cancel makes and adds nothing.
  *
  * Unless `inline`, the matches float in a popover under the field, or above it when there's no room below, outside
  * any scrolling panel around the picker, so a dialog's footer never covers them. Focus stays in the input throughout.
  */
 export function TagPicker({
   heapRef,
+  team,
   value,
   onChange,
   disabled,
@@ -29,8 +42,7 @@ export function TagPicker({
   layout = "stack",
   label = <span className="text-xs font-medium text-ink-soft">Tags</span>,
   inputLabel = "Add a tag",
-}: {
-  heapRef: HeapRef;
+}: TagSource & {
   value: ItemTag[];
   onChange: (tags: ItemTag[]) => void;
   disabled?: boolean;
@@ -42,9 +54,15 @@ export function TagPicker({
   /** The input's accessible name, for a page with several pickers, such as "Tags that suggest Plan". */
   inputLabel?: string;
 }) {
-  const tags = useTags(heapRef);
-  const create = useCreateTagIn({ kind: "heap", heap: heapRef });
+  const heapList = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
+  const teamList = useTeamTags(team ?? "", team !== undefined);
+  const create = useCreateTagIn(
+    team !== undefined ? { kind: "team", team } : { kind: "heap", heap: heapRef ?? NO_HEAP },
+  );
   const { data: me } = useMe();
+  const showToast = useToast();
+  // A new team tag's name that heap tags have, and what it would merge, while the merge confirm is open.
+  const [merging, setMerging] = useState<{ name: string; reach: MergeReach } | null>(null);
   const listId = useId();
   const [text, setText] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -56,7 +74,7 @@ export function TagPicker({
   const [placing, setPlacing] = useState(0);
   const fieldRef = useRef<HTMLDivElement>(null);
 
-  const canCreate = tags.data?.allowed_actions.includes("create") ?? false;
+  const canCreate = (team !== undefined ? teamList : heapList).data?.allowed_actions.includes("create") ?? false;
   // While a new tag is being created the chosen tags are frozen, because the new tag is appended to the list as it
   // was when Enter was pressed. The input stays focusable (read-only, not disabled) so typing can resume at once.
   const busy = create.isPending;
@@ -64,7 +82,8 @@ export function TagPicker({
   // Matching typed text against names the client already has is search, which stays on the client.
   const needle = query.toLowerCase();
   const chosen = new Set(value.map((tag) => tag.id));
-  const available = (tags.data ? heapTags(tags.data) : []).filter((tag) => !chosen.has(tag.id));
+  const listed = team !== undefined ? teamList.data?.tags : heapList.data && heapTags(heapList.data);
+  const available = (listed ?? []).filter((tag) => !chosen.has(tag.id));
   const exact = available.find((tag) => tag.name.toLowerCase() === needle);
   // The exact match comes first, so Enter on a full name picks that tag.
   const partial = available.filter((tag) => tag !== exact && tag.name.toLowerCase().includes(needle));
@@ -84,7 +103,16 @@ export function TagPicker({
     if (busy) return;
     // Through the promise rather than `onSuccess`, which is dropped if the picker goes away meanwhile (a phone's
     // sheet closed at once), so the new tag still lands on the item. A failure shows as `create.error`.
-    create.mutateAsync({ body: { name: query } }).then(add, () => {});
+    create.mutateAsync({ body: { name: query } }).then(add, (failure: unknown) => {
+      if (failure instanceof ApiProblem && failure.code === "tag_merge_unconfirmed" && failure.mergeReach) {
+        setMerging({ name: query, reach: failure.mergeReach });
+      }
+    });
+  };
+  // The confirm repeats the create with the reach's token; the tag it makes is added like any new one.
+  const confirmCreate = {
+    ...create,
+    mutateAsync: (variables: Parameters<typeof create.mutateAsync>[0]) => create.mutateAsync(variables).then(add),
   };
 
   const choose = (index: number) => {
@@ -118,14 +146,16 @@ export function TagPicker({
     }
   };
 
-  const team = me?.teams.find((t) => t.slug === heapRef.team);
+  const owner = me?.teams.find((t) => t.slug === (team ?? heapRef?.team));
+  const ownerName = me && owner ? teamName(owner, me) : (team ?? heapRef?.team ?? "");
   const createCode = create.error instanceof ApiProblem ? create.error.code : undefined;
+  // A team's tags take the Tags card's messages, and leave a merge refusal to the confirm.
+  const teamSettings = team !== undefined ? { scope: { kind: "team" as const, team }, teamName: ownerName } : null;
   let createProblem = create.error?.message;
   if (createCode === "tag_name_taken") {
     createProblem = "A tag with that name already exists.";
   } else if (createCode === "tag_name_taken_by_team_tag") {
-    const name = me && team ? teamName(team, me) : heapRef.team;
-    createProblem = `“${query}” is a team tag of ${name}. Use it on items here instead.`;
+    createProblem = `“${query}” is a team tag of ${ownerName}. Use it on items here instead.`;
   }
 
   const optionId = (index: number) => `${listId}-${index}`;
@@ -169,7 +199,7 @@ export function TagPicker({
           }}
           className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
         >
-          Create heap tag “{query}”
+          Create {team !== undefined ? "team" : "heap"} tag “{query}”
         </li>
       )}
     </ul>
@@ -243,14 +273,31 @@ export function TagPicker({
             {list}
           </Popover>
         ))}
-      {create.error && (
-        <>
-          <p role="alert" className="text-xs text-overdue-ink">
-            {createProblem}
-          </p>
-          <RequestId error={create.error} />
-        </>
+      {merging && teamSettings && (
+        <MergeConfirm
+          mutation={confirmCreate}
+          variables={{ body: { name: merging.name } }}
+          act={{ kind: "make", name: merging.name }}
+          reach={merging.reach}
+          description={null}
+          settings={teamSettings}
+          onDone={(confirmed) => {
+            showToast({ message: madeTeamTag(merging.name, confirmed) });
+            setMerging(null);
+          }}
+          onClose={() => setMerging(null)}
+        />
       )}
+      {teamSettings
+        ? !merging && <TagProblem error={create.error} typed={query} settings={teamSettings} />
+        : create.error && (
+            <>
+              <p role="alert" className="text-xs text-overdue-ink">
+                {createProblem}
+              </p>
+              <RequestId error={create.error} />
+            </>
+          )}
     </FieldFrame>
   );
 }

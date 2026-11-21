@@ -360,6 +360,8 @@ pub enum ParameterAction {
     Archive,
     /// A heap parameter: make it the team's, merging the team's same-named heap parameters into it.
     MakeTeam,
+    /// A team parameter in a heap: link the heap's tags to it.
+    LinkTags,
     /// A team parameter in a heap: stop the heap using it. Refused while an open item of the heap has a value for it.
     StopUsing,
     /// Read its history. Parameter changes are shown to those who may make them (see [`audit_permission`]), so this
@@ -377,7 +379,8 @@ pub enum ParameterListAction {
 }
 
 /// What `role` can do with `parameter` in `heap`. Only its history, for those who may configure the heap, once the
-/// parameter or the heap is archived. Making a heap parameter the team's is for admins, like configuring a heap. A team parameter the heap uses is stopped, not edited: it is edited on the team
+/// parameter or the heap is archived. Making a heap parameter the team's is for admins, like configuring a heap. A
+/// team parameter the heap uses is stopped and has the heap's tags linked to it, not edited: it is edited on the team
 /// (see [`allowed_team_parameter_actions`]), and its weight is saved with the heap's other weights.
 pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role) -> Vec<ParameterAction> {
     if !Permission::ConfigureHeap.is_granted_to(role) {
@@ -387,7 +390,11 @@ pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role)
         return vec![ParameterAction::ViewHistory];
     }
     if parameter.is_team_owned() {
-        return vec![ParameterAction::StopUsing, ParameterAction::ViewHistory];
+        return vec![
+            ParameterAction::LinkTags,
+            ParameterAction::StopUsing,
+            ParameterAction::ViewHistory,
+        ];
     }
     vec![
         ParameterAction::Edit,
@@ -681,13 +688,17 @@ mod tests {
     }
 
     #[gtest]
-    fn a_team_parameter_in_a_heap_is_stopped_by_admins_while_both_are_active() {
+    fn a_team_parameter_in_a_heap_is_linked_and_stopped_by_admins_while_both_are_active() {
         let used = parameter(team_owner(), false);
         let stopped = parameter(team_owner(), true);
 
         expect_that!(
             allowed_parameter_actions(&used, &heap(false), Role::Admin),
-            elements_are![eq(&ParameterAction::StopUsing), eq(&ParameterAction::ViewHistory)]
+            elements_are![
+                eq(&ParameterAction::LinkTags),
+                eq(&ParameterAction::StopUsing),
+                eq(&ParameterAction::ViewHistory)
+            ]
         );
         expect_that!(
             allowed_parameter_actions(&stopped, &heap(false), Role::Admin),

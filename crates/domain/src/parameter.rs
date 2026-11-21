@@ -167,8 +167,10 @@ pub struct Parameter {
     pub options: Vec<ParameterOption>,
     /// Archived options, in the order they were archived.
     pub archived_options: Vec<ArchivedOption>,
-    /// The tags whose items the parameter is suggested for.
+    /// The tags whose items the parameter is suggested for: the owner's links. A team parameter's are its team links.
     pub tags: BTreeSet<TagId>,
+    /// For a team parameter as a heap sees it, the heap's own links; empty otherwise.
+    pub heap_tags: BTreeSet<TagId>,
     pub created_at: Timestamp,
     /// `None` while the parameter is in use.
     pub archived_at: Option<Timestamp>,
@@ -222,12 +224,18 @@ impl Parameter {
             options: fields.options,
             archived_options: Vec::new(),
             tags: fields.tags,
+            heap_tags: BTreeSet::new(),
             created_at: now,
             archived_at: None,
             version: Version::INITIAL,
         };
         ensure_labels_unique(&parameter.options)?;
         Ok(parameter)
+    }
+
+    /// Every tag that suggests the parameter where it is read: the owner's links and the heap's own.
+    pub fn suggesting_tags(&self) -> BTreeSet<TagId> {
+        self.tags.union(&self.heap_tags).copied().collect()
     }
 
     pub const fn is_archived(&self) -> bool {

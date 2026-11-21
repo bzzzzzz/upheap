@@ -1347,6 +1347,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Links tags of the heap (its own and its team's) to a team parameter the heap uses, and unlinks others, so the
+         *     parameter is suggested for the linked ones in this heap only, besides the team's links. Admins only. Each tag
+         *     named ends up linked or unlinked, and the others are left alone, so two writes that race don't undo each other:
+         *     it takes no `If-Match`, as `use` and `stop-using` take none. Linking a tag linked already, or unlinking one not
+         *     linked, succeeds; a change that changes nothing writes nothing.
+         */
+        post: operations["link_heap_tags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options": {
         parameters: {
             query?: never;
@@ -1845,6 +1868,26 @@ export interface paths {
          *     send the parameter's `version` in `If-Match`.
          */
         patch: operations["arrange_team_options"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/parameters/{parameter_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Sets the team's tags a team parameter is suggested for, in every heap that uses it. Admins only; send the
+         *     parameter's `version` in `If-Match`.
+         */
+        put: operations["link_team_parameter_tags"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/teams/{team}/tags": {
@@ -2437,6 +2480,12 @@ export interface components {
             /** @description The account's email address, or its username. */
             login: string;
             password: string;
+        };
+        ChangeHeapTagLinksRequest: {
+            /** @description Tags of the heap (its own or its team's) to link to the parameter. One linked already stays linked. */
+            link?: string[];
+            /** @description Tags to unlink from it. One not linked is left as it is. None may also be in `link`. */
+            unlink?: string[];
         };
         /** @description What the signed-in user gives to change their password. */
         ChangePasswordRequest: {
@@ -3482,7 +3531,11 @@ export interface components {
          */
         Kind: "note" | "task" | "reminder";
         LinkTagsRequest: {
-            /** @description Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all. */
+            /**
+             * @description At most 50. Replaces the links: a heap parameter's, with tags of the same heap; a team parameter's, with tags
+             *     of the team; a heap's links to a team parameter, with tags of the heap (its own or its team's). `[]` unlinks
+             *     them all.
+             */
             tag_ids: string[];
         };
         /**
@@ -3767,14 +3820,24 @@ export interface components {
              *     parameter. A team parameter's owner is its team, named by its `team` kind.
              */
             heap_id: string;
+            /** @description This heap's own links to a team parameter, which suggest it in this heap only. Empty for a heap parameter. */
+            heap_tag_ids: string[];
             /** Format: uuid */
             id: string;
             kind: components["schemas"]["ParameterKind"];
             name: string;
             /** @description The options in use, highest priority first. */
             options: components["schemas"]["ParameterOption"][];
-            /** @description The tags whose items the parameter is suggested for. */
+            /**
+             * @description Every tag whose items the parameter is suggested for in this heap: for a team parameter, the team's links
+             *     and the heap's own.
+             */
             tag_ids: string[];
+            /**
+             * @description A team parameter's links to the team's tags, which suggest it in every heap that uses it. Empty for a heap
+             *     parameter.
+             */
+            team_tag_ids: string[];
             /**
              * Format: int32
              * @description Send back in `If-Match` when editing.
@@ -3791,7 +3854,7 @@ export interface components {
          * @description An action the caller can take on a parameter.
          * @enum {string}
          */
-        ParameterAction: "edit" | "archive" | "make_team" | "stop_using" | "view_history";
+        ParameterAction: "edit" | "archive" | "make_team" | "link_tags" | "stop_using" | "view_history";
         /**
          * @description Who owns a parameter.
          * @enum {string}
@@ -4741,7 +4804,7 @@ export interface components {
             name: string;
             /** @description The options in use, highest priority first. */
             options: components["schemas"]["ParameterOption"][];
-            /** @description Always empty for now. */
+            /** @description The team's tags the parameter is suggested for, in every heap that uses it. */
             tag_ids: string[];
             /** Format: uuid */
             team_id: string;
@@ -5134,6 +5197,7 @@ export type BlockedLayout = components['schemas']['BlockedLayout'];
 export type BlockerGone = components['schemas']['BlockerGone'];
 export type BlockerGoneHow = components['schemas']['BlockerGoneHow'];
 export type ChangeConfirmationAddressRequest = components['schemas']['ChangeConfirmationAddressRequest'];
+export type ChangeHeapTagLinksRequest = components['schemas']['ChangeHeapTagLinksRequest'];
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest'];
 export type Claim = components['schemas']['Claim'];
 export type ClaimRequest = components['schemas']['ClaimRequest'];
@@ -9302,6 +9366,76 @@ export interface operations {
             };
         };
     };
+    link_heap_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeHeapTagLinksRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterList"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a team parameter the heap uses */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_archived` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done), each with `field` `link` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     add_option: {
         parameters: {
             query?: never;
@@ -11233,6 +11367,82 @@ export interface operations {
                 };
             };
             /** @description An invalid label, or `options_mismatch` when the list isn't every option in use exactly once */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    link_team_parameter_tags: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkTagsRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_archived` or `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `tag_not_in_team` or `too_many_tags` */
             422: {
                 headers: {
                     [name: string]: unknown;

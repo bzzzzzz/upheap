@@ -333,7 +333,7 @@ async fn a_heap_parameter_becomes_the_teams_and_the_same_named_one_merges_into_i
         expect_that!(parameter.map(|p| p["weight"].clone()), some(eq(&json!(weight))));
         expect_that!(
             parameter.map(|p| p["allowed_actions"].clone()),
-            some(eq(&json!(["stop_using", "view_history"])))
+            some(eq(&json!(["link_tags", "stop_using", "view_history"])))
         );
     }
     // The merged parameter is archived in its heap.

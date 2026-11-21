@@ -284,7 +284,10 @@ async fn the_team_lists_its_parameters_and_a_heap_lists_the_ones_it_uses_among_i
     expect_that!(listed["kind"], eq(&json!("team")));
     expect_that!(listed["heap_id"], eq(&json!(w.first)));
     expect_that!(listed["weight"], eq(&json!(10)));
-    expect_that!(listed["allowed_actions"], eq(&json!(["stop_using", "view_history"])));
+    expect_that!(
+        listed["allowed_actions"],
+        eq(&json!(["link_tags", "stop_using", "view_history"]))
+    );
     expect_that!(used.body["parameters"][0]["kind"], eq(&json!("heap")));
     expect_that!(
         names(&team.body, "parameters"),

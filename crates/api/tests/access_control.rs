@@ -86,6 +86,8 @@ enum Target {
     ParameterToMakeTeam,
     /// A parameter of the shared team with two options, with its version for `If-Match`.
     TeamParameter,
+    /// A parameter of the shared team that the shared heap uses.
+    UsedTeamParameter,
     /// The first option of a new parameter of the shared team.
     TeamParameterOption,
     /// A session of its own, so signing out doesn't end the caller's shared session.
@@ -212,6 +214,8 @@ enum RequestBody {
     ArchiveOption,
     /// No tags.
     LinkTags,
+    /// No tag to link or unlink.
+    ChangeHeapTagLinks,
     /// The user from [`Target::NewUser`].
     AddMember,
     Promote,
@@ -1188,6 +1192,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags",
+            configure,
+            Target::UsedTeamParameter,
+            RequestBody::ChangeHeapTagLinks,
+            StatusCode::OK,
+        ),
+        row(
             Method::GET,
             "/teams/{team}/parameters",
             team(ViewTeam),
@@ -1217,6 +1229,14 @@ fn endpoints() -> Vec<Endpoint> {
             team(ConfigureHeap),
             Target::TeamParameter,
             RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PUT,
+            "/teams/{team}/parameters/{parameter_id}/tags",
+            team(ConfigureHeap),
+            Target::TeamParameter,
+            RequestBody::LinkTags,
             StatusCode::OK,
         ),
         row(
@@ -1948,6 +1968,7 @@ impl World {
             }
             RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
             RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
+            RequestBody::ChangeHeapTagLinks => Some(json!({ "link": [], "unlink": [] })),
             RequestBody::NewPassword => Some(json!({ "password": PASSWORD })),
             RequestBody::ResetRequest => Some(json!({ "email": "ada@example.test" })),
             RequestBody::EmailChange => Some(json!({ "email": "new@example.test", "current_password": PASSWORD })),
@@ -2176,6 +2197,25 @@ impl World {
                 let id = parameter["id"].as_str().context("team parameter has no id")?;
                 path = path.replace("{parameter_id}", id);
                 if_match = Some(parameter["version"].to_string());
+            }
+            Target::UsedTeamParameter => {
+                parameter = self.create_team_parameter().await?;
+                let id = parameter["id"].as_str().context("team parameter has no id")?;
+                path = path.replace("{parameter_id}", id);
+                let used = self
+                    .app
+                    .send(
+                        Method::POST,
+                        &format!("{}/parameters/{id}/use", self.heap_path()),
+                        Some(&self.admin.session),
+                        None,
+                    )
+                    .await?;
+                anyhow::ensure!(
+                    used.status == StatusCode::OK,
+                    "use team parameter failed: {}",
+                    used.body
+                );
             }
             Target::TeamParameterOption => {
                 parameter = self.create_team_parameter().await?;

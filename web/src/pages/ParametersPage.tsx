@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Ellipsis, List, Plus, Users } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
@@ -10,6 +10,7 @@ import type {
   ParameterList,
   ParameterMergeReach,
   ParameterOption,
+  Tag,
   TeamParameter,
 } from "../api/schema";
 import { useMe } from "../api/queries/me";
@@ -18,12 +19,13 @@ import {
   useArchiveParameter,
   useChangeParameter,
   useCreateParameter,
+  useLinkHeapTags,
   useMakeTeamParameter,
   useParameters,
   useSetUsingTeamParameter,
   type ParameterScope,
 } from "../api/queries/parameters";
-import { heapTags, useTags } from "../api/queries/tags";
+import { heapTags, useTags, useTeamTags } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { MenuEntry, MenuPopover } from "../components/Menu";
@@ -368,7 +370,7 @@ export function ParameterCard({ parameter, scope }: { parameter: CardParameter; 
           canEdit={canEdit}
           heapNames={usedBy?.map((heap) => heap.name)}
         />
-        {scope.kind === "heap" && <LinkedTags parameter={parameter} heapRef={scope.heap} canEdit={canEdit} />}
+        <LinkedTags parameter={parameter} scope={scope} canEdit={canEdit} />
       </div>
 
       {(canViewHistory || canArchive || (canStopUsing && scope.kind === "heap")) && (
@@ -773,68 +775,185 @@ function OptionRow({
   );
 }
 
-/** The tags whose items the parameter is suggested for. Each change is saved at once. */
-function LinkedTags({ parameter, heapRef, canEdit }: { parameter: CardParameter; heapRef: HeapRef; canEdit: boolean }) {
+/** What a tag link block needs of the query that changes the links. */
+type LinkSave = { mutate: (tagIds: string[]) => void; isPending: boolean; error: Error | null };
+
+/**
+ * The tags whose items the parameter is suggested for. Each change is saved at once. In a heap, a team parameter
+ * (`kind` team) shows the team's links as chips only the Team page changes, and the heap's own links apart: a picker
+ * for those who may link tags, chips for the rest. On the Team page, the team's links are the picker over the team's
+ * tags alone.
+ */
+function LinkedTags({
+  parameter,
+  scope,
+  canEdit,
+}: {
+  parameter: CardParameter;
+  scope: ParameterScope;
+  canEdit: boolean;
+}) {
+  return scope.kind === "heap" ? (
+    <HeapLinkedTags parameter={parameter} heapRef={scope.heap} canEdit={canEdit} />
+  ) : (
+    <TeamLinkedTags parameter={parameter} team={scope.team} canEdit={canEdit} />
+  );
+}
+
+function HeapLinkedTags({
+  parameter,
+  heapRef,
+  canEdit,
+}: {
+  parameter: CardParameter;
+  heapRef: HeapRef;
+  canEdit: boolean;
+}) {
   const tags = useTags(heapRef);
   const change = useChangeParameter({ kind: "heap", heap: heapRef });
+  const linkHeap = useLinkHeapTags(heapRef);
+  // A team's parameter in a heap carries both kinds of links; the heap's own are the ones this heap changes.
+  const inHeap = "heap_tag_ids" in parameter && parameter.kind === "team" ? parameter : null;
+  const canLink = parameter.allowed_actions.includes("link_tags");
+  const editable = inHeap ? (canLink ? inHeap.heap_tag_ids : null) : canEdit ? parameter.tag_ids : null;
+  const save: LinkSave = inHeap
+    ? {
+        // The heap's links are written per tag: send the difference between the links now and the new ones.
+        mutate: (tagIds) =>
+          linkHeap.mutate({
+            parameterId: parameter.id,
+            link: tagIds.filter((id) => !inHeap.heap_tag_ids.includes(id)),
+            unlink: inHeap.heap_tag_ids.filter((id) => !tagIds.includes(id)),
+          }),
+        isPending: linkHeap.isPending,
+        error: linkHeap.error,
+      }
+    : {
+        mutate: (tagIds) => change.mutate({ parameter, change: { kind: "link_tags", tagIds } }),
+        isPending: change.isPending,
+        error: change.error,
+      };
+  return (
+    <LinkedTagsView
+      parameter={parameter}
+      all={tags.data && heapTags(tags.data)}
+      loadError={tags.isError ? tags.error : null}
+      fixed={editable ? (inHeap?.team_tag_ids ?? []) : parameter.tag_ids}
+      editable={editable}
+      picker={{ heapRef }}
+      save={save}
+      suggests={`Adding one of these tags to an item suggests ${parameter.name}.`}
+    />
+  );
+}
+
+function TeamLinkedTags({ parameter, team, canEdit }: { parameter: CardParameter; team: string; canEdit: boolean }) {
+  const tags = useTeamTags(team);
+  const change = useChangeParameter({ kind: "team", team });
+  return (
+    <LinkedTagsView
+      parameter={parameter}
+      all={tags.data?.tags}
+      loadError={tags.isError ? tags.error : null}
+      fixed={canEdit ? [] : parameter.tag_ids}
+      editable={canEdit ? parameter.tag_ids : null}
+      picker={{ team }}
+      save={{
+        mutate: (tagIds) => change.mutate({ parameter, change: { kind: "link_tags", tagIds } }),
+        isPending: change.isPending,
+        error: change.error,
+      }}
+      suggests={`Adding one of these tags to an item suggests ${parameter.name} in every heap that uses it.`}
+    />
+  );
+}
+
+/**
+ * The block: the heading, the chips nobody here changes (`fixed`), and for those who can, the picker over `editable`.
+ * `suggests` is the line under it while any tag suggests the parameter.
+ */
+function LinkedTagsView({
+  parameter,
+  all,
+  loadError,
+  fixed,
+  editable,
+  picker,
+  save,
+  suggests,
+}: {
+  parameter: CardParameter;
+  all: Tag[] | undefined;
+  loadError: Error | null;
+  fixed: string[];
+  editable: string[] | null;
+  picker: { heapRef: HeapRef } | { team: string };
+  save: LinkSave;
+  suggests: string;
+}) {
   const heading = <h4 className={labelClass}>Suggested by tags</h4>;
+  const wrap = (children: ReactNode) => <div className="min-w-0 sm:flex-[1_1_220px]">{children}</div>;
 
   // Until the tags load, the linked ones can't be named, and a pick would replace the links rather than add to them.
-  if (!tags.data) {
-    if (!canEdit && parameter.tag_ids.length === 0) return null;
-    return (
-      <div className="min-w-0 sm:flex-[1_1_220px]">
+  if (!all) {
+    if (!editable && fixed.length === 0) return null;
+    return wrap(
+      <>
         {heading}
-        {tags.isError ? (
-          <ProblemText error={tags.error} className={`${problemClass} mt-1.5`} />
+        {loadError ? (
+          <ProblemText error={loadError} className={`${problemClass} mt-1.5`} />
         ) : (
           <p className="mt-1.5 text-sm text-muted">Loading tags…</p>
         )}
-      </div>
+      </>,
     );
   }
-  const linked: ItemTag[] = heapTags(tags.data)
-    .filter((tag) => parameter.tag_ids.includes(tag.id))
-    .map((tag) => ({ id: tag.id, name: tag.name, color: tag.color }));
+  const named = (ids: string[]): ItemTag[] =>
+    all.filter((tag) => ids.includes(tag.id)).map((tag) => ({ id: tag.id, name: tag.name, color: tag.color }));
+  const chips = named(fixed);
+  const chipList = chips.length > 0 && (
+    <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Suggested by tags">
+      {chips.map((tag) => (
+        <li
+          key={tag.id}
+          className={`inline-flex h-[26px] items-center rounded-full border bg-transparent px-2.5 text-[13px] font-medium ${tagChipColor(tag.color)}`}
+        >
+          {tag.name}
+        </li>
+      ))}
+    </ul>
+  );
 
-  if (!canEdit) {
-    if (linked.length === 0) return null;
-    return (
-      <div className="min-w-0 sm:flex-[1_1_220px]">
+  if (!editable) {
+    if (chips.length === 0) return null;
+    return wrap(
+      <>
         {heading}
-        <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Suggested by tags">
-          {linked.map((tag) => (
-            <li
-              key={tag.id}
-              className={`inline-flex h-[26px] items-center rounded-full border bg-transparent px-2.5 text-[13px] font-medium ${tagChipColor(tag.color)}`}
-            >
-              {tag.name}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 text-[13px]/[1.45] text-muted">
-          Adding one of these tags to an item suggests {parameter.name}.
-        </p>
-      </div>
+        {chipList}
+        <p className="mt-2 text-[13px]/[1.45] text-muted">{suggests}</p>
+      </>,
     );
   }
-  return (
-    <div className="min-w-0 sm:flex-[1_1_220px]">
+  return wrap(
+    <>
       <TagPicker
-        heapRef={heapRef}
-        value={linked}
-        disabled={change.isPending}
-        label={heading}
+        {...picker}
+        value={named(editable)}
+        disabled={save.isPending}
+        label={
+          <>
+            {heading}
+            {chipList}
+          </>
+        }
         inputLabel={`Tags that suggest ${parameter.name}`}
-        onChange={(next) => change.mutate({ parameter, change: { kind: "link_tags", tagIds: next.map((t) => t.id) } })}
+        onChange={(next) => save.mutate(next.map((t) => t.id))}
       />
       <p className="mt-2 text-[13px]/[1.45] text-muted">
-        {parameter.tag_ids.length > 0
-          ? `Adding one of these tags to an item suggests ${parameter.name}.`
-          : `No tags suggest ${parameter.name} yet.`}
+        {parameter.tag_ids.length > 0 ? suggests : `No tags suggest ${parameter.name} yet.`}
       </p>
-      <ProblemText error={change.error} className={problemClass} />
-    </div>
+      <ProblemText error={save.error} className={problemClass} />
+    </>,
   );
 }
 

@@ -9,6 +9,7 @@ import {
   expect,
   fieldButton,
   goTo,
+  heapTagOnNewItem,
   itemPane,
   moreEntry,
   openItem,
@@ -228,18 +229,6 @@ test("the team tags path: made once, used in two heaps, renamed, moved, and heap
   await addItem(page, "Reconcile the accounts");
   await tagWith(page, "Reconcile the accounts", "bill", "billing");
 });
-
-/** In the heap at `path`, makes the heap tag `name` through the item's Tags field and puts it on a new item `title`. */
-async function heapTagOnNewItem(page: Page, path: string, title: string, name: string) {
-  await page.goto(path);
-  await addItem(page, title);
-  await openItem(page, title);
-  await fieldButton(page, "Tags").click();
-  await itemPane(page).getByRole("combobox", { name: "Add a tag" }).fill(name);
-  await page.getByRole("option", { name: `Create heap tag “${name}”` }).click();
-  await expect(itemPane(page).getByRole("button", { name: `Remove tag ${name}` })).toBeVisible();
-  await closeItem(page);
-}
 
 test("a heap tag is made a team tag after the merge is confirmed, and both heaps' items carry it", async ({
   page,
