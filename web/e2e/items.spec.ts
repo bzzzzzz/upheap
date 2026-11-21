@@ -72,6 +72,15 @@ test("the item opens over the list, saves each change, and Back closes it", asyn
   const historyRegion = pane.getByRole("region", { name: "History" });
   await expect(historyRegion).toContainText("Added by you today");
   await expect(historyRegion).not.toContainText("You added item");
+  // A phone repeats it as the last of the fields, as plain text; wider screens don't.
+  const fields = pane.getByRole("region", { name: "Fields" });
+  if (isPhone(page)) {
+    await expect(fields.getByRole("definition").last()).toHaveText("You · today");
+    await expect(fields.getByRole("term").last()).toHaveText("Added");
+    await expect(fields.getByRole("button", { name: /^Added/ })).toHaveCount(0);
+  } else {
+    await expect(fields.getByRole("term").filter({ hasText: "Added" })).toHaveCount(0);
+  }
   const history = await openHistory(page);
   await expect(history).toContainText("In progress");
   // The user's own changes read as theirs.
