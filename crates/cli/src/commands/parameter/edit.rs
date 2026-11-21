@@ -1,23 +1,30 @@
 //! `upheap parameter edit <parameter>`: change a parameter's name, weight, tags or option order; with `--team`, a team
-//! parameter's name or option order.
+//! parameter's name, tags or option order. In a heap, `--tag` and `--untag` alone also change which of the heap's
+//! tags suggest a team parameter the heap uses.
 //!
 //! The API has one endpoint for each kind of change, so this makes one write per kind, in a fixed order, each at the
 //! version the last one returned. A failure after the first write leaves the earlier ones saved, and says which.
 
 use api_types::parameters::{
-    ArrangeOptionsDto, LinkTagsDto, OptionDto, ParameterDto, ParameterListDto, ParameterPatchDto, TeamParameterDto,
-    TeamParameterListDto, TeamParameterPatchDto,
+    ArrangeOptionsDto, LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto, ParameterPatchDto,
+    TeamParameterDto, TeamParameterListDto, TeamParameterPatchDto,
 };
-use api_types::tags::TagListDto;
-use clap::Args;
+use api_types::tags::{TagListDto, TeamTagListDto};
+use std::collections::BTreeSet;
 
-use super::{arrangement, describe_weight_flag, find_own_parameter, weight_parser};
+use clap::Args;
+use uuid::Uuid;
+
+use super::{arrangement, describe_weight_flag, ensure_own, weight_parser};
 use crate::client::{Fetched, NO_QUERY};
 use crate::commands::heap_api::{HeapApi, TeamApi, named_heap, resolve_heap_handle};
 use crate::commands::item::common::merge_tag_ids;
 use crate::commands::{HeapArgs, SharedArgs, UsageError};
 use crate::config::SettingError;
-use crate::lookup::{LookupError, find_option, find_team_option, find_team_parameter, resolve_tags};
+use crate::lookup::{
+    HeapHandle, LookupError, find_option, find_parameter, find_team_option, find_team_parameter, find_team_tag,
+    resolve_tags,
+};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -31,11 +38,13 @@ pub struct EditArgs {
     pub name: Option<String>,
     #[arg(long, value_name = "N", value_parser = weight_parser(), help = describe_weight_flag(), conflicts_with = "team")]
     pub weight: Option<u8>,
-    /// Suggest the parameter for a tag of the heap, by name or ID. Repeat for more
-    #[arg(long, value_name = "NAME", conflicts_with = "team")]
+    /// Suggest the parameter for a tag, by name or ID. Repeat for more. For a parameter of the heap or of its team,
+    /// a tag of the heap; for a team parameter the heap uses, only in this heap. With --team, a tag of the team,
+    /// in every heap that uses it
+    #[arg(long, value_name = "NAME")]
     pub tag: Vec<String>,
-    /// Stop suggesting it for a tag, by name or ID. Repeat for more
-    #[arg(long, value_name = "NAME", conflicts_with = "team")]
+    /// Stop suggesting it for a tag, by name or ID. Repeat for more. As --tag, for the same links
+    #[arg(long, value_name = "NAME")]
     pub untag: Vec<String>,
     /// Every option of the parameter, highest priority first, by label or ID, separated by commas. An option whose
     /// label has a comma is named by its ID, which `parameter list --json` shows
@@ -52,6 +61,14 @@ pub struct EditArgs {
 }
 
 impl EditArgs {
+    /// Whether `--tag` or `--untag` is given and nothing else is.
+    fn only_tags(&self) -> bool {
+        (!self.tag.is_empty() || !self.untag.is_empty())
+            && self.name.is_none()
+            && self.weight.is_none()
+            && self.order.is_empty()
+    }
+
     /// Whether any change flag is given.
     fn has_changes(&self) -> bool {
         self.name.is_some()
@@ -178,20 +195,23 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         heap: &heap,
     };
     let list = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;
-    let parameter = find_own_parameter(&args.parameter, &list.value, &heap)?;
+    let parameter = find_parameter(&args.parameter, &list.value, &heap)?;
+    if parameter.kind == ParameterKindDto::Team && args.only_tags() {
+        return edit_heap_links(&args, parameter, &heap, &api, out).await;
+    }
+    let parameter = ensure_own(parameter, &heap)?;
     let tag_ids = if args.tag.is_empty() && args.untag.is_empty() {
         None
     } else {
         let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
         let added = resolve_tags(&args.tag, &tags.value, &heap).map_err(LookupError::offering_add)?;
         let removed = resolve_tags(&args.untag, &tags.value, &heap)?;
-        if let Some(position) = added.iter().position(|id| removed.contains(id)) {
-            return Err(UsageError::TagAndUntag {
-                name: args.tag.get(position).cloned().unwrap_or_default(),
-            }
-            .into());
-        }
-        Some(merge_tag_ids(parameter.tag_ids.iter().copied(), added, &removed))
+        Some(changed_links(
+            &args,
+            parameter.tag_ids.iter().copied(),
+            added,
+            &removed,
+        )?)
     };
     let order = if args.order.is_empty() {
         None
@@ -285,11 +305,53 @@ fn check_order<'p>(
     Ok(ordered)
 }
 
-/// The edit of a team parameter: its name, then its option order, each its own write at the version the last one
-/// returned, as for a heap's. The rest of the flags can't go with `--team`, which clap checks.
+/// One write of a team parameter's edit, with the body it sends.
+enum TeamWrite {
+    Name(TeamParameterPatchDto),
+    Tags(LinkTagsDto),
+    Order(ArrangeOptionsDto),
+}
+
+impl TeamWrite {
+    fn part(&self) -> Part {
+        match self {
+            Self::Name(_) => Part::Details {
+                name: true,
+                weight: false,
+            },
+            Self::Tags(_) => Part::Tags,
+            Self::Order(_) => Part::Order,
+        }
+    }
+
+    /// Sends the write for the team parameter `id`, which is at `version`.
+    async fn send(&self, api: &TeamApi<'_>, id: &str, version: u32) -> Result<Fetched<TeamParameterDto>, CliError> {
+        Ok(match self {
+            Self::Name(body) => api.patch(&["parameters", id], version, body).await?,
+            Self::Tags(body) => api.put(&["parameters", id, "tags"], version, body).await?,
+            Self::Order(body) => api.patch(&["parameters", id, "options"], version, body).await?,
+        })
+    }
+}
+
+/// The edit of a team parameter: its name, then its tags, then its option order, each its own write at the version
+/// the last one returned, as for a heap's. The weight can't go with `--team`, which clap checks.
 async fn edit_team_parameter(args: &EditArgs, team: &str, api: &TeamApi<'_>, out: &mut Output) -> Result<(), CliError> {
     let list = api.get::<TeamParameterListDto>(&["parameters"]).await?;
     let parameter = find_team_parameter(&args.parameter, &list.value, team)?;
+    let tag_ids = if args.tag.is_empty() && args.untag.is_empty() {
+        None
+    } else {
+        let tags = api.get::<TeamTagListDto>(&["tags"]).await?;
+        let find = |names: &[String]| -> Result<Vec<Uuid>, LookupError> {
+            names
+                .iter()
+                .map(|name| find_team_tag(name, &tags.value, team).map(|tag| tag.id))
+                .collect()
+        };
+        let (added, removed) = (find(&args.tag)?, find(&args.untag)?);
+        Some(changed_links(args, parameter.tag_ids.iter().copied(), added, &removed)?)
+    };
     let order = if args.order.is_empty() {
         None
     } else {
@@ -298,37 +360,21 @@ async fn edit_team_parameter(args: &EditArgs, team: &str, api: &TeamApi<'_>, out
         })?;
         Some(arrangement(&ordered, None))
     };
-    let details = args
-        .name
-        .as_ref()
-        .map(|name| TeamParameterPatchDto { name: name.clone() });
+    let mut writes = Vec::new();
+    writes.extend(
+        args.name
+            .clone()
+            .map(|name| TeamWrite::Name(TeamParameterPatchDto { name })),
+    );
+    writes.extend(tag_ids.map(|tag_ids| TeamWrite::Tags(LinkTagsDto { tag_ids })));
+    writes.extend(order.map(TeamWrite::Order));
+
     let id = parameter.id.to_string();
     let mut latest: Option<Fetched<TeamParameterDto>> = None;
     let mut saved = Vec::new();
-    let name_part = Part::Details {
-        name: true,
-        weight: false,
-    };
-    let left_after = |done: usize| -> Vec<Part> {
-        [details.as_ref().map(|_| name_part), order.as_ref().map(|_| Part::Order)]
-            .into_iter()
-            .flatten()
-            .skip(done)
-            .collect()
-    };
-    if let Some(body) = &details {
-        latest = Some(
-            api.patch::<TeamParameterDto>(&["parameters", &id], parameter.version, body)
-                .await?,
-        );
-        saved.push(name_part);
-    }
-    if let Some(body) = &order {
+    for (index, write) in writes.iter().enumerate() {
         let version = latest.as_ref().map_or(parameter.version, |last| last.value.version);
-        match api
-            .patch::<TeamParameterDto>(&["parameters", &id, "options"], version, body)
-            .await
-        {
+        match write.send(api, &id, version).await {
             Ok(done) => latest = Some(done),
             Err(err) => {
                 if out.mode() == Mode::Json {
@@ -337,13 +383,15 @@ async fn edit_team_parameter(args: &EditArgs, team: &str, api: &TeamApi<'_>, out
                     }
                 } else {
                     let current = latest.as_ref().map_or(&parameter.name, |last| &last.value.name);
-                    if let Some(note) = partial_note(current, &saved, &left_after(saved.len())) {
+                    let left: Vec<Part> = writes[index..].iter().map(TeamWrite::part).collect();
+                    if let Some(note) = partial_note(current, &saved, &left) {
                         out.note(&note)?;
                     }
                 }
-                return Err(err.into());
+                return Err(err);
             }
         }
+        saved.push(write.part());
     }
     let Some(edited) = latest else {
         return Ok(());
@@ -364,6 +412,64 @@ async fn edit_team_parameter(args: &EditArgs, team: &str, api: &TeamApi<'_>, out
         ))?,
     }
     Ok(())
+}
+
+/// The edit of the heap's own links to a team parameter it uses: its tags, which suggest the parameter in this heap
+/// only. The heap's links have no version, so the write says what they end up as, and the tag sets tell whether
+/// anything changed. `--json` prints the heap's parameters as the server answers.
+async fn edit_heap_links(
+    args: &EditArgs,
+    parameter: &ParameterDto,
+    heap: &HeapHandle,
+    api: &HeapApi<'_>,
+    out: &mut Output,
+) -> Result<(), CliError> {
+    let tags = api.get::<TagListDto>(&["tags"], NO_QUERY).await?;
+    let added = resolve_tags(&args.tag, &tags.value, heap).map_err(LookupError::offering_add)?;
+    let removed = resolve_tags(&args.untag, &tags.value, heap)?;
+    let tag_ids = changed_links(args, parameter.heap_tag_ids.iter().copied(), added, &removed)?;
+    let id = parameter.id.to_string();
+    let done = api
+        .put_declared::<ParameterListDto>(&["parameters", &id, "heap-tags"], &LinkTagsDto { tag_ids })
+        .await?;
+    match out.mode() {
+        Mode::Json => out.json(&done.body)?,
+        Mode::Quiet => {}
+        Mode::Human => {
+            let before: BTreeSet<Uuid> = parameter.heap_tag_ids.iter().copied().collect();
+            let after: BTreeSet<Uuid> = find_parameter(&id, &done.value, heap)?
+                .heap_tag_ids
+                .iter()
+                .copied()
+                .collect();
+            if before == after {
+                out.line(&format!("No change to team parameter \"{}\".", parameter.name))?;
+            } else {
+                out.line(&format!(
+                    "Updated the tags of team parameter \"{}\" in this heap.",
+                    parameter.name
+                ))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The tag IDs `current` with `added` in and `removed` out, for the links `--tag` and `--untag` change. A tag both
+/// added and removed is a usage error.
+fn changed_links(
+    args: &EditArgs,
+    current: impl IntoIterator<Item = Uuid>,
+    added: Vec<Uuid>,
+    removed: &[Uuid],
+) -> Result<Vec<Uuid>, CliError> {
+    if let Some(position) = added.iter().position(|id| removed.contains(id)) {
+        return Err(UsageError::TagAndUntag {
+            name: args.tag.get(position).cloned().unwrap_or_default(),
+        }
+        .into());
+    }
+    Ok(merge_tag_ids(current, added, removed))
 }
 
 /// What to tell on stderr when a write failed after others were saved: what was saved, what wasn't, and the flags

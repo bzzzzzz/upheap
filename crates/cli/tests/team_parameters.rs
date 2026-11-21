@@ -171,6 +171,63 @@ async fn flags_for_a_heap_parameter_are_refused_with_team_before_any_request() -
 
 #[gtest]
 #[tokio::test]
+async fn a_team_parameter_is_linked_to_team_tags_and_a_heap_links_its_own_tags() -> Result<()> {
+    // Arrange: a team parameter in use in the heap, a team tag and a heap tag.
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+    for command in [
+        &["parameter", "add", "Tier", "--team", "ada"][..],
+        &["parameter", "use", "Tier"],
+        &["tag", "add", "billing", "--team", "ada"],
+        &["tag", "add", "support"],
+    ] {
+        let done = cli.run(command).await;
+        assert!(done.exited(0), "{command:?}: {}", done.stderr);
+    }
+    let parameter = async |cli: &common::TestCli| -> Result<Value> {
+        let listed: Value = serde_json::from_str(&cli.run(&["parameter", "list", "--json"]).await.stdout)?;
+        Ok(listed["parameters"][0].clone())
+    };
+
+    // Act
+    let team_linked = cli
+        .run(&["parameter", "edit", "Tier", "--team", "ada", "--tag", "billing"])
+        .await;
+    let heap_linked = cli.run(&["parameter", "edit", "Tier", "--tag", "support"]).await;
+    let repeated = cli.run(&["parameter", "edit", "Tier", "--tag", "support"]).await;
+    let both = parameter(&cli).await?;
+    let heap_unlinked = cli.run(&["parameter", "edit", "Tier", "--untag", "support"]).await;
+    let team_unlinked = cli
+        .run(&["parameter", "edit", "Tier", "--team", "ada", "--untag", "billing"])
+        .await;
+    let none = parameter(&cli).await?;
+    let renamed = cli
+        .run(&["parameter", "edit", "Tier", "--tag", "support", "--name", "Level"])
+        .await;
+
+    // Assert
+    expect_that!(
+        team_linked.stdout,
+        eq("Updated team parameter \"Tier\" in every heap of ada.\n")
+    );
+    expect_that!(
+        heap_linked.stdout,
+        eq("Updated the tags of team parameter \"Tier\" in this heap.\n")
+    );
+    expect_that!(repeated.stdout, eq("No change to team parameter \"Tier\".\n"));
+    expect_that!(both["tag_ids"].as_array().map(Vec::len), some(eq(2)));
+    expect_that!(both["team_tag_ids"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(both["heap_tag_ids"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(heap_unlinked.exited(0), eq(true));
+    expect_that!(team_unlinked.exited(0), eq(true));
+    expect_that!(none["tag_ids"], eq(&json!([])));
+    expect_that!(renamed.exited(2), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn promoting_a_heap_parameter_prints_the_reach_and_goes_ahead_when_confirmed() -> Result<()> {
     // Arrange: Tier in A (the default heap) and in B, linked to nothing, with an item in each.
     let server = TestServer::start().await?;
