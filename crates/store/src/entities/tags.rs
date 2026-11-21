@@ -11,6 +11,8 @@ pub struct Model {
     pub name: String,
     pub name_key: String,
     pub description: Option<String>,
+    /// A code of `domain::tag::TagColor`.
+    pub color: String,
     /// The team tag a merged heap tag was merged into; `NULL` for a tag in use.
     pub merged_into: Option<String>,
     pub created_at: i64,

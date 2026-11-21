@@ -20,6 +20,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::comments::CommentDto;
+use crate::tags::TagColorDto;
 use crate::turns::{AgentStateDto, GoalDto, TurnDto};
 use crate::work::ItemRunDto;
 
@@ -610,6 +611,10 @@ impl From<StepProgress> for StepProgressDto {
 pub struct ItemTagDto {
     pub id: Uuid,
     pub name: String,
+    // Defaults so this client reads a server older than tag colours, which leaves it out.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub color: TagColorDto,
 }
 
 impl From<&Tag> for ItemTagDto {
@@ -617,6 +622,7 @@ impl From<&Tag> for ItemTagDto {
         Self {
             id: *tag.id.as_uuid(),
             name: tag.name.as_str().to_owned(),
+            color: tag.color.into(),
         }
     }
 }

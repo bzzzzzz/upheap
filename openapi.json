@@ -11579,6 +11579,17 @@
           "name"
         ],
         "properties": {
+          "color": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TagColor",
+                "description": "Left out, the server picks the least used colour of the tags the new tag will sit among."
+              }
+            ]
+          },
           "description": {
             "type": [
               "string",
@@ -13420,9 +13431,13 @@
         "description": "A tag on an item: enough to show it.",
         "required": [
           "id",
-          "name"
+          "name",
+          "color"
         ],
         "properties": {
+          "color": {
+            "$ref": "#/components/schemas/TagColor"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -16193,6 +16208,7 @@
           "id",
           "kind",
           "name",
+          "color",
           "version",
           "allowed_actions"
         ],
@@ -16202,6 +16218,9 @@
             "items": {
               "$ref": "#/components/schemas/TagAction"
             }
+          },
+          "color": {
+            "$ref": "#/components/schemas/TagColor"
           },
           "description": {
             "type": [
@@ -16240,6 +16259,20 @@
         "description": "An action the caller can take on a tag.",
         "enum": [
           "edit"
+        ]
+      },
+      "TagColor": {
+        "type": "string",
+        "description": "A tag's colour, one of a fixed palette, in the order a colour is picked in.",
+        "enum": [
+          "blue",
+          "sky",
+          "teal",
+          "green",
+          "lime",
+          "rose",
+          "pink",
+          "grey"
         ]
       },
       "TagKind": {
@@ -16295,6 +16328,10 @@
         "type": "object",
         "description": "A partial edit. Leave a field out to keep it; send `null` to clear the description.",
         "properties": {
+          "color": {
+            "$ref": "#/components/schemas/TagColor",
+            "description": "The colour can be changed but not cleared; `null` is refused."
+          },
           "description": {
             "type": [
               "string",

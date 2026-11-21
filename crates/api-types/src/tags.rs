@@ -2,12 +2,13 @@
 
 use domain::ValidationError;
 use domain::permission::{TagAction, TagListAction};
-use domain::tag::{NewTag, TagDescription, TagName, TagPatch};
+use domain::tag::{NewTag, TagColor, TagDescription, TagName, TagPatch};
+use domain::validation::Field;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::common::{HeapSummaryDto, double_option};
+use crate::common::{HeapSummaryDto, double_option, never_null};
 
 /// An action the caller can take on a tag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -58,6 +59,61 @@ pub enum TagKindDto {
     Unknown,
 }
 
+/// A tag's colour, one of a fixed palette, in the order a colour is picked in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = TagColor)]
+pub enum TagColorDto {
+    Blue,
+    Sky,
+    Teal,
+    Green,
+    Lime,
+    Rose,
+    Pink,
+    // The default, for a server older than tag colours, which leaves the colour out.
+    #[default]
+    Grey,
+    /// A colour this client doesn't know: one the server added later. Only read, never sent, so it isn't in the
+    /// API's schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<TagColor> for TagColorDto {
+    fn from(color: TagColor) -> Self {
+        match color {
+            TagColor::Blue => Self::Blue,
+            TagColor::Sky => Self::Sky,
+            TagColor::Teal => Self::Teal,
+            TagColor::Green => Self::Green,
+            TagColor::Lime => Self::Lime,
+            TagColor::Rose => Self::Rose,
+            TagColor::Pink => Self::Pink,
+            TagColor::Grey => Self::Grey,
+        }
+    }
+}
+
+impl TryFrom<TagColorDto> for TagColor {
+    type Error = ValidationError;
+
+    /// Fails on a colour this server doesn't know, which a request can carry.
+    fn try_from(color: TagColorDto) -> Result<Self, Self::Error> {
+        match color {
+            TagColorDto::Blue => Ok(Self::Blue),
+            TagColorDto::Sky => Ok(Self::Sky),
+            TagColorDto::Teal => Ok(Self::Teal),
+            TagColorDto::Green => Ok(Self::Green),
+            TagColorDto::Lime => Ok(Self::Lime),
+            TagColorDto::Rose => Ok(Self::Rose),
+            TagColorDto::Pink => Ok(Self::Pink),
+            TagColorDto::Grey => Ok(Self::Grey),
+            TagColorDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Color }),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = Tag)]
 pub struct TagDto {
@@ -70,6 +126,10 @@ pub struct TagDto {
     pub heap_id: Option<Uuid>,
     pub name: String,
     pub description: Option<String>,
+    // Defaults so this client reads a server older than tag colours, which leaves it out.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub color: TagColorDto,
     /// Send back in `If-Match` when editing.
     pub version: u32,
     #[serde(deserialize_with = "crate::common::known_values")]
@@ -108,6 +168,9 @@ pub struct CreateTagDto {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Left out, the server picks the least used colour of the tags the new tag will sit among.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<TagColorDto>,
 }
 
 impl CreateTagDto {
@@ -121,6 +184,7 @@ impl CreateTagDto {
                 .map(TagDescription::parse)
                 .transpose()?
                 .flatten(),
+            color: self.color.map(TagColor::try_from).transpose()?,
         })
     }
 }
@@ -134,6 +198,10 @@ pub struct TagPatchDto {
     #[serde(default, deserialize_with = "double_option", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>, nullable)]
     pub description: Option<Option<String>>,
+    /// The colour can be changed but not cleared; `null` is refused.
+    #[serde(default, deserialize_with = "never_null", skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = TagColorDto, required = false)]
+    pub color: Option<TagColorDto>,
 }
 
 impl TagPatchDto {
@@ -146,6 +214,7 @@ impl TagPatchDto {
                 Some(None) => Some(None),
                 Some(Some(raw)) => Some(TagDescription::parse(raw)?),
             },
+            color: self.color.map(TagColor::try_from).transpose()?,
         })
     }
 }
@@ -176,9 +245,44 @@ mod tests {
         let tag = CreateTagDto {
             name: "Ops".to_owned(),
             description: None,
+            color: None,
+        };
+        let coloured = CreateTagDto {
+            color: Some(TagColorDto::Rose),
+            ..tag
         };
 
-        verify_that!(serde_json::to_string(&tag)?, eq(r#"{"name":"Ops"}"#))
+        verify_that!(
+            serde_json::to_string(&coloured)?,
+            eq(r#"{"name":"Ops","color":"rose"}"#)
+        )
+    }
+
+    #[gtest]
+    fn a_tag_without_a_colour_reads_as_grey_and_an_unknown_colour_as_unknown() -> googletest::Result<()> {
+        let older = r#"{"id": "00000000-0000-0000-0000-000000000003", "heap_id": null, "name": "infra",
+                        "description": null, "version": 1, "allowed_actions": []}"#;
+        let newer = older.replace(r#""name""#, r#""color": "mauve", "name""#);
+
+        let older: TagDto = serde_json::from_str(older)?;
+        let newer: TagDto = serde_json::from_str(&newer)?;
+
+        expect_that!(older.color, eq(TagColorDto::Grey));
+        expect_that!(newer.color, eq(TagColorDto::Unknown));
+        Ok(())
+    }
+
+    #[gtest]
+    fn a_request_naming_an_unknown_colour_is_refused() {
+        let patch = TagPatchDto {
+            color: Some(TagColorDto::Unknown),
+            ..TagPatchDto::default()
+        };
+
+        expect_that!(
+            patch.to_patch(),
+            err(eq(&ValidationError::ValueUnknown { field: Field::Color }))
+        );
     }
 
     #[gtest]

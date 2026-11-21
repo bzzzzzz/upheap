@@ -76,11 +76,11 @@ async fn the_team_tags_path_steps_1_to_7() -> Result<()> {
     expect_that!(made.exited(0), eq(true));
     expect_that!(made.stdout, eq("Added team tag \"security\" to ada.\n"));
     let team_list = cli.run(&["tag", "list", "--team", "ada"]).await;
-    expect_that!(team_list.stdout, eq("security\n  Security work\n"));
+    expect_that!(team_list.stdout, eq("security  blue\n  Security work\n"));
 
     // Step 2: heap A lists it marked, and an item there takes it by name.
     let in_a = cli.run(&["tag", "list"]).await;
-    expect_that!(in_a.stdout, eq("security  team\n  Security work\n"));
+    expect_that!(in_a.stdout, eq("security  blue  team\n  Security work\n"));
     let a_item = add_item(&cli, HEAP, "Audit the logins", "security").await?;
 
     // Step 3: in B, another item takes it.
@@ -135,6 +135,12 @@ async fn the_team_tags_path_steps_1_to_7() -> Result<()> {
     expect_that!(body["code"], eq("tag_merge_unconfirmed"));
     expect_that!(body["merge_reach"]["heaps"].as_array().map(Vec::len), some(eq(2)));
 
+    let before: Value = serde_json::from_str(&cli.run(&["tag", "list", "--json"]).await.stdout)?;
+    let heap_color = before["tags"]
+        .as_array()
+        .and_then(|tags| tags.iter().find(|tag| tag["name"] == "billing"))
+        .map(|tag| tag["color"].clone());
+
     let command = confirming_command(&refused.stderr)?;
     let command: Vec<&str> = command.iter().map(String::as_str).collect();
     let promoted = cli.run(&command).await;
@@ -157,6 +163,13 @@ async fn the_team_tags_path_steps_1_to_7() -> Result<()> {
             .map(|tags| tags.iter().any(|tag| tag["name"] == "billing")),
         some(eq(false))
     );
+    // The team tag keeps the colour the promoted heap tag had.
+    let team_color = listed["team_tags"]
+        .as_array()
+        .and_then(|tags| tags.iter().find(|tag| tag["name"] == "billing"))
+        .map(|tag| tag["color"].clone());
+    expect_that!(team_color.is_some(), eq(true));
+    expect_that!(team_color, eq(&heap_color));
     for heap in [HEAP, "ada/beta"] {
         let by_tag = cli
             .run(&["item", "list", "--tag", "billing", "--heap", heap, "-q"])

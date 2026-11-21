@@ -83,7 +83,7 @@ mod tests {
 
     use super::*;
     use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, ParameterOwner, Weight};
-    use crate::tag::{NewTag, TagName, TagOwner};
+    use crate::tag::{NewTag, TagColor, TagName, TagOwner};
     use crate::{HeapId, Timestamp};
 
     fn tag(n: u128, name: &str) -> Tag {
@@ -93,7 +93,9 @@ mod tests {
             NewTag {
                 name: TagName::parse(name).expect("valid"),
                 description: None,
+                color: None,
             },
+            TagColor::Blue,
             Timestamp::EPOCH,
         )
     }

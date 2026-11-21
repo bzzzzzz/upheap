@@ -16,6 +16,7 @@ import { useParameters } from "../api/queries/parameters";
 import { heapTags, useTags } from "../api/queries/tags";
 import { compactButtonClass } from "../components/buttons";
 import { MenuEntry, MenuPopover } from "../components/Menu";
+import { tagChipColor } from "../components/tagColor";
 import { TeamMark } from "../components/TeamMark";
 import { useFocusAfterRender } from "../components/useFocusAfterRender";
 import { ProblemText } from "../components/ProblemText";
@@ -519,7 +520,9 @@ function TagOrder({
             {ranked.map((tag, index) => (
               <li key={tag.id} className="flex min-h-9 items-center gap-2 max-sm:min-h-11">
                 <span className={rankClass}>{index + 1}</span>
-                <span className="rounded-md bg-sunken px-1.5 text-[13px] text-ink-soft">{tag.name}</span>
+                <span className={`rounded-md border bg-transparent px-1.5 text-[13px] ${tagChipColor(tag.color)}`}>
+                  {tag.name}
+                </span>
                 <span className="text-xs text-muted">{tagEffect(index, ranked.length)}</span>
                 <span className="flex-1" />
                 {editable && (

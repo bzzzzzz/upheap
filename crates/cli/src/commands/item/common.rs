@@ -253,6 +253,7 @@ pub(in crate::commands) async fn add_missing_tags(
         let body = CreateTagDto {
             name: name.clone(),
             description: None,
+            color: None,
         };
         match api.post::<TagDto>(&["tags"], &body).await {
             Ok(tag) => added.push(tag.value),

@@ -25,6 +25,7 @@ import { PopoverSheet } from "./PopoverSheet";
 import { formatDate, isToCome } from "./reminders";
 import { Sheet, SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
+import { tagChipColor } from "./tagColor";
 import { teamName } from "./teamName";
 import { useToast, useToastCount } from "./UndoToast";
 
@@ -790,7 +791,7 @@ function usePrefill(heapRef: HeapRef, view: ListSearch | undefined): Partial<Dra
     ...(impact && { impact }),
     tags: (tags.data ? heapTags(tags.data) : [])
       .filter((tag) => tagIds.includes(tag.id))
-      .map(({ id, name }) => ({ id, name })),
+      .map(({ id, name, color }) => ({ id, name, color })),
     values,
   };
 }
@@ -912,7 +913,7 @@ function PhoneChips({
               draft.tags.filter((t) => t.id !== tag.id),
             )
           }
-          className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-sunken px-3 text-sm text-ink-soft outline-none focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:h-11"
+          className={`flex h-9 shrink-0 items-center gap-1 rounded-full border bg-transparent px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:h-11 ${tagChipColor(tag.color)}`}
         >
           {tag.name}
           <span aria-hidden="true" className="text-muted">

@@ -8,6 +8,7 @@ import { heapTags, useCreateTagIn, useTags } from "../api/queries/tags";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 import { RequestId } from "./RequestId";
 import { teamName } from "./teamName";
+import { tagChipColor, tagDotColor } from "./tagColor";
 import { TeamMark } from "./TeamMark";
 
 const MAX_SUGGESTIONS = 6;
@@ -74,7 +75,7 @@ export function TagPicker({
   const open = optionCount > 0 && (inline || !dismissed);
 
   const add = (tag: ItemTag) => {
-    onChange([...value, { id: tag.id, name: tag.name }]);
+    onChange([...value, { id: tag.id, name: tag.name, color: tag.color }]);
     setText("");
     setHighlight(0);
   };
@@ -148,6 +149,10 @@ export function TagPicker({
           }}
           className="cursor-pointer px-3 py-2 aria-selected:bg-sunken"
         >
+          <span
+            aria-hidden="true"
+            className={`mr-2 inline-block size-2 rounded-full align-middle ${tagDotColor(tag.color)}`}
+          />
           {tag.name}
           {tag.kind === "team" && <TeamMark of="tag" />}
           {tag.description && <span className="ml-2 text-xs text-muted">{tag.description}</span>}
@@ -179,7 +184,7 @@ export function TagPicker({
           // input.
           <span
             key={tag.id}
-            className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1 pl-2.5 text-sm text-ink-soft pointer-coarse:my-2 pointer-coarse:pr-0"
+            className={`inline-flex h-7 items-center gap-1 rounded-full border bg-transparent pr-1 pl-2.5 text-sm pointer-coarse:my-2 pointer-coarse:pr-0 ${tagChipColor(tag.color)}`}
           >
             {tag.name}
             <button

@@ -101,6 +101,7 @@ mod tests {
     use crate::question::{QuestionKind, QuestionState};
     use crate::run::{RunEnd, RunReached};
     use crate::step::StepState;
+    use crate::tag::TagColor;
     use crate::team::Role;
     use crate::turn::{Goal, Reach, TakeBackWhy, TurnEnd, TurnSource};
 
@@ -213,6 +214,7 @@ mod tests {
                 "name",
                 "display_name",
                 "description",
+                "color",
                 "context",
                 "state",
                 "blocked_by",
@@ -313,6 +315,10 @@ mod tests {
         );
         pinned!(StepState, ["open", "ticked", "dropped"]);
         pinned!(Role, ["admin", "member"]);
+        pinned!(
+            TagColor,
+            ["blue", "sky", "teal", "green", "lime", "rose", "pink", "grey"]
+        );
         pinned!(InviteLinkState, ["working", "ended", "revoked"]);
 
         expect_that!(Size::from_code("unknown"), none());

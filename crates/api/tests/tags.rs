@@ -302,3 +302,144 @@ async fn null_tag_ids_are_refused_rather_than_ignored() -> Result<()> {
     expect_that!(null.body["code"], eq(&json!("invalid_body")));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_new_tag_gets_a_colour_a_given_one_is_kept_and_items_carry_it() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let path = format!("{}/tags", app.heap_url(&heap).await?);
+
+    // Act
+    let first = app.create_tag(&session, &heap, "infra").await?;
+    let second = app.create_tag(&session, &heap, "ops").await?;
+    let given = app
+        .send(
+            Method::POST,
+            &path,
+            Some(&session),
+            Some(json!({ "name": "docs", "color": "rose" })),
+        )
+        .await?;
+    let item = app
+        .create_item(
+            &session,
+            &heap,
+            json!({ "title": "Task", "tag_ids": [first.body["id"]] }),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(first.body["color"].is_string(), eq(true));
+    expect_that!(second.body["color"].is_string(), eq(true));
+    expect_that!(second.body["color"], not(eq(&first.body["color"])));
+    expect_that!(given.body["color"], eq(&json!("rose")));
+    expect_that!(item.body["tags"][0]["color"], eq(&first.body["color"]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_colour_outside_the_palette_is_refused() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let path = format!("{}/tags", app.heap_url(&heap).await?);
+    let tag = app.create_tag(&session, &heap, "infra").await?;
+
+    // Act
+    let created = app
+        .send(
+            Method::POST,
+            &path,
+            Some(&session),
+            Some(json!({ "name": "ops", "color": "mauve" })),
+        )
+        .await?;
+    let edited = app
+        .patch(
+            &session,
+            &format!("{path}/{}", tag.body["id"].as_str().unwrap_or_default()),
+            &tag.body["version"],
+            json!({ "color": "mauve" }),
+        )
+        .await?;
+
+    let cleared = app
+        .patch(
+            &session,
+            &format!("{path}/{}", tag.body["id"].as_str().unwrap_or_default()),
+            &tag.body["version"],
+            json!({ "color": null }),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(cleared.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(created.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(created.body["code"], eq(&json!("value_unknown")));
+    expect_that!(created.body["field"], eq(&json!("color")));
+    expect_that!(edited.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(edited.body["code"], eq(&json!("value_unknown")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn changing_a_colour_bumps_the_version_and_shows_in_the_history() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let path = format!("{}/tags", app.heap_url(&heap).await?);
+    let tag = app
+        .send(
+            Method::POST,
+            &path,
+            Some(&session),
+            Some(json!({ "name": "infra", "color": "rose" })),
+        )
+        .await?;
+    let tag_id = tag.body["id"].as_str().unwrap_or_default();
+
+    // Act
+    let same = app
+        .patch(
+            &session,
+            &format!("{path}/{tag_id}"),
+            &tag.body["version"],
+            json!({ "color": "rose" }),
+        )
+        .await?;
+    let edited = app
+        .patch(
+            &session,
+            &format!("{path}/{tag_id}"),
+            &tag.body["version"],
+            json!({ "color": "teal" }),
+        )
+        .await?;
+    let history = app
+        .send(
+            Method::GET,
+            &format!("{}/audit?entity_id={tag_id}", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(same.body["version"], eq(&tag.body["version"]));
+    expect_that!(edited.body["color"], eq(&json!("teal")));
+    expect_that!(
+        edited.body["version"].as_u64(),
+        some(gt(tag.body["version"].as_u64().unwrap_or_default()))
+    );
+    expect_that!(
+        history.body["entries"][0]["changes"],
+        eq(&json!([
+            { "field": "color", "label": "Colour", "before": "Rose", "after": "Teal", "text_diff": null },
+        ]))
+    );
+    Ok(())
+}

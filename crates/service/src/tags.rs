@@ -17,7 +17,7 @@ use domain::permission::{
     Permission, TagAction, TagListAction, allowed_tag_actions, allowed_tag_list_actions, allowed_team_tag_actions,
     allowed_team_tag_list_actions,
 };
-use domain::tag::{NewTag, Tag, TagName, TagOwner, TagPatch, merged_tag_order, reach_text};
+use domain::tag::{NewTag, Tag, TagName, TagOwner, TagPatch, merged_tag_order, pick_color, reach_text};
 use domain::{HeapId, ItemId, TagId, TeamId, Timestamp, Version};
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
@@ -108,8 +108,18 @@ impl Services {
         let access = authorize_heap_write_under_team(&txn, principal, heap_id, lower, Permission::EditItems).await?;
         ensure_name_free(&txn, &access.heap, &fields.name, None).await?;
 
+        let color = match fields.color {
+            Some(color) => color,
+            None => pick_color(store::tags::list_tags(&txn, heap_id).await?.iter().map(|tag| tag.color)),
+        };
         let now = self.now();
-        let tag = Tag::new(TagId::from_uuid(self.new_id(now)), TagOwner::Heap(heap_id), fields, now);
+        let tag = Tag::new(
+            TagId::from_uuid(self.new_id(now)),
+            TagOwner::Heap(heap_id),
+            fields,
+            color,
+            now,
+        );
         store::tags::insert_tag(&txn, &tag)
             .await
             .map_err(|e| name_taken_on_duplicate(e, &tag))?;
@@ -132,7 +142,7 @@ impl Services {
         })
     }
 
-    /// Renames a tag or changes its description, if it is still at version `expected`.
+    /// Renames a tag or changes its description or colour, if it is still at version `expected`.
     ///
     /// A patch that changes nothing succeeds and returns the tag unchanged, without an audit entry. A tag of another
     /// heap than `heap_id`, such as a team's tag, is [`ServiceError::NotFound`].
@@ -229,8 +239,23 @@ impl Services {
         let reach = reach_of(&txn, &heaps, &fields.name).await?;
         ensure_confirmed(&fields.name, &reach, confirm)?;
 
+        let color = match fields.color {
+            Some(color) => color,
+            None => pick_color(
+                store::tags::list_team_tags(&txn, team_id)
+                    .await?
+                    .iter()
+                    .map(|tag| tag.color),
+            ),
+        };
         let now = self.now();
-        let tag = Tag::new(TagId::from_uuid(self.new_id(now)), TagOwner::Team(team_id), fields, now);
+        let tag = Tag::new(
+            TagId::from_uuid(self.new_id(now)),
+            TagOwner::Team(team_id),
+            fields,
+            color,
+            now,
+        );
         store::tags::insert_tag(&txn, &tag)
             .await
             .map_err(|e| name_taken_on_duplicate(e, &tag))?;
@@ -256,7 +281,7 @@ impl Services {
         })
     }
 
-    /// Renames a team's tag or changes its description, if it is still at version `expected`.
+    /// Renames a team's tag or changes its description or colour, if it is still at version `expected`.
     ///
     /// A patch that changes nothing succeeds and returns the tag unchanged, without an audit entry. A tag that
     /// isn't a tag of `team_id` is [`ServiceError::NotFound`]. A rename to another name than the tag's own, ignoring

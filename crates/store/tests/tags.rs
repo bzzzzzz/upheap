@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use domain::handle::Handle;
 use domain::heap::{Heap, HeapPolicy};
-use domain::tag::{NewTag, Tag, TagName, TagOwner};
+use domain::tag::{NewTag, Tag, TagColor, TagName, TagOwner};
 use domain::team::Team;
 use domain::text::Name;
 use domain::validation::Field;
@@ -48,11 +48,13 @@ fn tag(heap_id: HeapId, name: &str) -> Result<Tag> {
     let fields = NewTag {
         name: TagName::parse(name)?,
         description: None,
+        color: None,
     };
     Ok(Tag::new(
         TagId::from_uuid(Uuid::now_v7()),
         TagOwner::Heap(heap_id),
         fields,
+        TagColor::Blue,
         Timestamp::from_millis(0).context("in range")?,
     ))
 }
@@ -88,5 +90,26 @@ async fn names_differing_only_in_accents_are_different_tags() -> Result<()> {
     // Assert
     expect_that!(accented, ok(anything()));
     expect_that!(found.map(|t| t.name), some(eq(&TagName::parse("Résumé")?)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_tags_colour_is_stored_and_changed() -> Result<()> {
+    // Arrange
+    let (db, heap_id) = heap_in_new_database().await?;
+    let tag = tag(heap_id, "Infra")?;
+    store::tags::insert_tag(&db, &tag).await?;
+
+    // Act
+    let recoloured = Tag {
+        color: TagColor::Rose,
+        ..tag.clone()
+    };
+    store::tags::update_tag(&db, &recoloured, tag.version).await?;
+    let found = store::tags::find_tag(&db, tag.id).await?;
+
+    // Assert
+    expect_that!(found.map(|t| t.color), some(eq(TagColor::Rose)));
     Ok(())
 }

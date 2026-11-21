@@ -2,6 +2,7 @@
 
 use api_types::tags::{TagDto, TagListDto, TeamTagListDto};
 use clap::Args;
+use domain::tag::TagColor;
 
 use crate::client::NO_QUERY;
 use crate::commands::heap_api::{HeapApi, TeamApi, indented_context, named_heap, resolve_heap_handle};
@@ -21,9 +22,9 @@ pub struct ListArgs {
     pub shared: SharedArgs,
 }
 
-/// Lists the tags, each name followed by its whole description, indented, so a reader can tell what each tag is for
-/// without `--json`. In a heap the team's tags come in the same list by name, marked `team`. `--quiet` prints the
-/// names one per line and `--json` the server's body.
+/// Lists the tags, each name followed by its colour and its whole description, indented, so a reader can tell what
+/// each tag is for without `--json`. In a heap the team's tags come in the same list by name, marked `team`, after the
+/// colour. `--quiet` prints the names one per line and `--json` the server's body.
 pub async fn run(args: ListArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let heap_name = match &args.team {
         Some(_) => None,
@@ -73,11 +74,17 @@ fn print(tags: &[(&TagDto, bool)], body: &str, empty: &str, out: &mut Output) ->
         Mode::Human if tags.is_empty() => out.line(empty)?,
         Mode::Human => {
             for (tag, team) in tags {
+                // A colour a newer server added is `?`.
+                let color = TagColor::try_from(tag.color).map_or("?", TagColor::code);
+                let mut parts = vec![
+                    (tag.name.as_str(), Tone::Strong),
+                    ("  ", Tone::Plain),
+                    (color, Tone::Dim),
+                ];
                 if *team {
-                    out.line_parts(&[(&tag.name, Tone::Strong), ("  ", Tone::Plain), ("team", Tone::Dim)])?;
-                } else {
-                    out.line_toned(&tag.name, Tone::Strong)?;
+                    parts.extend([("  ", Tone::Plain), ("team", Tone::Dim)]);
                 }
+                out.line_parts(&parts)?;
                 for line in indented_context(tag.description.as_deref().unwrap_or_default()) {
                     out.line(&line)?;
                 }
