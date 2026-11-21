@@ -628,8 +628,9 @@ a fixed time.
      the operator makes an admin with a command. Each change has an audit entry (`group_member_added`,
      `group_member_removed`) with the person as actor and the groups in the diff. A `group_member_removed` is not a
      `member_removed`, so it doesn't void invite links made before it. Lock order where these meet: the mapped teams in
-     ID order, then a SCIM row, then on Postgres the subject's advisory lock (below), then a person's personal team; a write that locks several of a person's teams (a
-     display-name change) takes the mapped ones first. A sign-in of a known person, by the provider or by password,
+     ID order, then a SCIM row, then on Postgres the subject's advisory lock (below), then a person's personal team;
+     a write that locks several of a person's teams (a display-name change) takes the mapped ones first. A sign-in of
+     a known person, by the provider or by password,
      locks their personal team before it opens the session, and approving a CLI sign-in and exchanging its code lock
      it before they store or use the code, so each waits for a SCIM write that is ending their sign-ins and then
      sees the deactivation. A first sign-in has no user yet, so the callback keeps the groups on
@@ -639,8 +640,7 @@ a fixed time.
      session is refused after a deactivation or ended by one that comes after it. A record being created with the
      subject, or moved onto it, has no such row yet. On MySQL the lock's gap lock makes that write wait, and the SCIM
      user writes run at READ COMMITTED so that after the wait they see the account; on Postgres both sides also take
-     an advisory lock on the subject. Password sign-in, invite
-     registration and reset never sync.
+     an advisory lock on the subject. Password sign-in, invite registration and reset never sync.
    - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)
      makes every password path in the service layer fail with `PasswordSignInOff`, so the API and the operator
      command both refuse: sign-in, registration, invite registration, asking for and using a reset link, and the
