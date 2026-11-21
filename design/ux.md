@@ -151,9 +151,9 @@ opened on the page from a link, to the heap kept.
 On a wide screen the sidebar and the content are one centred block, at most the sidebar, the content column and the
 item pane wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The block is
 that wide whether or not an item is open, so opening or closing one never moves the sidebar or the list's left edge:
-an item is opened many times a session. A list that opens items beside it (a heap's list, All items) fills the room
-next to the sidebar, and the pane opens on its right, so the list narrows from the right. Other pages keep the content
-column's reading width (48rem), next to the sidebar.
+an item is opened many times a session. Every page fills the room next to the sidebar, so the content's left and
+right edges are the same from one page to the next. On a list that opens items beside it (a heap's list, All items)
+the pane opens on the right, so the list narrows from the right. A card fills that room too, and a short field in it keeps the width its value needs.
 
 ### Heap settings
 
@@ -531,6 +531,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    nothing to say the chip is plain text, and an item that isn't in the list on screen has no chip. The list row
    doesn't show any of this.
 10. The item says when it was created and by whom ("Added by Sam 4 days ago"), on the line of History's toggle.
+    On a phone, where that line is easy to miss, the fields (point 16) end with an Added row as well.
 11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
     heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a
     grip before the checkbox (editors only; on a wide screen it shows when the row is hovered or has focus, on a phone
@@ -638,7 +639,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     send back.", the focus goes to the agent chip, and the Changes asked… chip is gone. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
-    each, with the label on the left. A parameter's label is violet. An unset effort, impact or due date reads "Set
+    each, with the label on the left. On a phone the last row is Added, "Sam · 4 days ago" ("You · …" for your own,
+    the age alone when nobody can be named), in plain text that
+    never opens an editor. Wider screens show it only on History's line (point 10). A parameter's label is violet. An unset effort, impact or due date reads "Set
     effort", "Set impact", "Set due" (a parameter "Set <name>") in muted text; when the server's held-back lines
     (point 9) name it, it is marked with an amber pill. With a mouse a value has no border at rest, a tint and ▾ when
     pointed at or focused; on a touch screen the ▾ always shows and the value is 44 px tall. A click opens a popover
