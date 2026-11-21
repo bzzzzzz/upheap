@@ -284,8 +284,9 @@ the keyboard covers, from the visual viewport. The heap switcher and More open a
 tabs.
 
 Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
-The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". From 8 unarchived
-heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
+The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". Each unarchived heap's
+row has its open count on the right, the number its Open view shows, which a screen reader hears as ", 2 open" in the
+row's name, as on the All rows; archived heaps and Recent have none. From 8 unarchived heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
 opened in this browser, not the one on screen, as chips on a phone. Recent and the folds are kept in localStorage,
 since a "last opened" on the server would cost a write on every heap visit;
 they don't follow the user to another device. Search gives a flat list with the team and an
