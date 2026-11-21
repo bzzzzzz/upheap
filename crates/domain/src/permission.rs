@@ -703,11 +703,11 @@ mod tests {
     #[gtest]
     fn admins_make_a_live_heap_parameter_the_teams_in_an_active_heap_only() {
         let live = parameter(
-            crate::parameter::ParameterOwner::Heap(HeapId::from_uuid(Uuid::from_u128(2))),
+            crate::parameter::ParameterOwner::Heap(crate::HeapId::from_uuid(Uuid::from_u128(2))),
             false,
         );
         let archived = parameter(
-            crate::parameter::ParameterOwner::Heap(HeapId::from_uuid(Uuid::from_u128(2))),
+            crate::parameter::ParameterOwner::Heap(crate::HeapId::from_uuid(Uuid::from_u128(2))),
             true,
         );
         let can_make_team = |parameter: &Parameter, heap: &Heap, role| {
