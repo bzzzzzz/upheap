@@ -104,10 +104,10 @@ test("the heap switcher opens another heap", async ({ page }) => {
   const startUrl = page.url();
   const heaps = await openSwitcher(page);
   // The heap on screen is checked.
-  await expect(heaps.getByRole("menuitem", { name: /, current/ })).toHaveCount(1);
+  await expect(heaps.getByRole("menuitem", { name: /, current$/ })).toHaveCount(1);
   // Rows are links, under the app's base path, so they open in a new tab and can be copied.
   const current = new URL(page.url()).pathname;
-  await expect(heaps.getByRole("menuitem", { name: /, current/ })).toHaveAttribute("href", current);
+  await expect(heaps.getByRole("menuitem", { name: /, current$/ })).toHaveAttribute("href", current);
   const garden = heaps.getByRole("menuitem", { name: "Garden" });
   await expect(garden).toHaveAttribute("href", current.replace(/[^/]+$/, "garden"));
   // A plain click navigates in place, without reloading the page.
@@ -124,8 +124,9 @@ test("each heap in the switcher shows its open count", async ({ page }) => {
   await addItem(page, "Water the plants");
   await addItem(page, "Feed the cat");
   const heaps = await openSwitcher(page);
-  await expect(heaps.getByRole("menuitem", { name: /, current/ })).toHaveText(/, current\s*2$/);
-  await expect(heaps.getByRole("menuitem", { name: "Garden" })).toHaveText(/^Garden\s*0$/);
+  // Shown on the right, and heard as part of the row's name.
+  await expect(heaps.getByRole("menuitem", { name: /, 2 open\s*, current$/ })).toHaveText(/2$/);
+  await expect(heaps.getByRole("menuitem", { name: /^Garden\s*, 0 open$/ })).toHaveText(/0$/);
 });
 
 test("a modifier-click on a heap opens it in a new tab", async ({ page }) => {
@@ -270,6 +271,9 @@ test("archived heaps are folded away, and found by search", async ({ page }) => 
   const found = heaps.getByRole("menuitem", { name: /Old news/ });
   await expect(found).toContainText("archived");
   await expect(heaps.getByRole("status")).toHaveText("1 heap");
+  // Unarchived results keep their count.
+  await heaps.getByLabel("Find a heap").fill("alpha");
+  await expect(heaps.getByRole("menuitem", { name: /^Alpha\s*, 0 open$/ })).toBeVisible();
 });
 
 test("Recent lists the heaps opened last, without the one on screen", async ({ page }) => {
@@ -282,7 +286,8 @@ test("Recent lists the heaps opened last, without the one on screen", async ({ p
 
   const heaps = await openSwitcher(page);
   const recent = heaps.getByRole("group", { name: "Recent" });
-  await expect(recent.getByRole("menuitem", { name: "Alpha" })).toBeVisible();
+  // A Recent shortcut has no open count.
+  await expect(recent.getByRole("menuitem", { name: "Alpha", exact: true })).toBeVisible();
   await expect(recent.getByRole("menuitem", { name: "Bravo" })).toHaveCount(0);
   if (isNarrow(page)) {
     // Chips at least 44 px tall.

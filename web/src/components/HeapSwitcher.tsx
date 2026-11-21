@@ -247,11 +247,10 @@ function SwitcherBody({
           >
             <span className="min-w-0 flex-1 truncate">
               All {label} items
+              <span className="sr-only">, {openItemCount(me, team.slug)} open</span>
               {onAll && allTeam === team.slug && <span className="sr-only">, current</span>}
             </span>
-            <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">
-              {openItemCount(me, team.slug)}
-            </span>
+            <OpenCount count={openItemCount(me, team.slug)} />
             <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
               {onAll && allTeam === team.slug && <Check className="size-4" strokeWidth={3} />}
             </span>
@@ -313,11 +312,10 @@ function SwitcherBody({
               >
                 <span className="min-w-0 flex-1 truncate">
                   All heaps
+                  <span className="sr-only">, {openItemCount(me, allTeam)} open</span>
                   {onAllHeaps && <span className="sr-only">, current</span>}
                 </span>
-                <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">
-                  {openItemCount(me, allTeam)}
-                </span>
+                <OpenCount count={openItemCount(me, allTeam)} />
                 <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
                   {onAllHeaps && <Check className="size-4" strokeWidth={3} />}
                 </span>
@@ -445,6 +443,15 @@ export function SectionTitle({ children, count }: { children: ReactNode; count?:
   );
 }
 
+/** A row's open count on its right. A screen reader hears it from the row's name instead, as ", N open". */
+function OpenCount({ count }: { count: number }) {
+  return (
+    <span aria-hidden="true" className="shrink-0 text-[13px] font-normal text-muted tabular-nums">
+      {count}
+    </span>
+  );
+}
+
 /** "3 heaps in 2 teams", or "3 heaps" for someone in one team. */
 function resultsSummary(results: Entry[], me: Me): string {
   const heaps = `${results.length} ${results.length === 1 ? "heap" : "heaps"}`;
@@ -469,8 +476,8 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 
 /**
  * One heap. In the team's list the name has "(archived)" after it; among search results (with `query`) the match is
- * marked and archived heaps carry a tag. `teamLabel` shows on the right when the user has several teams, then the heap's
- * open count, as the sidebar's Open shows it; an archived heap and a Recent shortcut have none.
+ * marked and archived heaps carry a tag. `teamLabel` shows on the right when the user has several teams, then the
+ * heap's open count, as the sidebar's Open shows it; an archived heap and a Recent shortcut have none.
  */
 function HeapItem({
   id,
@@ -496,6 +503,7 @@ function HeapItem({
   onOpen: () => void;
 }) {
   const { heap } = entry;
+  const count = !heap.archived && !recent;
   return (
     <MenuItem
       id={id}
@@ -517,13 +525,12 @@ function HeapItem({
                   archived
                 </span>
               ))}
-            {/* MenuItem has no aria-current or aria-checked here, so a screen reader hears it from the name. */}
+            {/* A screen reader hears the count, and whether it's current, from the name: MenuItem has no aria-current. */}
+            {count && <span className="sr-only">, {heap.open_count} open</span>}
             {current && <span className="sr-only">, current</span>}
           </span>
           {teamLabel && <span className="shrink-0 text-[13px] font-normal text-muted sm:text-xs">{teamLabel}</span>}
-          {!heap.archived && !recent && (
-            <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">{heap.open_count}</span>
-          )}
+          {count && <OpenCount count={heap.open_count} />}
           {enterHint && isFocused && (
             <kbd aria-hidden="true" className={kbdClass}>
               ↵
