@@ -9,6 +9,8 @@
 //! With provider logout on, the ID token is kept with the session, and signing out fetches discovery again to build
 //! the provider's logout URL from it (RP-initiated logout). Any failure there leaves a plain sign-out of Upheap.
 //!
+//! Identities are keyed on the configured subject claim of the ID token (`sub` unless the operator names another).
+//!
 //! Nothing here logs a token, a code, the client secret, the state or the verifier.
 
 use std::str::FromStr;
@@ -25,11 +27,12 @@ use openidconnect::{
     EndpointSet, IssuerUrl, LogoutRequest, Nonce, PkceCodeChallenge, PkceCodeVerifier, PostLogoutRedirectUrl,
     ProviderMetadataWithLogout, RedirectUrl, Scope, TokenResponse,
 };
+use serde_json::Value;
 use store::oidc_sign_ins::{NewOidcSignIn, OidcSignIn, VerifiedIdentity};
 use store::{StoreError, TransactionTrait};
 
 use crate::auth::{SessionGrant, random_token, sha256_hex};
-use crate::group_teams::{Groups, read_groups};
+use crate::group_teams::{Groups, read_groups, token_payload};
 use crate::{ServiceError, Services};
 
 /// The path the provider sends the person back to, after `BASE_URL`.
@@ -43,6 +46,9 @@ const HOUSEKEEPING_BATCH: u64 = 10;
 
 /// The claim the provider's groups are read from when the operator names none.
 const DEFAULT_GROUPS_CLAIM: &str = "groups";
+
+/// The claim identities are keyed on when the operator names none.
+const DEFAULT_SUBJECT_CLAIM: &str = "sub";
 
 /// The provider, from the operator's configuration (README, Configuration).
 #[derive(Clone, Debug)]
@@ -58,6 +64,8 @@ pub struct OidcSettings {
     label: String,
     /// The ID token claim that lists the person's groups.
     groups_claim: String,
+    /// The ID token claim an identity is keyed on.
+    subject_claim: String,
     /// Whether signing out also ends the person's session at the provider.
     provider_logout: bool,
     /// `BASE_URL`, without a trailing slash: where a finished sign-in sends the browser.
@@ -112,6 +120,7 @@ impl OidcSettings {
                 .collect(),
             label: label.to_owned(),
             groups_claim: DEFAULT_GROUPS_CLAIM.to_owned(),
+            subject_claim: DEFAULT_SUBJECT_CLAIM.to_owned(),
             provider_logout: false,
             app_url: app_url.to_owned(),
             redirect_uri: RedirectUrl::new(format!("{app_url}{CALLBACK_PATH}"))
@@ -128,6 +137,14 @@ impl OidcSettings {
         self
     }
 
+    /// Keys identities on the ID token claim `claim` instead of `sub`. Blank means `sub`.
+    #[must_use]
+    pub fn with_subject_claim(mut self, claim: &str) -> Self {
+        let claim = claim.trim();
+        self.subject_claim = if claim.is_empty() { DEFAULT_SUBJECT_CLAIM } else { claim }.to_owned();
+        self
+    }
+
     /// Keeps the ID token with the session, so signing out can end the person's session at the provider too.
     #[must_use]
     pub fn with_provider_logout(mut self, on: bool) -> Self {
@@ -141,6 +158,10 @@ impl OidcSettings {
 
     pub fn groups_claim(&self) -> &str {
         &self.groups_claim
+    }
+
+    pub fn subject_claim(&self) -> &str {
+        &self.subject_claim
     }
 
     pub fn label(&self) -> &str {
@@ -378,7 +399,16 @@ impl Services {
                 "provider sign-in has no usable groups; team memberships kept"
             );
         }
-        if let Some(user_id) = store::identities::find_identity_user(&self.db, oidc.issuer(), &claims.subject).await? {
+        let mut moving = false;
+        let mut known = store::identities::find_identity_user(&self.db, oidc.issuer(), &claims.subject).await?;
+        if known.is_none()
+            && let Some(previous) = &claims.previous_subject
+        {
+            // An identity made before the claim was configured is still keyed on the token's `sub`.
+            known = store::identities::find_identity_user(&self.db, oidc.issuer(), previous).await?;
+            moving = known.is_some();
+        }
+        if let Some(user_id) = known {
             let user = store::users::find_user(&self.db, user_id)
                 .await?
                 .ok_or_else(|| StoreError::corrupt("user_identities", &claims.subject, "no such user"))?;
@@ -387,6 +417,13 @@ impl Services {
             // The provider's pushes decide the teams they have pushed, instead of the token's groups. The teams are
             // locked before they are read, as a push does.
             self.lock_group_teams(&txn).await?;
+            if let Some(previous) = claims.previous_subject.as_deref().filter(|_| moving) {
+                // As in `register_oidc_user`: a subject newly linked to an account must not race a SCIM write to the
+                // records that carry it, so a deactivation already pushed applies at this sign-in.
+                store::scim::lock_users_by_external_id(&txn, &claims.subject).await?;
+                store::scim::lock_external_id(&txn, &claims.subject).await?;
+                store::identities::move_identity(&txn, oidc.issuer(), previous, &claims.subject).await?;
+            }
             // A deactivation holds this lock until it has ended the person's sign-ins, so the session opened below
             // either comes after it and is refused, or before it and is ended by it.
             store::teams::lock_team(&txn, personal_team).await?;
@@ -563,7 +600,11 @@ fn discovery_kind(error: &DiscoveryFailure) -> &'static str {
 
 /// What the ID token said, once checked.
 struct IdentityClaims {
+    /// The value of the configured subject claim.
     subject: String,
+    /// The token's `sub`, under which an identity made before the setting may still be keyed. `None` when it is the
+    /// subject.
+    previous_subject: Option<String>,
     email: Option<String>,
     email_verified: Option<bool>,
     name: Option<String>,
@@ -606,7 +647,7 @@ impl VerifyFailure {
 
 /// Exchanges the code with the sign-in's verifier, and checks the ID token's signature, issuer, audience, expiry and
 /// the sign-in's nonce. A network failure is told apart from a provider that answered no.
-/// The groups are read from the claim `groups_claim` when it is given.
+/// The subject is read from the claim `oidc.subject_claim()`, and the groups from `groups_claim` when it is given.
 async fn verify_code(
     oidc: &OidcSettings,
     groups_claim: Option<&str>,
@@ -634,16 +675,25 @@ async fn verify_code(
     let claims = id_token
         .claims(&client.id_token_verifier(), &Nonce::new(sign_in.nonce.clone()))
         .map_err(|_| VerifyFailure::Refused("ID token not valid"))?;
+    // The signature was checked above, so the payload can be read as it is.
+    let compact = id_token.to_string();
+    let subject = token_payload(&compact)
+        .and_then(|payload| match payload.get(oidc.subject_claim()) {
+            Some(Value::String(subject)) if !subject.is_empty() => Some(subject.clone()),
+            _ => None,
+        })
+        .ok_or(VerifyFailure::Refused("the ID token has no usable subject claim"))?;
+    let sub = claims.subject().as_str();
     Ok(IdentityClaims {
-        subject: claims.subject().as_str().to_owned(),
+        previous_subject: (sub != subject).then(|| sub.to_owned()),
+        subject,
         email: claims.email().map(|email| email.as_str().to_owned()),
         email_verified: claims.email_verified(),
         name: claims
             .name()
             .and_then(|name| name.get(None))
             .map(|name| name.as_str().trim().to_owned()),
-        id_token: id_token.to_string(),
-        // The signature was checked above, so the payload can be read as it is.
-        groups: groups_claim.map(|claim| read_groups(&id_token.to_string(), claim)),
+        groups: groups_claim.map(|claim| read_groups(&compact, claim)),
+        id_token: compact,
     })
 }

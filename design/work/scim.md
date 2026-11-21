@@ -25,8 +25,6 @@ SCIM endpoints with a token, creating, changing and deactivating users and group
 
 - No in-app setup: the token and the map are server settings, as the map is now.
 - No SCIM bulk requests, sorting, ETags, password changes or custom schemas.
-- Providers whose OIDC subject a SCIM push can't carry. Entra ID's `sub` is pairwise per app and no SCIM attribute
-  holds it, so Entra needs Upheap to match sign-ins on another claim (`oid`) first; this design doesn't do that.
 
 ## How it works
 
@@ -36,8 +34,9 @@ SCIM endpoints with a token, creating, changing and deactivating users and group
   says how to make one). The server stops at startup if it's set without the OIDC provider, or is too short. Unset,
   the SCIM endpoints answer `404` as any unknown path does. Rotating it is changing the setting and restarting.
 - The SCIM base URL to give the provider is `{BASE_URL}/scim/v2`.
-- At the provider, the SCIM user's `externalId` must be the person's OIDC subject: the `sub` of their ID token
-  (Okta: the user's ID, `user.id`, mapped to `externalId` in the app's attribute mappings).
+- At the provider, the SCIM user's `externalId` must be the person's OIDC subject: the value of the ID token claim `UPHEAP_OIDC_SUBJECT_CLAIM`
+  names (Okta: `sub`, the user's ID, `user.id`, mapped to `externalId` in the app's attribute mappings; Entra ID: `oid`,
+  with `objectId` mapped to `externalId`).
 - The map stays `UPHEAP_OIDC_GROUP_TEAMS`. A SCIM group matches a configured group when its `displayName` or its
   `externalId` equals it, so the same map works whether the provider's claim carries names or IDs.
 
@@ -152,7 +151,7 @@ step) does the same once the identity exists, so a person pushed before they eve
 
 ### What the operator sees
 
-- README: the setting, the base URL, `externalId` as the subject, and a walk-through for Okta.
+- README: the setting, the base URL, `externalId` as the subject, and a walk-through for Okta and Entra ID.
 - Logs at `info` for each team change, as at sign-in, and at `warn` for a refused SCIM request, with its status and
   `scimType`, never the token.
 - No new screens. The Team page already says a team's members come from groups; the Activity entries are the
