@@ -1142,6 +1142,84 @@ async fn a_first_provider_sign_in_during_the_deactivation_of_the_record_is_refus
 
 #[gtest]
 #[tokio::test]
+async fn a_first_provider_sign_in_during_the_creation_of_an_inactive_record_is_refused_or_ended() -> Result<()> {
+    // Arrange: no group-managed team, and no record of the person yet whose row the sign-in could lock.
+    let h = harness_with(&[]).await?;
+    for round in 0..ROUNDS {
+        let subject = format!("subject-{round}");
+        let email = format!("person{round}@example.test");
+        let claims = Claims::verified(&subject, &email, "Person").with_claim("groups", json!([]));
+        let (_, state) = sign_in(&h, claims).await?;
+        let inactive = json!({
+            "schemas": [USER_SCHEMA], "userName": email, "externalId": subject, "active": false
+        });
+
+        // Act
+        let username = format!("person{round}");
+        let (registered, created) = race(
+            round,
+            register(&h, &state, &username),
+            scim(&h, Method::POST, "/scim/v2/Users", Some(inactive)),
+        )
+        .await;
+        let (registered, created) = (registered?, created?);
+        let left_signed_in = match &registered.session_cookie {
+            Some(session) => me(&h.app, session).await?.status == StatusCode::OK,
+            None => false,
+        };
+
+        // Assert
+        expect_that!(created.status, eq(StatusCode::CREATED), "{}", created.body);
+        expect_that!(
+            registered.status,
+            any![eq(StatusCode::CREATED), eq(StatusCode::FORBIDDEN)],
+            "{}",
+            registered.body
+        );
+        expect_that!(left_signed_in, eq(false), "round {round}");
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_first_provider_sign_in_while_an_inactive_record_moves_onto_the_person_is_refused_or_ended() -> Result<()> {
+    // Arrange: no group-managed team, and the inactive record still names someone else, so the sign-in finds no row
+    // of the person to lock.
+    let h = harness_with(&[]).await?;
+    for round in 0..ROUNDS {
+        let subject = format!("subject-{round}");
+        let email = format!("person{round}@example.test");
+        let record = push_user(&h, &email, Some(&format!("elsewhere-{round}")), false).await?;
+        let claims = Claims::verified(&subject, &email, "Person").with_claim("groups", json!([]));
+        let (_, state) = sign_in(&h, claims).await?;
+        let moved = json!([{ "op": "replace", "path": "externalId", "value": subject }]);
+
+        // Act
+        let path = format!("/scim/v2/Users/{record}");
+        let username = format!("person{round}");
+        let (registered, patched) = race(round, register(&h, &state, &username), patch(&h, &path, moved)).await;
+        let (registered, patched) = (registered?, patched?);
+        let left_signed_in = match &registered.session_cookie {
+            Some(session) => me(&h.app, session).await?.status == StatusCode::OK,
+            None => false,
+        };
+
+        // Assert
+        expect_that!(patched.status, eq(StatusCode::OK), "{}", patched.body);
+        expect_that!(
+            registered.status,
+            any![eq(StatusCode::CREATED), eq(StatusCode::FORBIDDEN)],
+            "{}",
+            registered.body
+        );
+        expect_that!(left_signed_in, eq(false), "round {round}");
+    }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_password_sign_in_during_the_deactivation_of_the_last_record_is_refused_or_ended() -> Result<()> {
     // Arrange: no group-managed team, so only the personal team's lock can put the two in turn.
     let h = harness_with(&[]).await?;

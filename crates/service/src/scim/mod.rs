@@ -2,8 +2,9 @@
 //! teams follow at once.
 //!
 //! The pushes are stored as the provider sent them ([`store::scim`]). Each write runs in one transaction that locks
-//! the mapped teams first, then the SCIM row being written, then (a write to users, for each linked person it touches)
-//! the person's personal team, found before the transaction so the lock comes before any read of the person's state,
+//! the mapped teams first, then the SCIM row being written, then (a write to users) the subject a record is created
+//! with or moved onto ([`store::scim::lock_external_id`]), then for each linked person it touches the person's
+//! personal team, found before the transaction so the lock comes before any read of the person's state,
 //! writes the SCIM rows, then runs the group-teams sync for every touched person who is linked: a SCIM user is linked
 //! to an account when `user_identities` has the configured issuer and the SCIM user's `externalId`, the person's
 //! subject. Nothing stores the link.
@@ -348,8 +349,12 @@ impl Services {
         };
         let subjects: BTreeSet<String> = user.external_id.iter().cloned().collect();
         let personal_teams = self.personal_teams(&subjects).await?;
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let txn = store::scim::begin_user_write(&self.db).await?;
         self.lock_group_teams(&txn).await?;
+        // No row has the subject yet, so a first sign-in of the person can't lock this one ahead.
+        if let Some(subject) = &user.external_id {
+            store::scim::lock_external_id(&txn, subject).await?;
+        }
         lock_teams(&txn, &personal_teams).await?;
         let was_off = self.off_subjects(&txn, &subjects).await?;
         store::scim::insert_user(&txn, &user)
@@ -398,11 +403,20 @@ impl Services {
             }
             None => BTreeSet::new(),
         };
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let txn = store::scim::begin_user_write(&self.db).await?;
         self.lock_group_teams(&txn).await?;
         let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
-        lock_teams(&txn, &personal_teams).await?;
         let input = change(&current)?;
+        // A first sign-in of the person the record moves to can't lock this row ahead: it doesn't have their subject
+        // yet. The person it moves from is covered by the row's lock.
+        if let Some(subject) = input
+            .external_id
+            .as_ref()
+            .filter(|&moved_to| current.external_id.as_ref() != Some(moved_to))
+        {
+            store::scim::lock_external_id(&txn, subject).await?;
+        }
+        lock_teams(&txn, &personal_teams).await?;
         // The person the record was linked to before, if the write moves it to another.
         let subjects: BTreeSet<String> = [input.external_id.clone(), current.external_id.clone()]
             .into_iter()

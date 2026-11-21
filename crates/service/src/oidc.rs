@@ -471,9 +471,10 @@ impl Services {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         self.lock_group_teams(&txn).await?;
         // A SCIM write to the person's records finds no account until this commits, so it couldn't end the session
-        // opened below. Locking the records puts the two in turn: the session is refused after a deactivation, or
-        // ended by one that comes after it.
+        // opened below. Locking the records, and the subject for a record being created with it or moved onto it,
+        // puts the two in turn: the session is refused after a deactivation, or ended by one that comes after it.
         store::scim::lock_users_by_external_id(&txn, &verified.subject).await?;
+        store::scim::lock_external_id(&txn, &verified.subject).await?;
         let made = self
             .insert_personal_user(&txn, verified.email, username, verified.display_name, team_name, now)
             .await?;
