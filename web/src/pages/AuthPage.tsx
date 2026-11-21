@@ -509,6 +509,9 @@ function AuthForm({
             <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
               {waitLeft === undefined ? problemMessage(error) : `Too many attempts. Try again in ${clock(waitLeft)}.`}
             </p>
+            {error instanceof ApiProblem && error.code === "account_turned_off" && (
+              <OperatorContact className="text-[13px] text-ink-soft max-sm:text-sm" />
+            )}
             <RequestId error={error} />
           </>
         )}

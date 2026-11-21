@@ -25,6 +25,7 @@ import {
   List,
   Plus,
   Settings,
+  Shield,
   User,
   Users,
   type LucideIcon,
@@ -358,6 +359,7 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
             label={links.team.label}
           />
         )}
+        {me.operator && <NavLink to="/accounts" icon={Shield} label="Accounts" />}
         <NavLink {...links.teams} activeOptions={{ exact: true }} icon={Users} />
         <NavLink to="/account" icon={User} label="Account" />
       </div>
@@ -524,6 +526,11 @@ function MoreSheet({
             className={sheetRowClass}
           >
             {row(links.team.label, "Team")}
+          </Link>
+        )}
+        {me.operator && (
+          <Link to="/accounts" onClick={onClose} className={sheetRowClass}>
+            {row("Accounts")}
           </Link>
         )}
         <Link {...links.teams} activeOptions={{ exact: true }} onClick={onClose} className={sheetRowClass}>

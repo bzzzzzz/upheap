@@ -1,6 +1,9 @@
 // The account's History card: password changes, reset links made for the user, passwords set with one, address changes and
-// confirmations, and the user's own heap priority changes. The server words each line; this only lays them out (design/ux.md, History).
-import type { AccountEvent } from "../api/schema";
+// confirmations, an operator's turn-offs and turn-ons, and the user's own heap priority changes. The server words each
+// line; this only lays them out (design/ux.md, History). An operator reads the same list for any account, on Accounts.
+import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
+
+import type { AccountEvent, AccountHistory as AccountHistoryPage } from "../api/schema";
 import { useAccountHistory } from "../api/queries/audit";
 import { Disclosure, PagedHistory } from "./AuditHistory";
 
@@ -12,16 +15,25 @@ export function HistoryCard() {
         History
       </h2>
       <Disclosure label="Changes to your account" className="mt-3">
-        <AccountHistory />
+        <OwnAccountHistory />
       </Disclosure>
     </section>
   );
 }
 
-function AccountHistory() {
+function OwnAccountHistory() {
+  return <AccountHistory history={useAccountHistory()} />;
+}
+
+/** The entries of an account's history, read by `history`, a page at a time. */
+export function AccountHistory({
+  history,
+}: {
+  history: UseInfiniteQueryResult<InfiniteData<AccountHistoryPage>, Error>;
+}) {
   return (
     <PagedHistory
-      history={useAccountHistory()}
+      history={history}
       empty="No account changes yet."
       row={(event) => <AccountEventRow key={event.id} event={event} />}
     />
