@@ -1,5 +1,5 @@
 // The confirm before a team tag merges heap tags (design/ux.md, Tags): a dialog on a wide screen, a sheet on a phone.
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
@@ -9,17 +9,10 @@ import { PHONE, useMedia } from "../components/media";
 import { Sheet } from "../components/Sheet";
 import { listOf, plural } from "../components/words";
 import { chipClass, TagProblem, type TagSettings } from "./TagSettings";
+import { useMergeReachConfirm, type Send } from "./useMergeReachConfirm";
 
 /** What the write does: makes a team tag, or renames one into a name heap tags have. */
 export type MergeAct = { kind: "make"; name: string } | { kind: "rename"; from: string; to: string };
-
-/** The part of a mutation the confirm uses. `V` is what the opener sent in its first attempt. */
-type Send<V> = {
-  mutateAsync: (variables: V & { confirm: string }) => Promise<unknown>;
-  reset: () => void;
-  isPending: boolean;
-  error: Error | null;
-};
 
 const badgeClass = "rounded-full bg-sunken px-2 py-0.5 text-xs text-muted";
 
@@ -56,57 +49,42 @@ export function MergeConfirm<V>({
   onDone: (confirmed: MergeReach) => void;
   onClose: () => void;
 }) {
-  const [shown, setShown] = useState<{ reach: MergeReach; previous: MergeReach | null }>({
-    reach: refused,
-    previous: null,
+  const flow = useMergeReachConfirm({
+    mutation,
+    variables,
+    refused,
+    partsOf: (r: MergeReach) =>
+      r.heaps.map((reached) => ({
+        id: reached.tag_id,
+        items: reached.items,
+        label: `${reached.heap.name}'s “${reached.tag_name}”`,
+      })),
+    reachOf: (failure) =>
+      failure instanceof ApiProblem && failure.code === "tag_merge_unconfirmed" ? failure.mergeReach : undefined,
+    // A version conflict belongs to the form behind the dialog, which keeps the error.
+    onFailure: (failure) => {
+      if (failure instanceof ApiProblem && failure.code === "version_conflict") onClose();
+    },
+    onDone,
+    onClose,
   });
-  const { reach, previous } = shown;
-  const { pending, error } = { pending: mutation.isPending, error: mutation.error };
-  const bodyId = useId();
-  // A changed list moves focus to the band that says so, so a screen reader reads it before the button again.
-  const band = useRef<HTMLParagraphElement>(null);
-  useEffect(() => {
-    if (previous) band.current?.focus();
-  }, [previous]);
+  const { reach, pending, error, bodyId, band } = flow;
   const make = act.kind === "make";
   const name = make ? act.name : act.to;
   const title = make ? `Make “${name}” a team tag?` : `Rename “${act.from}” to “${act.to}”?`;
   const items = reach.heaps.reduce((sum, reached) => sum + reached.items, 0);
-  const before = previous && new Map(previous.heaps.map((reached) => [reached.tag_id, reached.items]));
-  const left = previous
-    ? previous.heaps.filter((old) => !reach.heaps.some((reached) => reached.tag_id === old.tag_id))
-    : [];
-
-  const cancel = () => {
-    if (pending) return;
-    mutation.reset();
-    onClose();
-  };
-  const confirm = () => {
-    mutation.mutateAsync({ ...variables, confirm: reach.token }).then(
-      () => onDone(reach),
-      (failure: unknown) => {
-        if (!(failure instanceof ApiProblem)) return;
-        if (failure.code === "tag_merge_unconfirmed" && failure.mergeReach) {
-          setShown({ reach: failure.mergeReach, previous: reach });
-        } else if (failure.code === "version_conflict") {
-          onClose();
-        }
-      },
-    );
-  };
 
   const actLabel = pending ? (make ? "Making…" : "Renaming…") : make ? "Make team tag" : "Rename and merge";
   const body: ReactNode = (
     <div id={bodyId} className="flex min-w-0 flex-col gap-3 text-sm text-ink-soft">
-      {previous && (
+      {flow.changed && (
         <p ref={band} tabIndex={-1} className="rounded-lg bg-accent-soft px-3 py-2 text-accent-ink outline-none">
           This changed while it was open. Check the list again; the button confirms this one.
         </p>
       )}
       <ul aria-label="Heap tags it merges" className="max-h-[40dvh] divide-y divide-line overflow-y-auto">
         {reach.heaps.map((reached) => {
-          const was = before?.get(reached.tag_id);
+          const was = flow.was(reached.tag_id, reached.items);
           return (
             <li
               key={reached.tag_id}
@@ -119,12 +97,12 @@ export function MergeConfirm<V>({
                   ·
                 </span>
                 <span>{plural(reached.items, "item")}</span>
-                {was !== undefined && was !== reached.items && <span className={badgeClass}>was {was}</span>}
+                {was !== undefined && <span className={badgeClass}>was {was}</span>}
               </span>
               <span className="flex gap-1.5 max-sm:order-1 sm:ml-auto">
                 {reached.archived && <span className={badgeClass}>archived</span>}
                 {reached.heap.id === promotingHeapId && <span className={badgeClass}>this heap</span>}
-                {before && !before.has(reached.tag_id) && <span className={badgeClass}>new</span>}
+                {flow.isNew(reached.tag_id) && <span className={badgeClass}>new</span>}
               </span>
             </li>
           );
@@ -133,7 +111,7 @@ export function MergeConfirm<V>({
       <p className="text-ink">
         {plural(items, "item")} in {plural(reach.heaps.length, "heap")} will carry the team tag.
       </p>
-      {left.length > 0 && <p>Left the list: {listOf(left.map((old) => `${old.heap.name}'s “${old.tag_name}”`))}.</p>}
+      {flow.left.length > 0 && <p>Left the list: {listOf(flow.left)}.</p>}
       <p>
         Description:{" "}
         {description ? (
@@ -157,8 +135,8 @@ export function MergeConfirm<V>({
       bodyId={bodyId}
       actLabel={actLabel}
       pending={pending}
-      onConfirm={confirm}
-      onCancel={cancel}
+      onConfirm={flow.confirm}
+      onCancel={flow.cancel}
     />
   );
 }

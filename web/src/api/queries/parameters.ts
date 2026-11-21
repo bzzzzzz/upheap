@@ -210,6 +210,9 @@ export function useMakeTeamParameter(heap: HeapRef) {
           },
         }),
       ),
-    onSettled: () => invalidateTeamParameters(queryClient, heap.team),
+    // The first attempt is always refused and changes nothing; only a confirmed one can have written.
+    onSettled: (_data, _error, { confirm }) => {
+      if (confirm) invalidateTeamParameters(queryClient, heap.team);
+    },
   });
 }
