@@ -45,8 +45,8 @@ pub struct Config {
     /// `UPHEAP_SCIM_TOKEN`: the bearer token the provider's SCIM client sends, at least 32 characters. `None` when unset
     /// or blank: the SCIM endpoints aren't served. Needs the provider.
     pub scim: Option<ScimSettings>,
-    /// `UPHEAP_OPERATOR_CONTACT`: one line, at most 200 characters, shown wherever the web app says to ask whoever runs
-    /// the server. `None` when unset or blank.
+    /// `UPHEAP_OPERATOR_CONTACT`: one line, at most 200 characters, shown wherever the web app or a mail says to ask
+    /// whoever runs the server. `None` when unset or blank.
     pub operator_contact: Option<String>,
     /// `MAIL_URL` and `MAIL_FROM`: where mail goes and who it is from. `None` when `MAIL_URL` is unset: mail is off.
     pub mail: Option<Arc<mail::Mailer>>,

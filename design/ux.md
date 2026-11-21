@@ -1044,7 +1044,8 @@ taken email says "An account with that email already exists and can't sign in th
 server." The invite page's signed-out state is the same, its button still returning to the invite.
 
 Wherever a page says to ask whoever runs the server (the forgotten-password line, the provider refusal, the reset page,
-a team with no admin), the operator's contact line, when set, shows under it as its own line in the muted text style.
+a team with no admin), the operator's contact line, when set, shows under it as its own line in the muted text style. The mail that tells an old address it was changed carries it the same way, on its own line under "ask whoever
+runs this Upheap server".
 
 A first sign-in through the provider continues at `/login/provider`, in the same card: **Pick a username**, "Signed in
 through Acme SSO as:" with the name and email as plain text, the Username input (the same hint, focused, empty),

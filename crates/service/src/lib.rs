@@ -80,7 +80,7 @@ pub struct Settings {
     pub group_teams: group_teams::GroupTeams,
     /// The provider's SCIM access, if the operator set a token. Needs [`Settings::oidc`].
     pub scim: Option<scim::ScimSettings>,
-    /// Who to ask, shown where the web app says to ask whoever runs the server.
+    /// Who to ask, shown where the web app or a mail says to ask whoever runs the server.
     pub operator_contact: Option<String>,
 }
 
