@@ -143,8 +143,10 @@ bar are as on Waiting for me.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
-that is `/waiting`, `/agents` and `/all`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
-there and active, else the first active heap, else the first.
+that is `/waiting`, `/agents` and `/all`; Teams, a team's page and its activity, and Account keep their shell without
+one. The heap kept is the one opened last that is still there and active, else the first active heap, else the first.
+On a phone those pages have no tabs, so the top bar starts with Back: it goes to the page before, or, when the tab
+opened on the page from a link, to the heap kept.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar, the content column and the
 item pane wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The block is

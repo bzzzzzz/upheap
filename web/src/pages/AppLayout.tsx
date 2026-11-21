@@ -4,6 +4,7 @@
 import {
   Link,
   Outlet,
+  useCanGoBack,
   useMatch,
   useParams,
   useRouter,
@@ -17,6 +18,7 @@ import {
   Building2,
   ChartColumn,
   ChevronDown,
+  ChevronLeft,
   ChevronsUpDown,
   CircleCheck,
   Ellipsis,
@@ -367,6 +369,7 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
   const team = titleTeam(me, heapRef);
   return (
     <header className="sticky top-0 z-10 flex items-center bg-canvas/95 px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 backdrop-blur sm:hidden">
+      {!heapRef && <PhoneBack me={me} />}
       <HeapSwitcher me={me} heapRef={heapRef}>
         {(props) => (
           <button
@@ -385,6 +388,31 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
       </HeapSwitcher>
       <PhoneSelect heapRef={heapRef} />
     </header>
+  );
+}
+
+/**
+ * Back, at the left of the phone's top bar on a page with no heap in the shell, which has no tabs to go on from
+ * (ux.md, Layout): the page before it, or the heap the shell would keep when the tab opened on this page. None when
+ * there is neither, for an account with no heap.
+ */
+function PhoneBack({ me }: { me: Me }) {
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
+  const kept = keptHeap(me);
+  if (!canGoBack && !kept) return null;
+  return (
+    <button
+      type="button"
+      aria-label="Back"
+      onClick={() => {
+        if (canGoBack) router.history.back();
+        else if (kept) void router.navigate({ to: "/teams/$team/heaps/$heap", params: kept });
+      }}
+      className="-ml-2 flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none focus-visible:outline-2 focus-visible:outline-accent"
+    >
+      <ChevronLeft aria-hidden="true" className="size-6" />
+    </button>
   );
 }
 
