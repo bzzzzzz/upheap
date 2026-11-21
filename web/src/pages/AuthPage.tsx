@@ -7,6 +7,7 @@ import { usePasswordResetOptions, useRequestPasswordReset } from "../api/queries
 import { BASE } from "../basePath";
 import { Field } from "../components/Field";
 import { Logo } from "../components/Logo";
+import { OperatorContact } from "../components/OperatorContact";
 import { ACCOUNT_DEACTIVATED, problemMessage } from "../components/ProblemText";
 import { RequestId } from "../components/RequestId";
 import { CheckMail, type CheckMailCause } from "./CheckMail";
@@ -235,6 +236,9 @@ export function AuthPage({
         <p role="alert" className="text-[13px] font-medium text-overdue-ink max-sm:text-sm">
           {refusalText}
         </p>
+      )}
+      {refusalText && refusal === "email_taken" && !provider?.password_sign_in && (
+        <OperatorContact className="text-sm text-ink-soft" />
       )}
     </>
   );
@@ -594,7 +598,10 @@ function ForgotPassword({
         Forgot your password?
       </button>
       {open && !byMail && (
-        <p className="text-sm text-ink-soft">Whoever runs this Upheap server can send you a reset link.</p>
+        <>
+          <p className="text-sm text-ink-soft">Whoever runs this Upheap server can send you a reset link.</p>
+          <OperatorContact className="text-sm text-ink-soft" />
+        </>
       )}
       {open && byMail && (
         <div className="flex w-full flex-col gap-2">

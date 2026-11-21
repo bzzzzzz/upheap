@@ -2,7 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, ensureOk, unwrap } from "../client";
 import { passwordResetOptionsKey, removeUserQueries } from "./keys";
 
-/** Whether the server mails password reset links. Read once: the operator sets mail up with the server's configuration. */
+/**
+ * Whether the server mails password reset links, and who to ask when someone needs the operator's help. Read once: the
+ * operator sets both with the server's configuration.
+ */
 export function usePasswordResetOptions() {
   return useQuery({
     queryKey: passwordResetOptionsKey,

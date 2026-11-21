@@ -956,7 +956,8 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
 
 1. Configuration comes from environment variables, validated at startup; the variables and their defaults are in
    [README.md](../README.md#configuration). No session secret is needed, because session tokens are random and
-   stored hashed rather than signed.
+   stored hashed rather than signed. The operator's contact line goes out with the public password-reset options
+   (`GET /password-resets`), because the sign-in page already reads them before anyone signs in.
 2. On startup the server runs pending migrations, then serves the API and the web app on one port. On Postgres the
    run holds a transaction-scoped advisory lock, so instances starting together apply each migration once; MySQL and
    SQLite aren't run with several instances.

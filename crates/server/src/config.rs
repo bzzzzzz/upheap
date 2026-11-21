@@ -45,6 +45,9 @@ pub struct Config {
     /// `UPHEAP_SCIM_TOKEN`: the bearer token the provider's SCIM client sends, at least 32 characters. `None` when unset
     /// or blank: the SCIM endpoints aren't served. Needs the provider.
     pub scim: Option<ScimSettings>,
+    /// `UPHEAP_OPERATOR_CONTACT`: one line, at most 200 characters, shown wherever the web app says to ask whoever runs
+    /// the server. `None` when unset or blank.
+    pub operator_contact: Option<String>,
     /// `MAIL_URL` and `MAIL_FROM`: where mail goes and who it is from. `None` when `MAIL_URL` is unset: mail is off.
     pub mail: Option<Arc<mail::Mailer>>,
 }
@@ -129,6 +132,7 @@ impl Config {
         let oidc = oidc.map(|oidc| oidc.with_provider_logout(provider_logout));
         let group_teams = group_teams(&lookup, oidc.is_some())?;
         let scim = scim_settings(&lookup, oidc.is_some(), &base_url)?;
+        let operator_contact = operator_contact(&lookup)?;
         let mail = match lookup("MAIL_URL").filter(|v| !v.trim().is_empty()) {
             None => None,
             Some(url) => {
@@ -157,6 +161,7 @@ impl Config {
             oidc,
             group_teams,
             scim,
+            operator_contact,
             mail,
         })
     }
@@ -238,6 +243,25 @@ fn group_teams(
         })
         .collect()
 }
+
+/// The operator's contact line, trimmed: none when `UPHEAP_OPERATOR_CONTACT` is unset or blank, and an error when it is
+/// longer than [`MAX_OPERATOR_CONTACT`] characters.
+fn operator_contact(lookup: &impl Fn(&str) -> Option<String>) -> anyhow::Result<Option<String>> {
+    const NAME: &str = "UPHEAP_OPERATOR_CONTACT";
+    let Some(contact) = lookup(NAME)
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(None);
+    };
+    if contact.chars().count() > MAX_OPERATOR_CONTACT {
+        bail!("{NAME} must be at most {MAX_OPERATOR_CONTACT} characters");
+    }
+    Ok(Some(contact))
+}
+
+/// The longest `UPHEAP_OPERATOR_CONTACT`: a line, not a page, on every screen that shows it.
+const MAX_OPERATOR_CONTACT: usize = 200;
 
 /// The SCIM access: none when `UPHEAP_SCIM_TOKEN` is unset or blank, and an error when it is set without a provider
 /// or is shorter than [`SCIM_TOKEN_MIN_CHARS`]. The token is never in the error.
@@ -570,5 +594,29 @@ mod tests {
             assert!(message.contains("UPHEAP_SCIM_TOKEN"), "{message}");
             assert!(!message.contains(SCIM_TOKEN), "{message}");
         }
+    }
+
+    #[test]
+    fn reads_the_operator_contact_trimmed_and_none_when_blank() -> anyhow::Result<()> {
+        assert!(config(&BASE)?.operator_contact.is_none());
+        assert!(
+            config(&[BASE[0], BASE[1], ("UPHEAP_OPERATOR_CONTACT", "  ")])?
+                .operator_contact
+                .is_none()
+        );
+        let set = config(&[BASE[0], BASE[1], ("UPHEAP_OPERATOR_CONTACT", " Ask Sam in #it ")])?;
+        assert_eq!(set.operator_contact.as_deref(), Some("Ask Sam in #it"));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_an_operator_contact_over_200_characters() {
+        let long = "x".repeat(201);
+        let error = config(&[BASE[0], BASE[1], ("UPHEAP_OPERATOR_CONTACT", long.as_str())]).expect_err("long");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("UPHEAP_OPERATOR_CONTACT") && message.contains("200"),
+            "{message}"
+        );
     }
 }
