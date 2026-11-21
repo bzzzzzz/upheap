@@ -5,8 +5,8 @@ import { ApiProblem, type HeapRef } from "../api/client";
 import type { ItemTag, MergeReach } from "../api/schema";
 import { useMe } from "../api/queries/me";
 import { heapTags, useCreateTagIn, useTags, useTeamTags } from "../api/queries/tags";
-import { MergeConfirm } from "../pages/MergeConfirm";
-import { carriedBy } from "../pages/TagSettings";
+import { madeTeamTag, MergeConfirm } from "../pages/MergeConfirm";
+import { TagProblem } from "../pages/TagSettings";
 import { FieldFrame, type FieldLayout } from "./ChoiceButtons";
 import { RequestId } from "./RequestId";
 import { teamName } from "./teamName";
@@ -149,12 +149,11 @@ export function TagPicker({
   const owner = me?.teams.find((t) => t.slug === (team ?? heapRef?.team));
   const ownerName = me && owner ? teamName(owner, me) : (team ?? heapRef?.team ?? "");
   const createCode = create.error instanceof ApiProblem ? create.error.code : undefined;
+  // A team's tags take the Tags card's messages, and leave a merge refusal to the confirm.
+  const teamSettings = team !== undefined ? { scope: { kind: "team" as const, team }, teamName: ownerName } : null;
   let createProblem = create.error?.message;
   if (createCode === "tag_name_taken") {
-    createProblem =
-      team !== undefined
-        ? `${ownerName} already has a team tag with that name.`
-        : "A tag with that name already exists.";
+    createProblem = "A tag with that name already exists.";
   } else if (createCode === "tag_name_taken_by_team_tag") {
     createProblem = `“${query}” is a team tag of ${ownerName}. Use it on items here instead.`;
   }
@@ -274,29 +273,31 @@ export function TagPicker({
             {list}
           </Popover>
         ))}
-      {merging && (
+      {merging && teamSettings && (
         <MergeConfirm
           mutation={confirmCreate}
           variables={{ body: { name: merging.name } }}
           act={{ kind: "make", name: merging.name }}
           reach={merging.reach}
           description={null}
-          settings={{ scope: { kind: "team", team: team ?? "" }, teamName: ownerName }}
+          settings={teamSettings}
           onDone={(confirmed) => {
-            showToast({ message: `“${merging.name}” is a team tag now: ${carriedBy(confirmed)}` });
+            showToast({ message: madeTeamTag(merging.name, confirmed) });
             setMerging(null);
           }}
           onClose={() => setMerging(null)}
         />
       )}
-      {create.error && !merging && createCode !== "tag_merge_unconfirmed" && (
-        <>
-          <p role="alert" className="text-xs text-overdue-ink">
-            {createProblem}
-          </p>
-          <RequestId error={create.error} />
-        </>
-      )}
+      {teamSettings
+        ? !merging && <TagProblem error={create.error} typed={query} settings={teamSettings} />
+        : create.error && (
+            <>
+              <p role="alert" className="text-xs text-overdue-ink">
+                {createProblem}
+              </p>
+              <RequestId error={create.error} />
+            </>
+          )}
     </FieldFrame>
   );
 }

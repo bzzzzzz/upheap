@@ -972,9 +972,8 @@ Archive or Unarchive, History), then Tags, the team's own, used in every heap of
 rows that are edited in place, with "Changes in every heap of {team}." under the form and the same History; a name
 that heap tags of the team have opens the merge confirm, see Tags), then Parameters, the team's own, which each heap
 chooses to use (a New parameter button that opens the add form without a weight, and a card per parameter like a
-heap's, with the team tags that suggest it, picked from the team's tags alone or made there
-(Create team tag “…”, which links the new team tag), a line "Used in Launch and Support" or
-"Not used in any heap yet"; archiving an option there names the heaps whose open items switch), then Members with a
+heap's, with the team tags that suggest it, picked from the team's tags alone or made there (Create
+team tag “…”, which links the new team tag), a line "Used in Launch and Support" or "Not used in any heap yet"; archiving an option there names the heaps whose open items switch), then Members with a
 search whose results are a listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge,
 Make admin or Make member and Remove, and Leave team or a line saying why the only admin can't leave. Removing a member
 says what happens: "They lose access to Launch and
