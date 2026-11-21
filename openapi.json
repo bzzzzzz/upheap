@@ -6290,7 +6290,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done)",
+            "description": "`tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done), each with `field` `link`",
             "content": {
               "application/json": {
                 "schema": {
@@ -9406,7 +9406,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_heap` or `too_many_tags`",
+            "description": "`tag_not_in_team` or `too_many_tags`",
             "content": {
               "application/json": {
                 "schema": {

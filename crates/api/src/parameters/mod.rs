@@ -476,7 +476,7 @@ async fn make_team_parameter(
         (status = 403, body = Problem),
         (status = 404, description = "Not a team parameter the heap uses", body = Problem),
         (status = 409, description = "`parameter_archived` or `heap_archived`", body = Problem),
-        (status = 422, description = "`tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done)", body = Problem),
+        (status = 422, description = "`tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done), each with `field` `link`", body = Problem),
     ))]
 async fn link_heap_tags(
     State(state): State<AppState>,
@@ -484,7 +484,7 @@ async fn link_heap_tags(
     ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
     ApiJson(body): ApiJson<ChangeHeapTagLinksDto>,
 ) -> Result<Json<ParameterListDto>, ApiError> {
-    let link = to_tag_set(&body.link).map_err(ServiceError::from)?;
+    let link = to_tag_set(&body.link).map_err(|error| in_link(error.into()))?;
     let unlink = body.unlink.iter().copied().map(TagId::from_uuid).collect();
     let list = state
         .services
@@ -495,8 +495,19 @@ async fn link_heap_tags(
             link,
             unlink,
         )
-        .await?;
+        .await
+        .map_err(in_link)?;
     Ok(Json(to_parameter_list_dto(list)))
+}
+
+/// A tag that can't be linked, or too many linked, is about `link`: only the tags to link are checked.
+fn in_link(error: ServiceError) -> ApiError {
+    match error {
+        ServiceError::TagNotInHeap { .. } | ServiceError::Invalid(ValidationError::TooManyTags { .. }) => {
+            ApiError::InField { error, field: "link" }
+        }
+        other => other.into(),
+    }
 }
 
 /// Makes the heap use one of its team's parameters. Admins only. The first use gives it the default weight, and
@@ -650,7 +661,7 @@ async fn archive_team_parameter(
         (status = 403, body = Problem),
         (status = 404, body = Problem),
         (status = 409, description = "`parameter_archived` or `version_conflict`", body = Problem),
-        (status = 422, description = "`tag_not_in_heap` or `too_many_tags`", body = Problem),
+        (status = 422, description = "`tag_not_in_team` or `too_many_tags`", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),
     ))]
 async fn link_team_parameter_tags(

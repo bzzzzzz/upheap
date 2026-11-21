@@ -101,6 +101,9 @@ pub enum ServiceError {
     /// A tag ID in the request doesn't name a tag of the item's heap.
     #[error("tag {tag_id} is not a tag of this heap")]
     TagNotInHeap { tag_id: TagId },
+    /// A tag ID in the request doesn't name a tag in use of the request's team.
+    #[error("tag {tag_id} is not a tag of this team")]
+    TagNotInTeam { tag_id: TagId },
     /// The blocker in the request isn't an item of the blocked item's heap.
     #[error("item {item_id} is not an item of this heap")]
     BlockerNotInHeap { item_id: ItemId },

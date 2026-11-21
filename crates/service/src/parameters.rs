@@ -429,7 +429,7 @@ impl Services {
     }
 
     /// Suggests the team's parameter in every heap that uses it for exactly `tags`, tags of the team in use, if it is
-    /// still at version `expected`. Anything else is [`ServiceError::TagNotInHeap`].
+    /// still at version `expected`. A tag that isn't the team's is [`ServiceError::TagNotInTeam`].
     pub async fn link_team_parameter_tags(
         &self,
         principal: Principal,
@@ -449,7 +449,7 @@ impl Services {
             .await?;
         let team_tags = store::tags::list_team_tags(&held.txn, team_id).await?;
         if let Some(&tag_id) = tags.iter().find(|id| !team_tags.iter().any(|tag| tag.id == **id)) {
-            return Err(ServiceError::TagNotInHeap { tag_id });
+            return Err(ServiceError::TagNotInTeam { tag_id });
         }
         ensure_tags_in_use(&held.txn, &tags).await?;
         let edited = held.current.link_tags(tags)?;

@@ -9425,7 +9425,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done) */
+            /** @description `tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done), each with `field` `link` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -11442,7 +11442,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_not_in_heap` or `too_many_tags` */
+            /** @description `tag_not_in_team` or `too_many_tags` */
             422: {
                 headers: {
                     [name: string]: unknown;
