@@ -46,9 +46,11 @@ test("Filters open as a sheet on a phone and a popover on a tablet", async ({ pa
     // A sheet reaches the bottom of the screen.
     expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBeGreaterThanOrEqual(height - 40);
   } else {
-    // A popover is narrower than the screen and stops short of its edges; its height follows the filters it holds.
-    expect(Math.round(box?.width ?? width)).toBeLessThan(width - 100);
-    expect(Math.round((box?.y ?? 0) + (box?.height ?? height))).toBeLessThan(height);
+    // A popover is narrower than the screen and stops short of its edges; its height follows the filters it holds, up
+    // to a limit, past which it scrolls. The dialog is the content, so the popover holding it is what is measured.
+    const popover = await filters.locator("..").boundingBox();
+    expect(Math.round(popover?.width ?? width)).toBeLessThan(width - 100);
+    expect(Math.round((popover?.y ?? 0) + (popover?.height ?? height))).toBeLessThan(height);
   }
   await filters.getByRole("button", { name: "Close" }).click();
   await expect(filters).toHaveCount(0);
