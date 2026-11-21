@@ -195,6 +195,8 @@ enum ItemCommand {
     Add(commands::item::add::AddArgs),
     /// The ranked list, or closed items with --closed
     List(commands::item::list::ListArgs),
+    /// Find items by title or key in every heap you can use, open and closed
+    Search(commands::item::search::SearchArgs),
     /// One item in full, and with --history what happened to it
     Show(commands::item::show::ShowArgs),
     /// Change an item's fields
@@ -368,6 +370,7 @@ impl Command {
         Some(match self {
             Self::Item(ItemCommand::Add(args)) => &args.shared,
             Self::Item(ItemCommand::List(args)) => &args.shared,
+            Self::Item(ItemCommand::Search(args)) => &args.shared,
             Self::Item(ItemCommand::Show(args)) => &args.shared,
             Self::Item(ItemCommand::Edit(args)) => &args.shared,
             Self::Item(
@@ -552,6 +555,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
     match command {
         Command::Item(ItemCommand::Add(args)) => commands::item::add::run(args, app, out).await,
         Command::Item(ItemCommand::List(args)) => commands::item::list::run(args, app, out).await,
+        Command::Item(ItemCommand::Search(args)) => commands::item::search::run(args, app, out).await,
         Command::Item(ItemCommand::Show(args)) => commands::item::show::run(args, app, out).await,
         Command::Item(ItemCommand::Edit(args)) => commands::item::edit::run(args, app, out).await,
         Command::Item(ItemCommand::Start(args)) => run_verb(StateVerb::Start, args, app, out).await,

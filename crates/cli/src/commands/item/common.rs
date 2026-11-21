@@ -8,6 +8,7 @@ use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
 use api_types::tags::{CreateTagDto, TagDto};
 use api_types::turns::SendToAgentDto;
+use api_types::waiting::ItemHeapDto;
 use domain::tag::TagName;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -394,6 +395,14 @@ pub(super) async fn parameter_values(
     }
     let parameters = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;
     resolve_parameter_values(set, clear, &parameters.value, api.heap).map(Some)
+}
+
+/// Titles longer than this are cut short in a table, so the columns after them stay on screen.
+pub(super) const TITLE_WIDTH: usize = 60;
+
+/// `team/heap`, the name every item command takes for a heap.
+pub(super) fn heap_label(heap: &ItemHeapDto) -> String {
+    format!("{}/{}", heap.team_slug, heap.slug)
 }
 
 pub(super) fn state_text(state: StateDto) -> &'static str {

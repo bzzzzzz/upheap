@@ -32,6 +32,7 @@ pub mod questions;
 mod random;
 pub mod saved_views;
 pub mod scim;
+pub mod search;
 mod splitting;
 pub mod steps;
 pub mod tags;

@@ -50,8 +50,10 @@ grouped, and ranking runs over every non-closed item so blockers inherit from hi
 **Instead of.** Pagination and a server search endpoint from the start.
 
 **Consequences.** No request per keystroke, and stable positions are trivial. If heaps outgrow the assumption,
-search moves to the server behind a `q=` parameter with per-database full-text indexes. The size assumption is
-written down in [architecture.md](architecture.md#computation).
+the list's own search moves to the server behind a `q=` parameter with per-database full-text indexes. Finding an
+item in any heap, closed ones included, is a separate search on the server, as portable `LIKE`
+([architecture.md](architecture.md#search)). The size assumption is written down in
+[architecture.md](architecture.md#computation).
 
 ## 4. The ranking formula is a version in code, not a setting per heap
 

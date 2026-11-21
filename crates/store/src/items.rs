@@ -12,7 +12,7 @@ use domain::item::{
     BlockReason, Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title,
 };
 use domain::{HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
-use sea_orm::sea_query::Condition;
+use sea_orm::sea_query::{BinOper, Condition, Expr, ExprTrait, Func, Order};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Select,
 };
@@ -22,6 +22,9 @@ use crate::codes::{GroupCount, IN_LIST_CHUNK, RowReader, id_to_db, version_to_db
 use crate::entities::{item_former_handles, item_parameter_values, item_tags, items};
 
 const TABLE: &str = "items";
+
+/// The character that escapes `%` and `_` in a search pattern, and itself.
+const LIKE_ESCAPE: char = '!';
 
 /// Position after which a page of closed items starts: the last item of the previous page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -396,6 +399,72 @@ pub async fn list_closed_items(
     attach_tags(db, &mut items).await?;
     attach_values(db, &mut items).await?;
     Ok(items)
+}
+
+/// Up to `limit` items of `heap_ids`, in any state and without their tags and values, whose title contains `text`
+/// ignoring case, or whose key is `key`. The item with `key` comes first; then open items, newest created first; then
+/// closed ones, most recently closed first.
+///
+/// The match is `LOWER(title) LIKE LOWER(pattern)`, which scans the heaps' items (the `heap_id` indexes only narrow it
+/// to them) and folds case as the database's `LOWER` does: Unicode on Postgres and MySQL, ASCII only on SQLite. It
+/// holds while a person sees thousands of items at most; after that it moves to per-database full-text indexes.
+/// `heap_ids` go in one `IN` list, which holds while a person views far fewer heaps than a backend's bound-parameter
+/// limit; chunk it when that stops being true.
+pub async fn search_items(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+    key: Option<ItemKey>,
+    text: &str,
+    limit: u64,
+) -> Result<Vec<Item>, StoreError> {
+    if heap_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    // `pattern ESCAPE '!'` is the right-hand side of the `LIKE`, as sea-query's own `LikeExpr` builds it, but with the
+    // pattern lowered by the database, so both sides are folded the same way.
+    let pattern = Expr::expr(Func::lower(Expr::val(like_pattern(text))))
+        .binary(BinOper::Escape, Expr::Constant(LIKE_ESCAPE.into()));
+    let title_matches = Expr::expr(Func::lower(Expr::col(items::Column::Title))).binary(BinOper::Like, pattern);
+    let mut matches = Condition::any().add(title_matches);
+    if let Some(key) = key {
+        matches = matches.add(items::Column::Key.eq(key.as_str()));
+    }
+    let mut query = items::Entity::find()
+        .filter(items::Column::HeapId.is_in(heap_ids.iter().map(|id| id_to_db(id.as_uuid()))))
+        .filter(matches);
+    if let Some(key) = key {
+        query = query.order_by_asc(Into::<Expr>::into(
+            Expr::case(items::Column::Key.eq(key.as_str()), 0).finally(1),
+        ));
+    }
+    query
+        .order_by_asc(Into::<Expr>::into(
+            Expr::case(Expr::col(items::Column::ClosedAt).is_null(), 0).finally(1),
+        ))
+        .order_by(items::Column::ClosedAt, Order::Desc)
+        .order_by_desc(items::Column::CreatedAt)
+        .order_by_desc(items::Column::Id)
+        .limit(limit)
+        .all(db)
+        .await?
+        .into_iter()
+        .map(to_item)
+        .collect()
+}
+
+/// `text` as a `LIKE` pattern that contains it, with `!` as the escape character, so `%`, `_` and `!` in `text` match
+/// only themselves.
+fn like_pattern(text: &str) -> String {
+    let mut pattern = String::with_capacity(text.len() + 2);
+    pattern.push('%');
+    for c in text.chars() {
+        if matches!(c, LIKE_ESCAPE | '%' | '_') {
+            pattern.push(LIKE_ESCAPE);
+        }
+        pattern.push(c);
+    }
+    pattern.push('%');
+    pattern
 }
 
 /// Writes `item` with its tags and values if the stored row still has version `expected`, and returns it with its
