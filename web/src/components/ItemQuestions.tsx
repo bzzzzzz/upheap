@@ -16,7 +16,7 @@ import { proposalSummary } from "./proposalSummary";
 import { StuckRow } from "./StuckRow";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
-import { useUserName } from "./userName";
+import { useUserNameAtStart } from "./userName";
 import { RequestId } from "./RequestId";
 
 export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
@@ -766,12 +766,12 @@ function AnsweredRow({
 
 /** What became of a listed question: the reply and who made it, or that closing the item withdrew it. */
 function Outcome({ question }: { question: Question }) {
-  const by = useUserName(question.reply?.replied_by);
+  const by = useUserNameAtStart(question.reply?.replied_by);
   const reply = question.reply;
   if (question.state === "withdrawn") return <p className="text-sm text-muted">Withdrawn</p>;
   if (!reply) return null;
   const labels = reply.picked.map((index) => question.choices[index] ?? "");
-  const who = by ? `${by.charAt(0).toUpperCase()}${by.slice(1)}, ` : "";
+  const who = by ? `${by}, ` : "";
   return (
     <>
       {labels.length > 0 && (

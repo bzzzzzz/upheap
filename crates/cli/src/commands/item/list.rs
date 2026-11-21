@@ -11,7 +11,6 @@ use api_types::parameters::ParameterListDto;
 use api_types::tags::{TagListDto, TeamTagListDto};
 use api_types::turns::{AgentStateDto, GoalDto};
 use api_types::views::SavedViewListDto;
-use api_types::waiting::ItemHeapDto;
 use clap::{Args, ValueEnum};
 
 use crate::client::NO_QUERY;
@@ -21,10 +20,8 @@ use crate::lookup::{find_team_tag, find_view, matches_text, resolve_parameter, r
 use crate::output::{Cell, Mode, Output, Tone, shorten};
 use crate::{App, CliError};
 
-use super::common::{due_cell, kind_text, sizes_text, state_text, tags_text, with_agent_text};
+use super::common::{TITLE_WIDTH, due_cell, heap_label, kind_text, sizes_text, state_text, tags_text, with_agent_text};
 
-/// Titles longer than this are cut short in the table, so the columns after them stay on screen.
-const TITLE_WIDTH: usize = 60;
 const REASON_WIDTH: usize = 40;
 
 /// What `--blocker` keeps.
@@ -350,11 +347,6 @@ fn across_groups(list: &AcrossHeapsListDto) -> [(&'static str, &[AcrossHeapsItem
         ("Ranked", &list.ranked),
         ("Blocked", &list.blocked),
     ]
-}
-
-/// `team/heap`, the name every item command takes for a heap.
-fn heap_label(heap: &ItemHeapDto) -> String {
-    format!("{}/{}", heap.team_slug, heap.slug)
 }
 
 fn keeps(item: &ItemDto, text: Option<&str>) -> bool {

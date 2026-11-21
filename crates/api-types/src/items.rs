@@ -300,6 +300,35 @@ pub struct AcrossHeapsItemDto {
     pub entry: RankedItemDto,
 }
 
+/// What to find in the search across all heaps (`GET /me/search`).
+#[derive(Clone, Debug, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+#[serde(deny_unknown_fields)]
+pub struct SearchQuery {
+    /// Text to find in an item's title, ignoring case, or an item's exact key. Blank text matches every title.
+    pub q: String,
+}
+
+/// The items a search across all heaps found.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = SearchResults)]
+pub struct SearchResultsDto {
+    /// At most 50 matches: the item whose key is the text first, then open items, newest created first, then closed
+    /// items, most recently closed first.
+    pub rows: Vec<SearchRowDto>,
+    /// Whether more items matched than `rows` holds.
+    pub truncated: bool,
+}
+
+/// An item a search found, with its heap.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = SearchRow)]
+pub struct SearchRowDto {
+    pub item: ItemRefDto,
+    /// The heap the item is in, and its team.
+    pub heap: ItemHeapDto,
+}
+
 /// A comma-separated query value, such as `tag=a,b`. An empty value is an empty list.
 fn comma_separated<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where

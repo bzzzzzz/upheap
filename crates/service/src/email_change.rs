@@ -201,7 +201,7 @@ impl Services {
 
         self.send_later(
             mail,
-            changed_mail(&user, mail, &link.new_email),
+            changed_mail(&user, mail, &link.new_email, self.operator_contact()),
             user.id,
             "email changed",
         );
@@ -235,17 +235,72 @@ fn change_mail(user: &User, mail: &MailSettings, new_email: &Email, token: &Rese
     }
 }
 
-/// The notice to the old address that the address changed.
-fn changed_mail(user: &User, mail: &MailSettings, new_email: &Email) -> Mail {
+/// The notice to the old address that the address changed, with the operator's contact line, when set, on its own
+/// line under the sentence that says to ask whoever runs the server.
+fn changed_mail(user: &User, mail: &MailSettings, new_email: &Email, operator_contact: Option<&str>) -> Mail {
+    let contact = operator_contact.map(|line| format!("{line}\n")).unwrap_or_default();
     Mail {
         to: user.email.as_str().to_owned(),
         subject: "Your Upheap address changed".to_owned(),
         body: format!(
-            "The address for @{username} on {host} changed from {old} to {new}.\n\nIf it wasn't you, ask whoever runs this Upheap server: they can make you a reset link.\n",
+            "The address for @{username} on {host} changed from {old} to {new}.\n\nIf it wasn't you, ask whoever runs this Upheap server: they can make you a reset link.\n{contact}",
             username = user.username,
             host = mail.host(),
             old = user.email.as_str(),
             new = new_email.as_str(),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use domain::handle::Handle;
+    use domain::user::DisplayName;
+    use domain::{Timestamp, Version};
+    use googletest::prelude::*;
+    use uuid::Uuid;
+
+    use super::*;
+
+    const UNCHANGED: &str = "The address for @sam on upheap.example.com changed from sam@old.example to sam@new.example.\n\nIf it wasn't you, ask whoever runs this Upheap server: they can make you a reset link.\n";
+
+    fn notice(operator_contact: Option<&str>) -> Result<Mail> {
+        let user = User {
+            id: UserId::from_uuid(Uuid::nil()),
+            username: Handle::parse("sam", Field::Username)?,
+            email: Email::parse("sam@old.example")?,
+            display_name: DisplayName::parse("Sam")?,
+            created_at: Timestamp::EPOCH,
+            version: Version::INITIAL,
+        };
+        let mail = MailSettings {
+            mailer: Arc::new(mail::Mailer::new("log:", "Upheap <upheap@example.com>")?),
+            base_url: "https://upheap.example.com".to_owned(),
+        };
+        Ok(changed_mail(
+            &user,
+            &mail,
+            &Email::parse("sam@new.example")?,
+            operator_contact,
+        ))
+    }
+
+    #[gtest]
+    fn the_changed_notice_adds_the_operator_contact_under_the_ask_line() -> Result<()> {
+        let mail = notice(Some("Ask Sam in #it"))?;
+
+        expect_that!(mail.body, eq(&format!("{UNCHANGED}Ask Sam in #it\n")));
+        Ok(())
+    }
+
+    #[gtest]
+    fn the_changed_notice_without_an_operator_contact_is_unchanged() -> Result<()> {
+        let mail = notice(None)?;
+
+        expect_that!(mail.to, eq("sam@old.example"));
+        expect_that!(mail.body, eq(UNCHANGED));
+        Ok(())
     }
 }
