@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 
 use domain::Timestamp;
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
-    QuerySelect,
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend,
+    EntityTrait, IsolationLevel, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Statement, TransactionTrait,
 };
 use serde_json::Value;
 use uuid::Uuid;
@@ -159,6 +159,42 @@ pub async fn lock_users_by_external_id(db: &impl ConnectionTrait, external_id: &
         .all(db)
         .await?;
     Ok(())
+}
+
+/// On Postgres, takes a lock on `external_id` itself until the transaction ends, whether or not a user has it yet,
+/// so a write that gives a user this external ID and a first sign-in of the person with that subject run one after
+/// the other. [`lock_users_by_external_id`] can't do that there: Postgres doesn't lock rows that don't match yet.
+/// On MySQL that lock's gap lock already covers it, and SQLite has one writer, so this does nothing on either.
+/// A transaction takes at most one, so two never wait on each other in a cycle; a hash collision only makes two
+/// people's writes take turns.
+pub async fn lock_external_id(db: &impl ConnectionTrait, external_id: &str) -> Result<(), StoreError> {
+    if db.get_database_backend() != DbBackend::Postgres {
+        return Ok(());
+    }
+    db.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT pg_advisory_xact_lock($1, hashtext($2))",
+        [EXTERNAL_ID_LOCK_SPACE.into(), external_id.into()],
+    ))
+    .await?;
+    Ok(())
+}
+
+/// The first key of [`lock_external_id`]'s two-key advisory locks, which keeps them apart from any other two-key
+/// lock. Two-key locks never meet the one-key migration lock: Postgres keeps the two kinds apart.
+const EXTERNAL_ID_LOCK_SPACE: i32 = 0x5343_494d; // "SCIM" in ASCII
+
+/// Begins a transaction for a write to users. On MySQL it runs at READ COMMITTED, so every read sees what committed
+/// before it, as on Postgres: the write can wait for a first sign-in's gap lock ([`lock_users_by_external_id`])
+/// after it has read, and must then see the account that sign-in made. At the default REPEATABLE READ its first read
+/// would fix what it sees. Postgres is at READ COMMITTED already, and SQLite has one writer.
+pub async fn begin_user_write(db: &DatabaseConnection) -> Result<DatabaseTransaction, StoreError> {
+    let txn = if db.get_database_backend() == DbBackend::MySql {
+        db.begin_with_config(Some(IsolationLevel::ReadCommitted), None).await?
+    } else {
+        db.begin().await?
+    };
+    Ok(txn)
 }
 
 /// Every user whose external ID is `external_id`, oldest first.

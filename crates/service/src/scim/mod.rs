@@ -348,9 +348,13 @@ impl Services {
         };
         let subjects: BTreeSet<String> = user.external_id.iter().cloned().collect();
         let personal_teams = self.personal_teams(&subjects).await?;
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let txn = store::scim::begin_user_write(&self.db).await?;
         self.lock_group_teams(&txn).await?;
         lock_teams(&txn, &personal_teams).await?;
+        // No row has the subject yet, so a first sign-in of the person can't lock this one ahead.
+        if let Some(subject) = &user.external_id {
+            store::scim::lock_external_id(&txn, subject).await?;
+        }
         let was_off = self.off_subjects(&txn, &subjects).await?;
         store::scim::insert_user(&txn, &user)
             .await
@@ -398,11 +402,16 @@ impl Services {
             }
             None => BTreeSet::new(),
         };
-        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let txn = store::scim::begin_user_write(&self.db).await?;
         self.lock_group_teams(&txn).await?;
         let current = store::scim::lock_user(&txn, id).await?.ok_or(ScimError::NotFound)?;
         lock_teams(&txn, &personal_teams).await?;
         let input = change(&current)?;
+        // A first sign-in of the person the record moves to can't lock this row ahead: it doesn't have their subject
+        // yet. The person it moves from is covered by the row's lock.
+        if let Some(subject) = &input.external_id {
+            store::scim::lock_external_id(&txn, subject).await?;
+        }
         // The person the record was linked to before, if the write moves it to another.
         let subjects: BTreeSet<String> = [input.external_id.clone(), current.external_id.clone()]
             .into_iter()

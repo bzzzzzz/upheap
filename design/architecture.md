@@ -636,7 +636,10 @@ a fixed time.
      the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step runs the sync after making the
      user. A SCIM write can't find that user until it commits, so the username step locks the SCIM rows with the
      person's subject before it makes the user: it and a SCIM write to one of them run one after the other, and the
-     session is refused after a deactivation or ended by one that comes after it. Password sign-in, invite
+     session is refused after a deactivation or ended by one that comes after it. A record being created with the
+     subject, or moved onto it, has no such row yet. On MySQL the lock's gap lock makes that write wait, and the SCIM
+     user writes run at READ COMMITTED so that after the wait they see the account; on Postgres both sides also take
+     an advisory lock on the subject, last. Password sign-in, invite
      registration and reset never sync.
    - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)
      makes every password path in the service layer fail with `PasswordSignInOff`, so the API and the operator
