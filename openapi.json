@@ -7845,6 +7845,86 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/views/{view_id}/unarchive": {
+      "post": {
+        "tags": [
+          "views"
+        ],
+        "summary": "Brings an archived saved view back into the heap's list. Unarchiving a view that is in use succeeds.",
+        "operationId": "unarchive_view",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/weights": {
       "patch": {
         "tags": [
@@ -11053,6 +11133,7 @@
           "saved_view_created",
           "saved_view_updated",
           "saved_view_archived",
+          "saved_view_unarchived",
           "parameter_created",
           "parameter_updated",
           "parameter_archived",

@@ -217,6 +217,53 @@ async fn an_archived_view_leaves_the_list_and_cant_be_changed() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn unarchiving_brings_a_view_back_and_a_view_in_use_is_left_alone() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let saved = save_view(&app, &session, &heap, json!({ "name": "Old" })).await?;
+    let id = saved.body["id"].as_str().context("view has no id")?.to_owned();
+    let base = format!("{}/views/{id}", app.heap_url(&heap).await?);
+
+    // Act
+    let in_use = app
+        .send(Method::POST, &format!("{base}/unarchive"), Some(&session), None)
+        .await?;
+    let archived = app
+        .send(Method::POST, &format!("{base}/archive"), Some(&session), None)
+        .await?;
+    let restored = app
+        .send(Method::POST, &format!("{base}/unarchive"), Some(&session), None)
+        .await?;
+    let listed = list_views(&app, &session, &heap).await?;
+    let audit = app.audit_entries(&id).await?;
+
+    // Assert
+    expect_that!(in_use.status, eq(StatusCode::OK));
+    expect_that!(in_use.body["version"], eq(&saved.body["version"]));
+    expect_that!(restored.status, eq(StatusCode::OK));
+    expect_that!(restored.body["id"], eq(&json!(id)));
+    expect_that!(restored.body["archived_at"], eq(&json!(null)));
+    expect_that!(restored.body["allowed_actions"], eq(&json!(["edit", "archive"])));
+    expect_that!(names(&listed), elements_are![eq(&"Old")]);
+    let actions: Vec<&str> = audit.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        actions,
+        elements_are![
+            eq(&"saved_view_created"),
+            eq(&"saved_view_archived"),
+            eq(&"saved_view_unarchived")
+        ]
+    );
+    expect_that!(
+        audit[2].1["archived_at"],
+        eq(&json!({ "before": archived.body["archived_at"], "after": null }))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_view_can_only_filter_by_tags_of_its_heap() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;
