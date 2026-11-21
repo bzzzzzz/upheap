@@ -59,10 +59,7 @@ async fn item_search_with_no_match_says_so() -> Result<()> {
     let found = cli.run(&["item", "search", "nothing like it"]).await;
 
     // Assert
-    expect_that!(
-        found.stdout,
-        eq("No items in your heaps match \"nothing like it\".\n")
-    );
+    expect_that!(found.stdout, eq("No items in your heaps match \"nothing like it\".\n"));
     expect_that!(found.exited(0), eq(true));
     Ok(())
 }
