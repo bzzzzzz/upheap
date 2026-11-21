@@ -287,7 +287,8 @@ since a "last opened" on the server would cost a write on every heap visit;
 they don't follow the user to another device. Search gives a flat list with the team and an
 "archived" tag, a "New heap “…”" row, and a message when nothing matches. Arrows move, Enter opens and Escape
 clears the field, then closes. It ends with "New heap in \<team\>", in the heap's own team, when the team allows
-it. On a tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts
+it. "New heap" turns into the name and an optional Link name, with the same new link under them as the Team page's
+form ([Teams and Team](#teams-and-team)); Add heap opens the new heap. On a tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts
 with the search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each
 team's name, and Recent's title, sits on a band a shade off the panel, with space above it, and a team's fold header
 stays in view while its heaps scroll.
@@ -954,7 +955,9 @@ stored as, so it has no Rename. The label is the web app's: the stored name is u
 follow a display-name change. Activity entries name the team as stored.
 
 The Team page follows the settings layout ([Rules](#rules) §3): the name with the rarer actions (Rename, Link name,
-Activity, Data) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
+Activity, Data) under a ⋯, then Heaps with + New heap (a form with the name and an optional Link name, as Create team
+has; once a link name is typed, "New link: /teams/{team}/heaps/{slug}" shows under them, and a blank one is made by the
+server from the name; the server's errors show under the field they name) and rows with their open count, Open and a ⋯ (Rename, Link name,
 Archive or Unarchive, History), then Tags, the team's own, used in every heap of the team (a New team tag card, and
 rows that are edited in place, with "Changes in every heap of {team}." under the form and the same History; a name
 that heap tags of the team have opens the merge confirm, see Tags), then Parameters, the team's own, which each heap

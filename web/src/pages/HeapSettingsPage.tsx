@@ -5,7 +5,6 @@ import { Switch, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Heap } from "../api/schema";
 import { useHeap, useSetHeapPriority, useUpdateHeap } from "../api/queries/heaps";
-import { BASE } from "../basePath";
 import { useArchiveHeap } from "../components/archiveHeap";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
@@ -13,6 +12,7 @@ import { choiceButtonClass } from "../components/ChoiceButtons";
 import { LazyMarkdownEditor } from "../components/LazyMarkdownEditor";
 import { Markdown } from "../components/Markdown";
 import { NameForm } from "../components/NameForm";
+import { NewHeapLink } from "../components/NewHeapLink";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
 import { RequestId } from "../components/RequestId";
@@ -148,11 +148,7 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
               <p className="mt-2 text-xs/normal text-muted max-sm:text-[13px]">
                 {slugChanging && (
                   <>
-                    New link:{" "}
-                    <span className="font-mono break-all text-ink-soft">
-                      {BASE}/teams/{heapRef.team}/heaps/{newSlug}
-                    </span>
-                    .{" "}
+                    <NewHeapLink team={heapRef.team} slug={newSlug} />.{" "}
                   </>
                 )}
                 Changing it changes the heap&apos;s links; old links stop working.
