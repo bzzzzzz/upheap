@@ -1,5 +1,6 @@
 // Team parameters (design/ux.md, Heap settings and Teams and Team): made on the Team page, chosen by each heap on its
 // Parameters tab, weighted on its Ranking page, and set on items like any parameter.
+import type { Page } from "@playwright/test";
 import {
   addHeaps,
   addItem,
@@ -77,4 +78,59 @@ test("a team parameter is made on the Team page, used and weighted in one heap, 
   // The Team page names the heap that uses it.
   await page.goto(`/teams/${team}`);
   await expect(parameters).toContainText(/Used in /);
+});
+
+/** In the heap at `path`, makes a parameter `name` with `options`, one per line. */
+async function newParameter(page: Page, path: string, name: string, options: string) {
+  await page.goto(path);
+  await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
+  await goTo(page, "Parameters");
+  await page.getByRole("button", { name: "New parameter" }).click();
+  await page.getByLabel("New parameter name").fill(name);
+  await page.getByLabel(/^Options of the new parameter/).fill(options);
+  await page.getByRole("button", { name: "Add parameter" }).click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+}
+
+test("a heap parameter is made a team parameter after the merge is confirmed, and both heaps' items keep their values", async ({
+  page,
+  heapPath,
+}) => {
+  const heapA = heapPath;
+  const team = /\/teams\/([^/]+)\//.exec(heapA)?.[1] ?? "";
+  await addHeaps(page, ["Beta"]);
+  const heapB = `/teams/${team}/heaps/beta`;
+  await newParameter(page, heapA, "Customer tier", "Gold\nSilver");
+  await newParameter(page, heapB, "customer tier", "silver\nPlatinum");
+  await goTo(page, "Open");
+  await addItem(page, "Beta request");
+  await openItem(page, "Beta request");
+  await pick(page, "customer tier", "silver");
+  await closeItem(page);
+
+  // The ⋯ on the heap parameter opens the confirm, which lists both heaps' parameters and marks this heap.
+  await page.goto(heapA);
+  await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
+  await goTo(page, "Parameters");
+  await page.getByRole("button", { name: "More for Customer tier" }).click();
+  await page.getByRole("menuitem", { name: "Make a team parameter" }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Make “Customer tier” a team parameter?" });
+  const rows = confirm.getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.filter({ hasText: "this heap" })).toHaveCount(1);
+  await expect(rows.filter({ hasText: "adds Platinum" })).toHaveCount(1);
+  await expect(confirm).toContainText("1 item in 2 heaps keep their values.");
+
+  // The toast exists only once the server has merged them.
+  await confirm.getByRole("button", { name: "Make team parameter" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "is a team parameter now" })).toContainText(
+    "“Customer tier” is a team parameter now: 1 item in 2 heaps keep their values.",
+  );
+  await expect(page.getByRole("heading", { name: /^Customer tier\s?, team parameter$/ })).toBeVisible();
+
+  // Beta's item has the team's option, and Beta lists the parameter as a team one.
+  await page.goto(heapB);
+  await expect(row(page, "Beta request")).toContainText("Customer tier: Silver");
+  await goTo(page, "Parameters");
+  await expect(page.getByRole("heading", { name: /^Customer tier\s?, team parameter$/ })).toBeVisible();
 });

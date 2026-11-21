@@ -1378,6 +1378,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins
+         *     only. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a
+         *     `parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team
+         *     parameter at the weight it had, and each item's value moves to the option with the same label. A parameter linked
+         *     to tags can't be merged: `parameter_merge_linked` names them.
+         */
+        post: operations["make_team_parameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use": {
         parameters: {
             query?: never;
@@ -2283,7 +2306,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed" | "email_confirmed";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "parameter_merged" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed" | "email_confirmed";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -3736,7 +3759,7 @@ export interface components {
          * @description An action the caller can take on a parameter.
          * @enum {string}
          */
-        ParameterAction: "edit" | "archive" | "stop_using" | "view_history";
+        ParameterAction: "edit" | "archive" | "make_team" | "stop_using" | "view_history";
         /**
          * @description Who owns a parameter.
          * @enum {string}
@@ -3760,6 +3783,34 @@ export interface components {
          * @enum {string}
          */
         ParameterListAction: "create" | "use_team_parameter";
+        /**
+         * @description What making a heap parameter a team parameter would do: the parameter itself, and the same-named heap parameters of
+         *     the team that merge into it.
+         */
+        ParameterMergeReach: {
+            /** @description The parameter it starts from first, then the others by heap name, then heap ID. */
+            entries: components["schemas"]["ParameterMergeReachEntry"][];
+            /** @description Names exactly these parameters, item counts and added options; it changes when any does. */
+            token: string;
+        };
+        /** @description A heap parameter in a merge. */
+        ParameterMergeReachEntry: {
+            /** @description The labels of its options the team parameter doesn't have yet. Empty for the one the merge starts from. */
+            added_options: string[];
+            archived: boolean;
+            heap: components["schemas"]["HeapSummary"];
+            /**
+             * Format: int32
+             * @description Items with a value for the parameter, open or closed.
+             */
+            items: number;
+            /** Format: uuid */
+            parameter_id: string;
+            /** @description The parameter's name as written. */
+            parameter_name: string;
+            /** @description Whether it is the one the merge starts from. */
+            starting: boolean;
+        };
         /** @description An option in use. */
         ParameterOption: {
             /** Format: uuid */
@@ -3904,6 +3955,7 @@ export interface components {
              */
             item_key?: string | null;
             merge_reach?: null | components["schemas"]["MergeReach"];
+            parameter_merge_reach?: null | components["schemas"]["ParameterMergeReach"];
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -5106,6 +5158,8 @@ export type ParameterAction = components['schemas']['ParameterAction'];
 export type ParameterKind = components['schemas']['ParameterKind'];
 export type ParameterList = components['schemas']['ParameterList'];
 export type ParameterListAction = components['schemas']['ParameterListAction'];
+export type ParameterMergeReach = components['schemas']['ParameterMergeReach'];
+export type ParameterMergeReachEntry = components['schemas']['ParameterMergeReachEntry'];
 export type ParameterOption = components['schemas']['ParameterOption'];
 export type ParameterPatchRequest = components['schemas']['ParameterPatchRequest'];
 export type ParameterWeightChange = components['schemas']['ParameterWeightChange'];
@@ -9421,6 +9475,80 @@ export interface operations {
             };
         };
     };
+    make_team_parameter: {
+        parameters: {
+            query?: {
+                /**
+                 * @description The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with, or of the
+                 *     `parameter_merge_reach` of `parameter_merge_unconfirmed`: the write goes on if what it would merge is still
+                 *     that, with the same item counts.
+                 */
+                confirm_reach?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The team parameter, with the heaps that use it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a parameter of the heap */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_merge_unconfirmed`, `parameter_merge_linked`, `parameter_archived` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `too_many_options` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     use_team_parameter: {
         parameters: {
             query?: never;
@@ -11034,8 +11162,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the
-                 *     heap tags it would merge are still those, with the same item counts.
+                 * @description The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with, or of the
+                 *     `parameter_merge_reach` of `parameter_merge_unconfirmed`: the write goes on if what it would merge is still
+                 *     that, with the same item counts.
                  */
                 confirm_reach?: string;
             };
@@ -11094,8 +11223,9 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the
-                 *     heap tags it would merge are still those, with the same item counts.
+                 * @description The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with, or of the
+                 *     `parameter_merge_reach` of `parameter_merge_unconfirmed`: the write goes on if what it would merge is still
+                 *     that, with the same item counts.
                  */
                 confirm_reach?: string;
             };

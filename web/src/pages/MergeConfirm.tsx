@@ -62,7 +62,6 @@ export function MergeConfirm<V>({
   });
   const { reach, previous } = shown;
   const { pending, error } = { pending: mutation.isPending, error: mutation.error };
-  const phone = useMedia(PHONE);
   const bodyId = useId();
   // A changed list moves focus to the band that says so, so a screen reader reads it before the button again.
   const band = useRef<HTMLParagraphElement>(null);
@@ -151,9 +150,44 @@ export function MergeConfirm<V>({
     </div>
   );
 
+  return (
+    <MergeDialog
+      title={title}
+      body={body}
+      bodyId={bodyId}
+      actLabel={actLabel}
+      pending={pending}
+      onConfirm={confirm}
+      onCancel={cancel}
+    />
+  );
+}
+
+/**
+ * The shell of a merge's confirm: a dialog on a wide screen, a sheet on a phone, with the body, Cancel and the button
+ * that goes ahead. `bodyId` is the id of the body's element, which the dialog is described by.
+ */
+export function MergeDialog({
+  title,
+  body,
+  bodyId,
+  actLabel,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  body: ReactNode;
+  bodyId: string;
+  actLabel: string;
+  pending: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const phone = useMedia(PHONE);
   if (phone) {
     return (
-      <Sheet title={title} role="alertdialog" describedBy={bodyId} isOpen onClose={cancel}>
+      <Sheet title={title} role="alertdialog" describedBy={bodyId} isOpen onClose={onCancel}>
         <div className="flex flex-col gap-3 pb-1">
           {body}
           <div className="flex flex-col gap-2">
@@ -161,7 +195,7 @@ export function MergeConfirm<V>({
               type="button"
               autoFocus
               disabled={pending}
-              onClick={confirm}
+              onClick={onConfirm}
               className="min-h-13 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:opacity-40"
             >
               {actLabel}
@@ -169,7 +203,7 @@ export function MergeConfirm<V>({
             <button
               type="button"
               disabled={pending}
-              onClick={cancel}
+              onClick={onCancel}
               className="min-h-13 rounded-xl border border-line text-[15px] text-ink disabled:opacity-40"
             >
               Cancel
@@ -182,7 +216,7 @@ export function MergeConfirm<V>({
   return (
     <ModalOverlay
       isOpen
-      onOpenChange={(open) => !open && cancel()}
+      onOpenChange={(open) => !open && onCancel()}
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[14vh]"
     >
       <Modal className="w-full max-w-[480px] rounded-2xl bg-surface p-[22px] text-ink shadow-xl outline-none">
@@ -192,10 +226,10 @@ export function MergeConfirm<V>({
           </Heading>
           {body}
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button type="button" autoFocus disabled={pending} onClick={cancel} className={compactButtonClass.quiet}>
+            <button type="button" autoFocus disabled={pending} onClick={onCancel} className={compactButtonClass.quiet}>
               Cancel
             </button>
-            <button type="button" disabled={pending} onClick={confirm} className={compactButtonClass.primary}>
+            <button type="button" disabled={pending} onClick={onConfirm} className={compactButtonClass.primary}>
               {actLabel}
             </button>
           </div>

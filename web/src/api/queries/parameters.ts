@@ -192,3 +192,24 @@ export function useSetUsingTeamParameter(heap: HeapRef, use: boolean) {
     onSettled: () => invalidateTeamParameters(queryClient, heap.team),
   });
 }
+
+/**
+ * Makes a heap parameter its team's, merging the team's same-named heap parameters into it. `confirm` is the token of
+ * the reach a `parameter_merge_unconfirmed` refusal answered with. A merge changes values, options and weights in
+ * every heap of the team, so all of them are read again.
+ */
+export function useMakeTeamParameter(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ parameterId, confirm }: { parameterId: string; confirm?: string }) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/team", {
+          params: {
+            path: { ...heap, parameter_id: parameterId },
+            query: { ...(confirm && { confirm_reach: confirm }) },
+          },
+        }),
+      ),
+    onSettled: () => invalidateTeamParameters(queryClient, heap.team),
+  });
+}

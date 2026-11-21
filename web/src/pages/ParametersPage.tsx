@@ -1,15 +1,24 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, List, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Ellipsis, List, Plus, Users } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
-import type { ItemTag, Parameter, ParameterList, ParameterOption, TeamParameter } from "../api/schema";
+import type {
+  ItemTag,
+  Parameter,
+  ParameterList,
+  ParameterMergeReach,
+  ParameterOption,
+  TeamParameter,
+} from "../api/schema";
 import { useMe } from "../api/queries/me";
 import {
   useArchiveOption,
   useArchiveParameter,
   useChangeParameter,
   useCreateParameter,
+  useMakeTeamParameter,
   useParameters,
   useSetUsingTeamParameter,
   type ParameterScope,
@@ -17,11 +26,13 @@ import {
 import { heapTags, useTags } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
+import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm } from "../components/NameForm";
 import { ProblemText } from "../components/ProblemText";
 import { TagPicker } from "../components/TagPicker";
 import { TeamMark } from "../components/TeamMark";
 import { teamName } from "../components/teamName";
+import { useToast } from "../components/UndoToast";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { listOf, plural } from "../components/words";
 import {
@@ -34,6 +45,7 @@ import {
   nameFormClasses,
 } from "./settingsForm";
 import { RequestId } from "../components/RequestId";
+import { keptValues, ParameterMergeConfirm, parameterMergeReachOf } from "./ParameterMergeConfirm";
 
 const problemClass = "text-overdue-ink";
 
@@ -253,6 +265,7 @@ export function ParameterCard({ parameter, scope }: { parameter: CardParameter; 
   const canArchive = parameter.allowed_actions.includes("archive");
   const canViewHistory = parameter.allowed_actions.includes("view_history");
   const canStopUsing = parameter.allowed_actions.includes("stop_using");
+  const canMakeTeam = parameter.allowed_actions.includes("make_team");
   const inHeap = "weight" in parameter ? parameter : null;
   const usedTeam = inHeap?.kind === "team" && scope.kind === "heap";
   const usedBy = "heaps" in parameter ? parameter.heaps : null;
@@ -318,6 +331,7 @@ export function ParameterCard({ parameter, scope }: { parameter: CardParameter; 
                 Rename
               </button>
             )}
+            {canMakeTeam && scope.kind === "heap" && <MakeTeamParameter parameter={parameter} heapRef={scope.heap} />}
           </>
         )}
       </div>
@@ -366,6 +380,50 @@ export function ParameterCard({ parameter, scope }: { parameter: CardParameter; 
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * The ⋯ of a heap parameter's card: Make a team parameter, which asks first. The first try is sent without a token, and
+ * the refusal, with the reach, opens the confirm. Any other refusal, such as the linked tags that stop a merge, shows
+ * under the card's heading as a failed archive does.
+ */
+function MakeTeamParameter({ parameter, heapRef }: { parameter: CardParameter; heapRef: HeapRef }) {
+  const make = useMakeTeamParameter(heapRef);
+  const showToast = useToast();
+  const [reach, setReach] = useState<ParameterMergeReach | null>(null);
+  const ask = () =>
+    make.mutate({ parameterId: parameter.id }, { onError: (error) => setReach(parameterMergeReachOf(error) ?? null) });
+  const label = `More for ${parameter.name}`;
+  return (
+    <>
+      <MenuTrigger>
+        <Button aria-label={label} className={compactButtonClass.icon}>
+          <Ellipsis aria-hidden="true" className="size-4" />
+        </Button>
+        <MenuPopover placement="bottom end">
+          <Menu aria-label={label} className="outline-none">
+            <MenuEntry id="make-team-parameter" icon={Users} onAction={ask}>
+              Make a team parameter
+            </MenuEntry>
+          </Menu>
+        </MenuPopover>
+      </MenuTrigger>
+      {!reach && <ProblemText error={parameterMergeReachOf(make.error) ? null : make.error} className={problemClass} />}
+      {reach && (
+        <ParameterMergeConfirm
+          mutation={make}
+          parameterId={parameter.id}
+          name={parameter.name}
+          reach={reach}
+          onDone={(confirmed) => {
+            showToast({ message: `“${parameter.name}” is a team parameter now: ${keptValues(confirmed)}` });
+            setReach(null);
+          }}
+          onClose={() => setReach(null)}
+        />
+      )}
+    </>
   );
 }
 
