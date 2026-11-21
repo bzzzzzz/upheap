@@ -185,6 +185,7 @@ impl TestServer {
                 oidc: None,
                 group_teams: service::group_teams::GroupTeams::default(),
                 scim: None,
+                operator_contact: None,
             },
         )
         .with_random(random);

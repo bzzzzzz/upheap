@@ -54,13 +54,14 @@ fn to_password_reset_dto(view: ResetLinkView) -> PasswordResetDto {
     }
 }
 
-/// Whether this server mails reset links, so the sign-in page knows whether to offer asking for one. No sign-in is
-/// needed, and a session cookie or bearer token is ignored.
+/// Whether this server mails reset links, so the sign-in page knows whether to offer asking for one, and who to ask
+/// otherwise, if the operator said. No sign-in is needed, and a session cookie or bearer token is ignored.
 #[utoipa::path(get, path = "/password-resets", tag = "auth",
     responses((status = 200, description = "Whether reset links are mailed", body = PasswordResetOptionsDto)))]
 async fn password_reset_options(State(state): State<AppState>) -> Json<PasswordResetOptionsDto> {
     Json(PasswordResetOptionsDto {
         by_mail: state.services.has_mail(),
+        operator_contact: state.services.operator_contact().map(str::to_owned),
     })
 }
 

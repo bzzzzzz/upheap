@@ -960,6 +960,8 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
    rustls, no connection pool). SMTP always uses TLS, implicit or STARTTLS. `file://` and `log:` are the development
    transports, and the only places a mail's text is recorded. A failed send isn't retried. `service` sends the mail
    it needs through that mailer (the reset mail, the email change link and the notice of a change, and the confirmation link, see Authentication).
+   `UPHEAP_OPERATOR_CONTACT`, the line the web app shows under "ask whoever runs this server", is validated at startup
+   and sent with the public password-reset options, because the sign-in page already reads them before anyone signs in.
 7. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
    with a clear message before it listens. The database gets time first: a database that scales to zero (Neon) can
    take longer to wake than one try's 10 s timeout, so the connect is retried with backoff, every error alike, until

@@ -709,8 +709,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Whether this server mails reset links, so the sign-in page knows whether to offer asking for one. No sign-in is
-         *     needed, and a session cookie or bearer token is ignored.
+         * Whether this server mails reset links, so the sign-in page knows whether to offer asking for one, and who to ask
+         *     otherwise, if the operator said. No sign-in is needed, and a session cookie or bearer token is ignored.
          */
         get: operations["password_reset_options"];
         put?: never;
@@ -3819,10 +3819,15 @@ export interface components {
             display_name: string;
             username: string;
         };
-        /** @description Whether this server mails password reset links. */
+        /** @description What the sign-in and reset pages need to know from the server's settings. */
         PasswordResetOptions: {
             /** @description `true` when the server has mail set up, so a signed-out user can ask for a link by email. */
             by_mail: boolean;
+            /**
+             * @description Who to ask for a reset link, or other help only whoever runs the server can give, as the operator wrote it.
+             *     Absent when unset.
+             */
+            operator_contact?: string | null;
         };
         /**
          * @description Where a password reset link is in its life. `used`, `cancelled` and `ended` are final.

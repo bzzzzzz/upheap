@@ -612,3 +612,26 @@ async fn without_mail_the_request_is_not_found() -> Result<()> {
     expect_that!(problem_code(&asked), eq("not_found"));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn the_options_say_who_to_ask_when_the_operator_set_a_contact() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let with_contact = app.with_settings(service::Settings {
+        operator_contact: Some("Ask Sam in #it".to_owned()),
+        ..service::Settings::default()
+    });
+
+    // Act
+    let options = with_contact
+        .send(Method::GET, "/api/v1/password-resets", None, None)
+        .await?;
+
+    // Assert
+    expect_that!(
+        options.body,
+        eq(&json!({ "by_mail": false, "operator_contact": "Ask Sam in #it" }))
+    );
+    Ok(())
+}

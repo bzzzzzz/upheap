@@ -2306,7 +2306,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Whether this server mails reset links, so the sign-in page knows whether to offer asking for one. No sign-in is\nneeded, and a session cookie or bearer token is ignored.",
+        "summary": "Whether this server mails reset links, so the sign-in page knows whether to offer asking for one, and who to ask\notherwise, if the operator said. No sign-in is needed, and a session cookie or bearer token is ignored.",
         "operationId": "password_reset_options",
         "responses": {
           "200": {
@@ -14445,7 +14445,7 @@
       },
       "PasswordResetOptions": {
         "type": "object",
-        "description": "Whether this server mails password reset links.",
+        "description": "What the sign-in and reset pages need to know from the server's settings.",
         "required": [
           "by_mail"
         ],
@@ -14453,6 +14453,13 @@
           "by_mail": {
             "type": "boolean",
             "description": "`true` when the server has mail set up, so a signed-out user can ask for a link by email."
+          },
+          "operator_contact": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who to ask for a reset link, or other help only whoever runs the server can give, as the operator wrote it.\nAbsent when unset."
           }
         }
       },

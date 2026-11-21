@@ -3,7 +3,7 @@
 // own command and one with mail set up, where they ask for it, and a small test for each state of the page.
 import type { Browser, TestInfo } from "@playwright/test";
 
-import { test as closed, type ClosedServer } from "./closedServer";
+import { OPERATOR_CONTACT, test as closed, type ClosedServer } from "./closedServer";
 import { expect, expectFitsWidth, goTo, HEAP_URL, PASSWORD, signOut, test } from "./fixtures";
 
 const NEW_PASSWORD = "another long password";
@@ -103,6 +103,7 @@ closed(
       await page.goto(link);
       await expect(page.getByRole("heading", { name: "This reset link was already used." })).toBeVisible();
       await expect(page.getByText("Ask whoever runs this server for a new one.")).toBeVisible();
+      await expect(page.getByText(OPERATOR_CONTACT, { exact: true })).toBeVisible();
     } finally {
       await context.close();
       // The account goes back to the password the other tests know.

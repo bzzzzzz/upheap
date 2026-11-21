@@ -28,6 +28,7 @@ import { InlineConfirm } from "../components/InlineConfirm";
 import { PHONE, useMedia } from "../components/media";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
+import { OperatorContact } from "../components/OperatorContact";
 import { ProblemText, problemMessage } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
@@ -633,9 +634,12 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
         Members · {team.members.length}
       </h2>
       {!team.personal && !team.members.some((member) => member.role === "admin") && (
-        <p className="text-[13px] text-muted max-sm:text-sm">
-          This team has no admin. Whoever runs this Upheap server can make one.
-        </p>
+        <>
+          <p className="text-[13px] text-muted max-sm:text-sm">
+            This team has no admin. Whoever runs this Upheap server can make one.
+          </p>
+          <OperatorContact className="text-[13px] text-muted max-sm:text-sm" />
+        </>
       )}
       {team.managed_by_groups && provider && (
         <p className="text-[13px] text-muted max-sm:text-sm">

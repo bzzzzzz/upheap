@@ -118,6 +118,7 @@ fn test_settings(allow_registration: bool) -> Settings {
         oidc: None,
         group_teams: GroupTeams::default(),
         scim: None,
+        operator_contact: None,
     }
 }
 
