@@ -111,6 +111,26 @@ pub struct ConfirmationSentDto {
     pub email: String,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct ChangeConfirmationAddressRequest {
+    /// The account's email address, or its username.
+    pub login: String,
+    pub password: String,
+    /// The address to mail a new confirmation link to.
+    pub email: String,
+}
+
+/// What changing the address of an unconfirmed account answers.
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[schema(as = ConfirmationAddress)]
+pub struct ConfirmationAddressDto {
+    /// The address the account has now, as parsed. The same when another account has the address, in which case
+    /// nothing changed and nothing was mailed.
+    pub email: String,
+    /// The account's username, which names it whether or not the address changed.
+    pub username: String,
+}
+
 /// What applying an email change link did.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[schema(as = EmailChanged)]

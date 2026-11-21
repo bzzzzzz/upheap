@@ -142,6 +142,8 @@ enum RequestBody {
     Empty,
     Registration,
     SignIn,
+    /// A new address for an account that hasn't confirmed its own.
+    ConfirmationAddress,
     /// A personal token's name.
     NewPersonalToken,
     /// The username step of a sign-in through the provider.
@@ -282,6 +284,14 @@ fn endpoints() -> Vec<Endpoint> {
             Target::Nothing,
             RequestBody::SignIn,
             StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/auth/confirmation-address",
+            Mail,
+            Target::Nothing,
+            RequestBody::ConfirmationAddress,
+            StatusCode::ACCEPTED,
         ),
         row(
             Method::POST,
@@ -1866,6 +1876,11 @@ impl World {
                 Some(json!({ "email": email, "username": username, "display_name": "New", "password": PASSWORD }))
             }
             RequestBody::SignIn => Some(json!({ "email": self.admin.email, "password": PASSWORD })),
+            RequestBody::ConfirmationAddress => Some(json!({
+                "login": self.admin.email,
+                "password": PASSWORD,
+                "email": "right@example.test",
+            })),
             RequestBody::NewPersonalToken => Some(json!({ "name": "ci" })),
             RequestBody::OidcUsername => Some(json!({ "username": self.unique_name("oidc") })),
             RequestBody::NewItem => Some(json!({ "title": "New", "need": "expected" })),

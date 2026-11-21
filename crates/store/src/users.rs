@@ -164,6 +164,24 @@ pub async fn set_email(db: &impl ConnectionTrait, user_id: UserId, email: &Email
     Ok(())
 }
 
+/// Sets the address of a user whose address isn't confirmed, and bumps their version. The address stays unconfirmed:
+/// nothing has proven it. Returns whether it changed: `false` means the address is confirmed, and nothing was set.
+/// Fails with [`StoreError::Duplicate`] when another user has the email.
+pub async fn set_unconfirmed_email(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    email: &Email,
+) -> Result<bool, StoreError> {
+    let result = users::Entity::update_many()
+        .col_expr(users::Column::Email, email.as_str().into())
+        .col_expr(users::Column::Version, Expr::col(users::Column::Version).add(1))
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .filter(users::Column::UnconfirmedSince.is_not_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
 /// Marks the user's address as not confirmed since `since`, for an account made while the server has mail set up.
 pub async fn set_unconfirmed(db: &impl ConnectionTrait, user_id: UserId, since: Timestamp) -> Result<(), StoreError> {
     users::Entity::update_many()

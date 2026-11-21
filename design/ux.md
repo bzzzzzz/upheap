@@ -977,14 +977,25 @@ form. Create account has none. The invite page's Sign in side has it too.
 
 With mail set up, Create account doesn't sign in. The card shows **Check your mail** in place of the forms, focus on its
 heading: "We sent a link to a@x.dev. It works for a day.", a **Send it again** button (disabled while it is pending),
-and "Wrong address? **Create the account again** with the right one and another username.", which brings the form back with what was typed (the first account keeps its username). Signing in with the
+and "Wrong address? **Change it**" (below). Signing in with the
 right password for an account that hasn't confirmed its address shows the same card as **Confirm your address**: "We
-mailed you a new link. It works for a day." with Send it again and no Wrong address line. Send it again signs in again
+mailed you a new link. It works for a day." with Send it again and the same Wrong address line. Send it again signs in again
 with the login and password the form held, which makes the server mail a fresh link and answer that the address isn't
 confirmed; that answer is "sent", and a line under the button says "Sent. It can take a minute to arrive.", shown anew
 for each send. If the sign-in goes through (the address was confirmed meanwhile, in another tab) the user is signed in as
 a sign-in would. Too many tries, or anything else, is the server's message in place of the line. The invite page's Create
 account and Sign in sides do the same.
+
+**Change it** replaces the Wrong address line with a small form under the buttons, for either way the card came up: a
+"Right address" email input, focused, with **Send a link there** (disabled while it is pending) and **Cancel**. Escape
+and Cancel close the form and put focus back on Change it; Enter sends. It posts the login and password the form held
+with the address, and the server sets the address of the still unconfirmed account and mails the link there. On
+success the form closes, the card's text names the new address ("We sent a link to b@x.dev. It works for a day."),
+the "Sent" line of Send it again goes, a line says "Sent to b@x.dev. It can take a minute to arrive.", and focus goes
+back to Change it. The card then signs in with the account's username, since the login may have been the mistyped
+address. A problem (too many tries, a network error) is the server's message under the form's buttons. An address
+another account has looks the same as a free one, so nothing says it was refused: whoever mistyped twice changes it
+again.
 
 On a server with registration closed, the sign-in page has no switch and no Create account: the Sign in form shows
 alone, and under its button a footnote in Create account's style says "New accounts need an invite link from a team's

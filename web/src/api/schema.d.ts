@@ -4,6 +4,29 @@
  */
 
 export interface paths {
+    "/api/v1/auth/confirmation-address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no
+         *     sign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.
+         * @description Only for a server with mail set up, and only for an account that hasn't confirmed its address: a confirmed
+         *     account fails as a wrong password does. The earlier confirmation link and any password reset link stop working.
+         *     An address another account has answers the same as a free one, and nothing changes.
+         */
+        post: operations["change_confirmation_address"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -2354,6 +2377,13 @@ export interface components {
          * @enum {string}
          */
         BlockerGoneHow: "done" | "wont_do" | "became" | "moved";
+        ChangeConfirmationAddressRequest: {
+            /** @description The address to mail a new confirmation link to. */
+            email: string;
+            /** @description The account's email address, or its username. */
+            login: string;
+            password: string;
+        };
         /** @description What the signed-in user gives to change their password. */
         ChangePasswordRequest: {
             /** @description The password now in use, to show it is the user and not someone at their open browser. */
@@ -2451,6 +2481,16 @@ export interface components {
              *     named by its item's key and this number, as `k3x9a.c3`.
              */
             number: number;
+        };
+        /** @description What changing the address of an unconfirmed account answers. */
+        ConfirmationAddress: {
+            /**
+             * @description The address the account has now, as parsed. The same when another account has the address, in which case
+             *     nothing changed and nothing was mailed.
+             */
+            email: string;
+            /** @description The account's username, which names it whether or not the address changed. */
+            username: string;
         };
         /** @description What registering answers when the account must confirm its address first. */
         ConfirmationSent: {
@@ -4957,6 +4997,7 @@ export type AuditTextDiff = components['schemas']['AuditTextDiff'];
 export type BlockedLayout = components['schemas']['BlockedLayout'];
 export type BlockerGone = components['schemas']['BlockerGone'];
 export type BlockerGoneHow = components['schemas']['BlockerGoneHow'];
+export type ChangeConfirmationAddressRequest = components['schemas']['ChangeConfirmationAddressRequest'];
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest'];
 export type Claim = components['schemas']['Claim'];
 export type ClaimRequest = components['schemas']['ClaimRequest'];
@@ -4965,6 +5006,7 @@ export type ClientSignInList = components['schemas']['ClientSignInList'];
 export type ClosedGroup = components['schemas']['ClosedGroup'];
 export type ClosedItems = components['schemas']['ClosedItems'];
 export type Comment = components['schemas']['Comment'];
+export type ConfirmationAddress = components['schemas']['ConfirmationAddress'];
 export type ConfirmationSent = components['schemas']['ConfirmationSent'];
 export type Contributor = components['schemas']['Contributor'];
 export type CreateHeapRequest = components['schemas']['CreateHeapRequest'];
@@ -5162,6 +5204,77 @@ export type WorkNext = components['schemas']['WorkNext'];
 export type WorkQueue = components['schemas']['WorkQueue'];
 export type $defs = Record<string, never>;
 export interface operations {
+    change_confirmation_address: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeConfirmationAddressRequest"];
+            };
+        };
+        responses: {
+            /** @description The address is set and a link is mailed to it, or another account has the address and nothing changed */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmationAddress"];
+                };
+            };
+            /** @description `invalid_credentials`: no such account, a wrong password, or an account that is confirmed */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf_header_missing`, or `password_sign_in_off`: the server signs in through its provider only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The server has no mail set up */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `field_empty` (`field` `login`, `password` or `email`), or `email_invalid`; not counted as an attempt */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
+            429: {
+                headers: {
+                    /** @description Seconds until the account may try again */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     sign_in: {
         parameters: {
             query?: never;

@@ -251,7 +251,8 @@ each as an `.eml` file in that directory, which must exist. Nothing is sent.
 With mail set up, users can ask for a password reset link on the sign-in page ([Resetting a
 password](#resetting-a-password)), and a new account (open registration, or Create account through an invite link)
 confirms its address before it can sign in: a link is mailed to it, and it works for a day. Signing in again with the
-right password mails a fresh link. Accounts made before mail was set up, or while it was off, and provider accounts
+right password mails a fresh link, and a person who mistyped their address can correct it on the Check your mail
+card, which mails the link to the new address. Accounts made before mail was set up, or while it was off, and provider accounts
 count as confirmed; with mail off, nobody has to confirm. If the mail doesn't come, confirm an account by hand:
 
 ```sh

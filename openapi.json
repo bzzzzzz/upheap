@@ -10,6 +10,97 @@
     "version": "0.8.0"
   },
   "paths": {
+    "/api/v1/auth/confirmation-address": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no\nsign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.",
+        "description": "Only for a server with mail set up, and only for an account that hasn't confirmed its address: a confirmed\naccount fails as a wrong password does. The earlier confirmation link and any password reset link stop working.\nAn address another account has answers the same as a free one, and nothing changes.",
+        "operationId": "change_confirmation_address",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeConfirmationAddressRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "The address is set and a link is mailed to it, or another account has the address and nothing changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmationAddress"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_credentials`: no such account, a wrong password, or an account that is confirmed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_header_missing`, or `password_sign_in_off`: the server signs in through its provider only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The server has no mail set up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`field_empty` (`field` `login`, `password` or `email`), or `email_invalid`; not counted as an attempt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`too_many_attempts`; `Retry-After` gives the seconds to wait",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "description": "Seconds until the account may try again"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -10821,6 +10912,27 @@
           "moved"
         ]
       },
+      "ChangeConfirmationAddressRequest": {
+        "type": "object",
+        "required": [
+          "login",
+          "password",
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The address to mail a new confirmation link to."
+          },
+          "login": {
+            "type": "string",
+            "description": "The account's email address, or its username."
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
       "ChangePasswordRequest": {
         "type": "object",
         "description": "What the signed-in user gives to change their password.",
@@ -11037,6 +11149,24 @@
             "format": "int32",
             "description": "The comment's number within its item, given when it was added and never changed or reused. The comment is\nnamed by its item's key and this number, as `k3x9a.c3`.",
             "minimum": 0
+          }
+        }
+      },
+      "ConfirmationAddress": {
+        "type": "object",
+        "description": "What changing the address of an unconfirmed account answers.",
+        "required": [
+          "email",
+          "username"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The address the account has now, as parsed. The same when another account has the address, in which case\nnothing changed and nothing was mailed."
+          },
+          "username": {
+            "type": "string",
+            "description": "The account's username, which names it whether or not the address changed."
           }
         }
       },

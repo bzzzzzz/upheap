@@ -10,9 +10,10 @@ use domain::Timestamp;
 use domain::UserId;
 use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::email_change::{EmailChangeLinkError, confirmation_link_end_from};
+use domain::handle::Handle;
 use domain::password_reset::{ResetLink, ResetToken};
-use domain::user::User;
-use domain::validation::ValidationError;
+use domain::user::{Email, User};
+use domain::validation::{Field, ValidationError};
 use mail::Mail;
 use serde_json::json;
 use store::{StoreError, TransactionTrait};
@@ -34,6 +35,14 @@ pub enum Registered {
 pub enum OperatorConfirmed {
     Confirmed(User),
     AlreadyConfirmed(User),
+}
+
+/// Where a new confirmation link went, and the account it is for.
+#[derive(Debug)]
+pub struct ConfirmationAddress {
+    /// The address the account has now, as parsed.
+    pub email: Email,
+    pub username: Handle,
 }
 
 /// What a new account got inside its transaction, before the transaction commits.
@@ -110,6 +119,105 @@ impl Services {
         );
         tracing::info!(user_id = %user.id, "sign-in refused: address not confirmed, new link mailed");
         Ok(())
+    }
+
+    /// Sets the address of an account that hasn't confirmed it and mails a new confirmation link there, for a
+    /// mistyped address at sign-up. The caller proves who they are with the account's login and password, as for a
+    /// sign-in, and needs no session.
+    ///
+    /// Fails with [`ServiceError::PasswordSignInOff`] when the server has no password sign-in, and with
+    /// [`ServiceError::NotFound`] when it has no mail set up. An empty `login`, `password` or `email`, or an `email`
+    /// that isn't an address, fails with a [`ValidationError`] before anything is counted. Then the attempt is counted
+    /// and checked as a sign-in's is ([`Services::verify_login`]): past the limit it fails with
+    /// [`ServiceError::TooManySignInAttempts`], and an unknown login or a wrong password with
+    /// [`ServiceError::InvalidCredentials`]. A success doesn't clear the count, but the count is keyed by the
+    /// account's address, so a changed address starts a fresh one.
+    ///
+    /// In one transaction the address is set (a conditional update, so an account that is confirmed fails with
+    /// [`ServiceError::InvalidCredentials`] and nothing changes), the account's working password reset link is
+    /// cancelled, since one mailed to a wrong mailbox would give the account to whoever reads it, a new
+    /// confirmation link is made, cancelling the earlier one, and the change is recorded in the personal team with
+    /// the address before and after. After it commits the link is mailed, in a task of its own.
+    ///
+    /// An address another account has answers as a success, with nothing changed, mailed or recorded, so it
+    /// reveals nothing about accounts.
+    pub async fn change_unconfirmed_address(
+        &self,
+        login: &str,
+        password: &str,
+        email: &str,
+    ) -> Result<ConfirmationAddress, ServiceError> {
+        self.ensure_password_sign_in()?;
+        let Some(mail) = &self.mail else {
+            return Err(ServiceError::NotFound);
+        };
+        let login = login.trim();
+        if login.is_empty() {
+            return Err(ValidationError::Empty { field: Field::Login }.into());
+        }
+        if password.is_empty() {
+            return Err(ValidationError::Empty { field: Field::Password }.into());
+        }
+        if email.is_empty() {
+            return Err(ValidationError::Empty { field: Field::Email }.into());
+        }
+        let new_email = Email::parse(email)?;
+
+        let (user, _) = self.verify_login(login, password).await?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
+        let now = self.now();
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        store::teams::lock_team(&txn, personal_team).await?;
+        // The unique index decides whether another account has the address. A refusal ends the transaction on
+        // Postgres, so it rolls back right away (see `apply_email_change`).
+        match store::users::set_unconfirmed_email(&txn, user.id, &new_email).await {
+            Ok(true) => {}
+            Ok(false) => {
+                txn.rollback().await.map_err(StoreError::from)?;
+                return Err(ServiceError::InvalidCredentials);
+            }
+            Err(StoreError::Duplicate(_)) => {
+                txn.rollback().await.map_err(StoreError::from)?;
+                tracing::info!(user_id = %user.id, taken = true, "unconfirmed address change asked");
+                return Ok(ConfirmationAddress {
+                    email: new_email,
+                    username: user.username,
+                });
+            }
+            Err(error) => return Err(error.into()),
+        }
+        store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
+        let token = make_confirmation_link(&txn, user.id, now).await?;
+        let entry = self.team_audit_entry(
+            Principal {
+                user_id: user.id,
+                run: None,
+            },
+            personal_team,
+            AuditAction::EmailChanged,
+            EntityType::User,
+            *user.id.as_uuid(),
+            json!({ AuditField::Email.code(): { "before": user.email.as_str(), "after": new_email.as_str() } }),
+            now,
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+
+        let user = User {
+            email: new_email.clone(),
+            ..user
+        };
+        self.send_later(
+            mail,
+            confirmation_mail(&user, mail, &token),
+            user.id,
+            "email confirmation",
+        );
+        tracing::info!(user_id = %user.id, taken = false, "unconfirmed address changed");
+        Ok(ConfirmationAddress {
+            email: new_email,
+            username: user.username,
+        })
     }
 
     /// Confirms the address of the link's user and signs the caller in as them, in one transaction. Anyone holding

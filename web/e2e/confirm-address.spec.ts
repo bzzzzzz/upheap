@@ -69,3 +69,67 @@ closed(
     }
   },
 );
+
+closed(
+  "someone who mistyped their address at sign-up changes it on the card and confirms with the link mailed there",
+  async ({ browser, closedServer }, testInfo) => {
+    const { baseURL, admin, mailedLink } = closedServer;
+    const anaContext = await browser.newContext({ ...testInfo.project.use, baseURL });
+    const newcomerContext = await browser.newContext({ ...testInfo.project.use, baseURL });
+    try {
+      const signedIn = await anaContext.request.post("/api/v1/auth/login", {
+        headers: CSRF,
+        data: { login: admin.email, password: PASSWORD },
+      });
+      expect(signedIn.status()).toBe(200);
+      const team = await anaContext.request.post("/api/v1/teams", {
+        headers: CSRF,
+        data: { name: "Mistyped", slug: `t-${crypto.randomUUID().slice(0, 8)}` },
+      });
+      expect(team.status()).toBe(201);
+      const { slug } = (await team.json()) as { slug: string };
+      const made = await anaContext.request.post(`/api/v1/teams/${slug}/invite-links`, { headers: CSRF });
+      expect(made.status()).toBe(201);
+      const { token } = (await made.json()) as { token: string };
+
+      // The newcomer mistypes the address, and the account is made all the same.
+      const page = await newcomerContext.newPage();
+      await page.goto(`/invite/${token}`);
+      const { username, email: right } = uniqueUser();
+      const wrong = right.replace("@example.test", "@exmaple.test");
+      await page.getByLabel("Name", { exact: true }).fill("Nia Park");
+      await page.getByLabel("Username").fill(username);
+      await page.getByLabel("Email").fill(wrong);
+      await page.getByLabel("Password").fill(PASSWORD);
+      await page.getByRole("button", { name: "Create account and join" }).click();
+      await expect(page.getByRole("heading", { name: "Check your mail" })).toBeVisible();
+
+      // Change it opens the form, and Cancel closes it with focus back on the button.
+      const change = page.getByRole("button", { name: "Change it" });
+      await change.click();
+      const address = page.getByLabel("Right address");
+      await expect(address).toBeFocused();
+      await expectFitsWidth(page, "The Check your mail card with the address form open");
+      await page.keyboard.press("Escape");
+      await expect(address).toBeHidden();
+      await expect(change).toBeFocused();
+
+      // The right address gets a new link, and the card says so.
+      const asked = new Date();
+      await change.click();
+      await page.getByLabel("Right address").fill(right);
+      await page.getByRole("button", { name: "Send a link there" }).click();
+      await expect(page.getByRole("status")).toHaveText(`Sent to ${right}. It can take a minute to arrive.`);
+      await expect(page.getByText(`We sent a link to ${right}. It works for a day.`)).toBeVisible();
+      await expect(change).toBeFocused();
+
+      // The link mailed there confirms the account and signs the browser in.
+      const link = await mailedLink(right, asked, "confirm");
+      await page.goto(link);
+      await page.getByRole("button", { name: "Confirm and sign in" }).click();
+      await expect(page).toHaveURL(HEAP_URL);
+    } finally {
+      await Promise.all([anaContext.close(), newcomerContext.close()]);
+    }
+  },
+);
