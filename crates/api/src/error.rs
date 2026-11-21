@@ -184,7 +184,9 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some(Field::CurrentPassword.as_str()),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "wrong_password", Category::Caller)
         },
-        ServiceError::TooManySignInAttempts { .. } | ServiceError::TooManyResetRequests { .. } => {
+        ServiceError::TooManySignInAttempts { .. }
+        | ServiceError::TooManyResetRequests { .. }
+        | ServiceError::TooManyAddressChanges { .. } => {
             simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
         }
         ServiceError::EmailTaken => Classified {
@@ -640,7 +642,9 @@ impl IntoResponse for ApiError {
             );
         }
         if let ApiError::Service(
-            ServiceError::TooManySignInAttempts { retry_after } | ServiceError::TooManyResetRequests { retry_after },
+            ServiceError::TooManySignInAttempts { retry_after }
+            | ServiceError::TooManyResetRequests { retry_after }
+            | ServiceError::TooManyAddressChanges { retry_after },
         ) = &self
         {
             response

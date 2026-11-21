@@ -282,6 +282,20 @@ started. Exit codes: `0` confirmed or already confirmed, `2` wrong arguments, `3
 be reached, `1` anything else, a database a version behind included. A reset link, which also arrives by mail,
 confirms the address too.
 
+The server limits the mail an account or an address can send (five in 15 minutes each), but not registration: it
+mails each new address once, and the server can't tell one client from another behind a proxy. On a server open to
+sign-ups, rate-limit `POST /api/v1/auth/register` per client at the reverse proxy, or set `ALLOW_REGISTRATION=false`
+and let people in with invite links. With nginx, for example:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=register:10m rate=1r/m;
+
+location = /api/v1/auth/register {
+    limit_req zone=register burst=5 nodelay;
+    proxy_pass http://upheap;
+}
+```
+
 ### Resetting a password
 
 With mail set up, a user who forgot their password asks for a reset link on the sign-in page and gets it by mail. Without

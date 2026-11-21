@@ -695,6 +695,16 @@ a fixed time.
      under many spellings, each with its own attempts.
    - There is no per-IP limit, because the server sits behind a proxy and doesn't know client addresses. Spraying
      one password across many accounts is left to the reverse proxy.
+   - **Mail is limited on every path that sends it**, each with the sign-in limit's numbers in `sign_in_attempts`
+     under a key of its own: a reset link per address (`reset:`), a confirmation link mailed by a refused sign-in per
+     address (the sign-in count), and an address change per account (`address-change:` and the user's id), shared
+     by a change asked from Account and a correction on the Check your mail card. The account's count is checked
+     only once the password verified, counts free and taken addresses alike so it reveals nothing, and is never
+     cleared: a new session, a changed address or a confirmation doesn't start it over, so one account can't mail
+     more than five addresses in 15 minutes. Registration mails each new address once but has no count, since
+     the server has no client to key one by and a cap for the whole server would let anyone stop all sign-ups:
+     the README asks operators to rate-limit `POST /auth/register` at the reverse proxy, or to close registration.
+     A notice to the old address follows an applied change, which a mailed link limits already.
    - A password change (`POST /me/password`, the session cookie only) takes the current password. Each try counts
      against the same limit per session, not per account, so someone using up the account's sign-in attempts can't
      block the owner's change; a wrong current password also adds one to the account's sign-in count. Then, in one
@@ -724,9 +734,9 @@ a fixed time.
    - With mail set up and a local password, a user changes their **email address** from Account
      (`POST /me/email-changes`, the session cookie only, as a password change is: it is the person's decision in their
      browser). It takes the current password and the new address; the address changes only when a link mailed to the
-     new one is applied. Tries are counted per session in the password change's count with its limit, and unlike a
-     password change a success doesn't clear it, so it also limits the mails a session sends (five asks per 15
-     minutes); a wrong password adds one to the account's sign-in count. An address another account has gets the same
+     new one is applied. Tries are counted per session in the password change's count with its limit, before the
+     password is checked, and a wrong password adds one to the account's sign-in count; an ask with the right one
+     counts as an address change of the account (above), which limits the mails. An address another account has gets the same
      `202` and the same history entry as a free one, with no link and no mail, so the answer reveals nothing about
      accounts. A free one is a row in `email_change_links` (a token's SHA-256, the user, the new address, an expiry a
      day on), made in one transaction with the cancelling of the user's earlier working one. The table is apart from
@@ -763,7 +773,7 @@ a fixed time.
      `email_confirmed` (`made_by: operator`) unless the address already was.
      A mistyped address is corrected with `POST /auth/confirmation-address` (login, password and the new address, no
      session): it counts and verifies like a sign-in, under the same limit (keyed by the address, so a changed address
-     starts a fresh count), and only works for an account that is
+     starts a fresh count), then counts as an address change of the account (above), and only works for an account that is
      still unconfirmed (a confirmed one fails like a wrong password). In one transaction it sets the address (still
      unconfirmed, since nothing proved it), cancels the working reset link, so whoever reads the wrong mailbox can't
      take the account with one, makes a new confirmation link (cancelling the earlier one) and records

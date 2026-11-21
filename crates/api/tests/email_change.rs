@@ -423,6 +423,34 @@ async fn the_sixth_ask_of_a_session_is_refused() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn new_sessions_dont_start_the_accounts_address_changes_over() -> Result<()> {
+    // Arrange: five asks, each from a session of its own.
+    let dir = tempfile::tempdir()?;
+    let (app, first) = start(dir.path()).await?;
+    let mut sessions = vec![first];
+    for _ in 0..5 {
+        let signed_in = sign_in(&app, EMAIL).await?;
+        sessions.push(signed_in.session_cookie.clone().context("no session cookie")?);
+    }
+    for (n, session) in sessions[..5].iter().enumerate() {
+        let asked = ask_as(&app, session, &format!("grace{n}@example.test"), PASSWORD).await?;
+        assert_eq!(asked.status, StatusCode::ACCEPTED);
+    }
+    common::wait_for_mails(dir.path(), 5).await?;
+
+    // Act
+    let sixth = ask_as(&app, &sessions[5], "grace5@example.test", PASSWORD).await?;
+
+    // Assert
+    expect_that!(sixth.status, eq(StatusCode::TOO_MANY_REQUESTS));
+    expect_that!(problem_code(&sixth), eq("too_many_attempts"));
+    expect_that!(sixth.headers.contains_key("retry-after"), eq(true));
+    expect_that!(std::fs::read_dir(dir.path())?.count(), eq(5));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_history_lists_the_ask_and_the_change() -> Result<()> {
     // Arrange
     let dir = tempfile::tempdir()?;
