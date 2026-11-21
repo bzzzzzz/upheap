@@ -254,10 +254,13 @@ async fn provider_accounts_are_listed_read_only() -> Result<()> {
     let listed = get(&with_provider, &admin, "/operator/accounts").await?;
     let off = post(&with_provider, &admin, &format!("{base}/deactivate")).await?;
     let on = post(&with_provider, &admin, &format!("{base}/reactivate")).await?;
+    let link = post(&with_provider, &admin, &format!("{base}/reset-link")).await?;
     let history = get(&with_provider, &admin, &format!("{base}/history")).await?;
 
     // Assert
     expect_that!(listed.body["accounts"][1]["kind"], eq(&json!("provider")));
+    expect_that!(link.status, eq(StatusCode::CONFLICT));
+    expect_that!(link.body["code"], eq(&json!("account_provider_managed")));
     expect_that!(off.status, eq(StatusCode::CONFLICT));
     expect_that!(off.body["code"], eq(&json!("account_provider_managed")));
     expect_that!(on.status, eq(StatusCode::CONFLICT));

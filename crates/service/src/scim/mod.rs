@@ -748,11 +748,7 @@ impl Services {
     /// Locks the personal team of `user_id` and returns it. Usually the write locked it already, before reading the
     /// person's state ([`Self::personal_teams`]); this covers a person the early read couldn't name: one linked, or
     /// one the record was moved to, by a write that committed in between.
-    pub(crate) async fn lock_personal_team(
-        &self,
-        txn: &impl ConnectionTrait,
-        user_id: UserId,
-    ) -> Result<TeamId, ServiceError> {
+    async fn lock_personal_team(&self, txn: &impl ConnectionTrait, user_id: UserId) -> Result<TeamId, ServiceError> {
         let personal_team = self.personal_team(txn, user_id).await?;
         store::teams::lock_team(txn, personal_team).await?;
         Ok(personal_team)

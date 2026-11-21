@@ -72,14 +72,9 @@ pub enum Applied {
 }
 
 impl Services {
-    /// Whether the caller is an operator.
-    pub async fn is_operator(&self, principal: Principal) -> Result<bool, ServiceError> {
-        Ok(store::users::is_operator(&self.db, principal.user_id).await?)
-    }
-
     /// Fails with [`ServiceError::NotFound`] unless the caller is an operator.
     pub(crate) async fn require_operator(&self, principal: Principal) -> Result<(), ServiceError> {
-        if self.is_operator(principal).await? {
+        if store::users::is_operator(&self.db, principal.user_id).await? {
             Ok(())
         } else {
             Err(ServiceError::NotFound)
@@ -112,20 +107,22 @@ impl Services {
     }
 
     /// Every account, by display name ignoring case, then username. A server has tens to a few hundred, so the list
-    /// isn't paged; a provider account's SCIM state is read one account at a time.
+    /// isn't paged; the provider's pushes are read in one query.
     pub async fn list_accounts(&self, by: Operator) -> Result<Vec<Account>, ServiceError> {
         self.authorize_operator(by).await?;
         let identities = match &self.settings.oidc {
             Some(oidc) => store::identities::list_identity_subjects(&self.db, oidc.issuer()).await?,
             None => Default::default(),
         };
+        let provider_inactive = if self.settings.scim.is_some() {
+            store::scim::list_inactive_external_ids(&self.db).await?
+        } else {
+            Default::default()
+        };
         let mut accounts = Vec::new();
         for record in store::users::list_accounts(&self.db).await? {
             let subject = identities.get(&record.user.id);
-            let provider_off = match subject {
-                Some(subject) if self.settings.scim.is_some() => self.is_scim_inactive(&self.db, subject).await?,
-                _ => false,
-            };
+            let provider_off = subject.is_some_and(|subject| provider_inactive.contains(subject));
             accounts.push(Account {
                 kind: if subject.is_some() {
                     AccountKind::Provider
@@ -235,6 +232,8 @@ impl Services {
 
     /// Makes a reset link for the account `user_id`, as [`Services::create_password_reset_link`] does, with the
     /// caller as the entry's actor. The link is in the answer and nowhere else.
+    ///
+    /// Fails with [`ServiceError::AccountProviderManaged`] for a provider account, which has no password.
     pub async fn create_operator_reset_link(
         &self,
         principal: Principal,
@@ -243,6 +242,7 @@ impl Services {
         self.require_operator(principal).await?;
         self.ensure_password_sign_in()?;
         let user = self.find_account(user_id).await?;
+        self.refuse_provider_account(user.id).await?;
         self.make_reset_link(user, "operator", principal.user_id).await
     }
 
