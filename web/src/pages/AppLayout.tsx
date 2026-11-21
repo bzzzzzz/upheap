@@ -62,6 +62,8 @@ export function AppLayout() {
   const onAgents = useMatch({ from: "/app/agents", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
   const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
+  // The pages that open an item in a pane beside the list.
+  const withPane = (onList && heapRef !== undefined) || onAll;
   const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
   const shellHeap = heapRef ?? ((onWaiting || onAgents || onAll || onData) && me ? keptHeap(me, allTeam) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
@@ -72,10 +74,10 @@ export function AppLayout() {
   return (
     // On a wide screen the shell is one centred block, at most the sidebar plus the content column plus the item
     // pane wide (15rem + 48rem + 26rem + padding), whether or not an item is open, so opening or closing one never
-    // moves the sidebar or the list. The content column sits next to the sidebar; an open item pane
-    // (`data-item-pane`) widens it by the pane's width, into the room on its right where there is some, and takes the
-    // right-hand padding. The left half behind the block takes the sidebar's colour, so the sidebar reaches the edge
-    // of the screen.
+    // moves the sidebar or the list's left edge. A page that opens items beside it (`withPane`) fills the room next
+    // to the sidebar, and an open item pane (`data-item-pane`) takes its right-hand part and padding, so the list
+    // narrows from the right. Other pages keep the content column's reading width, next to the sidebar. The left half
+    // behind the block takes the sidebar's colour, so the sidebar reaches the edge of the screen.
     <ToastProvider>
       <NoticeLine />
       <ConnectionBanner />
@@ -86,7 +88,9 @@ export function AppLayout() {
             <div className="min-w-0 flex-1 bg-canvas">
               {me && <PhoneTopBar me={me} heapRef={shellHeap} />}
               {/* On a phone, room at the bottom for the tabs. */}
-              <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:has-[[data-item-pane]]:max-w-[74rem] lg:has-[[data-item-pane]]:pr-0">
+              <div
+                className={`mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:has-[[data-item-pane]]:pr-0 ${withPane ? "lg:max-w-none" : ""}`}
+              >
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
                 <Outlet />
               </div>

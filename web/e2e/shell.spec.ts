@@ -534,7 +534,7 @@ test("on a phone, the rows' chips and buttons scroll under the top bar and the t
   expect(result.checked.start).toBeGreaterThan(0);
 });
 
-test("on a wide screen, opening and closing an item leaves the sidebar and the list where they are", async ({
+test("on a wide screen, the list fills the room beside the sidebar and an open item narrows it from the right", async ({
   page,
 }) => {
   test.skip((page.viewportSize()?.width ?? 0) < 1024, "only a wide screen has the pane beside the list");
@@ -547,13 +547,14 @@ test("on a wide screen, opening and closing an item leaves the sidebar and the l
     return { x: Math.round(b.x), right: Math.round(b.x + b.width), width: Math.round(b.width) };
   };
 
-  // 1600 px has room for the pane beside the list; 1024 px doesn't, so the list narrows from the right.
+  // At 1600 px the block is at its widest (92rem) and centred; at 1024 px it fills the screen.
   for (const width of [1600, 1024]) {
     await page.setViewportSize({ width, height: 900 });
+    const blockRight = Math.round(Math.min(width, (width + 92 * 16) / 2));
     const before = { sidebar: await box(sidebar), row: await box(row(page, title)) };
-    // With no item open the list keeps its reading width next to the sidebar.
+    // With no item open the list runs from next to the sidebar to the block's right-hand padding.
     expect(before.row.x - before.sidebar.right).toBeLessThanOrEqual(32);
-    expect(before.row.width).toBeLessThanOrEqual(720);
+    expect(blockRight - before.row.right).toBeLessThanOrEqual(32);
 
     await openItem(page, title);
     const pane = await box(itemPane(page));
@@ -561,8 +562,8 @@ test("on a wide screen, opening and closing an item leaves the sidebar and the l
     expect(open.sidebar).toEqual(before.sidebar);
     expect(open.row.x).toBe(before.row.x);
     expect(open.row.right).toBeLessThanOrEqual(pane.x);
-    if (width === 1600) expect(open.row.width).toBe(before.row.width);
-    else expect(open.row.width).toBeLessThan(before.row.width);
+    expect(pane.right).toBe(blockRight);
+    expect(open.row.width).toBeLessThan(before.row.width);
 
     await closeItem(page);
     expect({ sidebar: await box(sidebar), row: await box(row(page, title)) }).toEqual(before);
