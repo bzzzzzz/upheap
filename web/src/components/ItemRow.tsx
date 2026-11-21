@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from
 import type { HeapRef } from "../api/client";
 import type { Item, ItemState, RankedItem, RankedList, Turn } from "../api/schema";
 import { useSendWithUndo } from "./ItemTurn";
+import { Kbd } from "./Kbd";
 import { KindIcon, StageIcon, TargetIcon } from "./kindIcons";
 import { GOAL_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
@@ -125,6 +126,7 @@ export function ItemRow({
   };
   const onOpen = () => onChangeState(item, "open");
   const startable = item.state === "open" || item.state === "blocked";
+  const blockable = canChangeState && (item.state === "open" || item.state === "in_progress");
   const touch = useMedia(TOUCH);
   const swipe = useSwipe(canChangeState && touch && !selection, ACTION_WIDTH * (canSend ? 3 : 2), (state, onError) =>
     onChangeState(item, state, onError),
@@ -140,6 +142,11 @@ export function ItemRow({
       // The row goes away, so the next one takes the focus.
       focusRow(event.currentTarget, 1);
       onMarkDone();
+    } else if (event.key === "b" && blockable) {
+      event.preventDefault();
+      // The row goes away, so the next one takes the focus.
+      focusRow(event.currentTarget, 1);
+      onChangeState(item, "blocked");
     } else if (event.key === "s" && canChangeState && startable) {
       event.preventDefault();
       onStart();
@@ -327,6 +334,17 @@ export function ItemRow({
             />
           )}
         </div>
+        {!selection && canChangeState && (
+          // The keys that work on the focused row, on a wide screen.
+          <span
+            aria-hidden="true"
+            className="hidden shrink-0 items-center gap-1 lg:pointer-fine:group-focus-within/row:inline-flex"
+          >
+            {startable && <Kbd title="Start">S</Kbd>}
+            {blockable && <Kbd title="Block">B</Kbd>}
+            <Kbd title="Mark done">X</Kbd>
+          </span>
+        )}
         {item.waits_for_you && (
           <span aria-hidden="true" className="hidden shrink-0 text-xs font-semibold text-accent-ink sm:inline">
             waits for you
