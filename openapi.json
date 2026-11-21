@@ -6620,7 +6620,7 @@
         "tags": [
           "parameters"
         ],
-        "summary": "Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins\nonly. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a\n`parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team\nparameter at the weight it had, and each item's value moves to the option with the same label. A parameter linked\nto tags can't be merged: `parameter_merge_linked` names them.",
+        "summary": "Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins\nonly. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a\n`parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team\nparameter at the weight it had, and each item's value moves to the option with the same label; for an open item\nwhose option the team parameter has archived, that is the option in use it was replaced by (`switched`). A\nparameter linked to tags can't be merged: `parameter_merge_linked` names them. Repeating the write on a team\nparameter the heap uses succeeds and changes nothing.",
         "operationId": "make_team_parameter",
         "parameters": [
           {
@@ -14440,6 +14440,7 @@
           "parameter_name",
           "items",
           "added_options",
+          "switched",
           "starting"
         ],
         "properties": {
@@ -14473,6 +14474,31 @@
           "starting": {
             "type": "boolean",
             "description": "Whether it is the one the merge starts from."
+          },
+          "switched": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterMergeSwitch"
+            },
+            "description": "Its options in use that match an option the team parameter has archived: open items on them get the option in\nuse that one was replaced by. Empty for the one the merge starts from."
+          }
+        }
+      },
+      "ParameterMergeSwitch": {
+        "type": "object",
+        "description": "An option in use of a merged parameter whose open items move to another option of the team parameter.",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "The option's label as the merged parameter wrote it."
+          },
+          "to": {
+            "type": "string",
+            "description": "The label of the team parameter's option in use that open items get."
           }
         }
       },

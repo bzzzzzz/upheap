@@ -192,6 +192,18 @@ pub struct OptionMerge {
     pub option_map: BTreeMap<OptionId, OptionId>,
     /// The labels of the options `merged` didn't have: in use first, in the merged-in parameter's order, then archived.
     pub added: Vec<OptionLabel>,
+    /// The options of the merged-in parameter in use that matched an archived option of `merged`, in its order: open
+    /// items on them move to the option in use that archived option resolves to.
+    pub switched: Vec<OptionSwitch>,
+}
+
+/// An option in use of a merged-in parameter that open items leave for another option of the team parameter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OptionSwitch {
+    /// The label as the merged-in parameter wrote it.
+    pub from: OptionLabel,
+    /// The label of the option in use that open items get.
+    pub to: OptionLabel,
 }
 
 impl Parameter {
@@ -256,13 +268,28 @@ impl Parameter {
         let mut merged = self.clone();
         let mut option_map = BTreeMap::new();
         let mut added = Vec::new();
+        let mut switched = Vec::new();
         let mut in_use: BTreeMap<String, OptionId> = self.options.iter().map(|o| (o.label.to_key(), o.id)).collect();
         let mut archived: BTreeMap<String, OptionId> =
             self.archived_options.iter().map(|o| (o.label.to_key(), o.id)).collect();
 
         for option in &from.options {
             let key = option.label.to_key();
-            if let Some(&id) = in_use.get(&key).or_else(|| archived.get(&key)) {
+            if let Some(&id) = in_use.get(&key) {
+                option_map.insert(option.id, id);
+                continue;
+            }
+            if let Some(&id) = archived.get(&key) {
+                let to = merged
+                    .resolve(id)
+                    .ok_or(ParameterError::ReplacementRequired { option_id: id })?
+                    .option
+                    .label
+                    .clone();
+                switched.push(OptionSwitch {
+                    from: option.label.clone(),
+                    to,
+                });
                 option_map.insert(option.id, id);
                 continue;
             }
@@ -313,6 +340,7 @@ impl Parameter {
             merged,
             option_map,
             added,
+            switched,
         })
     }
 
@@ -461,16 +489,22 @@ fn ensure_labels_unique(options: &[ParameterOption]) -> Result<(), ParameterErro
 }
 
 /// The text a parameter merge's reach is hashed from: for each parameter in the reach, by parameter ID,
-/// `"<parameter id>:<items>:<labels added, joined by |>\n"`. It changes when a parameter joins or leaves the reach,
-/// a count changes or the options it adds change.
-pub fn reach_text<'a>(entries: impl IntoIterator<Item = (ParameterId, u32, &'a [OptionLabel])>) -> String {
+/// `"<parameter id>:<items>:<labels added, joined by |>:<switches as from>to, joined by |>\n"`. It changes when a
+/// parameter joins or leaves the reach, a count changes or the options it adds or switches change.
+pub fn reach_text<'a>(
+    entries: impl IntoIterator<Item = (ParameterId, u32, &'a [OptionLabel], &'a [OptionSwitch])>,
+) -> String {
     let mut entries: Vec<_> = entries.into_iter().collect();
-    entries.sort_by_key(|(parameter, _, _)| *parameter);
+    entries.sort_by_key(|(parameter, _, _, _)| *parameter);
     entries
         .into_iter()
-        .map(|(parameter, items, added)| {
+        .map(|(parameter, items, added, switched)| {
             let added: Vec<&str> = added.iter().map(OptionLabel::as_str).collect();
-            format!("{parameter}:{items}:{}\n", added.join("|"))
+            let switched: Vec<String> = switched
+                .iter()
+                .map(|switch| format!("{}>{}", switch.from.as_str(), switch.to.as_str()))
+                .collect();
+            format!("{parameter}:{items}:{}:{}\n", added.join("|"), switched.join("|"))
         })
         .collect()
 }
@@ -744,6 +778,13 @@ mod tests {
         expect_that!(merge.option_map.get(&opt(11)), some(eq(&opt(2))));
         expect_that!(merge.merged.options.len(), eq(1));
         expect_that!(merge.added, is_empty());
+        expect_that!(
+            merge.switched,
+            elements_are![eq(&OptionSwitch {
+                from: OptionLabel::parse("silver").expect("valid"),
+                to: OptionLabel::parse("Gold").expect("valid"),
+            })]
+        );
     }
 
     #[gtest]

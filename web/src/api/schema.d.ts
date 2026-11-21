@@ -1391,8 +1391,10 @@ export interface paths {
          * Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins
          *     only. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a
          *     `parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team
-         *     parameter at the weight it had, and each item's value moves to the option with the same label. A parameter linked
-         *     to tags can't be merged: `parameter_merge_linked` names them.
+         *     parameter at the weight it had, and each item's value moves to the option with the same label; for an open item
+         *     whose option the team parameter has archived, that is the option in use it was replaced by (`switched`). A
+         *     parameter linked to tags can't be merged: `parameter_merge_linked` names them. Repeating the write on a team
+         *     parameter the heap uses succeeds and changes nothing.
          */
         post: operations["make_team_parameter"];
         delete?: never;
@@ -3810,6 +3812,18 @@ export interface components {
             parameter_name: string;
             /** @description Whether it is the one the merge starts from. */
             starting: boolean;
+            /**
+             * @description Its options in use that match an option the team parameter has archived: open items on them get the option in
+             *     use that one was replaced by. Empty for the one the merge starts from.
+             */
+            switched: components["schemas"]["ParameterMergeSwitch"][];
+        };
+        /** @description An option in use of a merged parameter whose open items move to another option of the team parameter. */
+        ParameterMergeSwitch: {
+            /** @description The option's label as the merged parameter wrote it. */
+            from: string;
+            /** @description The label of the team parameter's option in use that open items get. */
+            to: string;
         };
         /** @description An option in use. */
         ParameterOption: {
@@ -5160,6 +5174,7 @@ export type ParameterList = components['schemas']['ParameterList'];
 export type ParameterListAction = components['schemas']['ParameterListAction'];
 export type ParameterMergeReach = components['schemas']['ParameterMergeReach'];
 export type ParameterMergeReachEntry = components['schemas']['ParameterMergeReachEntry'];
+export type ParameterMergeSwitch = components['schemas']['ParameterMergeSwitch'];
 export type ParameterOption = components['schemas']['ParameterOption'];
 export type ParameterPatchRequest = components['schemas']['ParameterPatchRequest'];
 export type ParameterWeightChange = components['schemas']['ParameterWeightChange'];

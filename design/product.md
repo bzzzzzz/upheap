@@ -242,8 +242,9 @@ What it is not:
    own, so the weight is part of the heap's ranking. A heap parameter and a team parameter of the team never share a
    name. A team parameter's options also filter the list across the team's heaps. An admin can make a heap's
    parameter the team's, and the team's heap parameters with the same name then merge into it: items keep their
-   values, matched by option name, each heap keeps its weight, and the admin sees what it reaches first, since it
-   can't be undone.
+   values, matched by option name (open items on an option the team parameter has retired get its replacement, which
+   the confirm shows), each heap keeps its weight, and the admin sees what it reaches first, since it can't be
+   undone.
 2. The order of a parameter's options determines their relative priority within that parameter. Each parameter also
    has a weight controlling its influence relative to the heap's other factors (Priority §1).
 3. A heap's custom parameter can be linked to one or more of its heap's tags, the team's included. When a user adds

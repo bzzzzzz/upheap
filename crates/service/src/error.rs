@@ -161,7 +161,7 @@ pub enum ServiceError {
     )]
     TagMergeUnconfirmed { name: String, reach: MergeReach },
     /// Making a heap parameter a team parameter was not confirmed with the token of its current reach.
-    #[error("making this a team parameter merges {} into it", merged_parameters(reach.entries.len() - 1))]
+    #[error("{}", unconfirmed_message(reach.entries.len() - 1))]
     ParameterMergeUnconfirmed { reach: ParameterMergeReach },
     /// A parameter the merge would take in is linked to tags, which a team parameter can't be yet. `linked` is in the
     /// reach's order.
@@ -205,11 +205,12 @@ fn in_minutes(wait: Duration) -> String {
     }
 }
 
-/// "1 same-named heap parameter", "3 same-named heap parameters".
-fn merged_parameters(count: usize) -> String {
-    match count {
-        1 => "1 same-named heap parameter".to_owned(),
-        n => format!("{n} same-named heap parameters"),
+/// What making a parameter a team parameter does, given how many same-named heap parameters merge into it.
+fn unconfirmed_message(merged: usize) -> String {
+    match merged {
+        0 => "making this a team parameter can't be undone: confirm it".to_owned(),
+        1 => "making this a team parameter merges 1 same-named heap parameter into it".to_owned(),
+        n => format!("making this a team parameter merges {n} same-named heap parameters into it"),
     }
 }
 
@@ -218,8 +219,13 @@ fn linked_message(linked: &[LinkedParameter]) -> String {
     let parts: Vec<String> = linked
         .iter()
         .map(|parameter| {
+            let archived = if parameter.heap_archived {
+                " (archived heap: unarchive it to unlink)"
+            } else {
+                ""
+            };
             format!(
-                "{}'s \u{201c}{}\u{201d}: {}",
+                "{}'s \u{201c}{}\u{201d}{archived}: {}",
                 parameter.heap,
                 parameter.parameter,
                 parameter.tags.join(", ")

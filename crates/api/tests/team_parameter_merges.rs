@@ -549,8 +549,9 @@ async fn a_parameter_alone_moves_to_the_team_with_its_items_and_weight() -> Resu
         values(&item),
         elements_are![eq(&("Customer tier".to_owned(), "Silver".to_owned()))]
     );
-    // It is a team parameter now, so no heap parameter of its heap.
-    expect_that!(again.status, eq(StatusCode::NOT_FOUND));
+    // Repeating the write succeeds with the team parameter and changes nothing.
+    expect_that!(again.status, eq(StatusCode::OK));
+    expect_that!(again.body, eq(&made.body));
     Ok(())
 }
 
@@ -755,10 +756,14 @@ async fn open_items_end_on_an_option_in_use_and_closed_ones_keep_the_archived_on
     w.close(&closed).await?;
 
     // Act
-    let made = w.make_team_confirmed(&w.a, &tier_a).await?;
+    let asked = w.make_team(&w.a, &tier_a, None).await?;
+    let made = w.make_team(&w.a, &tier_a, Some(&token(&asked))).await?;
     let (open, closed) = (w.read_item(&open).await?, w.read_item(&closed).await?);
 
     // Assert
+    let entries = &asked.body["parameter_merge_reach"]["entries"];
+    expect_that!(entries[0]["switched"], eq(&json!([])));
+    expect_that!(entries[1]["switched"], eq(&json!([{ "from": "Silver", "to": "Gold" }])));
     expect_that!(made.status, eq(StatusCode::OK));
     expect_that!(labels(&made.body, "options"), elements_are![eq(&"Gold"), eq(&"Bronze")]);
     expect_that!(labels(&made.body, "archived_options"), elements_are![eq(&"Silver")]);
@@ -766,6 +771,76 @@ async fn open_items_end_on_an_option_in_use_and_closed_ones_keep_the_archived_on
     expect_that!(open["parameters"][0]["option"]["archived"], eq(&json!(false)));
     expect_that!(closed["parameters"][0]["option"]["label"], eq(&json!("Silver")));
     expect_that!(closed["parameters"][0]["option"]["archived"], eq(&json!(true)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_token_taken_before_the_team_parameter_archives_an_option_is_refused_afterwards() -> Result<()> {
+    // Arrange: heap B's live "Silver" matches a live option of the parameter when the token is taken.
+    let w = world().await?;
+    let tier_a = w.heap_parameter(&w.a, "Customer tier", &["Gold", "Silver"], 10).await?;
+    let tier_b = w
+        .heap_parameter(&w.b, "Customer tier", &["Silver", "Bronze"], 10)
+        .await?;
+    w.item_with(&w.b, "Open", &tier_b, "Silver").await?;
+    let before = w.make_team(&w.a, &tier_a, None).await?;
+    let archiving = w
+        .app
+        .send(
+            Method::POST,
+            &format!(
+                "{}/options/{}/archive",
+                w.app.heap_url(&w.a).await?,
+                option_id(&tier_a, "Silver")
+            ),
+            Some(&w.session),
+            Some(json!({ "replacement_option_id": option_id(&tier_a, "Gold") })),
+        )
+        .await?;
+    anyhow::ensure!(archiving.status == StatusCode::OK, "archive failed: {}", archiving.body);
+
+    // Act
+    let stale = w.make_team(&w.a, &tier_a, Some(&token(&before))).await?;
+    let confirmed = w.make_team(&w.a, &tier_a, Some(&token(&stale))).await?;
+
+    // Assert
+    expect_that!(
+        before.body["parameter_merge_reach"]["entries"][1]["switched"],
+        eq(&json!([]))
+    );
+    expect_that!(stale.status, eq(StatusCode::CONFLICT));
+    expect_that!(stale.body["code"], eq(&json!("parameter_merge_unconfirmed")));
+    expect_that!(token(&stale), not(eq(&token(&before))));
+    expect_that!(
+        stale.body["parameter_merge_reach"]["entries"][1]["switched"],
+        eq(&json!([{ "from": "Silver", "to": "Gold" }]))
+    );
+    expect_that!(confirmed.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn repeating_the_write_on_a_team_parameter_the_heap_uses_succeeds_and_changes_nothing() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let tier_a = w.heap_parameter(&w.a, "Customer tier", &["Gold"], 10).await?;
+    let made = w.make_team_confirmed(&w.a, &tier_a).await?;
+    anyhow::ensure!(made.status == StatusCode::OK, "make failed: {}", made.body);
+    let history = w.history(&w.a, id(&tier_a)).await?;
+
+    // Act
+    let again = w.make_team(&w.a, &tier_a, None).await?;
+    let history_after = w.history(&w.a, id(&tier_a)).await?;
+    let from_heap_c = w.make_team_as(&w.session, &w.c, id(&tier_a), None).await?;
+
+    // Assert
+    expect_that!(again.status, eq(StatusCode::OK));
+    expect_that!(again.body["id"], eq(&json!(id(&tier_a))));
+    expect_that!(again.body["heaps"], eq(&made.body["heaps"]));
+    expect_that!(history_after, eq(&history));
+    expect_that!(from_heap_c.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }
 

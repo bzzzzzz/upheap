@@ -13,7 +13,7 @@ use api_types::parameters::{
     LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto, ParameterPatchDto, TeamParameterDto,
     TeamParameterListDto, TeamParameterPatchDto,
 };
-use api_types::problem::{ParameterMergeReachDto, ParameterMergeReachEntryDto};
+use api_types::problem::{ParameterMergeReachDto, ParameterMergeReachEntryDto, ParameterMergeSwitchDto};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -81,6 +81,14 @@ pub(crate) fn to_parameter_merge_reach_dto(reach: &ParameterMergeReach) -> Param
                 parameter_name: entry.parameter.name.as_str().to_owned(),
                 items: entry.items,
                 added_options: entry.added.iter().map(|label| label.as_str().to_owned()).collect(),
+                switched: entry
+                    .switched
+                    .iter()
+                    .map(|switch| ParameterMergeSwitchDto {
+                        from: switch.from.as_str().to_owned(),
+                        to: switch.to.as_str().to_owned(),
+                    })
+                    .collect(),
                 starting: entry.starting,
             })
             .collect(),
@@ -413,8 +421,10 @@ async fn link_tags(
 /// Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins
 /// only. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a
 /// `parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team
-/// parameter at the weight it had, and each item's value moves to the option with the same label. A parameter linked
-/// to tags can't be merged: `parameter_merge_linked` names them.
+/// parameter at the weight it had, and each item's value moves to the option with the same label; for an open item
+/// whose option the team parameter has archived, that is the option in use it was replaced by (`switched`). A
+/// parameter linked to tags can't be merged: `parameter_merge_linked` names them. Repeating the write on a team
+/// parameter the heap uses succeeds and changes nothing.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/team", tag = "parameters", security(("session" = [])),
     params(HeapParams, ("parameter_id" = Uuid, Path), ConfirmReachQuery),
     responses(

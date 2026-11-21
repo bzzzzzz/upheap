@@ -122,14 +122,24 @@ fn merge_lines(reach: &ParameterMergeReachDto, typed: &str, name: &str, heap: &H
         } else {
             format!("  adds {}", entry.added_options.join(", "))
         };
+        let moves = if entry.switched.is_empty() {
+            String::new()
+        } else {
+            let switches: Vec<String> = entry
+                .switched
+                .iter()
+                .map(|switch| format!("{} \u{2192} {}", switch.from, switch.to))
+                .collect();
+            format!("  moves {}", switches.join(", "))
+        };
+        // The heap it starts from is never archived: an archived heap can't make a team parameter.
         let marks = match (entry.starting, entry.archived) {
-            (true, true) => "  (this heap, archived)",
-            (true, false) => "  (this heap)",
+            (true, _) => "  (this heap)",
             (false, true) => "  (archived)",
             (false, false) => "",
         };
         lines.push(format!(
-            "  {:<slug_width$}  {:<name_width$}  {items}{adds}{marks}",
+            "  {:<slug_width$}  {:<name_width$}  {items}{adds}{moves}{marks}",
             entry.heap.slug, entry.parameter_name
         ));
     }

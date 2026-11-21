@@ -88,6 +88,19 @@ pub struct ParameterMergeReachEntryDto {
     pub items: u32,
     /// The labels of its options the team parameter doesn't have yet. Empty for the one the merge starts from.
     pub added_options: Vec<String>,
+    /// Its options in use that match an option the team parameter has archived: open items on them get the option in
+    /// use that one was replaced by. Empty for the one the merge starts from.
+    pub switched: Vec<ParameterMergeSwitchDto>,
     /// Whether it is the one the merge starts from.
     pub starting: bool,
+}
+
+/// An option in use of a merged parameter whose open items move to another option of the team parameter.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ParameterMergeSwitch)]
+pub struct ParameterMergeSwitchDto {
+    /// The option's label as the merged parameter wrote it.
+    pub from: String,
+    /// The label of the team parameter's option in use that open items get.
+    pub to: String,
 }

@@ -584,10 +584,12 @@ a fixed time.
 
     **Making a heap parameter a team parameter** works the same way, with `parameter_merge_unconfirmed` and its reach
     (`domain::parameter::reach_text`): the parameter it starts from, then each same-named heap parameter it takes in,
-    each with its item count and the options it adds. A reach of the starting parameter alone still needs the
+    each with its item count, the options it adds and the options it switches (a live option that matches one the team
+    parameter archived, whose open items get its replacement). A reach of the starting parameter alone still needs the
     confirm, since the move to the team can't be undone. A parameter linked to tags among them is refused first, with
     `parameter_merge_linked` and a message naming each heap, parameter and tags, because a team parameter can't hold tag
-    links yet; nothing changes and there is no reach in the body.
+    links yet; nothing changes and there is no reach in the body. Repeating the write on a team parameter the heap
+    uses succeeds with no confirm and changes nothing.
 
 ## Authentication and authorization
 
