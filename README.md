@@ -108,7 +108,7 @@ writes run at READ COMMITTED. For Cloud Run with Neon, see [design/operations.md
 | `UPHEAP_OIDC_SCOPES` | `openid email profile` | Space-separated scopes to ask for; `openid` is always asked |
 | `UPHEAP_OIDC_GROUP_TEAMS` | none | A JSON object from team slug to the list of provider groups whose members the team has: `{"ops": ["engineering", "sre"]}`. Needs the provider. See [Teams from groups](#teams-from-groups) |
 | `UPHEAP_OIDC_GROUPS_CLAIM` | `groups` | The ID token claim that lists a person's groups. Only read when `UPHEAP_OIDC_GROUP_TEAMS` is set |
-| `UPHEAP_OIDC_SUBJECT_CLAIM` | `sub` | The ID token claim an account is matched on. Set `oid` for Microsoft Entra ID, so SCIM can link people. Existing accounts move over at their next sign-in |
+| `UPHEAP_OIDC_SUBJECT_CLAIM` | `sub` | The ID token claim an account is matched on. Set `oid` for Microsoft Entra ID, so SCIM can link people. Existing accounts move over at their next sign-in. The claim must be stable and never given to another person: `sub` or `oid`, not an email or user name |
 | `UPHEAP_OIDC_PROVIDER_LOGOUT` | `false` | `true` also signs a person out at the provider when they sign out of the web app, if the provider supports RP-initiated logout. Needs the provider |
 | `UPHEAP_SCIM_TOKEN` | none | The bearer token the provider's SCIM client sends, at least 32 characters; make one with `openssl rand -hex 32`. Needs the provider. Unset, there are no SCIM endpoints. See [Provisioning over SCIM](#provisioning-over-scim) |
 
@@ -226,7 +226,8 @@ The provider's pushes are stored, so a group mapped later already has its member
 
 1. Register a single-tenant app for the sign-in, and set `UPHEAP_OIDC_SUBJECT_CLAIM=oid`. The issuer is
    `https://login.microsoftonline.com/<tenant-id>/v2.0`. Entra's `sub` is different for each app and SCIM can't carry
-   it, but `oid`, the person's object ID, can be pushed.
+   it, but `oid`, the person's object ID, can be pushed. Until a person has signed in once through the provider after
+   the switch, SCIM pushes don't reach their account, so ask everyone to sign in once.
 2. In the Enterprise application, go to Provisioning, set the mode to Automatic, Tenant URL to `{BASE_URL}/scim/v2`
    and Secret Token to the token.
 3. In the attribute mappings for users, map `externalId` to `objectId`: Entra's default maps it to `mailNickname`.

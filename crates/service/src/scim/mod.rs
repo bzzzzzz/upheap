@@ -689,6 +689,33 @@ impl Services {
         Ok(())
     }
 
+    /// What a push does to a linked person who is inactive, for a person a sign-in has just linked to their SCIM
+    /// records by moving their identity onto the subject: their sign-ins end, the turn-off is recorded, and their
+    /// mapped teams follow the SCIM state. The person wasn't off before, so the entry is recorded. The caller holds
+    /// the locks a push takes, in the same order.
+    pub(crate) async fn apply_scim_state_to_moved(
+        &self,
+        txn: &impl ConnectionTrait,
+        subject: &str,
+        now: Timestamp,
+    ) -> Result<(), ServiceError> {
+        let pushed = self.pushed_teams(txn).await?;
+        self.apply_to_linked(
+            txn,
+            BTreeSet::from([subject.to_owned()]),
+            false,
+            Some(&BTreeSet::new()),
+            &pushed,
+            now,
+        )
+        .await
+        .map_err(|error| match error {
+            ScimError::Service(error) => error,
+            // Applying a state to a linked person has no other failure.
+            _ => StoreError::corrupt("scim_users", subject, "applying the state to a moved identity failed").into(),
+        })
+    }
+
     /// The personal teams of the people among `subjects` who are linked to an account, read before a write to users
     /// begins its transaction. The write locks them right after the SCIM row and before it reads any person's state:
     /// on MySQL a transaction's first plain read fixes its snapshot, so reading them inside it first would hide a

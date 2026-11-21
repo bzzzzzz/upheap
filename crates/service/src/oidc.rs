@@ -399,14 +399,16 @@ impl Services {
                 "provider sign-in has no usable groups; team memberships kept"
             );
         }
-        let mut moving = false;
+        let mut moved_from = None;
         let mut known = store::identities::find_identity_user(&self.db, oidc.issuer(), &claims.subject).await?;
         if known.is_none()
             && let Some(previous) = &claims.previous_subject
         {
             // An identity made before the claim was configured is still keyed on the token's `sub`.
             known = store::identities::find_identity_user(&self.db, oidc.issuer(), previous).await?;
-            moving = known.is_some();
+            if known.is_some() {
+                moved_from = Some(previous.as_str());
+            }
         }
         if let Some(user_id) = known {
             let user = store::users::find_user(&self.db, user_id)
@@ -417,7 +419,7 @@ impl Services {
             // The provider's pushes decide the teams they have pushed, instead of the token's groups. The teams are
             // locked before they are read, as a push does.
             self.lock_group_teams(&txn).await?;
-            if let Some(previous) = claims.previous_subject.as_deref().filter(|_| moving) {
+            if let Some(previous) = moved_from {
                 // As in `register_oidc_user`: a subject newly linked to an account must not race a SCIM write to the
                 // records that carry it, so a deactivation already pushed applies at this sign-in.
                 store::scim::lock_users_by_external_id(&txn, &claims.subject).await?;
@@ -431,8 +433,17 @@ impl Services {
                 .await?;
             let grant = match self.open_session(&txn, user, now, id_token_to_keep.as_deref()).await {
                 Err(ServiceError::AccountDeactivated) => {
-                    // Nothing of this sign-in is kept, not even the groups it brought.
-                    txn.rollback().await.map_err(StoreError::from)?;
+                    if moved_from.is_some() {
+                        // The move is kept: rolling it back would leave the identity out of reach of SCIM, and the
+                        // person's sessions and tokens valid. What a push does to a linked inactive person is done
+                        // here, the groups this sign-in brought apart, which the pushed state replaces.
+                        self.apply_scim_state_to_moved(&txn, &claims.subject, now).await?;
+                        store::oidc_sign_ins::delete_oidc_sign_in(&txn, state_hash).await?;
+                        txn.commit().await.map_err(StoreError::from)?;
+                    } else {
+                        // Nothing of this sign-in is kept, not even the groups it brought.
+                        txn.rollback().await.map_err(StoreError::from)?;
+                    }
                     return refuse(
                         OidcRefusal::AccountDeactivated,
                         "the provider deactivated the account",
