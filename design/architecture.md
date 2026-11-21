@@ -284,6 +284,12 @@ The tables and columns are in the migrations. These are the conventions they fol
   unique, and can't match a name looked up, since names are trimmed. Its name and description stay, so the history of
   what happened before the merge still names it. Only the history's name lookup reads merged tags; every other read
   leaves them out, as if they were unknown.
+- **A merged heap parameter** is archived. Making a heap parameter a team parameter moves each item's value to the
+  team parameter and then archives the heap parameter, which the archiving rule allows since no item has a value for
+  it any more. Archiving is enough: it keeps the row, name and options, so the history from before still names them
+  (its name lookup reads archived parameters), frees the name, and can't be undone. The one that starts the merge
+  becomes the team parameter in place (same row and ID, no weight of its own, each heap's weight in its use row), so
+  its heap's items, views and history need no change.
 - **Insert-only tables:** the application can only insert into `audit_log`. There is no update or delete code path
   for it.
 - **The heap's ranking policy** is its row: the need, age, deadline, value and tags weights on `heaps`, plus each
@@ -501,6 +507,9 @@ a fixed time.
    for it; that is fine for merges of up to a few hundred items, which is the size assumption, and there is no limit.
    The plain reads of a tag write come after its locks, so on MySQL their snapshot sees what committed while it
    waited; the name checks take no locking reads, which would take gap locks that deadlock tag writes of two teams.
+   Making a heap parameter a team parameter takes the locks of a team parameter write, since it writes items, saved
+   views, parameters and use rows in every heap of the team, and does the same handful of queries per item it reaches
+   under the same size assumption.
 2. A move of an item to another heap, in any team the caller may edit items in, locks both heaps in heap ID order, as
    the agent's queue locks several, then reads the item with a locking read and checks its version. A run's `became`
    locks the note's heap and the active heaps made from the note the same way, since it defines the tasks in them. Two
@@ -572,6 +581,13 @@ a fixed time.
     write is refused again with the new reach, so what happens is what the person was shown. Nothing is stored
     between the two requests. A merged heap tag's items, parameter links, saved views and tag-order places all move
     to the team tag in that one transaction ([Data model](#data-model), a merged heap tag).
+
+    **Making a heap parameter a team parameter** works the same way, with `parameter_merge_unconfirmed` and its reach
+    (`domain::parameter::reach_text`): the parameter it starts from, then each same-named heap parameter it takes in,
+    each with its item count and the options it adds. A reach of the starting parameter alone still needs the
+    confirm, since the move to the team can't be undone. A parameter linked to tags among them is refused first, with
+    `parameter_merge_linked` and a message naming each heap, parameter and tags, because a team parameter can't hold tag
+    links yet; nothing changes and there is no reach in the body.
 
 ## Authentication and authorization
 
