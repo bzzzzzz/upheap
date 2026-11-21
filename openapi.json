@@ -1901,6 +1901,66 @@
         ]
       }
     },
+    "/api/v1/me/search": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Items found by title or key in every active heap the signed-in user can view, closed ones included. `q` is\ntrimmed, and matched as a case-insensitive substring of the title (`%` and `_` match only themselves; case folding\nis the database's, ASCII only on SQLite) or as an exact key. The item with that key comes first, then open items,\nnewest created first, then closed items, most recently closed first. At most 50 rows come back, and `truncated`\nsays whether more matched. A blank `q` matches every title. Read-only, for any member.",
+        "operationId": "get_search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Text to find in an item's title, ignoring case, or an item's exact key. Blank text matches every title.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/me/sign-ins": {
       "get": {
         "tags": [
@@ -15962,6 +16022,44 @@
           }
         },
         "additionalProperties": false
+      },
+      "SearchResults": {
+        "type": "object",
+        "description": "The items a search across all heaps found.",
+        "required": [
+          "rows",
+          "truncated"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchRow"
+            },
+            "description": "At most 50 matches: the item whose key is the text first, then open items, newest created first, then closed\nitems, most recently closed first."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether more items matched than `rows` holds."
+          }
+        }
+      },
+      "SearchRow": {
+        "type": "object",
+        "description": "An item a search found, with its heap.",
+        "required": [
+          "item",
+          "heap"
+        ],
+        "properties": {
+          "heap": {
+            "$ref": "#/components/schemas/ItemHeap",
+            "description": "The heap the item is in, and its team."
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemRef"
+          }
+        }
       },
       "SendToAgentRequest": {
         "type": "object",
