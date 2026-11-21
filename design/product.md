@@ -248,8 +248,10 @@ What it is not:
    undone.
 2. The order of a parameter's options determines their relative priority within that parameter. Each parameter also
    has a weight controlling its influence relative to the heap's other factors (Priority §1).
-3. A heap's custom parameter can be linked to one or more of its heap's tags, the team's included. When a user adds
-   that tag to an item in the heap, the app suggests the linked parameters.
+3. A heap's custom parameter can be linked to one or more of its heap's tags, the team's included. A team parameter
+   can be linked to the team's tags by the team, which suggests it in every heap that uses it, and a heap can link its
+   own tags to a team parameter it uses, for that heap only. When a user adds a linked tag to an item in the heap, the
+   app suggests the linked parameters.
 4. Effort and impact apply to every item. They share one weight: they count together as a single value-per-effort
    factor, so a small high-impact item ranks above a large item with the same impact. The exact combination is part
    of the formula.
