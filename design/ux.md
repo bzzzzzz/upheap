@@ -528,6 +528,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    nothing to say the chip is plain text, and an item that isn't in the list on screen has no chip. The list row
    doesn't show any of this.
 10. The item says when it was created and by whom ("Added by Sam 4 days ago"), on the line of History's toggle.
+    On a phone, where that line is easy to miss, the fields (point 16) end with an Added row as well.
 11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
     heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a
     grip before the checkbox (editors only; on a wide screen it shows when the row is hovered or has focus, on a phone
@@ -635,7 +636,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     send back.", the focus goes to the agent chip, and the Changes asked… chip is gone. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
-    each, with the label on the left. A parameter's label is violet. An unset effort, impact or due date reads "Set
+    each, with the label on the left. On a phone the last row is Added, "Sam · 4 days ago" ("You · …" for your own,
+    the age alone when nobody can be named): plain text, never an editor, as wider screens keep it on History's line
+    alone (point 10). A parameter's label is violet. An unset effort, impact or due date reads "Set
     effort", "Set impact", "Set due" (a parameter "Set <name>") in muted text; when the server's held-back lines
     (point 9) name it, it is marked with an amber pill. With a mouse a value has no border at rest, a tint and ▾ when
     pointed at or focused; on a touch screen the ▾ always shows and the value is 44 px tall. A click opens a popover
