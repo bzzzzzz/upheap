@@ -803,7 +803,8 @@ a fixed time.
      `email_changed`; the link is mailed after commit. An address another account has answers the same `202` and
      changes, mails and records nothing.
    - A user's **account history** is the audit entries about them in their personal team, where their account entries
-     go: a password change, a reset link made for them (actor: the user, for the reason above), a password set with
+     go: a password change, a reset link made for them (actor: the user, for the reason above, or the operator who made it on the
+     Accounts page), a password set with
      one, an email change asked and one made, an address confirmed, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
      reset link made for them), an operator turning them off or on, the operator role given or taken away, and their own heap priority change (recorded here and not in the heap's team, since
      the value is private to them). `GET /me/history` reads exactly those eleven actions for the caller, with no way to name another user or
