@@ -136,9 +136,9 @@ pub enum AccountEventKindDto {
     PasswordResetLinkMade,
     /// A password was set with a reset link.
     PasswordReset,
-    /// The sign-in provider turned the account off, or removed its last record.
+    /// The sign-in provider turned the account off, or removed its last record, or an operator turned it off.
     AccountDeactivated,
-    /// The sign-in provider turned the account back on.
+    /// The sign-in provider, or an operator, turned the account back on.
     AccountReactivated,
     /// The user changed their own priority for a heap.
     HeapPriorityChanged,
@@ -148,6 +148,10 @@ pub enum AccountEventKindDto {
     EmailChanged,
     /// The address was confirmed, with the mailed link or by whoever runs the server.
     EmailConfirmed,
+    /// The server's shell made the account an operator.
+    OperatorGranted,
+    /// The server's shell took the operator role from the account.
+    OperatorRemoved,
     /// A kind this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
     /// schema.
     #[serde(other, skip_serializing)]
@@ -294,6 +298,11 @@ pub struct MeDto {
     /// What the user may do with their account, such as signing out and making teams.
     #[serde(deserialize_with = "crate::common::known_values")]
     pub allowed_actions: Vec<MeActionDto>,
+    /// Whether the user is an operator of the server, who reads every account and turns local ones off and on.
+    // Defaults so this client reads a server older than operators, which has none.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub operator: bool,
 }
 
 #[derive(Deserialize, ToSchema)]

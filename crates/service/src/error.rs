@@ -40,6 +40,12 @@ pub enum ServiceError {
     /// The identity provider turned the person's access off over SCIM, so no sign-in opens a session for them.
     #[error("the account is deactivated")]
     AccountDeactivated,
+    /// An operator turned the local account off, so no sign-in opens a session for the person.
+    #[error("the account is turned off")]
+    AccountTurnedOff,
+    /// An operator action on an account whose state the sign-in provider owns.
+    #[error("the account is managed by the sign-in provider")]
+    AccountProviderManaged,
     #[error("email or password is wrong")]
     InvalidCredentials,
     /// The right password for an account that hasn't confirmed its address, on a server with mail set up. A new link

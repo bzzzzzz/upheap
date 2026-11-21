@@ -74,6 +74,7 @@ fn to_me_dto(me: MeView) -> MeDto {
         user: UserDto::from(&me.user),
         teams: me.teams.into_iter().map(team).collect(),
         allowed_actions,
+        operator: me.operator,
     }
 }
 

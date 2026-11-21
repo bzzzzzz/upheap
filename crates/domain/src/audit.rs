@@ -61,6 +61,8 @@ coded_enum! {
         EmailChangeAsked = "email_change_asked",
         EmailChanged = "email_changed",
         EmailConfirmed = "email_confirmed",
+        OperatorGranted = "operator_granted",
+        OperatorRemoved = "operator_removed",
     }
 }
 

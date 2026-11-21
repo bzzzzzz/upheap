@@ -31,6 +31,9 @@ pub async fn insert_user(db: &impl ConnectionTrait, user: &User) -> Result<(), S
         display_name: Set(user.display_name.as_str().to_owned()),
         created_at: Set(user.created_at.as_millis()),
         unconfirmed_since: Set(None),
+        operator_since: Set(None),
+        deactivated_at: Set(None),
+        last_sign_in_at: Set(None),
     };
     users::Entity::insert(row).exec_without_returning(db).await?;
     Ok(())
@@ -210,6 +213,129 @@ pub async fn is_email_confirmed(db: &impl ConnectionTrait, user_id: UserId) -> R
         .await?
         .ok_or_else(|| StoreError::corrupt("users", &user_id.to_string(), "user vanished"))?;
     Ok(row.unconfirmed_since.is_none())
+}
+
+/// An account as an operator lists it: the user and the columns only operators read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AccountRecord {
+    pub user: User,
+    /// Whether the address isn't confirmed.
+    pub unconfirmed: bool,
+    /// Whether the server command made the user an operator.
+    pub operator: bool,
+    /// Whether an operator turned the account off.
+    pub turned_off: bool,
+    /// When a session was last opened for the user; `None` until one is.
+    pub last_sign_in_at: Option<Timestamp>,
+}
+
+/// Every account, by display name ignoring case, then username. The whole table is read and sorted in memory, which
+/// is fine for the tens to few hundreds of accounts a server has; a server with thousands needs a paged read.
+pub async fn list_accounts(db: &impl ConnectionTrait) -> Result<Vec<AccountRecord>, StoreError> {
+    let rows = users::Entity::find().all(db).await?;
+    let columns: HashMap<String, (bool, bool, bool, Option<i64>)> = rows
+        .iter()
+        .map(|row| {
+            (
+                row.id.clone(),
+                (
+                    row.unconfirmed_since.is_some(),
+                    row.operator_since.is_some(),
+                    row.deactivated_at.is_some(),
+                    row.last_sign_in_at,
+                ),
+            )
+        })
+        .collect();
+    let mut accounts = Vec::with_capacity(rows.len());
+    for user in to_users(db, rows).await? {
+        let id = id_to_db(user.id.as_uuid());
+        let (unconfirmed, operator, turned_off, last_sign_in_at) = columns
+            .get(&id)
+            .copied()
+            .ok_or_else(|| StoreError::corrupt(TABLE, &id, "user vanished"))?;
+        let read = RowReader { table: TABLE, id: &id };
+        accounts.push(AccountRecord {
+            last_sign_in_at: read.optional_timestamp(last_sign_in_at)?,
+            user,
+            unconfirmed,
+            operator,
+            turned_off,
+        });
+    }
+    accounts.sort_by_cached_key(|account| {
+        (
+            account.user.display_name.as_str().to_lowercase(),
+            account.user.username.as_str().to_owned(),
+        )
+    });
+    Ok(accounts)
+}
+
+/// Whether the user is an operator. A missing user isn't.
+pub async fn is_operator(db: &impl ConnectionTrait, user_id: UserId) -> Result<bool, StoreError> {
+    let row = users::Entity::find_by_id(id_to_db(user_id.as_uuid())).one(db).await?;
+    Ok(row.is_some_and(|row| row.operator_since.is_some()))
+}
+
+/// Whether an operator turned the user's account off. A missing user isn't.
+pub async fn is_turned_off(db: &impl ConnectionTrait, user_id: UserId) -> Result<bool, StoreError> {
+    let row = users::Entity::find_by_id(id_to_db(user_id.as_uuid())).one(db).await?;
+    Ok(row.is_some_and(|row| row.deactivated_at.is_some()))
+}
+
+/// Makes the user an operator from `since`. Returns whether it changed: `false` means they already were.
+pub async fn set_operator(db: &impl ConnectionTrait, user_id: UserId, since: Timestamp) -> Result<bool, StoreError> {
+    let result = users::Entity::update_many()
+        .col_expr(users::Column::OperatorSince, since.as_millis().into())
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .filter(users::Column::OperatorSince.is_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
+/// Takes the operator role from the user. Returns whether it changed: `false` means they weren't one.
+pub async fn clear_operator(db: &impl ConnectionTrait, user_id: UserId) -> Result<bool, StoreError> {
+    let result = users::Entity::update_many()
+        .col_expr(users::Column::OperatorSince, Expr::value(Option::<i64>::None))
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .filter(users::Column::OperatorSince.is_not_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
+/// Turns the user's account off at `at`. Returns whether it changed: `false` means it already was off.
+pub async fn set_turned_off(db: &impl ConnectionTrait, user_id: UserId, at: Timestamp) -> Result<bool, StoreError> {
+    let result = users::Entity::update_many()
+        .col_expr(users::Column::DeactivatedAt, at.as_millis().into())
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .filter(users::Column::DeactivatedAt.is_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
+/// Turns the user's account back on. Returns whether it changed: `false` means it wasn't off.
+pub async fn clear_turned_off(db: &impl ConnectionTrait, user_id: UserId) -> Result<bool, StoreError> {
+    let result = users::Entity::update_many()
+        .col_expr(users::Column::DeactivatedAt, Expr::value(Option::<i64>::None))
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .filter(users::Column::DeactivatedAt.is_not_null())
+        .exec(db)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
+/// Records that a session was opened for the user at `now`.
+pub async fn touch_last_sign_in(db: &impl ConnectionTrait, user_id: UserId, now: Timestamp) -> Result<(), StoreError> {
+    users::Entity::update_many()
+        .col_expr(users::Column::LastSignInAt, now.as_millis().into())
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .exec(db)
+        .await?;
+    Ok(())
 }
 
 /// Makes `%`, `_` and the escape character itself match literally in a `LIKE` pattern.

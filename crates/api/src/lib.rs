@@ -21,6 +21,7 @@ mod invites;
 mod items;
 mod me;
 mod oauth;
+mod operator;
 mod parameters;
 mod password_resets;
 mod paths;
@@ -86,6 +87,7 @@ pub struct CookieSettings {
         (name = "tags", description = "A heap's tags and a team's"),
         (name = "teams", description = "Teams and their members"),
         (name = "heaps", description = "Creating, renaming and archiving heaps"),
+        (name = "operator", description = "What an operator of the server does about accounts. Every endpoint answers `404 not_found` to anyone who isn't one."),
         (name = "users", description = "Finding users to add to a team"),
         (name = "views", description = "A heap's saved views"),
         (name = "parameters", description = "A heap's custom parameters and their options"),
@@ -165,7 +167,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .merge(me::password::routes())
         .merge(me::email::routes())
         .merge(me::personal_tokens::routes())
-        .merge(me::history::routes());
+        .merge(me::history::routes())
+        .merge(operator::routes());
     let v1 = v1.merge(turns::routes()).merge(work::routes());
     let v1 = v1
         .merge(me::routes())

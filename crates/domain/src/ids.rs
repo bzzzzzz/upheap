@@ -175,7 +175,9 @@ mod tests {
                 "account_reactivated",
                 "email_change_asked",
                 "email_changed",
-                "email_confirmed"
+                "email_confirmed",
+                "operator_granted",
+                "operator_removed"
             ]
         );
         pinned!(
