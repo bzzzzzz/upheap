@@ -151,7 +151,7 @@ item pane wide, so the menu stays next to what it opens; the sidebar's colour ru
 that wide whether or not an item is open, so opening or closing one never moves the sidebar or the list's left edge:
 an item is opened many times a session. Every page fills the room next to the sidebar, so the content's left and
 right edges are the same from one page to the next. On a list that opens items beside it (a heap's list, All items)
-the pane opens on the right, so the list narrows from the right. A form inside a page keeps its own narrower width.
+the pane opens on the right, so the list narrows from the right. A card fills that room too, and a short field in it keeps the width its value needs.
 
 ### Heap settings
 

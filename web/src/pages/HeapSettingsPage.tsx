@@ -96,7 +96,7 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
   const slugChanging = newSlug !== "" && newSlug !== data.slug;
 
   return (
-    <div className="flex max-w-[640px] flex-col gap-4 sm:gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <section aria-labelledby="heap-details" className={cardClass}>
         <h2 id="heap-details" className={cardTitleClass}>
           Details
