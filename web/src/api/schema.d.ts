@@ -570,6 +570,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Items found by title or key in every active heap the signed-in user can view, closed ones included. `q` is
+         *     trimmed, and matched as a case-insensitive substring of the title (`%` and `_` match only themselves; case folding
+         *     is the database's: ASCII only on SQLite, and MySQL also ignores accents) or as an exact key. The item with that key comes first, then open items,
+         *     newest created first, then closed items, most recently closed first. At most 50 rows come back, and `truncated`
+         *     says whether more matched. A blank `q` matches every title. Read-only, for any member.
+         */
+        get: operations["get_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/sign-ins": {
         parameters: {
             query?: never;
@@ -4470,6 +4493,22 @@ export interface components {
             name?: string | null;
             view?: null | components["schemas"]["ListViewInput"];
         };
+        /** @description The items a search across all heaps found. */
+        SearchResults: {
+            /**
+             * @description At most 50 matches: the item whose key is the text first, then open items, newest created first, then closed
+             *     items, most recently closed first.
+             */
+            rows: components["schemas"]["SearchRow"][];
+            /** @description Whether more items matched than `rows` holds. */
+            truncated: boolean;
+        };
+        /** @description An item a search found, with its heap. */
+        SearchRow: {
+            /** @description The heap the item is in, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+            item: components["schemas"]["ItemRef"];
+        };
         /** @description Sends an item to an agent. */
         SendToAgentRequest: {
             goal?: null | components["schemas"]["Goal"];
@@ -5254,6 +5293,8 @@ export type SavedViewAction = components['schemas']['SavedViewAction'];
 export type SavedViewList = components['schemas']['SavedViewList'];
 export type SavedViewListAction = components['schemas']['SavedViewListAction'];
 export type SavedViewPatchRequest = components['schemas']['SavedViewPatchRequest'];
+export type SearchResults = components['schemas']['SearchResults'];
+export type SearchRow = components['schemas']['SearchRow'];
 export type SendToAgentRequest = components['schemas']['SendToAgentRequest'];
 export type SetPasswordRequest = components['schemas']['SetPasswordRequest'];
 export type SignInRequest = components['schemas']['SignInRequest'];
@@ -6580,6 +6621,46 @@ export interface operations {
                 };
             };
             /** @description `invalid_query`, or `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_search: {
+        parameters: {
+            query: {
+                /** @description Text to find in an item's title, ignoring case, or an item's exact key. Blank text matches every title. */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResults"];
+                };
+            };
+            /** @description `invalid_query` */
             400: {
                 headers: {
                     [name: string]: unknown;

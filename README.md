@@ -375,6 +375,7 @@ cargo run -p cli -- item list --effort s,m --tag infra
 cargo run -p cli -- item list --all-heaps
 cargo run -p cli -- item list --all-heaps --team acme            # only one team's heaps
 cargo run -p cli -- item list --json | jq '.ranked[].item.key'
+cargo run -p cli -- item search "rotate certs"          # by title or key, in every heap, open and closed
 cargo run -p cli -- item add "Rotate the staging certs" --effort s --due next-week
 cargo run -p cli -- item add "Order the new certificate" --task -q    # added as a task; -q prints its key
 cargo run -p cli -- item add "Rotate certs" --task --context-file context.md --step "Order it" --step "Install it"

@@ -8,6 +8,7 @@ Naming
   default set with `upheap heap use`. With none of them it fails and says how to set one.
   `upheap item list --all-heaps` lists every heap's items in one ranked list, each with its heap, and needs no heap
   set; `upheap question list` lists what waits for you across heaps, and needs none either.
+  `upheap item search <text>` finds an item by title or key in every heap, closed ones included.
   `upheap item list --all-heaps --blocker gone` lists the blocked items whose blocker was closed or moved, which wait
   for you; `upheap item reopen` unblocks one.
 
