@@ -13,6 +13,7 @@ pub struct Model {
     pub expires_at: Option<i64>,
     pub last_used_at: Option<i64>,
     pub revoked_at: Option<i64>,
+    pub revoke_reason: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

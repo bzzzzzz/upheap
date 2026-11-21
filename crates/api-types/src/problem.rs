@@ -32,6 +32,9 @@ pub struct Problem {
     /// `confirm_reach` to merge them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_reach: Option<MergeReachDto>,
+    /// Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     /// Present on unexpected errors, so the operator can find the details in the log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,

@@ -26,6 +26,30 @@ pub enum TokenKind {
     Refresh,
 }
 
+/// Why a token family or personal token was revoked, when the server records it. A revocation with no reason says
+/// nothing about why. Clients read the reason's [`as_str`](Self::as_str) from the API.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RevokeReason {
+    /// The account's password was changed or reset.
+    PasswordChanged,
+}
+
+impl RevokeReason {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PasswordChanged => "password_changed",
+        }
+    }
+
+    /// The reason named `raw`, or `None` for a name this version doesn't know.
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "password_changed" => Some(Self::PasswordChanged),
+            _ => None,
+        }
+    }
+}
+
 /// A registered client.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Client {
@@ -88,7 +112,7 @@ pub enum GrantError {
     #[error("the refresh token has expired")]
     RefreshTokenExpired,
     #[error("the refresh token has been revoked")]
-    RefreshTokenRevoked,
+    RefreshTokenRevoked { reason: Option<RevokeReason> },
 }
 
 /// A redirect URI a registered client may use: `http://127.0.0.1:<port><path>` or `http://[::1]:<port><path>`.

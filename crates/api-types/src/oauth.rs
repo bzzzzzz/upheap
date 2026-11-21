@@ -123,6 +123,10 @@ pub struct OAuthErrorDto {
     pub error: String,
     /// What was wrong, for people. May change; branch on `error`.
     pub error_description: String,
+    /// Why the refresh token was revoked, on `invalid_grant` for a revoked refresh token, when the server knows:
+    /// `password_changed`. An extra parameter, which RFC 6749 §5.2 allows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 // The forms and the token response carry secrets: codes, verifiers and tokens. Their `Debug` says whether each is

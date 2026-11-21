@@ -3613,6 +3613,11 @@ export interface components {
             error: string;
             /** @description What was wrong, for people. May change; branch on `error`. */
             error_description: string;
+            /**
+             * @description Why the refresh token was revoked, on `invalid_grant` for a revoked refresh token, when the server knows:
+             *     `password_changed`. An extra parameter, which RFC 6749 §5.2 allows.
+             */
+            reason?: string | null;
         };
         /** @description A token revocation request (RFC 7009 §2.1), form-encoded. */
         OAuthRevokeRequest: {
@@ -3904,6 +3909,8 @@ export interface components {
              */
             item_key?: string | null;
             merge_reach?: null | components["schemas"]["MergeReach"];
+            /** @description Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`. */
+            reason?: string | null;
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -5776,7 +5783,7 @@ export interface operations {
                     "application/json": components["schemas"]["Invitation"];
                 };
             };
-            /** @description `unauthenticated`: the bearer token is invalid, expired or revoked */
+            /** @description `unauthenticated` or `token_revoked`: the bearer token is invalid, expired or revoked */
             401: {
                 headers: {
                     [name: string]: unknown;

@@ -267,7 +267,10 @@ impl Services {
             .await?
             .ok_or(GrantError::RefreshTokenUnknown)?;
         if family.revoked_at.is_some() {
-            return Err(GrantError::RefreshTokenRevoked.into());
+            return Err(GrantError::RefreshTokenRevoked {
+                reason: family.revoke_reason,
+            }
+            .into());
         }
         if token.used_at.is_some() {
             return revoke_after_reuse(txn, family.id, now, GrantError::RefreshTokenUsed).await;
@@ -339,13 +342,22 @@ impl Services {
     }
 
     /// Resolves an access token to its user, as [`Services::authenticate_session`] does a session. Fails with
-    /// [`ServiceError::Unauthenticated`] when the token is unknown, expired or revoked, or is a refresh token.
+    /// [`ServiceError::Unauthenticated`] when the token is unknown or expired, or is a refresh token, and with
+    /// [`ServiceError::TokenRevoked`] when its family was revoked.
     pub async fn authenticate_access_token(&self, token: &OAuthSecret) -> Result<Principal, ServiceError> {
-        let user_id = store::oauth::find_access_token_user(&self.db, &token.to_hash(), self.now())
+        let family = store::oauth::find_access_token_family(&self.db, &token.to_hash(), self.now())
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
-        self.ensure_not_local_user_while_passwords_off(user_id).await?;
-        Ok(Principal { user_id, run: None })
+        if family.revoked_at.is_some() {
+            return Err(ServiceError::TokenRevoked {
+                reason: family.revoke_reason,
+            });
+        }
+        self.ensure_not_local_user_while_passwords_off(family.user_id).await?;
+        Ok(Principal {
+            user_id: family.user_id,
+            run: None,
+        })
     }
 }
 

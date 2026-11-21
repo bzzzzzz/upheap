@@ -26,6 +26,9 @@ pub use store::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, Token
 pub enum AuthError {
     #[error("not signed in to {server}")]
     NotSignedIn { server: String },
+    /// The server refused the refresh token because the account's password changed, so the sign-in ended.
+    #[error("the sign-in to {server} ended because the account's password changed")]
+    PasswordChanged { server: String },
     #[error(transparent)]
     Store(#[from] TokenStoreError),
     #[error("can't lock {}", path.display())]
@@ -48,7 +51,8 @@ pub enum AuthError {
 /// stored one while it's fresh, or a new one from refreshing, which is saved before it's returned.
 ///
 /// Fails with [`AuthError::NotSignedIn`] when there's no sign-in, or the server no longer accepts its refresh token,
-/// which is then forgotten.
+/// which is then forgotten; with [`AuthError::PasswordChanged`] instead when the server says it ended because the
+/// account's password changed.
 pub async fn access_token(
     store: &Arc<dyn TokenStore>,
     lock_dir: &Path,
@@ -80,6 +84,11 @@ pub async fn access_token(
         Err(ClientError::OAuthRefused { refusal, .. }) if refusal.error == "invalid_grant" => {
             tracing::info!(error = %refusal.error_description, "refresh token refused; forgetting the sign-in");
             delete_tokens(store, server).await?;
+            if refusal.reason.as_deref() == Some(domain::oauth::RevokeReason::PasswordChanged.as_str()) {
+                return Err(AuthError::PasswordChanged {
+                    server: server.to_owned(),
+                });
+            }
             return Err(not_signed_in());
         }
         Err(err) => return Err(err.into()),

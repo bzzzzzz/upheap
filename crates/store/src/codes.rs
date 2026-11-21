@@ -1,6 +1,7 @@
 //! Conversions between domain values and their stored form. Stored strings are stable and never renamed.
 
 use domain::handle::{Handle, ItemKey};
+use domain::oauth::RevokeReason;
 use domain::parameter::Weight;
 use domain::validation::Field;
 use domain::{Timestamp, Version};
@@ -48,6 +49,12 @@ impl RowReader<'_> {
 
     pub fn item_key(&self, raw: &str) -> Result<ItemKey, StoreError> {
         ItemKey::parse(raw).map_err(|_| self.corrupt(format!("invalid item key {raw:?}")))
+    }
+
+    /// A stored revoke reason: `None` for NULL, which records no reason.
+    pub fn revoke_reason(&self, raw: Option<&str>) -> Result<Option<RevokeReason>, StoreError> {
+        raw.map(|raw| RevokeReason::parse(raw).ok_or_else(|| self.corrupt(format!("unknown revoke reason {raw:?}"))))
+            .transpose()
     }
 
     pub fn corrupt(&self, problem: String) -> StoreError {

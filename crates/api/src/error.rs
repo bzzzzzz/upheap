@@ -13,7 +13,7 @@ use domain::comment::CommentError;
 use domain::email_change::EmailChangeLinkError;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
-use domain::oauth::AuthorizationError;
+use domain::oauth::{AuthorizationError, RevokeReason};
 use domain::parameter::ParameterError;
 use domain::password_reset::ResetLinkError;
 use domain::question::QuestionError;
@@ -105,6 +105,8 @@ struct Classified {
     item_key: Option<String>,
     highest: Option<String>,
     merge_reach: Option<MergeReachDto>,
+    /// Why a token was revoked, on `token_revoked`.
+    reason: Option<&'static str>,
     category: Category,
 }
 
@@ -118,6 +120,7 @@ fn classify(err: &ApiError) -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        reason: None,
         category,
     };
     match err {
@@ -160,6 +163,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        reason: None,
         category,
     };
     match err {
@@ -167,8 +171,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::NotFound => simple(StatusCode::NOT_FOUND, "not_found", Category::Permission),
         ServiceError::Forbidden(_) => simple(StatusCode::FORBIDDEN, "forbidden", Category::Permission),
         ServiceError::Unauthenticated => simple(StatusCode::UNAUTHORIZED, "unauthenticated", Category::Permission),
-        ServiceError::TokenRevoked => Classified {
+        ServiceError::TokenRevoked { reason } => Classified {
             title: "The token was revoked".to_owned(),
+            reason: reason.map(RevokeReason::as_str),
             ..simple(StatusCode::UNAUTHORIZED, "token_revoked", Category::Permission)
         },
         ServiceError::TokenExpired => Classified {
@@ -454,6 +459,7 @@ fn classify_service(err: &ServiceError) -> Classified {
                 item_key: None,
                 highest: None,
                 merge_reach: None,
+                reason: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -575,6 +581,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        reason: None,
         category: Category::Caller,
     }
 }
@@ -589,6 +596,7 @@ fn unexpected() -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        reason: None,
         category: Category::Unexpected,
     }
 }
@@ -620,6 +628,7 @@ pub(crate) fn problem_of(err: &ApiError) -> (StatusCode, Problem) {
         item_key: classified.item_key,
         highest: classified.highest,
         merge_reach: classified.merge_reach,
+        reason: classified.reason.map(str::to_owned),
         request_id,
     };
     (classified.status, body)
@@ -631,7 +640,8 @@ impl IntoResponse for ApiError {
         let mut response = (status, [(header::CONTENT_TYPE, "application/problem+json")], Json(body)).into_response();
         if matches!(
             self,
-            ApiError::BearerRejected | ApiError::Service(ServiceError::TokenRevoked | ServiceError::TokenExpired)
+            ApiError::BearerRejected
+                | ApiError::Service(ServiceError::TokenRevoked { .. } | ServiceError::TokenExpired)
         ) {
             // RFC 6750 §3: says how to authenticate, and why this token didn't.
             response.headers_mut().insert(

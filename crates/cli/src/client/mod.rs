@@ -82,7 +82,10 @@ pub enum ClientError {
     Problem { problem: Box<Problem>, body: String },
     /// The token endpoints' refusal (RFC 6749 §5.2).
     #[error("{} ({})", refusal.error_description, refusal.error)]
-    OAuthRefused { status: StatusCode, refusal: OAuthErrorDto },
+    OAuthRefused {
+        status: StatusCode,
+        refusal: Box<OAuthErrorDto>,
+    },
     /// The server sent the request elsewhere. The CLI doesn't follow redirects, so its tokens go only where it was
     /// told to send them.
     #[error("{server} answered with a redirect ({status}) to {location}; set the server to the address it's served at")]
@@ -388,7 +391,10 @@ impl ApiClient {
             };
         }
         if let Ok(refusal) = serde_json::from_str::<OAuthErrorDto>(&body) {
-            return ClientError::OAuthRefused { status, refusal };
+            return ClientError::OAuthRefused {
+                status,
+                refusal: Box::new(refusal),
+            };
         }
         tracing::debug!(%status, path, body, "unreadable failure");
         ClientError::Unreadable {

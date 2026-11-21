@@ -648,7 +648,7 @@ impl Services {
                 // open a session under it.
                 let personal_team = self.lock_personal_team(txn, user_id).await?;
                 if !person.active {
-                    let ended_sign_ins = self.end_sign_ins(txn, user_id, None, now).await?;
+                    let ended_sign_ins = self.end_sign_ins(txn, user_id, None, None, now).await?;
                     tracing::info!(%user_id, ended_sign_ins, "ended the sign-ins of a person the provider deactivated");
                     if !off_before {
                         let diff = json!({ AuditField::EndedSignIns.code(): ended_sign_ins });

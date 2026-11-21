@@ -134,7 +134,8 @@ async fn a_reused_refresh_token_revokes_every_token_of_its_sign_in() -> Result<(
     );
     for revoked in [&first_me, &second_me] {
         expect_that!(revoked.status, eq(StatusCode::UNAUTHORIZED));
-        expect_that!(revoked.body["code"], eq(&json!("unauthenticated")));
+        expect_that!(revoked.body["code"], eq(&json!("token_revoked")));
+        expect_that!(revoked.body.get("reason"), none());
         expect_that!(
             header_of(revoked, header::WWW_AUTHENTICATE),
             some(eq(r#"Bearer error="invalid_token""#))

@@ -125,7 +125,7 @@ impl Services {
 
     /// Resolves a personal token to its user, as [`Services::authenticate_access_token`] does an OAuth one, and
     /// records that it was used. Fails with [`ServiceError::Unauthenticated`] for a token this server doesn't know,
-    /// and with [`ServiceError::TokenRevoked`] or [`ServiceError::TokenExpired`] for one that is no longer live:
+    /// and with [`ServiceError::TokenRevoked`] (with its reason) or [`ServiceError::TokenExpired`] for one that is no longer live:
     /// only the holder of the secret can ask, so saying which leaks nothing.
     pub async fn authenticate_personal_token(&self, secret: &OAuthSecret) -> Result<Principal, ServiceError> {
         let now = self.now();
@@ -134,7 +134,11 @@ impl Services {
             .ok_or(ServiceError::Unauthenticated)?;
         match TokenState::of(token.revoked_at, token.expires_at, now) {
             TokenState::Live => {}
-            TokenState::Revoked => return Err(ServiceError::TokenRevoked),
+            TokenState::Revoked => {
+                return Err(ServiceError::TokenRevoked {
+                    reason: token.revoke_reason,
+                });
+            }
             TokenState::Expired => return Err(ServiceError::TokenExpired),
         }
         self.ensure_not_local_user_while_passwords_off(token.user_id).await?;

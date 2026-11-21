@@ -3,7 +3,7 @@ use domain::email_change::EmailChangeLinkError;
 use domain::handle::Handle;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
-use domain::oauth::{AuthorizationError, GrantError};
+use domain::oauth::{AuthorizationError, GrantError, RevokeReason};
 use domain::parameter::ParameterError;
 use domain::password_reset::ResetLinkError;
 use domain::permission::Permission;
@@ -30,9 +30,9 @@ pub enum ServiceError {
     Forbidden(Permission),
     #[error("not signed in")]
     Unauthenticated,
-    /// A personal token that was revoked.
+    /// A personal token or an OAuth access token that was revoked, and why when that was recorded.
     #[error("the token was revoked")]
-    TokenRevoked,
+    TokenRevoked { reason: Option<RevokeReason> },
     /// A personal token whose time passed.
     #[error("the token has expired")]
     TokenExpired,

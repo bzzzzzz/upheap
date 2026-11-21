@@ -3,6 +3,7 @@
 //! Revoked and expired rows are kept, so a request that presents one can be told why it was refused; they are tiny
 //! and a person makes a handful.
 
+use domain::oauth::RevokeReason;
 use domain::personal_token::LAST_USED_PRECISION;
 use domain::{PersonalTokenId, Timestamp, UserId};
 use sea_orm::sea_query::Condition;
@@ -36,6 +37,8 @@ pub struct PersonalToken {
     pub expires_at: Option<Timestamp>,
     pub last_used_at: Option<Timestamp>,
     pub revoked_at: Option<Timestamp>,
+    /// Why it was revoked, when that was recorded.
+    pub revoke_reason: Option<RevokeReason>,
 }
 
 pub async fn insert_personal_token(db: &impl ConnectionTrait, token: &NewPersonalToken<'_>) -> Result<(), StoreError> {
@@ -48,6 +51,7 @@ pub async fn insert_personal_token(db: &impl ConnectionTrait, token: &NewPersona
         expires_at: Set(token.expires_at.map(Timestamp::as_millis)),
         last_used_at: Set(None),
         revoked_at: Set(None),
+        revoke_reason: Set(None),
     };
     personal_tokens::Entity::insert(row).exec_without_returning(db).await?;
     Ok(())
@@ -111,14 +115,19 @@ pub async fn revoke_personal_token(
     Ok(result.rows_affected == 1)
 }
 
-/// Revokes every live token of the user at `now` and returns how many it revoked.
+/// Revokes every live token of the user at `now` with `reason` and returns how many it revoked.
 pub async fn revoke_user_personal_tokens(
     db: &impl ConnectionTrait,
     user_id: UserId,
+    reason: Option<RevokeReason>,
     now: Timestamp,
 ) -> Result<u64, StoreError> {
     let result = personal_tokens::Entity::update_many()
         .col_expr(personal_tokens::Column::RevokedAt, now.as_millis().into())
+        .col_expr(
+            personal_tokens::Column::RevokeReason,
+            reason.map(RevokeReason::as_str).into(),
+        )
         .filter(personal_tokens::Column::UserId.eq(id_to_db(user_id.as_uuid())))
         .filter(is_live(now))
         .exec(db)
@@ -169,5 +178,6 @@ fn to_token(row: personal_tokens::Model) -> Result<PersonalToken, StoreError> {
         expires_at: read.optional_timestamp(row.expires_at)?,
         last_used_at: read.optional_timestamp(row.last_used_at)?,
         revoked_at: read.optional_timestamp(row.revoked_at)?,
+        revoke_reason: read.revoke_reason(row.revoke_reason.as_deref())?,
     })
 }
