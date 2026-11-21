@@ -98,9 +98,15 @@ function FindBody({
     return () => window.clearTimeout(timer);
   }, [query]);
   const search = useSearch(searching ? settled : "");
+  // The results are the answer to what is typed now, not the previous text's rows that stay while the next load. Until
+  // then Enter and Tab do nothing, so they never act on a row the person didn't see for this text.
+  const asked = searching && settled === query;
+  const current = asked && !search.isPlaceholderData && search.data !== undefined;
+  const error = asked ? search.error : null;
+  const pending = searching && !current && !error;
 
   const several = me.teams.length > 1;
-  const rows = searching ? (search.data?.rows ?? []) : [];
+  const rows = current ? search.data.rows : [];
   const heaps = me.teams.flatMap((team) =>
     team.heaps
       .filter((heap) => !heap.archived && (!searching || heap.name.toLowerCase().includes(query.toLowerCase())))
@@ -108,9 +114,21 @@ function FindBody({
   );
   const addHeap = shellHeap && heapOf(me, shellHeap);
 
-  const go = (to: "/teams/$team/heaps/$heap" | "/teams/$team/heaps/$heap/items/$item", params: object) => {
+  const goToHeap = (team: string, heap: string) => {
     close();
-    void navigate({ to, params } as Parameters<typeof navigate>[0]);
+    void navigate({ to: "/teams/$team/heaps/$heap", params: { team, heap } });
+  };
+  const goToItem = (team: string, heap: string, item: string) => {
+    close();
+    void navigate({ to: "/teams/$team/heaps/$heap/items/$item", params: { team, heap, item } });
+  };
+
+  // Before the field's own handlers (the menu's Enter among them), which would act on the highlighted row.
+  const holdKeys = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (pending && (event.key === "Enter" || event.key === "Tab")) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   };
 
   // The row the field's highlight is on, as the input names it in `aria-activedescendant`.
@@ -127,7 +145,6 @@ function FindBody({
 
   if (acting) return <Actions row={acting} me={me} close={close} onBack={() => setActing(null)} />;
 
-  const hint = !searching || search.data !== undefined ? "" : "Searching…";
   return (
     <>
       <Autocomplete inputValue={text} onInputChange={setText}>
@@ -136,6 +153,7 @@ function FindBody({
           <Search aria-hidden="true" className="pointer-events-none absolute left-5 size-4 text-muted" />
           <Input
             placeholder="Find an item, or go to a heap"
+            onKeyDownCapture={holdKeys}
             onKeyDown={onKeyDown}
             className="h-10 w-full rounded-[9px] border-2 border-transparent bg-sunken pr-10 pl-9 text-base outline-none placeholder:text-muted focus:border-accent sm:text-sm [&::-webkit-search-cancel-button]:hidden"
           />
@@ -149,10 +167,10 @@ function FindBody({
           )}
         </SearchField>
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1.5 pt-1 pb-2">
-          {hint && <p className="px-2.5 py-2 text-sm text-muted">{hint}</p>}
-          {searching && search.error && (
+          {pending && <p className="px-2.5 py-2 text-sm text-muted">Searching…</p>}
+          {error && (
             <div className="px-2.5 py-1">
-              <ProblemText error={search.error} />
+              <ProblemText error={error} />
             </div>
           )}
           {/* New for each answer, so the highlight starts on the first row again, as it does when typing. */}
@@ -162,9 +180,7 @@ function FindBody({
             aria-label="Results"
             className="outline-none"
             renderEmptyState={() =>
-              searching && (search.data !== undefined || search.error) ? (
-                <p className="px-2.5 py-2 text-sm text-muted">Nothing matches “{query}”.</p>
-              ) : null
+              current ? <p className="px-2.5 py-2 text-sm text-muted">Nothing matches “{query}”.</p> : null
             }
           >
             {rows.length > 0 && (
@@ -176,13 +192,7 @@ function FindBody({
                     row={row}
                     at={at}
                     me={me}
-                    onAction={() =>
-                      go("/teams/$team/heaps/$heap/items/$item", {
-                        team: row.heap.team_slug,
-                        heap: row.heap.slug,
-                        item: row.item.key,
-                      })
-                    }
+                    onAction={() => goToItem(row.heap.team_slug, row.heap.slug, row.item.key)}
                   />
                 ))}
               </MenuSection>
@@ -195,7 +205,7 @@ function FindBody({
                     key={heap.id}
                     id={`heap:${heap.id}`}
                     textValue={heap.name}
-                    onAction={() => go("/teams/$team/heaps/$heap", { team: team.slug, heap: heap.slug })}
+                    onAction={() => goToHeap(team.slug, heap.slug)}
                     className={rowClass}
                   >
                     <span className="min-w-0 flex-1 truncate">
@@ -224,6 +234,9 @@ function FindBody({
               </MenuSection>
             )}
           </Menu>
+          {current && search.data.truncated && (
+            <p className="px-2.5 py-2 text-[13px] text-muted">More items match. Keep typing to narrow them.</p>
+          )}
         </div>
       </Autocomplete>
       <p
@@ -295,7 +308,7 @@ function Actions({ row, me, close, onBack }: { row: SearchRow; me: Me; close: ()
       <div className="flex shrink-0 flex-col border-b border-line px-4 py-3">
         <span className="flex items-center gap-1.5 text-sm text-muted">
           <ChevronLeft aria-hidden="true" className="size-4" />
-          <Kbd className="hidden lg:pointer-fine:inline-flex">⇧⇥</Kbd>
+          <Kbd className={WIDE_HINT}>⇧⇥</Kbd>
         </span>
         <h2 className="truncate text-base font-semibold">{row.item.title}</h2>
         <p className="truncate text-[13px] text-muted">{placeLabel(me, row)}</p>

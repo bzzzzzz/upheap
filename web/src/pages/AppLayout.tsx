@@ -39,7 +39,7 @@ import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useHeap, useSetHeapArchived } from "../api/queries/heaps";
 import { useMe, useDecisions, useWaiting } from "../api/queries/me";
-import { AddItemDialog } from "../components/AddItem";
+import { AddItemDialog, OVERLAY } from "../components/AddItem";
 import { FindPalette } from "../components/FindPalette";
 import { Kbd, MAC, WIDE_HINT } from "../components/Kbd";
 import { KeysHelp } from "../components/KeysHelp";
@@ -93,7 +93,7 @@ export function AppLayout() {
       // ⌘K (Ctrl K off a Mac) works in fields too, and not over another dialog, the palette itself included.
       if ((MAC ? event.metaKey : event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        if (!document.querySelector("[role=dialog]")) setFindOpen(true);
+        if (!document.querySelector(OVERLAY)) setFindOpen(true);
         return;
       }
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -145,6 +145,9 @@ export function AppLayout() {
             {me && shellHeap && <PhoneTabs me={me} heapRef={shellHeap} />}
           </div>
         </div>
+        {addingFrom && (
+          <FindAdd heapRef={addingFrom.heap} title={addingFrom.title} onClose={() => setAddingFrom(null)} />
+        )}
       </ListSearchProvider>
       <KeysHelp isOpen={helpOpen} onOpenChange={setHelpOpen} />
       {me && (
@@ -156,15 +159,17 @@ export function AppLayout() {
           onAdd={(heap, title) => setAddingFrom({ heap, title })}
         />
       )}
-      {addingFrom && (
-        <AddItemDialog
-          heapRef={addingFrom.heap}
-          view={undefined}
-          title={addingFrom.title}
-          onClose={() => setAddingFrom(null)}
-        />
-      )}
     </ToastProvider>
+  );
+}
+
+/** The Add dialog the Find palette opens, starting from the list on screen, as the phone's Add does. */
+function FindAdd({ heapRef, title, onClose }: { heapRef: HeapRef; title: string; onClose: () => void }) {
+  const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
+  const { search } = useListSearch();
+  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
+  return (
+    <AddItemDialog heapRef={heapRef} view={view} search={search} acrossHeaps={onAll} title={title} onClose={onClose} />
   );
 }
 

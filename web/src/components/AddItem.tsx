@@ -30,6 +30,9 @@ import { tagChipColor } from "./tagColor";
 import { teamName } from "./teamName";
 import { useToast, useToastCount } from "./UndoToast";
 
+/** What is on screen over the page, so a key that opens another dialog waits: a dialog, or a confirmation. */
+export const OVERLAY = "[role=dialog], [role=alertdialog]";
+
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
 
 /**
@@ -60,7 +63,7 @@ export function AddItem({
       const target = event.target as HTMLElement | null;
       const typing = target?.closest("input, textarea, select, [contenteditable]");
       // Not over another dialog or sheet, where the new one would open underneath it.
-      const overlaid = document.querySelector("[role=dialog]") !== null;
+      const overlaid = document.querySelector(OVERLAY) !== null;
       if (event.key === "n" && !typing && !overlaid && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         setOpen(true);

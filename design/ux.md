@@ -118,7 +118,7 @@ Acme"), on the phone's top bar as well, except for a heap in the personal team.
 A phone's tabs have room for four: Waiting sits left of the + and Agents right of it, and Closed, Settings, Activity
 and Data go into More with the account pages. More shows as active on the pages it holds, Closed among them.
 
-**Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
+**Waiting for me** is the first entry of the rail and, in the sidebar, the first below Find, above the heap switcher: an inbox icon, "Waiting for
 me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count as a small badge on
 the icon. There is no count at zero, and the entry stays. The count is the number of open questions across the
 person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the list is, so a
@@ -1327,6 +1327,6 @@ The wide screen shows its keys, and `?` lists them all:
    cancels it. Keys are ignored in a field.
 
 5. `⌘K` (`Ctrl K` off a Mac) anywhere, or Find at the top of the sidebar, opens Find. It finds items by title or
-   key in every heap (the server's search, open items first), goes to a heap, and adds "Add “text” as a new item" to
+   key in every heap, goes to a heap, and adds "Add “text” as a new item" to
    the heap on screen. ↑ ↓ and Enter open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy
    link, as the item allows), and Shift+Tab goes back.
