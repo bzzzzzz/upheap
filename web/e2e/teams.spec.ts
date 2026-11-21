@@ -84,6 +84,42 @@ test("a team is created with or without a link name, and a taken one is said und
   await expect(personal).toContainText("Only you · 1 heap");
 });
 
+test("a heap is added with or without a link name, and a taken one is said under its field", async ({ page }) => {
+  await createTeam(page, "Gardeners");
+  const teamPath = new URL(page.url()).pathname;
+  const form = page.getByRole("form", { name: "New heap" });
+
+  // Without a link name the server makes one from the name, and no link shows.
+  await page.getByRole("button", { name: "+ New heap" }).click();
+  await page.getByLabel("New heap name").fill("Seed Swap");
+  await expect(form.getByText("New link:")).toHaveCount(0);
+  await page.getByRole("button", { name: "Add heap" }).click();
+  await expect(heaps(page).getByRole("link", { name: /Seed Swap/ })).toHaveAttribute(
+    "href",
+    `${teamPath}/heaps/seed-swap`,
+  );
+
+  // With one, the form shows the new link, and the heap gets it.
+  await page.getByRole("button", { name: "+ New heap" }).click();
+  await page.getByLabel("New heap name").fill("Compost");
+  await page.getByLabel("Link name").fill("rot");
+  await expect(form.getByText(`${teamPath}/heaps/rot`)).toBeVisible();
+  await page.getByRole("button", { name: "Add heap" }).click();
+  await expect(heaps(page).getByRole("link", { name: /Compost/ })).toHaveAttribute("href", `${teamPath}/heaps/rot`);
+
+  // The same link name again is taken: the error is under Link name, which gets focus, and typing clears it.
+  await page.getByRole("button", { name: "+ New heap" }).click();
+  await page.getByLabel("New heap name").fill("Compost again");
+  const link = page.getByLabel("Link name");
+  await link.fill("rot");
+  await page.getByRole("button", { name: "Add heap" }).click();
+  await expect(link).toHaveAttribute("aria-invalid", "true");
+  await expect(link).toHaveAccessibleDescription("That's taken. Pick another.");
+  await expect(link).toBeFocused();
+  await link.pressSequentially("-2");
+  await expect(link).not.toHaveAttribute("aria-invalid");
+});
+
 test("the counts come from the server: open items per heap, members per team", async ({ page, request }) => {
   const grace = await registerOther(request, "Grace Hopper");
   await createTeam(page, "Counting");

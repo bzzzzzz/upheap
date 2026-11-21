@@ -20,6 +20,7 @@ import { useCreateHeap } from "../api/queries/heaps";
 import { useTeam } from "../api/queries/teams";
 import { readFoldedTeams, readRecentHeaps, writeFoldedTeams } from "./heapSwitcherStorage";
 import { PHONE, TOUCH, useMedia } from "./media";
+import { NewHeapLink } from "./NewHeapLink";
 import { PopoverSheet } from "./PopoverSheet";
 import { ProblemText } from "./ProblemText";
 import { sheetRowClass } from "./Sheet";
@@ -550,7 +551,10 @@ function NewHeapButton({ me, team, onClick }: { me: Me; team: SwitcherTeam; onCl
   );
 }
 
-/** The name field that "New heap" becomes, with `initialName` filled in and focused, the caret at its end. */
+/**
+ * The name and optional Link name fields that "New heap" becomes, with `initialName` filled in and focused, the caret at
+ * its end. A blank link name is made by the server from the name.
+ */
 function NewHeapForm({
   me,
   team,
@@ -567,6 +571,8 @@ function NewHeapForm({
   const create = useCreateHeap(team.slug);
   const navigate = useNavigate();
   const [name, setName] = useState(initialName);
+  const [slugDraft, setSlugDraft] = useState("");
+  const slug = slugDraft.trim();
   const focusAtEnd = useCallback((input: HTMLInputElement | null) => {
     if (!input) return;
     input.focus();
@@ -577,7 +583,7 @@ function NewHeapForm({
     event.preventDefault();
     if (name.trim() === "") return;
     create.mutate(
-      { name: name.trim() },
+      { name: name.trim(), ...(slug !== "" && { slug }) },
       {
         onSuccess: (heap) => {
           onCreated();
@@ -598,6 +604,23 @@ function NewHeapForm({
         placeholder="Heap name"
         className="h-12 rounded-xl border border-line bg-surface px-3 text-base"
       />
+      <input
+        aria-label={`Link name of the new heap in ${teamName(team, me)}`}
+        value={slugDraft}
+        onChange={(e) => setSlugDraft(e.target.value)}
+        maxLength={39}
+        placeholder="Link name (optional)"
+        autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        className="h-12 rounded-xl border border-line bg-surface px-3 text-base"
+      />
+      {slug !== "" && (
+        <p className="text-xs break-words text-muted max-sm:text-[13px]">
+          <NewHeapLink team={team.slug} slug={slug} />
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} className={newHeapButtonClass}>
           Cancel

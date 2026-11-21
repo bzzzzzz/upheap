@@ -28,6 +28,7 @@ import { InlineConfirm } from "../components/InlineConfirm";
 import { PHONE, useMedia } from "../components/media";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
+import { NewHeapLink } from "../components/NewHeapLink";
 import { OperatorContact } from "../components/OperatorContact";
 import { ProblemText, problemMessage } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
@@ -220,20 +221,45 @@ function HeapsSection({ team, phone }: { team: Team; phone: boolean }) {
   );
 }
 
-/** A name for a new heap. The server makes its link name from the name. */
+type HeapField = "name" | "slug";
+
+/**
+ * Name and Link name for a new heap, as Create team has them. The server makes the link name from the name when it's
+ * left out, so the new link shows only once one is typed.
+ */
 function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
   const create = useCreateHeap(team);
-  const [name, setName] = useState("");
+  const [values, setValues] = useState<Record<HeapField, string>>({ name: "", slug: "" });
+  const formRef = useRef<HTMLFormElement>(null);
   const { error } = create;
-  const nameError = error instanceof ApiProblem && error.field === "name";
+  const errorField: HeapField | undefined =
+    error instanceof ApiProblem && (error.field === "name" || error.field === "slug") ? error.field : undefined;
 
+  // After a failed submit, focus goes to the input the problem is about.
+  useEffect(() => {
+    const input = errorField && formRef.current?.elements.namedItem(errorField);
+    if (input instanceof HTMLInputElement) input.focus();
+  }, [error, errorField]);
+
+  const slug = values.slug.trim();
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    create.mutate({ name }, { onSuccess: onClose });
+    create.mutate({ name: values.name, ...(slug !== "" && { slug }) }, { onSuccess: onClose });
   };
+
+  const field = (name: HeapField) => ({
+    name,
+    value: values[name],
+    error: errorField === name && error ? problemMessage(error) : undefined,
+    onChange: (value: string) => {
+      setValues((current) => ({ ...current, [name]: value }));
+      if (errorField === name) create.reset();
+    },
+  });
 
   return (
     <form
+      ref={formRef}
       aria-label="New heap"
       onSubmit={submit}
       onKeyDown={(event) => {
@@ -245,22 +271,32 @@ function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
       noValidate
       className="flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft"
     >
-      <Field
-        label="New heap name"
-        name="name"
-        value={name}
-        error={nameError && error ? problemMessage(error) : undefined}
-        onChange={(value) => {
-          setName(value);
-          if (nameError) create.reset();
-        }}
-        autoFocus
-        autoComplete="off"
-        maxLength={100}
-      />
-      {error && !nameError && <ProblemText error={error} className="text-overdue-ink" />}
-      <div className="flex items-center justify-end gap-2.5">
-        <button type="button" onClick={onClose} className={`${compactButtonClass.quiet} max-sm:min-h-11`}>
+      <div className="flex flex-wrap gap-2.5">
+        <div className="min-w-0 flex-[1_1_200px]">
+          <Field label="New heap name" {...field("name")} autoFocus autoComplete="off" maxLength={100} />
+        </div>
+        <div className="min-w-0 flex-[1_1_160px]">
+          <Field
+            label="Link name"
+            {...field("slug")}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={39}
+          />
+        </div>
+      </div>
+      {error && !errorField && <ProblemText error={error} className="text-overdue-ink" />}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="min-w-0 flex-1 text-xs break-words text-muted max-sm:basis-full max-sm:text-[13px]">
+          {slug !== "" && <NewHeapLink team={team} slug={slug} />}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className={`${compactButtonClass.quiet} max-sm:ml-auto max-sm:min-h-11`}
+        >
           Cancel
         </button>
         <button type="submit" disabled={create.isPending} className={`${compactButtonClass.primary} max-sm:min-h-11`}>
