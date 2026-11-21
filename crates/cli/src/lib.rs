@@ -292,6 +292,8 @@ enum ParameterCommand {
     Use(commands::parameter::use_parameter::UseArgs),
     /// Make the heap stop using a team parameter
     StopUsing(commands::parameter::stop_using::StopUsingArgs),
+    /// Make a heap's parameter a team parameter, merging the team's same-named ones into it
+    Promote(commands::parameter::promote::PromoteArgs),
     /// A parameter's options
     #[command(subcommand)]
     Option(ParameterOptionCommand),
@@ -403,6 +405,7 @@ impl Command {
             Self::Parameter(ParameterCommand::Archive(args)) => &args.shared,
             Self::Parameter(ParameterCommand::Use(args)) => &args.shared,
             Self::Parameter(ParameterCommand::StopUsing(args)) => &args.shared,
+            Self::Parameter(ParameterCommand::Promote(args)) => &args.shared,
             Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Add(args))) => &args.shared,
             Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Edit(args))) => &args.shared,
             Self::Parameter(ParameterCommand::Option(ParameterOptionCommand::Archive(args))) => &args.shared,
@@ -592,6 +595,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Parameter(ParameterCommand::StopUsing(args)) => {
             commands::parameter::stop_using::run(args, app, out).await
         }
+        Command::Parameter(ParameterCommand::Promote(args)) => commands::parameter::promote::run(args, app, out).await,
         Command::Parameter(ParameterCommand::Option(ParameterOptionCommand::Add(args))) => {
             commands::parameter::option::add::run(args, app, out).await
         }

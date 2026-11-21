@@ -33,6 +33,10 @@ pub struct Problem {
     /// `confirm_reach` to merge them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_reach: Option<MergeReachDto>,
+    /// The heap parameters making one a team parameter would merge, for `parameter_merge_unconfirmed`: repeat the
+    /// write with `token` as `confirm_reach` to go on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter_merge_reach: Option<ParameterMergeReachDto>,
     /// Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<RevokeReasonDto>,
@@ -62,4 +66,45 @@ pub struct MergeReachHeapDto {
     pub tag_name: String,
     /// Items with an active link to the tag, open or closed.
     pub items: u32,
+}
+
+/// What making a heap parameter a team parameter would do: the parameter itself, and the same-named heap parameters of
+/// the team that merge into it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ParameterMergeReach)]
+pub struct ParameterMergeReachDto {
+    /// Names exactly these parameters, item counts and added options; it changes when any does.
+    pub token: String,
+    /// The parameter it starts from first, then the others by heap name, then heap ID.
+    pub entries: Vec<ParameterMergeReachEntryDto>,
+}
+
+/// A heap parameter in a merge.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ParameterMergeReachEntry)]
+pub struct ParameterMergeReachEntryDto {
+    pub heap: HeapSummaryDto,
+    pub archived: bool,
+    pub parameter_id: Uuid,
+    /// The parameter's name as written.
+    pub parameter_name: String,
+    /// Items with a value for the parameter, open or closed.
+    pub items: u32,
+    /// The labels of its options the team parameter doesn't have yet. Empty for the one the merge starts from.
+    pub added_options: Vec<String>,
+    /// Its options in use that match an option the team parameter has archived: open items on them get the option in
+    /// use that one was replaced by. Empty for the one the merge starts from.
+    pub switched: Vec<ParameterMergeSwitchDto>,
+    /// Whether it is the one the merge starts from.
+    pub starting: bool,
+}
+
+/// An option in use of a merged parameter whose open items move to another option of the team parameter.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ParameterMergeSwitch)]
+pub struct ParameterMergeSwitchDto {
+    /// The option's label as the merged parameter wrote it.
+    pub from: String,
+    /// The label of the team parameter's option in use that open items get.
+    pub to: String,
 }

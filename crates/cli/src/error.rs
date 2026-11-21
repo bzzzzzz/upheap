@@ -59,11 +59,11 @@ pub enum CliError {
         #[source]
         source: ClientError,
     },
-    /// The server refused a team tag write, and the CLI has more to say than the refusal's title: the heap tags a merge
-    /// would take in with the command that confirms it, or the heaps a run wasn't given. `lines` are the message,
-    /// whole, as `to_message_in` returns them.
+    /// The server refused a team tag write or a parameter merge, and the CLI has more to say than the refusal's title:
+    /// what a merge would take in with the command that confirms it, or the heaps a run wasn't given. `lines` are the
+    /// message, whole, as `to_message_in` returns them.
     #[error("{source}")]
-    TagWriteRefused {
+    WriteRefused {
         lines: Vec<String>,
         #[source]
         source: ClientError,
@@ -175,7 +175,7 @@ impl CliError {
             | Self::Client(err)
             | Self::NoSuchItem { source: err, .. }
             | Self::ItemRefused { source: err, .. }
-            | Self::TagWriteRefused { source: err, .. } => client_exit_code(err),
+            | Self::WriteRefused { source: err, .. } => client_exit_code(err),
             Self::Login(LoginError::Loopback(LoopbackError::Bind(_))) => 6,
             Self::Login(LoginError::Loopback(LoopbackError::TimedOut(_)) | LoginError::Cancelled) => 4,
             Self::Login(LoginError::Refused { .. }) => 4,
@@ -225,7 +225,7 @@ impl CliError {
     pub fn to_message_in(&self, in_run: bool) -> Vec<String> {
         match self {
             Self::Reported { .. } => return Vec::new(),
-            Self::TagWriteRefused { lines, .. } => return lines.clone(),
+            Self::WriteRefused { lines, .. } => return lines.clone(),
             _ => {}
         }
         let mut lines = vec![format!("error: {}", self.with_causes())];
@@ -260,7 +260,7 @@ impl CliError {
                 source: ClientError::Problem { body, .. },
                 ..
             }
-            | Self::TagWriteRefused {
+            | Self::WriteRefused {
                 source: ClientError::Problem { body, .. },
                 ..
             }
@@ -295,7 +295,7 @@ impl CliError {
                 source: ClientError::Problem { problem, .. },
                 ..
             }
-            | Self::TagWriteRefused {
+            | Self::WriteRefused {
                 source: ClientError::Problem { problem, .. },
                 ..
             }
@@ -314,7 +314,7 @@ impl CliError {
             | Self::Client(err)
             | Self::NoSuchItem { source: err, .. }
             | Self::ItemRefused { source: err, .. }
-            | Self::TagWriteRefused { source: err, .. }
+            | Self::WriteRefused { source: err, .. }
             | Self::EnvTokenRefused { refused: err }
             | Self::SignInEnded { refused: err, .. } => Some(err),
             _ => None,
@@ -557,6 +557,7 @@ mod tests {
                 item_key: None,
                 highest: None,
                 merge_reach: None,
+                parameter_merge_reach: None,
                 reason: None,
                 request_id: None,
             }),

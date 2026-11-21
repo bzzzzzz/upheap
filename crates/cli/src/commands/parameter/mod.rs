@@ -5,6 +5,7 @@ pub mod archive;
 pub mod edit;
 pub mod list;
 pub mod option;
+pub mod promote;
 pub mod stop_using;
 pub mod use_parameter;
 

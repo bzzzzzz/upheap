@@ -626,3 +626,23 @@ team parameters it uses, with the heap's weight in place, and everything that re
 filters, saved views, moves) is unchanged. A heap stopping its use is refused while its open items hold a value, and a
 team parameter or one of its options is archived across every heap of the team, so a team parameter write locks every
 heap of the team as a team tag write does.
+
+## 46. A heap parameter becomes the team's in place, and same-named ones merge into it
+
+**Context.** A team that defined the same parameter in several heaps (such as a customer tier) had no way to move to
+one team parameter (45): the name rule refused a team parameter with a heap parameter's name, and the heap ones could
+only be archived once no open item held a value for them. Team tags (44) already merged.
+
+**Decision.** An admin makes one heap parameter the team's, and it keeps its row and ID, so its own heap's items, views
+and history stay as they are. Every other live heap parameter of the team with the same name, ignoring case, merges into
+it: its options match by label, those with no match are added, so nothing is dropped, items keep their values on the
+matched options, each heap keeps its weight in its use row, and the merged parameter is archived. The admin confirms
+what it reaches first.
+
+**Instead of.** Making a new team parameter and archiving the heap ones, which needs the heap ones emptied of open
+items first and leaves the new one with no values. Refusing, which leaves a team that already drifted no way to one
+parameter.
+
+**Consequences.** It can't be undone: there is no demoting a team parameter to heap parameters. A parameter linked to
+tags can't be merged until team parameters can hold tag links, so the admin unlinks them first. Rankings can shift in a
+heap whose options were in another order, since the options now follow the team parameter's order.

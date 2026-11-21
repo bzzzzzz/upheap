@@ -217,6 +217,19 @@ label is an input, a list icon after the label, named "Items with Energy: Low"; 
 option row itself. Archived parameters are listed last, and their options aren't links. On a phone everything stacks
 in one column, main buttons span the width, and every control is 44 px to a finger.
 
+A heap's own parameter, for an admin, has a ⋯ after Rename with **Make a team parameter**. It sends the write without a
+token and the server's refusal opens the **parameter merge confirm**. The confirm is the merge confirm of Tags, with the
+same dialog on a wide screen and sheet on a phone, the same "This changed while it was open" state, and the same failure
+line. It differs in what it lists: it is headed "Make “Customer tier” a team parameter?", a row per heap parameter (the
+starting one first, marked "this heap", then the same-named ones, "archived" where their heap is) shows the heap, the
+parameter as that heap wrote it, its item count and, when it brings options the team parameter lacks, "adds Platinum".
+When one of its options matches an option the team parameter has archived, the row says "moves Silver → Gold": its
+open items get the option in use that Silver was replaced by, while closed ones keep Silver. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
+whose options were in another order." and the quiet line "The items keep their history. This can't be undone."; the
+buttons are Cancel and Make team parameter ("Making…"). Success closes it with a toast, "“Customer tier” is a team
+parameter now: 3 items in 2 heaps keep their values.". A parameter linked to tags is refused with no dialog: the server's
+message ("Unlink the tags first: …") shows under the card's heading, as a failed archive does.
+
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
 parameter" to a screen reader), its weight read as "Weight {n}", its options and tags read-only, a line saying the
 weight is set on the Ranking page and the name and options on the Team page (both links), and Stop using for an admin

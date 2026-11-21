@@ -533,6 +533,39 @@ pub async fn list_active_tag_links(
     Ok(links)
 }
 
+/// The set values `(item, parameter, option)` of the parameters `parameter_ids`, whatever the item's state and heap, in
+/// no particular order. Serves the reach of a parameter merge: how many items have a value for each, and which items to
+/// rewrite.
+pub async fn list_parameter_values(
+    db: &impl ConnectionTrait,
+    parameter_ids: &[ParameterId],
+) -> Result<Vec<(ItemId, ParameterId, OptionId)>, StoreError> {
+    let ids: Vec<String> = parameter_ids.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let mut values = Vec::new();
+    for chunk in ids.chunks(IN_LIST_CHUNK) {
+        let rows = item_parameter_values::Entity::find()
+            .filter(item_parameter_values::Column::ParameterId.is_in(chunk.iter().map(String::as_str)))
+            .filter(item_parameter_values::Column::OptionId.is_not_null())
+            .all(db)
+            .await?;
+        for row in rows {
+            let read = RowReader {
+                table: "item_parameter_values",
+                id: &row.item_id,
+            };
+            let Some(option) = row.option_id.as_deref() else {
+                continue;
+            };
+            values.push((
+                ItemId::from_uuid(read.uuid(&row.item_id)?),
+                ParameterId::from_uuid(read.uuid(&row.parameter_id)?),
+                OptionId::from_uuid(read.uuid(option)?),
+            ));
+        }
+    }
+    Ok(values)
+}
+
 /// Makes the item's active tags exactly `tags`: adds the missing ones and marks the others removed.
 async fn sync_tags(
     db: &impl ConnectionTrait,

@@ -95,6 +95,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::TagCreated
         | AuditAction::TagUpdated
         | AuditAction::TagMerged
+        | AuditAction::ParameterMerged
         | AuditAction::SavedViewCreated
         | AuditAction::SavedViewUpdated
         | AuditAction::SavedViewArchived => Permission::EditItems,
@@ -357,6 +358,8 @@ pub enum ParameterAction {
     Edit,
     /// Take it out of use. Refused while an open item has a value for it.
     Archive,
+    /// A heap parameter: make it the team's, merging the team's same-named heap parameters into it.
+    MakeTeam,
     /// A team parameter in a heap: stop the heap using it. Refused while an open item of the heap has a value for it.
     StopUsing,
     /// Read its history. Parameter changes are shown to those who may make them (see [`audit_permission`]), so this
@@ -374,7 +377,7 @@ pub enum ParameterListAction {
 }
 
 /// What `role` can do with `parameter` in `heap`. Only its history, for those who may configure the heap, once the
-/// parameter or the heap is archived. A team parameter the heap uses is stopped, not edited: it is edited on the team
+/// parameter or the heap is archived. Making a heap parameter the team's is for admins, like configuring a heap. A team parameter the heap uses is stopped, not edited: it is edited on the team
 /// (see [`allowed_team_parameter_actions`]), and its weight is saved with the heap's other weights.
 pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role) -> Vec<ParameterAction> {
     if !Permission::ConfigureHeap.is_granted_to(role) {
@@ -389,6 +392,7 @@ pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role)
     vec![
         ParameterAction::Edit,
         ParameterAction::Archive,
+        ParameterAction::MakeTeam,
         ParameterAction::ViewHistory,
     ]
 }
@@ -694,6 +698,30 @@ mod tests {
             elements_are![eq(&ParameterAction::ViewHistory)]
         );
         expect_that!(allowed_parameter_actions(&used, &heap(false), Role::Member), is_empty());
+    }
+
+    #[gtest]
+    fn admins_make_a_live_heap_parameter_the_teams_in_an_active_heap_only() {
+        let live = parameter(
+            crate::parameter::ParameterOwner::Heap(crate::HeapId::from_uuid(Uuid::from_u128(2))),
+            false,
+        );
+        let archived = parameter(
+            crate::parameter::ParameterOwner::Heap(crate::HeapId::from_uuid(Uuid::from_u128(2))),
+            true,
+        );
+        let can_make_team = |parameter: &Parameter, heap: &Heap, role| {
+            allowed_parameter_actions(parameter, heap, role).contains(&ParameterAction::MakeTeam)
+        };
+
+        expect_that!(can_make_team(&live, &heap(false), Role::Admin), is_true());
+        expect_that!(can_make_team(&live, &heap(false), Role::Member), is_false());
+        expect_that!(can_make_team(&live, &heap(true), Role::Admin), is_false());
+        expect_that!(can_make_team(&archived, &heap(false), Role::Admin), is_false());
+        expect_that!(
+            can_make_team(&parameter(team_owner(), false), &heap(false), Role::Admin),
+            is_false()
+        );
     }
 
     #[gtest]

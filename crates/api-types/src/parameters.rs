@@ -16,6 +16,8 @@ pub enum ParameterActionDto {
     /// Rename it, change its weight, change its options and link it to tags.
     Edit,
     Archive,
+    /// A heap parameter: make it the team's, merging the team's same-named heap parameters into it.
+    MakeTeam,
     /// A team parameter in a heap: stop the heap using it.
     StopUsing,
     ViewHistory,
@@ -26,6 +28,7 @@ impl From<ParameterAction> for ParameterActionDto {
         match action {
             ParameterAction::Edit => Self::Edit,
             ParameterAction::Archive => Self::Archive,
+            ParameterAction::MakeTeam => Self::MakeTeam,
             ParameterAction::StopUsing => Self::StopUsing,
             ParameterAction::ViewHistory => Self::ViewHistory,
         }

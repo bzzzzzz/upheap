@@ -37,6 +37,18 @@ impl HeapApi<'_> {
         Ok(self.client.post(&self.path(resource), body, self.token).await?)
     }
 
+    /// `POST` of `body` to `resource` under the heap, with the merge `confirm` token when there is one.
+    pub async fn post_confirming<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        body: &(impl Serialize + ?Sized),
+        confirm: Option<&str>,
+    ) -> Result<Fetched<T>, ClientError> {
+        self.client
+            .post_with_query(&self.path(resource), &confirm_query(confirm), body, self.token)
+            .await
+    }
+
     /// `PATCH` of `body` to `resource` under the heap, which is at `version`.
     pub async fn patch<T: DeserializeOwned>(
         &self,
