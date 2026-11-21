@@ -183,6 +183,17 @@ pub struct ResolvedValue<'a> {
     pub rank: usize,
 }
 
+/// What merging one parameter's options into another's gives.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OptionMerge {
+    /// The receiving parameter with the options it took in.
+    pub merged: Parameter,
+    /// Each option of the merged-in parameter, in use or archived, to the option of `merged` it became.
+    pub option_map: BTreeMap<OptionId, OptionId>,
+    /// The labels of the options `merged` didn't have: in use first, in the merged-in parameter's order, then archived.
+    pub added: Vec<OptionLabel>,
+}
+
 impl Parameter {
     /// A parameter in use, created at `now`. Fails if the options are too many or two share a label.
     pub fn new(
@@ -214,6 +225,95 @@ impl Parameter {
     /// Whether the team owns the parameter.
     pub const fn is_team_owned(&self) -> bool {
         matches!(self.owner, ParameterOwner::Team(_))
+    }
+
+    /// The heap parameter as its team's: the same parameter, options and history, with no weight of its own, since each
+    /// heap that uses a team parameter weights it for itself. Fails if it is archived or already a team's.
+    pub fn into_team(&self, team_id: TeamId) -> Result<Self, ParameterError> {
+        self.ensure_in_use()?;
+        if self.is_team_owned() {
+            return Err(ParameterError::NotInHeap { parameter_id: self.id });
+        }
+        Ok(Self {
+            owner: ParameterOwner::Team(team_id),
+            weight: Weight::OFF,
+            ..self.clone()
+        })
+    }
+
+    /// This parameter with the options of `from` taken in, which is merged into it.
+    ///
+    /// Options match by label, ignoring case, among this parameter's options in use first, then its archived ones,
+    /// including those taken in so far. An option of `from` in use with no match is added as this parameter's
+    /// lowest-priority option, in `from`'s order. An archived one with no match is added archived, keeping its
+    /// `archived_at`, with the option its replacement became as its replacement. `new_id` makes the ID of each option
+    /// added. Fails when the result has too many options in use ([`ParameterError::TooManyOptions`]).
+    pub fn merge_options(
+        &self,
+        from: &Self,
+        mut new_id: impl FnMut() -> OptionId,
+    ) -> Result<OptionMerge, ParameterError> {
+        let mut merged = self.clone();
+        let mut option_map = BTreeMap::new();
+        let mut added = Vec::new();
+        let mut in_use: BTreeMap<String, OptionId> = self.options.iter().map(|o| (o.label.to_key(), o.id)).collect();
+        let mut archived: BTreeMap<String, OptionId> =
+            self.archived_options.iter().map(|o| (o.label.to_key(), o.id)).collect();
+
+        for option in &from.options {
+            let key = option.label.to_key();
+            if let Some(&id) = in_use.get(&key).or_else(|| archived.get(&key)) {
+                option_map.insert(option.id, id);
+                continue;
+            }
+            let id = new_id();
+            merged.options.push(ParameterOption {
+                id,
+                label: option.label.clone(),
+            });
+            in_use.insert(key, id);
+            option_map.insert(option.id, id);
+            added.push(option.label.clone());
+        }
+
+        // An archived option is added once the option that replaced it is mapped, so a replacement is always there
+        // before the option that names it.
+        let mut pending: Vec<&ArchivedOption> = from.archived_options.iter().collect();
+        while !pending.is_empty() {
+            let before = pending.len();
+            pending.retain(|option| {
+                let key = option.label.to_key();
+                if let Some(&id) = in_use.get(&key).or_else(|| archived.get(&key)) {
+                    option_map.insert(option.id, id);
+                    return false;
+                }
+                let Some(&replaced_by) = option_map.get(&option.replaced_by) else {
+                    return true;
+                };
+                let id = new_id();
+                merged.archived_options.push(ArchivedOption {
+                    id,
+                    label: option.label.clone(),
+                    archived_at: option.archived_at,
+                    replaced_by,
+                });
+                archived.insert(key, id);
+                option_map.insert(option.id, id);
+                added.push(option.label.clone());
+                false
+            });
+            if pending.len() == before {
+                return Err(ParameterError::ReplacementRequired {
+                    option_id: pending[0].id,
+                });
+            }
+        }
+        ensure_labels_unique(&merged.options)?;
+        Ok(OptionMerge {
+            merged,
+            option_map,
+            added,
+        })
     }
 
     /// The parameter with `patch` applied, or `None` when the patch changes nothing. Keeps the old version; the
@@ -358,6 +458,21 @@ fn ensure_labels_unique(options: &[ParameterOption]) -> Result<(), ParameterErro
         }
     }
     Ok(())
+}
+
+/// The text a parameter merge's reach is hashed from: for each parameter in the reach, by parameter ID,
+/// `"<parameter id>:<items>:<labels added, joined by |>\n"`. It changes when a parameter joins or leaves the reach,
+/// a count changes or the options it adds change.
+pub fn reach_text<'a>(entries: impl IntoIterator<Item = (ParameterId, u32, &'a [OptionLabel])>) -> String {
+    let mut entries: Vec<_> = entries.into_iter().collect();
+    entries.sort_by_key(|(parameter, _, _)| *parameter);
+    entries
+        .into_iter()
+        .map(|(parameter, items, added)| {
+            let added: Vec<&str> = added.iter().map(OptionLabel::as_str).collect();
+            format!("{parameter}:{items}:{}\n", added.join("|"))
+        })
+        .collect()
 }
 
 /// `values` as they stand for an open item: each value followed to its option in use, and values of archived
@@ -541,6 +656,161 @@ mod tests {
         expect_that!(resolved.map(|v| v.option.id), some(eq(opt(3))));
         expect_that!(resolved.map(|v| v.rank), some(eq(0)));
         expect_that!(parameter.resolve(opt(99)), none());
+    }
+
+    fn team_parameter(options: Vec<ParameterOption>) -> Parameter {
+        Parameter {
+            options,
+            ..customer()
+                .into_team(TeamId::from_uuid(Uuid::from_u128(7)))
+                .expect("heap parameter")
+        }
+    }
+
+    fn heap_parameter(options: Vec<ParameterOption>) -> Parameter {
+        Parameter {
+            id: ParameterId::from_uuid(Uuid::from_u128(101)),
+            options,
+            ..customer()
+        }
+    }
+
+    fn id_source() -> impl FnMut() -> OptionId {
+        let mut next = 1000;
+        move || {
+            next += 1;
+            opt(next)
+        }
+    }
+
+    #[gtest]
+    fn a_heap_parameter_becomes_a_team_one_with_the_same_id_and_options_and_no_weight() {
+        let team = TeamId::from_uuid(Uuid::from_u128(7));
+
+        let made = customer().into_team(team).expect("heap parameter");
+
+        expect_that!(made.owner, eq(ParameterOwner::Team(team)));
+        expect_that!(made.weight, eq(Weight::OFF));
+        expect_that!(made.id, eq(customer().id));
+        expect_that!(made.options, eq(&customer().options));
+        expect_that!(made.into_team(team), err(anything()));
+        expect_that!(
+            customer().archive(at(1)).expect("changed").into_team(team),
+            err(anything())
+        );
+    }
+
+    #[gtest]
+    fn merged_options_match_by_label_ignoring_case() {
+        let team = team_parameter(vec![option(1, "Gold"), option(2, "Silver")]);
+        let heap = heap_parameter(vec![option(11, "silver"), option(12, "GOLD")]);
+
+        let merge = team.merge_options(&heap, id_source()).expect("fits");
+
+        expect_that!(merge.merged.options, eq(&team.options));
+        expect_that!(
+            merge.option_map,
+            eq(&BTreeMap::from([(opt(11), opt(2)), (opt(12), opt(1))]))
+        );
+        expect_that!(merge.added, is_empty());
+    }
+
+    #[gtest]
+    fn merged_options_without_a_match_are_appended_in_their_order() {
+        let team = team_parameter(vec![option(1, "Gold")]);
+        let heap = heap_parameter(vec![option(11, "Platinum"), option(12, "gold"), option(13, "Bronze")]);
+
+        let merge = team.merge_options(&heap, id_source()).expect("fits");
+
+        let labels: Vec<&str> = merge.merged.options.iter().map(|o| o.label.as_str()).collect();
+        expect_that!(labels, elements_are![eq(&"Gold"), eq(&"Platinum"), eq(&"Bronze")]);
+        expect_that!(merge.option_map.get(&opt(11)), some(eq(&opt(1001))));
+        expect_that!(merge.option_map.get(&opt(12)), some(eq(&opt(1))));
+        expect_that!(merge.option_map.get(&opt(13)), some(eq(&opt(1002))));
+        let added: Vec<&str> = merge.added.iter().map(OptionLabel::as_str).collect();
+        expect_that!(added, elements_are![eq(&"Platinum"), eq(&"Bronze")]);
+    }
+
+    #[gtest]
+    fn a_live_option_matching_an_archived_one_maps_to_the_archived_one() {
+        let team = team_parameter(vec![option(1, "Gold"), option(2, "Silver")])
+            .archive_option(opt(2), Some(opt(1)), at(5))
+            .expect("allowed")
+            .expect("changed");
+        let heap = heap_parameter(vec![option(11, "silver")]);
+
+        let merge = team.merge_options(&heap, id_source()).expect("fits");
+
+        expect_that!(merge.option_map.get(&opt(11)), some(eq(&opt(2))));
+        expect_that!(merge.merged.options.len(), eq(1));
+        expect_that!(merge.added, is_empty());
+    }
+
+    #[gtest]
+    fn an_archived_option_without_a_match_is_added_archived_with_its_replacement_mapped() {
+        let team = team_parameter(vec![option(1, "Gold")]);
+        // 12 Old was replaced by 13 Older (itself archived later), which was replaced by 11 Platinum.
+        let heap = Parameter {
+            archived_options: vec![
+                ArchivedOption {
+                    id: opt(12),
+                    label: OptionLabel::parse("Old").expect("valid"),
+                    archived_at: at(3),
+                    replaced_by: opt(13),
+                },
+                ArchivedOption {
+                    id: opt(13),
+                    label: OptionLabel::parse("Older").expect("valid"),
+                    archived_at: at(4),
+                    replaced_by: opt(11),
+                },
+            ],
+            ..heap_parameter(vec![option(11, "Platinum")])
+        };
+
+        let merge = team.merge_options(&heap, id_source()).expect("fits");
+
+        let platinum = merge.option_map[&opt(11)];
+        let older = merge.option_map[&opt(13)];
+        let old = merge.option_map[&opt(12)];
+        let archived = &merge.merged.archived_options;
+        expect_that!(archived.len(), eq(2));
+        // A replacement comes before the option that names it.
+        expect_that!(archived[0].id, eq(older));
+        expect_that!(archived[0].replaced_by, eq(platinum));
+        expect_that!(archived[0].archived_at, eq(at(4)));
+        expect_that!(archived[1].id, eq(old));
+        expect_that!(archived[1].replaced_by, eq(older));
+        expect_that!(merge.merged.resolve(old).map(|v| v.option.id), some(eq(platinum)));
+    }
+
+    #[gtest]
+    fn two_merges_adding_the_same_label_add_it_once() {
+        let team = team_parameter(vec![option(1, "Gold")]);
+        let first = heap_parameter(vec![option(11, "Platinum")]);
+        let second = heap_parameter(vec![option(21, "platinum")]);
+
+        let after_first = team.merge_options(&first, id_source()).expect("fits");
+        let after_second = after_first.merged.merge_options(&second, id_source()).expect("fits");
+
+        expect_that!(after_second.merged.options.len(), eq(2));
+        expect_that!(after_second.added, is_empty());
+        expect_that!(
+            after_second.option_map.get(&opt(21)),
+            some(eq(&after_first.option_map[&opt(11)]))
+        );
+    }
+
+    #[gtest]
+    fn a_merge_that_leaves_too_many_options_is_refused() {
+        let many: Vec<ParameterOption> = (1..=MAX_OPTIONS as u128).map(|n| option(n, &format!("A{n}"))).collect();
+        let team = team_parameter(many);
+        let heap = heap_parameter(vec![option(500, "Extra")]);
+
+        expect_that!(
+            team.merge_options(&heap, id_source()),
+            err(eq(&ParameterError::TooManyOptions { max: MAX_OPTIONS }))
+        );
     }
 
     #[gtest]

@@ -80,6 +80,8 @@ enum Target {
     Parameter,
     /// The first option of a new parameter of the shared heap.
     ParameterOption,
+    /// A parameter of the shared heap, and the token that confirms making it a team parameter, in the query.
+    ParameterToMakeTeam,
     /// A parameter of the shared team with two options, with its version for `If-Match`.
     TeamParameter,
     /// The first option of a new parameter of the shared team.
@@ -1153,6 +1155,14 @@ fn endpoints() -> Vec<Endpoint> {
         ),
         row(
             Method::POST,
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/team",
+            configure,
+            Target::ParameterToMakeTeam,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
             "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use",
             configure,
             Target::TeamParameter,
@@ -2129,6 +2139,26 @@ impl World {
                 let id = parameter["id"].as_str().context("parameter has no id")?;
                 path = path.replace("{parameter_id}", id);
                 if_match = Some(parameter["version"].to_string());
+            }
+            Target::ParameterToMakeTeam => {
+                parameter = self.create_parameter().await?;
+                let id = parameter["id"].as_str().context("parameter has no id")?;
+                path = path.replace("{parameter_id}", id);
+                // The first answer, to the admin, names what confirms it and changes nothing.
+                let refused = self
+                    .app
+                    .send_with(
+                        Method::POST,
+                        &format!("/api/v1{path}"),
+                        Some(&self.admin.session),
+                        None,
+                        &[common::CSRF],
+                    )
+                    .await?;
+                let token = refused.body["parameter_merge_reach"]["token"]
+                    .as_str()
+                    .context("no reach to confirm")?;
+                path = format!("{path}?confirm_reach={token}");
             }
             Target::TeamParameter => {
                 parameter = self.create_team_parameter().await?;

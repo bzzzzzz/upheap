@@ -6615,6 +6615,115 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/team": {
+      "post": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins\nonly. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a\n`parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team\nparameter at the weight it had, and each item's value moves to the option with the same label. A parameter linked\nto tags can't be merged: `parameter_merge_linked` names them.",
+        "operationId": "make_team_parameter",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "confirm_reach",
+            "in": "query",
+            "description": "The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with, or of the\n`parameter_merge_reach` of `parameter_merge_unconfirmed`: the write goes on if what it would merge is still\nthat, with the same item counts.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The team parameter, with the heaps that use it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a parameter of the heap",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_merge_unconfirmed`, `parameter_merge_linked`, `parameter_archived` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`too_many_options`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use": {
       "post": {
         "tags": [
@@ -9108,7 +9217,7 @@
           {
             "name": "confirm_reach",
             "in": "query",
-            "description": "The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the\nheap tags it would merge are still those, with the same item counts.",
+            "description": "The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with, or of the\n`parameter_merge_reach` of `parameter_merge_unconfirmed`: the write goes on if what it would merge is still\nthat, with the same item counts.",
             "required": false,
             "schema": {
               "type": "string"
@@ -9216,7 +9325,7 @@
           {
             "name": "confirm_reach",
             "in": "query",
-            "description": "The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with: the write goes on if the\nheap tags it would merge are still those, with the same item counts.",
+            "description": "The `token` of the `merge_reach` a `tag_merge_unconfirmed` refusal answered with, or of the\n`parameter_merge_reach` of `parameter_merge_unconfirmed`: the write goes on if what it would merge is still\nthat, with the same item counts.",
             "required": false,
             "schema": {
               "type": "string"
@@ -10658,6 +10767,7 @@
           "parameter_created",
           "parameter_updated",
           "parameter_archived",
+          "parameter_merged",
           "option_archived",
           "invite_link_created",
           "invite_link_revoked",
@@ -14236,6 +14346,7 @@
         "enum": [
           "edit",
           "archive",
+          "make_team",
           "stop_using",
           "view_history"
         ]
@@ -14297,6 +14408,73 @@
           "create",
           "use_team_parameter"
         ]
+      },
+      "ParameterMergeReach": {
+        "type": "object",
+        "description": "What making a heap parameter a team parameter would do: the parameter itself, and the same-named heap parameters of\nthe team that merge into it.",
+        "required": [
+          "token",
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterMergeReachEntry"
+            },
+            "description": "The parameter it starts from first, then the others by heap name, then heap ID."
+          },
+          "token": {
+            "type": "string",
+            "description": "Names exactly these parameters, item counts and added options; it changes when any does."
+          }
+        }
+      },
+      "ParameterMergeReachEntry": {
+        "type": "object",
+        "description": "A heap parameter in a merge.",
+        "required": [
+          "heap",
+          "archived",
+          "parameter_id",
+          "parameter_name",
+          "items",
+          "added_options",
+          "starting"
+        ],
+        "properties": {
+          "added_options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The labels of its options the team parameter doesn't have yet. Empty for the one the merge starts from."
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "heap": {
+            "$ref": "#/components/schemas/HeapSummary"
+          },
+          "items": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Items with a value for the parameter, open or closed.",
+            "minimum": 0
+          },
+          "parameter_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parameter_name": {
+            "type": "string",
+            "description": "The parameter's name as written."
+          },
+          "starting": {
+            "type": "boolean",
+            "description": "Whether it is the one the merge starts from."
+          }
+        }
       },
       "ParameterOption": {
         "type": "object",
@@ -14634,6 +14812,17 @@
               {
                 "$ref": "#/components/schemas/MergeReach",
                 "description": "The heap tags a team tag write would merge, for `tag_merge_unconfirmed`: repeat the write with `token` as\n`confirm_reach` to merge them."
+              }
+            ]
+          },
+          "parameter_merge_reach": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ParameterMergeReach",
+                "description": "The heap parameters making one a team parameter would merge, for `parameter_merge_unconfirmed`: repeat the\nwrite with `token` as `confirm_reach` to go on."
               }
             ]
           },

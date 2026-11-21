@@ -3,7 +3,7 @@
 //! Every [`ServiceError`] variant is matched exhaustively, so a new variant doesn't compile until it has a
 //! status and a code. Clients branch on `code`, never on `title` or `detail`.
 
-use api_types::problem::MergeReachDto;
+use api_types::problem::{MergeReachDto, ParameterMergeReachDto};
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::{StatusCode, header};
@@ -27,6 +27,7 @@ use store_error::StoreErrorKind;
 
 pub(crate) use api_types::problem::Problem;
 
+use crate::parameters::to_parameter_merge_reach_dto;
 use crate::request_id::current_request_id;
 use crate::tags::to_merge_reach_dto;
 
@@ -105,6 +106,7 @@ struct Classified {
     item_key: Option<String>,
     highest: Option<String>,
     merge_reach: Option<MergeReachDto>,
+    parameter_merge_reach: Option<ParameterMergeReachDto>,
     category: Category,
 }
 
@@ -118,6 +120,7 @@ fn classify(err: &ApiError) -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        parameter_merge_reach: None,
         category,
     };
     match err {
@@ -160,6 +163,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        parameter_merge_reach: None,
         category,
     };
     match err {
@@ -433,6 +437,13 @@ fn classify_service(err: &ServiceError) -> Classified {
             merge_reach: Some(to_merge_reach_dto(reach)),
             ..simple(StatusCode::CONFLICT, "tag_merge_unconfirmed", Category::Conflict)
         },
+        ServiceError::ParameterMergeUnconfirmed { reach } => Classified {
+            parameter_merge_reach: Some(to_parameter_merge_reach_dto(reach)),
+            ..simple(StatusCode::CONFLICT, "parameter_merge_unconfirmed", Category::Conflict)
+        },
+        ServiceError::ParameterMergeLinked { .. } => {
+            simple(StatusCode::CONFLICT, "parameter_merge_linked", Category::Conflict)
+        }
         ServiceError::Parameter(error) => classify_parameter(error, simple),
         ServiceError::ParameterNameTaken { .. } => Classified {
             field: Some("name"),
@@ -454,6 +465,7 @@ fn classify_service(err: &ServiceError) -> Classified {
                 item_key: None,
                 highest: None,
                 merge_reach: None,
+                parameter_merge_reach: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -575,6 +587,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        parameter_merge_reach: None,
         category: Category::Caller,
     }
 }
@@ -589,6 +602,7 @@ fn unexpected() -> Classified {
         item_key: None,
         highest: None,
         merge_reach: None,
+        parameter_merge_reach: None,
         category: Category::Unexpected,
     }
 }
@@ -620,6 +634,7 @@ pub(crate) fn problem_of(err: &ApiError) -> (StatusCode, Problem) {
         item_key: classified.item_key,
         highest: classified.highest,
         merge_reach: classified.merge_reach,
+        parameter_merge_reach: classified.parameter_merge_reach,
         request_id,
     };
     (classified.status, body)

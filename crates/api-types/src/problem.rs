@@ -32,6 +32,10 @@ pub struct Problem {
     /// `confirm_reach` to merge them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_reach: Option<MergeReachDto>,
+    /// The heap parameters making one a team parameter would merge, for `parameter_merge_unconfirmed`: repeat the
+    /// write with `token` as `confirm_reach` to go on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter_merge_reach: Option<ParameterMergeReachDto>,
     /// Present on unexpected errors, so the operator can find the details in the log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
@@ -58,4 +62,32 @@ pub struct MergeReachHeapDto {
     pub tag_name: String,
     /// Items with an active link to the tag, open or closed.
     pub items: u32,
+}
+
+/// What making a heap parameter a team parameter would do: the parameter itself, and the same-named heap parameters of
+/// the team that merge into it.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ParameterMergeReach)]
+pub struct ParameterMergeReachDto {
+    /// Names exactly these parameters, item counts and added options; it changes when any does.
+    pub token: String,
+    /// The parameter it starts from first, then the others by heap name, then heap ID.
+    pub entries: Vec<ParameterMergeReachEntryDto>,
+}
+
+/// A heap parameter in a merge.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = ParameterMergeReachEntry)]
+pub struct ParameterMergeReachEntryDto {
+    pub heap: HeapSummaryDto,
+    pub archived: bool,
+    pub parameter_id: Uuid,
+    /// The parameter's name as written.
+    pub parameter_name: String,
+    /// Items with a value for the parameter, open or closed.
+    pub items: u32,
+    /// The labels of its options the team parameter doesn't have yet. Empty for the one the merge starts from.
+    pub added_options: Vec<String>,
+    /// Whether it is the one the merge starts from.
+    pub starting: bool,
 }

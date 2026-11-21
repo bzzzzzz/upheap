@@ -16,6 +16,7 @@ use domain::validation::Field;
 use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
+use crate::parameters::{LinkedParameter, ParameterMergeReach};
 use crate::tags::MergeReach;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
@@ -159,6 +160,16 @@ pub enum ServiceError {
         heap_tags(reach.entries.len())
     )]
     TagMergeUnconfirmed { name: String, reach: MergeReach },
+    /// Making a heap parameter a team parameter was not confirmed with the token of its current reach.
+    #[error("making this a team parameter merges {} into it", merged_parameters(reach.entries.len() - 1))]
+    ParameterMergeUnconfirmed { reach: ParameterMergeReach },
+    /// A parameter the merge would take in is linked to tags, which a team parameter can't be yet. `linked` is in the
+    /// reach's order.
+    #[error(
+        "Unlink the tags first: team parameters can't be linked to tags yet. {}",
+        linked_message(linked)
+    )]
+    ParameterMergeLinked { linked: Vec<LinkedParameter> },
     #[error(transparent)]
     Parameter(#[from] ParameterError),
     #[error("this heap already has a parameter called {name:?}")]
@@ -192,6 +203,30 @@ fn in_minutes(wait: Duration) -> String {
         1 => "1 minute".to_owned(),
         minutes => format!("{minutes} minutes"),
     }
+}
+
+/// "1 same-named heap parameter", "3 same-named heap parameters".
+fn merged_parameters(count: usize) -> String {
+    match count {
+        1 => "1 same-named heap parameter".to_owned(),
+        n => format!("{n} same-named heap parameters"),
+    }
+}
+
+/// `Launch's "Customer tier": billing, vip; Support's "customer tier": vip.`
+fn linked_message(linked: &[LinkedParameter]) -> String {
+    let parts: Vec<String> = linked
+        .iter()
+        .map(|parameter| {
+            format!(
+                "{}'s \u{201c}{}\u{201d}: {}",
+                parameter.heap,
+                parameter.parameter,
+                parameter.tags.join(", ")
+            )
+        })
+        .collect();
+    format!("{}.", parts.join("; "))
 }
 
 /// "1 heap tag", "3 heap tags".

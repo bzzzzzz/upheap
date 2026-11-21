@@ -451,6 +451,10 @@ fn describe_phrase(
     if action == AuditAction::TagMerged && entity_type == EntityType::Item {
         return (Cow::Borrowed("merged a tag on"), names_entity);
     }
+    // The same for a parameter made a team's: one entry on the parameter and one on each item whose value moved.
+    if action == AuditAction::ParameterMerged && entity_type == EntityType::Item {
+        return (Cow::Borrowed("merged a parameter on"), names_entity);
+    }
     if action == AuditAction::ItemMoved {
         // A move across teams records one side of the heap change only (architecture.md, Audit log).
         let heap = diff.get(AuditField::Heap.code());
@@ -539,6 +543,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::ParameterCreated, _) => ("added parameter", true),
         (AuditAction::ParameterUpdated, _) => ("changed parameter", true),
         (AuditAction::ParameterArchived, _) => ("archived parameter", true),
+        (AuditAction::ParameterMerged, _) => ("made a team parameter of", true),
         (AuditAction::OptionArchived, _) => ("archived an option of", true),
         (AuditAction::InviteLinkCreated, _) => ("made an invite link", false),
         (AuditAction::InviteLinkRevoked, _) => ("revoked", true),
@@ -616,6 +621,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::SavedViewArchived
         | AuditAction::ParameterUpdated
         | AuditAction::ParameterArchived
+        | AuditAction::ParameterMerged
         | AuditAction::OptionArchived
         | AuditAction::InviteLinkRevoked
         | AuditAction::EmailChanged => DiffShape::Changed,
@@ -853,6 +859,8 @@ enum Form {
     ItemCount,
     /// Heap tags merged into a team tag: each heap's tag as it wrote it, and its items.
     MergedTags,
+    /// Heap parameters made a team parameter: each heap's parameter as it wrote it, its items and the options it added.
+    MergedParameters,
     /// No short form, as a whole list view: the label says it changed.
     NoShort,
 }
@@ -898,7 +906,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::Tags | AuditField::TagOrder => shown(Form::Tags),
         AuditField::Options | AuditField::ArchivedOptions => shown(Form::OptionLabels),
         AuditField::ItemsSwitched => shown(Form::ItemCount),
-        // Only on a tag's `TagMerged` entry: the heap tags it took in.
+        // Only on a `TagMerged` entry, or a parameter's `ParameterMerged`: what the merge took in.
+        AuditField::Merged if entity_type == EntityType::Parameter => shown(Form::MergedParameters),
         AuditField::Merged => shown(Form::MergedTags),
         AuditField::ListView => shown(Form::NoShort),
         AuditField::Title | AuditField::Description | AuditField::StepTitle | AuditField::StepContext => {
@@ -985,6 +994,22 @@ fn describe_value(form: Form, value: &Value, names: &Names, tz: &TimeZone) -> Op
             let name = merged["name"].as_str().unwrap_or_default();
             let items = merged["items"].as_u64().unwrap_or_default();
             format!("{heap}'s \u{201c}{name}\u{201d} ({})", count_items(items as usize))
+        }))?,
+        Form::MergedParameters => join(value.as_array()?.iter().map(|merged| {
+            let heap = names.of_value(&merged["heap"], "Unknown heap");
+            let name = merged["name"].as_str().unwrap_or_default();
+            let items = count_items(merged["items"].as_u64().unwrap_or_default() as usize);
+            let added: Vec<&str> = merged["added"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            if added.is_empty() {
+                format!("{heap}'s \u{201c}{name}\u{201d} ({items})")
+            } else {
+                format!("{heap}'s \u{201c}{name}\u{201d} ({items}, adds {})", added.join(", "))
+            }
         }))?,
         Form::NoShort => return None,
     };
@@ -1455,6 +1480,35 @@ mod tests {
                 "Merged",
                 None,
                 Some("Launch's \u{201c}billing\u{201d} (1 item), Unknown heap's \u{201c}Billing\u{201d} (3 items)")
+            ))]
+        );
+    }
+
+    #[gtest]
+    fn a_parameter_merge_shows_the_parameters_it_took_in_and_what_they_added() {
+        let launch = Uuid::from_u128(20);
+        let mut names = Names::default();
+        names.insert(launch, "Launch");
+        let merged = json!({ "merged": [
+            { "heap": launch.to_string(), "parameter": Uuid::from_u128(21).to_string(), "name": "Customer tier", "weight": 30, "items": 12, "added": [] },
+            { "heap": Uuid::from_u128(22).to_string(), "parameter": Uuid::from_u128(23).to_string(), "name": "customer tier", "weight": 5, "items": 1, "added": ["Platinum", "Bronze"] },
+        ] });
+
+        let changes = describe_changes(
+            &entry(AuditAction::ParameterMerged, EntityType::Parameter, merged),
+            &names,
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![eq(&change(
+                "merged",
+                "Merged",
+                None,
+                Some(
+                    "Launch's \u{201c}Customer tier\u{201d} (12 items), Unknown heap's \u{201c}customer tier\u{201d} (1 item, adds Platinum, Bronze)"
+                )
             ))]
         );
     }

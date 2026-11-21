@@ -13,6 +13,7 @@ use api_types::parameters::{
     LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto, ParameterPatchDto, TeamParameterDto,
     TeamParameterListDto, TeamParameterPatchDto,
 };
+use api_types::problem::{ParameterMergeReachDto, ParameterMergeReachEntryDto};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -23,15 +24,18 @@ use domain::tag::parse_tag_set;
 use domain::{HeapId, OptionId, ParameterId, TagId, Timestamp, ValidationError};
 use serde::Deserialize;
 use service::ServiceError;
-use service::parameters::{ParameterDraft, ParameterEntry, TeamParameterDraft, TeamParameterEntry};
+use service::parameters::{
+    ParameterDraft, ParameterEntry, ParameterMergeReach, TeamParameterDraft, TeamParameterEntry,
+};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
 use crate::dto::IfMatchHeader;
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiPath, IfMatch};
+use crate::extract::{ApiJson, ApiPath, ApiQuery, IfMatch};
 use crate::paths::{HeapParams, HeapPath, TeamParams, TeamPath};
+use crate::tags::ConfirmReachQuery;
 use crate::{ApiError, AppState};
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
@@ -39,6 +43,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(list_parameters, create_parameter))
         .routes(routes!(update_parameter))
         .routes(routes!(archive_parameter))
+        .routes(routes!(make_team_parameter))
         .routes(routes!(add_option, arrange_options))
         .routes(routes!(archive_option))
         .routes(routes!(link_tags))
@@ -61,6 +66,25 @@ struct ParameterPathId {
 #[derive(Deserialize)]
 struct OptionPathId {
     option_id: Uuid,
+}
+
+pub(crate) fn to_parameter_merge_reach_dto(reach: &ParameterMergeReach) -> ParameterMergeReachDto {
+    ParameterMergeReachDto {
+        token: reach.token.clone(),
+        entries: reach
+            .entries
+            .iter()
+            .map(|entry| ParameterMergeReachEntryDto {
+                heap: HeapSummaryDto::from(&entry.heap),
+                archived: entry.heap.is_archived(),
+                parameter_id: *entry.parameter.id.as_uuid(),
+                parameter_name: entry.parameter.name.as_str().to_owned(),
+                items: entry.items,
+                added_options: entry.added.iter().map(|label| label.as_str().to_owned()).collect(),
+                starting: entry.starting,
+            })
+            .collect(),
+    }
 }
 
 /// The parameter as `heap_id` lists it.
@@ -384,6 +408,38 @@ async fn link_tags(
         )
         .await?;
     Ok(Json(to_parameter_dto(entry, path.heap.heap_id)))
+}
+
+/// Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins
+/// only. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a
+/// `parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team
+/// parameter at the weight it had, and each item's value moves to the option with the same label. A parameter linked
+/// to tags can't be merged: `parameter_merge_linked` names them.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/team", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path), ConfirmReachQuery),
+    responses(
+        (status = 200, description = "The team parameter, with the heaps that use it", body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, description = "Not a parameter of the heap", body = Problem),
+        (status = 409, description = "`parameter_merge_unconfirmed`, `parameter_merge_linked`, `parameter_archived` or `heap_archived`", body = Problem),
+        (status = 422, description = "`too_many_options`", body = Problem),
+    ))]
+async fn make_team_parameter(
+    State(state): State<AppState>,
+    path: HeapPath,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+    ApiQuery(query): ApiQuery<ConfirmReachQuery>,
+) -> Result<Json<TeamParameterDto>, ApiError> {
+    let entry = state
+        .services
+        .make_team_parameter(
+            path.principal,
+            path.heap.heap_id,
+            ParameterId::from_uuid(parameter_id),
+            query.confirm_reach.as_deref(),
+        )
+        .await?;
+    Ok(Json(to_team_parameter_dto(entry)))
 }
 
 /// Makes the heap use one of its team's parameters. Admins only. The first use gives it the default weight, and
