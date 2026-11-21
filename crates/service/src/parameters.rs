@@ -560,6 +560,9 @@ impl Services {
         if found.owner == ParameterOwner::Team(team_id) {
             // Repeating the write after it went through: the parameter is the team's and the heap uses it. Nothing
             // changes and no confirmation is needed.
+            if found.is_archived() {
+                return Err(ParameterError::Archived { parameter_id }.into());
+            }
             let used = store::parameters::lock_heap_use(&txn, heap_id, parameter_id)
                 .await?
                 .is_some_and(|heap_use| heap_use.stopped_at.is_none());

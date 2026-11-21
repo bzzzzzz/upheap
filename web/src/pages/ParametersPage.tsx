@@ -393,7 +393,13 @@ function MakeTeamParameter({ parameter, heapRef }: { parameter: CardParameter; h
   const showToast = useToast();
   const [reach, setReach] = useState<ParameterMergeReach | null>(null);
   const ask = () =>
-    make.mutate({ parameterId: parameter.id }, { onError: (error) => setReach(parameterMergeReachOf(error) ?? null) });
+    make.mutate(
+      { parameterId: parameter.id },
+      {
+        onError: (error) => setReach(parameterMergeReachOf(error) ?? null),
+        onSuccess: () => showToast({ message: `“${parameter.name}” is a team parameter already.` }),
+      },
+    );
   const label = `More for ${parameter.name}`;
   return (
     <>

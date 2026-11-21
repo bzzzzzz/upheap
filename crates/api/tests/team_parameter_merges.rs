@@ -846,6 +846,33 @@ async fn repeating_the_write_on_a_team_parameter_the_heap_uses_succeeds_and_chan
 
 #[gtest]
 #[tokio::test]
+async fn repeating_the_write_on_an_archived_team_parameter_is_refused() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let tier_a = w.heap_parameter(&w.a, "Customer tier", &["Gold"], 10).await?;
+    let made = w.make_team_confirmed(&w.a, &tier_a).await?;
+    anyhow::ensure!(made.status == StatusCode::OK, "make failed: {}", made.body);
+    let archived = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/parameters/{}/archive", w.team_path, id(&tier_a)),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+    anyhow::ensure!(archived.status == StatusCode::OK, "archive failed: {}", archived.body);
+
+    // Act
+    let again = w.make_team(&w.a, &tier_a, None).await?;
+
+    // Assert
+    expect_that!(again.body["code"], eq(&json!("parameter_archived")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn an_item_moved_into_the_merged_heap_keeps_its_value() -> Result<()> {
     // Arrange: an item of heap A moved to heap B keeps a cleared row for A's parameter, and takes B's value.
     let w = world().await?;

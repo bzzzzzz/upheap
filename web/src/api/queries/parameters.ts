@@ -210,9 +210,11 @@ export function useMakeTeamParameter(heap: HeapRef) {
           },
         }),
       ),
-    // The first attempt is always refused and changes nothing; only a confirmed one can have written.
-    onSettled: (_data, _error, { confirm }) => {
-      if (confirm) invalidateTeamParameters(queryClient, heap.team);
+    // An attempt without a token changes nothing: it is refused with the reach, or it succeeds only when the parameter
+    // already is the team's (made in another tab), and then the page is stale. Either success or a confirmed try reads
+    // the team again.
+    onSettled: (_data, error, { confirm }) => {
+      if (confirm || !error) invalidateTeamParameters(queryClient, heap.team);
     },
   });
 }
