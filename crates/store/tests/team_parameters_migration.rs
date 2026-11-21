@@ -169,7 +169,7 @@ async fn existing_parameters_stay_heap_parameters_and_a_team_can_have_its_own() 
         weight: Weight::parse(25)?,
         stopped_at: None,
     };
-    store::parameters::ensure_heap_use(&db, &used, at(1)?).await?;
+    store::parameters::ensure_heap_use(&db, heap, team_parameter.id, at(1)?).await?;
     store::parameters::update_heap_use(&db, &used).await?;
     let seen = store::parameters::list_parameters(&db, heap).await?;
     expect_that!(

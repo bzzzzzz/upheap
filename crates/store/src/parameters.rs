@@ -261,16 +261,21 @@ pub async fn lock_heap_use(
         .transpose()
 }
 
-/// Gives the heap a use row for the parameter, unless it has one: from `now`, stopped at `now`, with `heap_use.weight`.
+/// Gives the heap a use row for the parameter, unless it has one: from `now`, stopped at `now`, at the default weight.
 /// The caller then reads it with [`lock_heap_use`] and starts the use. A first use writes the row before it reads,
 /// rather than reading the missing row with a lock: on MySQL that read takes a gap lock, and two first uses in two
 /// heaps would each wait on the other's gap to insert. The row is written stopped so that whether it was there
 /// before needn't be known, which MySQL's affected-row count doesn't tell for a skipped insert.
-pub async fn ensure_heap_use(db: &impl ConnectionTrait, heap_use: &HeapUse, now: Timestamp) -> Result<(), StoreError> {
+pub async fn ensure_heap_use(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+    now: Timestamp,
+) -> Result<(), StoreError> {
     let row = heap_parameters::ActiveModel {
-        heap_id: Set(id_to_db(heap_use.heap_id.as_uuid())),
-        parameter_id: Set(id_to_db(heap_use.parameter_id.as_uuid())),
-        weight: Set(i32::from(heap_use.weight.get())),
+        heap_id: Set(id_to_db(heap_id.as_uuid())),
+        parameter_id: Set(id_to_db(parameter_id.as_uuid())),
+        weight: Set(i32::from(Weight::DEFAULT.get())),
         used_at: Set(now.as_millis()),
         stopped_at: Set(Some(now.as_millis())),
     };

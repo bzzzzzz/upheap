@@ -340,22 +340,16 @@ pub(crate) fn diff_parameters(before: &Parameter, after: &Parameter) -> Value {
     diff_fields(parameter_fields(before), parameter_fields(after))
 }
 
-/// Changed fields between a heap's use of a team parameter before (`None` when it never used it) and after: whether it
-/// uses it, and its weight.
-pub(crate) fn diff_heap_use(before: Option<&HeapUse>, after: &HeapUse) -> Value {
-    let fields = |heap_use: Option<&HeapUse>| {
+/// Changed fields between a heap's use of a team parameter before and after: whether it uses it, and its weight. A
+/// first use starts from a stopped row (see `store::parameters::ensure_heap_use`), so there is always a before.
+pub(crate) fn diff_heap_use(before: &HeapUse, after: &HeapUse) -> Value {
+    let fields = |heap_use: &HeapUse| {
         let mut fields = Map::new();
-        fields.insert(
-            AuditField::Used.code().into(),
-            json!(heap_use.is_some_and(|u| u.stopped_at.is_none())),
-        );
-        fields.insert(
-            AuditField::Weight.code().into(),
-            json!(heap_use.map(|u| u.weight.get())),
-        );
+        fields.insert(AuditField::Used.code().into(), json!(heap_use.stopped_at.is_none()));
+        fields.insert(AuditField::Weight.code().into(), json!(heap_use.weight.get()));
         fields
     };
-    diff_fields(fields(before), fields(Some(after)))
+    diff_fields(fields(before), fields(after))
 }
 
 /// Changed weights and tag order between a heap and its new `policy` and `tag_order`, named like the heap's columns.

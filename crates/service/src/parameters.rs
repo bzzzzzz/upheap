@@ -481,15 +481,9 @@ impl Services {
             return Err(ParameterError::Archived { parameter_id }.into());
         }
         let now = self.now();
-        let first = HeapUse {
-            heap_id,
-            parameter_id,
-            weight: Weight::DEFAULT,
-            stopped_at: Some(now),
-        };
         // Written before it is read, stopped (see `store::parameters::ensure_heap_use`), so a first use starts at the
         // default weight and its entry says only that the heap now uses it.
-        store::parameters::ensure_heap_use(&txn, &first, now).await?;
+        store::parameters::ensure_heap_use(&txn, heap_id, parameter_id, now).await?;
         let before = store::parameters::lock_heap_use(&txn, heap_id, parameter_id)
             .await?
             .ok_or_else(|| {
@@ -507,7 +501,7 @@ impl Services {
             ..before
         };
         store::parameters::update_heap_use(&txn, &after).await?;
-        self.record_heap_use(&txn, &access.heap, principal, &parameter, Some(&before), &after, now)
+        self.record_heap_use(&txn, &access.heap, principal, &parameter, &before, &after, now)
             .await?;
         let list = load_parameter_list(&txn, access.heap, access.membership.role).await?;
         txn.commit().await.map_err(StoreError::from)?;
@@ -546,7 +540,7 @@ impl Services {
             ..before
         };
         store::parameters::update_heap_use(&txn, &after).await?;
-        self.record_heap_use(&txn, &access.heap, principal, &parameter, Some(&before), &after, now)
+        self.record_heap_use(&txn, &access.heap, principal, &parameter, &before, &after, now)
             .await?;
         let list = load_parameter_list(&txn, access.heap, access.membership.role).await?;
         txn.commit().await.map_err(StoreError::from)?;
@@ -576,7 +570,7 @@ impl Services {
             ..before
         };
         store::parameters::update_heap_use(txn, &after).await?;
-        self.record_heap_use(txn, heap, principal, current, Some(&before), &after, now)
+        self.record_heap_use(txn, heap, principal, current, &before, &after, now)
             .await
     }
 
@@ -588,7 +582,7 @@ impl Services {
         heap: &Heap,
         principal: Principal,
         parameter: &Parameter,
-        before: Option<&HeapUse>,
+        before: &HeapUse,
         after: &HeapUse,
         now: Timestamp,
     ) -> Result<(), ServiceError> {
