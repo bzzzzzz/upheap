@@ -13,6 +13,7 @@ use domain::Timestamp;
 use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::handle::Handle;
 use domain::heap::Heap;
+use domain::oauth::RevokeReason;
 use domain::team::Team;
 use domain::text::Name;
 use domain::user::{DisplayName, Email, User, validate_new_password};
@@ -396,7 +397,9 @@ impl Services {
         if !store::users::update_password(&txn, user.id, &stored_hash, &new_hash, now).await? {
             return Err(ServiceError::WrongPassword);
         }
-        let ended_sign_ins = self.end_sign_ins(&txn, user.id, Some(&old_hash), now).await?;
+        let ended_sign_ins = self
+            .end_sign_ins(&txn, user.id, Some(&old_hash), Some(RevokeReason::PasswordChanged), now)
+            .await?;
         let session = self.open_session(&txn, user.clone(), now, None).await?;
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;
         let entry = self.team_audit_entry(
@@ -447,8 +450,8 @@ impl Services {
         let mut ended = 0;
         for user_id in store::identities::list_users_without_identity(&txn).await? {
             ended += store::sessions::delete_user_sessions(&txn, user_id).await?;
-            ended += store::oauth::revoke_user_token_families(&txn, user_id, now).await?;
-            ended += store::personal_tokens::revoke_user_personal_tokens(&txn, user_id, now).await?;
+            ended += store::oauth::revoke_user_token_families(&txn, user_id, None, now).await?;
+            ended += store::personal_tokens::revoke_user_personal_tokens(&txn, user_id, None, now).await?;
         }
         txn.commit().await.map_err(StoreError::from)?;
         tracing::info!(ended, "local sign-ins ended");
@@ -498,12 +501,13 @@ impl Services {
     /// Ends every sign-in of the account in the caller's transaction: its web sessions, its OAuth token families and
     /// open authorization codes, and its personal tokens. Returns how many sign-ins were live: sessions, OAuth token
     /// families and personal tokens. The session whose hash is `own_session` is ended too, but isn't counted: it is the
-    /// caller's, who is told a new one is open.
+    /// caller's, who is told a new one is open. The families and personal tokens record `reason` for why they ended.
     pub(crate) async fn end_sign_ins(
         &self,
         txn: &impl store::ConnectionTrait,
         user_id: domain::UserId,
         own_session: Option<&str>,
+        reason: Option<RevokeReason>,
         now: Timestamp,
     ) -> Result<u32, ServiceError> {
         let live_sessions = match own_session {
@@ -513,8 +517,8 @@ impl Services {
         let live_clients = store::oauth::list_live_token_families(txn, user_id, now).await?.len() as u64;
         store::oauth::expire_user_auth_codes(txn, user_id, now).await?;
         store::sessions::delete_user_sessions(txn, user_id).await?;
-        store::oauth::revoke_user_token_families(txn, user_id, now).await?;
-        let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(txn, user_id, now).await?;
+        store::oauth::revoke_user_token_families(txn, user_id, reason, now).await?;
+        let revoked_tokens = store::personal_tokens::revoke_user_personal_tokens(txn, user_id, reason, now).await?;
         let ended = live_sessions
             .saturating_add(live_clients)
             .saturating_add(revoked_tokens);

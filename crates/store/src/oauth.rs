@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use domain::oauth::{CodeChallenge, DeviceName, TokenKind};
+use domain::oauth::{CodeChallenge, DeviceName, RevokeReason, TokenKind};
 use domain::{Timestamp, TokenFamilyId, UserId};
 use sea_orm::sea_query::{Condition, Query, SelectStatement};
 use sea_orm::{
@@ -20,7 +20,7 @@ use sea_orm::{
 };
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db};
+use crate::codes::{RowReader, id_to_db, revoke_reason_to_db};
 use crate::entities::{oauth_auth_codes, oauth_token_families, oauth_tokens};
 
 /// Errors name a code, family or token by its user or family: hashes are derived from secrets, which don't belong in
@@ -59,8 +59,16 @@ pub struct TokenFamily {
     pub id: TokenFamilyId,
     pub user_id: UserId,
     pub client_id: String,
-    /// When the family was revoked, which ends every token in it. `None` while it's live.
-    pub revoked_at: Option<Timestamp>,
+    /// How the family was revoked, which ends every token in it. `None` while it's live.
+    pub revocation: Option<TokenRevocation>,
+}
+
+/// When a token family or personal token was revoked, and why when that was recorded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TokenRevocation {
+    pub at: Timestamp,
+    /// `None` for a revocation that recorded no reason.
+    pub reason: Option<RevokeReason>,
 }
 
 /// A sign-in that can still be used: its family isn't revoked and it holds a refresh token that is unused and
@@ -111,6 +119,7 @@ pub async fn insert_token_family(
         created_at: Set(created_at.as_millis()),
         revoked_at: Set(None),
         device_name: Set(device_name.map(|name| name.as_str().to_owned())),
+        revoke_reason: Set(None),
     };
     oauth_token_families::Entity::insert(row)
         .exec_without_returning(db)
@@ -280,15 +289,20 @@ pub async fn revoke_token_family(
     Ok(result.rows_affected == 1)
 }
 
-/// Revokes every family of the user that isn't revoked yet at `now`, and returns how many it revoked. As
-/// [`revoke_token_family`], each row waits for a refresh of its family in progress.
+/// Revokes every family of the user that isn't revoked yet at `now` with `reason`, and returns how many it revoked.
+/// As [`revoke_token_family`], each row waits for a refresh of its family in progress.
 pub async fn revoke_user_token_families(
     db: &impl ConnectionTrait,
     user_id: UserId,
+    reason: Option<RevokeReason>,
     now: Timestamp,
 ) -> Result<u64, StoreError> {
     let result = oauth_token_families::Entity::update_many()
         .col_expr(oauth_token_families::Column::RevokedAt, now.as_millis().into())
+        .col_expr(
+            oauth_token_families::Column::RevokeReason,
+            reason.map(revoke_reason_to_db).into(),
+        )
         .filter(oauth_token_families::Column::UserId.eq(id_to_db(user_id.as_uuid())))
         .filter(oauth_token_families::Column::RevokedAt.is_null())
         .exec(db)
@@ -331,12 +345,13 @@ pub async fn find_token(db: &impl ConnectionTrait, token_hash: &str) -> Result<O
     }))
 }
 
-/// The user of an access token that hasn't expired at `now`, in a family that isn't revoked.
-pub async fn find_access_token_user(
+/// The family of an access token that hasn't expired at `now`, whether or not the family is revoked, so the caller
+/// can tell a revoked token from an unknown one.
+pub async fn find_access_token_family(
     db: &impl ConnectionTrait,
     token_hash: &str,
     now: Timestamp,
-) -> Result<Option<UserId>, StoreError> {
+) -> Result<Option<TokenFamily>, StoreError> {
     let row = oauth_tokens::Entity::find_by_id(token_hash.to_owned())
         .filter(oauth_tokens::Column::Kind.eq(kind_to_db(TokenKind::Access)))
         .filter(oauth_tokens::Column::ExpiresAt.gt(now.as_millis()))
@@ -345,11 +360,8 @@ pub async fn find_access_token_user(
     let Some(row) = row else {
         return Ok(None);
     };
-    let family = oauth_token_families::Entity::find_by_id(row.family_id)
-        .filter(oauth_token_families::Column::RevokedAt.is_null())
-        .one(db)
-        .await?;
-    family.map(|family| Ok(to_family(family)?.user_id)).transpose()
+    let family = oauth_token_families::Entity::find_by_id(row.family_id).one(db).await?;
+    family.map(to_family).transpose()
 }
 
 /// Marks a refresh token used at `now`. `false` when it was used already, so the caller mustn't issue the next pair
@@ -378,7 +390,7 @@ fn to_family(row: oauth_token_families::Model) -> Result<TokenFamily, StoreError
         id: TokenFamilyId::from_uuid(read.uuid(&row.id)?),
         user_id: UserId::from_uuid(read.uuid(&row.user_id)?),
         client_id: row.client_id,
-        revoked_at: read.optional_timestamp(row.revoked_at)?,
+        revocation: read.token_revocation(row.revoked_at, row.revoke_reason.as_deref())?,
     })
 }
 

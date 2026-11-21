@@ -5,6 +5,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::common::HeapSummaryDto;
+use crate::oauth::RevokeReasonDto;
 
 /// An error response body (RFC 9457 problem details).
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -36,6 +37,9 @@ pub struct Problem {
     /// write with `token` as `confirm_reach` to go on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameter_merge_reach: Option<ParameterMergeReachDto>,
+    /// Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<RevokeReasonDto>,
     /// Present on unexpected errors, so the operator can find the details in the log.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,

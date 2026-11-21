@@ -3,7 +3,7 @@ use domain::email_change::EmailChangeLinkError;
 use domain::handle::Handle;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
-use domain::oauth::{AuthorizationError, GrantError};
+use domain::oauth::{AuthorizationError, GrantError, RevokeReason};
 use domain::parameter::ParameterError;
 use domain::password_reset::ResetLinkError;
 use domain::permission::Permission;
@@ -31,9 +31,9 @@ pub enum ServiceError {
     Forbidden(Permission),
     #[error("not signed in")]
     Unauthenticated,
-    /// A personal token that was revoked.
+    /// A personal token or an OAuth access token that was revoked, and why when that was recorded.
     #[error("the token was revoked")]
-    TokenRevoked,
+    TokenRevoked { reason: Option<RevokeReason> },
     /// A personal token whose time passed.
     #[error("the token has expired")]
     TokenExpired,
@@ -55,6 +55,9 @@ pub enum ServiceError {
     /// The email address used up its password reset requests for now.
     #[error("too many reset requests for this address; try again in {}", in_minutes(*retry_after))]
     TooManyResetRequests { retry_after: Duration },
+    /// The account used up its address changes for now, which each mail a link.
+    #[error("too many address changes for this account; try again in {}", in_minutes(*retry_after))]
+    TooManyAddressChanges { retry_after: Duration },
     #[error("an account with this email already exists")]
     EmailTaken,
     /// Another user or team has the username or team slug, or another heap of the team has the heap slug. `hint` is

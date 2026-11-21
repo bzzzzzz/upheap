@@ -3,6 +3,7 @@
 //! Every [`ServiceError`] variant is matched exhaustively, so a new variant doesn't compile until it has a
 //! status and a code. Clients branch on `code`, never on `title` or `detail`.
 
+use api_types::oauth::RevokeReasonDto;
 use api_types::problem::{MergeReachDto, ParameterMergeReachDto};
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
@@ -107,6 +108,8 @@ struct Classified {
     highest: Option<String>,
     merge_reach: Option<MergeReachDto>,
     parameter_merge_reach: Option<ParameterMergeReachDto>,
+    /// Why a token was revoked, on `token_revoked`.
+    reason: Option<RevokeReasonDto>,
     category: Category,
 }
 
@@ -121,6 +124,7 @@ fn classify(err: &ApiError) -> Classified {
         highest: None,
         merge_reach: None,
         parameter_merge_reach: None,
+        reason: None,
         category,
     };
     match err {
@@ -164,6 +168,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         highest: None,
         merge_reach: None,
         parameter_merge_reach: None,
+        reason: None,
         category,
     };
     match err {
@@ -171,8 +176,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::NotFound => simple(StatusCode::NOT_FOUND, "not_found", Category::Permission),
         ServiceError::Forbidden(_) => simple(StatusCode::FORBIDDEN, "forbidden", Category::Permission),
         ServiceError::Unauthenticated => simple(StatusCode::UNAUTHORIZED, "unauthenticated", Category::Permission),
-        ServiceError::TokenRevoked => Classified {
+        ServiceError::TokenRevoked { reason } => Classified {
             title: "The token was revoked".to_owned(),
+            reason: reason.map(RevokeReasonDto::from),
             ..simple(StatusCode::UNAUTHORIZED, "token_revoked", Category::Permission)
         },
         ServiceError::TokenExpired => Classified {
@@ -188,7 +194,9 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some(Field::CurrentPassword.as_str()),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "wrong_password", Category::Caller)
         },
-        ServiceError::TooManySignInAttempts { .. } | ServiceError::TooManyResetRequests { .. } => {
+        ServiceError::TooManySignInAttempts { .. }
+        | ServiceError::TooManyResetRequests { .. }
+        | ServiceError::TooManyAddressChanges { .. } => {
             simple(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts", Category::Permission)
         }
         ServiceError::EmailTaken => Classified {
@@ -466,6 +474,7 @@ fn classify_service(err: &ServiceError) -> Classified {
                 highest: None,
                 merge_reach: None,
                 parameter_merge_reach: None,
+                reason: None,
                 category: Category::Dependency,
             },
             StoreErrorKind::Other => unexpected(),
@@ -588,6 +597,7 @@ fn classify_validation(err: &ValidationError) -> Classified {
         highest: None,
         merge_reach: None,
         parameter_merge_reach: None,
+        reason: None,
         category: Category::Caller,
     }
 }
@@ -603,6 +613,7 @@ fn unexpected() -> Classified {
         highest: None,
         merge_reach: None,
         parameter_merge_reach: None,
+        reason: None,
         category: Category::Unexpected,
     }
 }
@@ -635,6 +646,7 @@ pub(crate) fn problem_of(err: &ApiError) -> (StatusCode, Problem) {
         highest: classified.highest,
         merge_reach: classified.merge_reach,
         parameter_merge_reach: classified.parameter_merge_reach,
+        reason: classified.reason,
         request_id,
     };
     (classified.status, body)
@@ -646,7 +658,8 @@ impl IntoResponse for ApiError {
         let mut response = (status, [(header::CONTENT_TYPE, "application/problem+json")], Json(body)).into_response();
         if matches!(
             self,
-            ApiError::BearerRejected | ApiError::Service(ServiceError::TokenRevoked | ServiceError::TokenExpired)
+            ApiError::BearerRejected
+                | ApiError::Service(ServiceError::TokenRevoked { .. } | ServiceError::TokenExpired)
         ) {
             // RFC 6750 §3: says how to authenticate, and why this token didn't.
             response.headers_mut().insert(
@@ -655,7 +668,9 @@ impl IntoResponse for ApiError {
             );
         }
         if let ApiError::Service(
-            ServiceError::TooManySignInAttempts { retry_after } | ServiceError::TooManyResetRequests { retry_after },
+            ServiceError::TooManySignInAttempts { retry_after }
+            | ServiceError::TooManyResetRequests { retry_after }
+            | ServiceError::TooManyAddressChanges { retry_after },
         ) = &self
         {
             response

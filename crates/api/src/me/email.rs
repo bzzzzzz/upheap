@@ -24,8 +24,9 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 /// caller's own current address is treated like a free one.
 ///
 /// Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
-/// is checked. Unlike a password change, a success doesn't start the count over, so the limit, five in 15 minutes,
-/// also limits the mails a session sends. A wrong current password also adds one to the account's sign-in attempts.
+/// is checked. A wrong current password also adds one to the account's sign-in attempts. Asks with the right password
+/// are limited per account, five in 15 minutes, shared with `POST /auth/confirmation-address`: a new session or a
+/// success doesn't start that count over, so it limits the addresses an account mails.
 #[utoipa::path(post, path = "/me/email-changes", tag = "me", security(("session" = [])),
     request_body = RequestEmailChangeDto,
     responses(
@@ -35,7 +36,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         (status = 404, description = "`not_found`: the server has no mail set up", body = Problem),
         (status = 422, description = "`wrong_password` (`field` `current_password`); `field_empty` (`field` `current_password` or `email`); `email_invalid` (`field` `email`). Not counted as an attempt, except `wrong_password`", body = Problem),
         (status = 429, description = "`too_many_attempts`; `Retry-After` gives the seconds to wait", body = Problem,
-            headers(("Retry-After" = i64, description = "Seconds until the session may try again"))),
+            headers(("Retry-After" = i64, description = "Seconds until the session or account may try again"))),
     ))]
 async fn request_email_change(
     State(state): State<AppState>,

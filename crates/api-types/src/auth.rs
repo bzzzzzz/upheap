@@ -67,12 +67,17 @@ pub struct PasswordResetAccountDto {
     pub username: String,
 }
 
-/// Whether this server mails password reset links.
+/// Whether this server mails password reset links, and who to ask for one (or for other help only the operator can
+/// give) otherwise.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = PasswordResetOptions)]
 pub struct PasswordResetOptionsDto {
     /// `true` when the server has mail set up, so a signed-out user can ask for a link by email.
     pub by_mail: bool,
+    /// Who to ask for a reset link, or other help only whoever runs the server can give, as the operator wrote it.
+    /// `null` when unset.
+    #[serde(default)]
+    pub operator_contact: Option<String>,
 }
 
 /// Whether this server lets anyone create an account.

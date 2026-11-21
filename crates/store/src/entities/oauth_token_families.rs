@@ -11,6 +11,7 @@ pub struct Model {
     pub created_at: i64,
     pub revoked_at: Option<i64>,
     pub device_name: Option<String>,
+    pub revoke_reason: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

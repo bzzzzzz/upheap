@@ -16,6 +16,9 @@ export interface paths {
         /**
          * Corrects the address of an account that hasn't confirmed it, and mails a new confirmation link there. Needs no
          *     sign-in: the account's login and password are the proof, and the attempt is counted and limited as a sign-in is.
+         *     With the right password it also counts against the account's address changes, five in 15 minutes, shared with
+         *     `POST /me/email-changes`: a changed address doesn't start that count over, so it limits the addresses an account
+         *     mails.
          * @description Only for a server with mail set up, and only for an account that hasn't confirmed its address: a confirmed
          *     account fails as a wrong password does. The earlier confirmation link and any password reset link stop working.
          *     An address another account has answers the same as a free one, and nothing changes.
@@ -412,8 +415,9 @@ export interface paths {
          *     caller's own current address is treated like a free one.
          *
          *     Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
-         *     is checked. Unlike a password change, a success doesn't start the count over, so the limit, five in 15 minutes,
-         *     also limits the mails a session sends. A wrong current password also adds one to the account's sign-in attempts.
+         *     is checked. A wrong current password also adds one to the account's sign-in attempts. Asks with the right password
+         *     are limited per account, five in 15 minutes, shared with `POST /auth/confirmation-address`: a new session or a
+         *     success doesn't start that count over, so it limits the addresses an account mails.
          */
         post: operations["request_email_change"];
         delete?: never;
@@ -709,8 +713,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Whether this server mails reset links, so the sign-in page knows whether to offer asking for one. No sign-in is
-         *     needed, and a session cookie or bearer token is ignored.
+         * Whether this server mails reset links, so the sign-in page knows whether to offer asking for one, and who to ask
+         *     otherwise, if the operator said. No sign-in is needed, and a session cookie or bearer token is ignored.
          */
         get: operations["password_reset_options"];
         put?: never;
@@ -3638,6 +3642,7 @@ export interface components {
             error: string;
             /** @description What was wrong, for people. May change; branch on `error`. */
             error_description: string;
+            reason?: null | components["schemas"]["RevokeReason"];
         };
         /** @description A token revocation request (RFC 7009 §2.1), form-encoded. */
         OAuthRevokeRequest: {
@@ -3884,10 +3889,18 @@ export interface components {
             display_name: string;
             username: string;
         };
-        /** @description Whether this server mails password reset links. */
+        /**
+         * @description Whether this server mails password reset links, and who to ask for one (or for other help only the operator can
+         *     give) otherwise.
+         */
         PasswordResetOptions: {
             /** @description `true` when the server has mail set up, so a signed-out user can ask for a link by email. */
             by_mail: boolean;
+            /**
+             * @description Who to ask for a reset link, or other help only whoever runs the server can give, as the operator wrote it.
+             *     `null` when unset.
+             */
+            operator_contact?: string | null;
         };
         /**
          * @description Where a password reset link is in its life. `used`, `cancelled` and `ended` are final.
@@ -3970,6 +3983,7 @@ export interface components {
             item_key?: string | null;
             merge_reach?: null | components["schemas"]["MergeReach"];
             parameter_merge_reach?: null | components["schemas"]["ParameterMergeReach"];
+            reason?: null | components["schemas"]["RevokeReason"];
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -4334,6 +4348,11 @@ export interface components {
              */
             round: number;
         };
+        /**
+         * @description Why a sign-in or personal token was revoked, when the server records it. More can join.
+         * @enum {string}
+         */
+        RevokeReason: "password_changed";
         /** @enum {string} */
         Role: "admin" | "member";
         /** @description A run: one go an agent has at an item's turn. */
@@ -5214,6 +5233,7 @@ export type RequestPasswordReset = components['schemas']['RequestPasswordReset']
 export type ResultRow = components['schemas']['ResultRow'];
 export type Results = components['schemas']['Results'];
 export type Review = components['schemas']['Review'];
+export type RevokeReason = components['schemas']['RevokeReason'];
 export type Role = components['schemas']['Role'];
 export type Run = components['schemas']['Run'];
 export type RunEnd = components['schemas']['RunEnd'];
@@ -5845,7 +5865,7 @@ export interface operations {
                     "application/json": components["schemas"]["Invitation"];
                 };
             };
-            /** @description `unauthenticated`: the bearer token is invalid, expired or revoked */
+            /** @description `unauthenticated` or `token_revoked`: the bearer token is invalid, expired or revoked */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6184,7 +6204,7 @@ export interface operations {
             /** @description `too_many_attempts`; `Retry-After` gives the seconds to wait */
             429: {
                 headers: {
-                    /** @description Seconds until the session may try again */
+                    /** @description Seconds until the session or account may try again */
                     "Retry-After"?: number;
                     [name: string]: unknown;
                 };

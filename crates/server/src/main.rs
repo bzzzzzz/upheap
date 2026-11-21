@@ -73,6 +73,7 @@ fn build_services(config: &Config, group_teams: GroupTeams, db: store::DatabaseC
             oidc: config.oidc.clone(),
             group_teams,
             scim: config.scim.clone(),
+            operator_contact: config.operator_contact.clone(),
         },
     );
     match &config.mail {

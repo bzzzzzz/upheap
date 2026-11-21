@@ -475,6 +475,8 @@ where
     // the token's.
     let env_token_used = has_env_token && !matches!(cli.command, Command::Auth(_));
     let mut out = Output::new(stdout, stderr, mode, color).on_terminals(env.stdout_is_terminal, env.stderr_is_terminal);
+    // Without `UPHEAP_TOKEN` every bearer token came from the keychain sign-in for this server.
+    let mut sign_in_server = None;
     let result = match cli.command {
         // Before the config file is read, so the guide can be read on a machine where nothing is set up yet.
         Command::Guide(GuideCommand::Show(_)) => {
@@ -483,7 +485,15 @@ where
         command => match load_app(env, tokens, browser, stdin, clock, http) {
             // Before any request, so a bad run ID is told of once, not as a refusal.
             Ok(app) => match check_run_env(&app.env) {
-                Ok(()) => dispatch(command, &app, work, &mut out).await,
+                Ok(()) => {
+                    if !env_token_used && !matches!(command, Command::Auth(_)) {
+                        sign_in_server = command
+                            .shared()
+                            .and_then(|shared| app.server(shared).ok())
+                            .map(|url| config::server_key(&url));
+                    }
+                    dispatch(command, &app, work, &mut out).await
+                }
                 Err(err) => Err(err.into()),
             },
             Err(err) => Err(err.into()),
@@ -494,7 +504,11 @@ where
         // The reader went away, as `| head` does once it has its lines: nothing more to say, and nobody to say it to.
         Err(CliError::Output(err)) if err.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
         Err(err) => {
-            let err = if env_token_used { err.refused_env_token() } else { err };
+            let err = if env_token_used {
+                err.refused_env_token()
+            } else {
+                err.ended_sign_in(sign_in_server)
+            };
             report(&err, &mut out, in_run);
             ExitCode::from(err.exit_code())
         }

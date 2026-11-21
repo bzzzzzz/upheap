@@ -390,6 +390,7 @@ mod tests {
                 highest: None,
                 merge_reach: None,
                 parameter_merge_reach: None,
+                reason: None,
                 request_id: None,
             }),
             body: String::new(),

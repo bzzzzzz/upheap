@@ -4,7 +4,7 @@ mod common;
 
 use anyhow::{Context, Result};
 use cli::{StoredTokens, TokenStore};
-use common::{ConsentBrowser, TestCli, TestServer};
+use common::{ConsentBrowser, TestCli, TestServer, TestUser};
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -197,9 +197,103 @@ async fn a_refused_refresh_token_is_forgotten_and_reported_as_not_signed_in() ->
     let heaps = cli.run(&["heap", "list"]).await;
 
     // Assert
-    expect_that!(heaps.stderr, contains_substring("not signed in"));
+    expect_that!(
+        heaps.stderr,
+        eq(&format!(
+            "error: not signed in to {}\nhint: sign in with `upheap auth login`\n",
+            server.url
+        ))
+    );
     expect_that!(heaps.exited(4), eq(true));
     expect_that!(cli.stored(&server)?, none());
+    Ok(())
+}
+
+/// What the CLI says when the account's password changed under its sign-in.
+fn password_changed_message(server: &TestServer) -> String {
+    format!(
+        "error: the sign-in to {} ended because the account's password changed\nhint: sign in with `upheap auth login`\n",
+        server.url
+    )
+}
+
+async fn change_password(server: &TestServer, user: &TestUser) -> Result<()> {
+    server
+        .send(
+            user,
+            "POST",
+            "/me/password",
+            Some(json!({ "current_password": "a long test password", "password": "another long test password" })),
+        )
+        .await?;
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_password_change_is_reported_when_the_refresh_is_refused() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let stored = cli.stored(&server)?.context("signed in")?;
+    cli.tokens.save(
+        &server.url,
+        &StoredTokens {
+            access_expires_at: 0,
+            ..stored
+        },
+    )?;
+    change_password(&server, &ada).await?;
+
+    // Act
+    let heaps = cli.run(&["heap", "list"]).await;
+
+    // Assert
+    expect_that!(heaps.stderr, eq(&password_changed_message(&server)));
+    expect_that!(heaps.exited(4), eq(true));
+    expect_that!(cli.stored(&server)?, none());
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_password_change_is_reported_when_a_fresh_access_token_is_refused() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    change_password(&server, &ada).await?;
+
+    // Act
+    let heaps = cli.run(&["heap", "list"]).await;
+
+    // Assert
+    expect_that!(heaps.stderr, eq(&password_changed_message(&server)));
+    expect_that!(heaps.exited(4), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_sign_in_ended_another_way_is_reported_as_revoked_not_as_a_password_change() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let listed = server.send(&ada, "GET", "/me/sign-ins", None).await?;
+    let id = listed["sign_ins"][0]["id"].as_str().context("sign-in id")?;
+    server.send(&ada, "DELETE", &format!("/me/sign-ins/{id}"), None).await?;
+
+    // Act
+    let heaps = cli.run(&["heap", "list"]).await;
+
+    // Assert
+    expect_that!(
+        heaps.stderr,
+        eq("error: The token was revoked (token_revoked)\nhint: sign in with `upheap auth login`\n")
+    );
+    expect_that!(heaps.exited(4), eq(true));
     Ok(())
 }
 

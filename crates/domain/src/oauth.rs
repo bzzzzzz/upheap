@@ -26,6 +26,14 @@ pub enum TokenKind {
     Refresh,
 }
 
+/// Why a token family or personal token was revoked, when the server records it. A revocation with no reason says
+/// nothing about why.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RevokeReason {
+    /// The account's password was changed or reset.
+    PasswordChanged,
+}
+
 /// A registered client.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Client {
@@ -88,7 +96,7 @@ pub enum GrantError {
     #[error("the refresh token has expired")]
     RefreshTokenExpired,
     #[error("the refresh token has been revoked")]
-    RefreshTokenRevoked,
+    RefreshTokenRevoked { reason: Option<RevokeReason> },
 }
 
 /// A redirect URI a registered client may use: `http://127.0.0.1:<port><path>` or `http://[::1]:<port><path>`.

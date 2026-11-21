@@ -5,6 +5,7 @@
 //! operator who made it.
 
 use domain::audit::{AuditAction, AuditField, EntityType};
+use domain::oauth::RevokeReason;
 use domain::password_reset::{ResetLink, ResetLinkError, ResetLinkState, ResetToken};
 use domain::user::{Email, User, validate_new_password};
 use domain::validation::{Field, ValidationError};
@@ -179,7 +180,9 @@ impl Services {
         store::users::set_password(&txn, user.id, &new_hash, now).await?;
         // A link that came by mail proves the address. The operator's is the same kind of link.
         store::users::confirm_email(&txn, user.id).await?;
-        let ended_sign_ins = self.end_sign_ins(&txn, user.id, None, now).await?;
+        let ended_sign_ins = self
+            .end_sign_ins(&txn, user.id, None, Some(RevokeReason::PasswordChanged), now)
+            .await?;
         let session = self.open_session(&txn, user.clone(), now, None).await?;
         // There shouldn't be one, since making a link cancels the others; this keeps "one working link" true anyway.
         store::password_resets::cancel_working_reset_links(&txn, user.id, now).await?;

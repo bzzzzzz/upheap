@@ -63,7 +63,8 @@ What it is not:
    in browsers, in command-line clients and by personal token.
 6. A forgotten password is reset through a link the operator makes with a command on the server, or, when the server
    sends mail, one the user asks for by mail (Email §3). It works once and for one hour, and setting the new password
-   ends all the user's sign-ins, personal tokens included.
+   ends all the user's sign-ins, personal tokens included. The operator can set a line that says who they are and how
+   to reach them, and the sign-in page shows it, so someone who forgot their password knows whom to ask.
 7. A password change and a reset are in the audit log, without the password, and only the user sees them.
 
 ## Email
