@@ -469,7 +469,8 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 
 /**
  * One heap. In the team's list the name has "(archived)" after it; among search results (with `query`) the match is
- * marked and archived heaps carry a tag. `teamLabel` shows on the right when the user has several teams.
+ * marked and archived heaps carry a tag. `teamLabel` shows on the right when the user has several teams, then the heap's
+ * open count, as the sidebar's Open shows it; an archived heap and a Recent shortcut have none.
  */
 function HeapItem({
   id,
@@ -520,6 +521,9 @@ function HeapItem({
             {current && <span className="sr-only">, current</span>}
           </span>
           {teamLabel && <span className="shrink-0 text-[13px] font-normal text-muted sm:text-xs">{teamLabel}</span>}
+          {!heap.archived && !recent && (
+            <span className="shrink-0 text-[13px] font-normal text-muted tabular-nums">{heap.open_count}</span>
+          )}
           {enterHint && isFocused && (
             <kbd aria-hidden="true" className={kbdClass}>
               ↵

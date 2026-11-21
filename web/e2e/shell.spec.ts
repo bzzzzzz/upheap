@@ -104,10 +104,10 @@ test("the heap switcher opens another heap", async ({ page }) => {
   const startUrl = page.url();
   const heaps = await openSwitcher(page);
   // The heap on screen is checked.
-  await expect(heaps.getByRole("menuitem", { name: /, current$/ })).toHaveCount(1);
+  await expect(heaps.getByRole("menuitem", { name: /, current/ })).toHaveCount(1);
   // Rows are links, under the app's base path, so they open in a new tab and can be copied.
   const current = new URL(page.url()).pathname;
-  await expect(heaps.getByRole("menuitem", { name: /, current$/ })).toHaveAttribute("href", current);
+  await expect(heaps.getByRole("menuitem", { name: /, current/ })).toHaveAttribute("href", current);
   const garden = heaps.getByRole("menuitem", { name: "Garden" });
   await expect(garden).toHaveAttribute("href", current.replace(/[^/]+$/, "garden"));
   // A plain click navigates in place, without reloading the page.
@@ -117,6 +117,15 @@ test("the heap switcher opens another heap", async ({ page }) => {
   expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
   await expect(page).not.toHaveURL(startUrl);
   await expect(heaps).toHaveCount(0);
+});
+
+test("each heap in the switcher shows its open count", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  await addItem(page, "Water the plants");
+  await addItem(page, "Feed the cat");
+  const heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("menuitem", { name: /, current/ })).toHaveText(/, current\s*2$/);
+  await expect(heaps.getByRole("menuitem", { name: "Garden" })).toHaveText(/^Garden\s*0$/);
 });
 
 test("a modifier-click on a heap opens it in a new tab", async ({ page }) => {
@@ -247,7 +256,8 @@ test("archived heaps are folded away, and found by search", async ({ page }) => 
   let heaps = await openSwitcher(page);
   await expect(heaps.getByRole("menuitem", { name: "Old news" })).toHaveCount(0);
   await heaps.getByRole("menuitem", { name: "1 archived" }).click();
-  await expect(heaps.getByRole("menuitem", { name: "Old news (archived)" })).toBeVisible();
+  // An archived heap shows no open count.
+  await expect(heaps.getByRole("menuitem", { name: "Old news (archived)" })).toHaveText(/^Old news \(archived\)$/);
   // The row stays as the toggle, so keyboard focus stays where it was.
   await expect(heaps.getByRole("menuitem", { name: "1 archived" })).toHaveCount(0);
   await expect(heaps.getByRole("menuitem", { name: "Hide archived" })).toBeVisible();
