@@ -36,7 +36,7 @@ test("? lists every key and Escape closes it", async ({ page }) => {
 
 test("a wide screen shows its keys", async ({ page }, info) => {
   await addItem(page, "Hinted");
-  const bar = page.getByRole("contentinfo", { name: "Keys on this screen" });
+  const bar = page.getByRole("region", { name: "Keys on this screen" });
   if (info.project.name !== "desktop") {
     await expect(bar).toBeHidden();
     return;

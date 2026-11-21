@@ -449,7 +449,7 @@ function ListPage({
 
       {hidden_count > 0 && <HiddenNote count={hidden_count} view={view} onViewChange={onViewChange} />}
 
-      <footer
+      <section
         aria-label="Keys on this screen"
         className="sticky bottom-0 hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-canvas/95 py-2 text-xs text-muted lg:pointer-fine:flex"
       >
@@ -463,7 +463,7 @@ function ListPage({
           <Kbd>?</Kbd>
           All keys
         </span>
-      </footer>
+      </section>
     </main>
   );
 }
