@@ -143,17 +143,17 @@ export function useChangeParameter(scope: ParameterScope) {
 }
 
 /**
- * Sets a heap's own links of its tags to a team parameter it uses, which suggest the parameter in this heap only. The
- * links have no version; the answer is the heap's new list.
+ * Links and unlinks a heap's own tags to a team parameter it uses, which suggest the parameter in this heap only. The
+ * links are written per tag, so they have no version; the answer is the heap's new list.
  */
 export function useLinkHeapTags(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ parameterId, tagIds }: { parameterId: string; tagIds: string[] }) =>
+    mutationFn: async ({ parameterId, link, unlink }: { parameterId: string; link: string[]; unlink: string[] }) =>
       unwrap(
-        await api.PUT("/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags", {
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags", {
           params: { path: { ...heap, parameter_id: parameterId } },
-          body: { tag_ids: tagIds },
+          body: { link, unlink },
         }),
       ),
     // Tag links don't show on items, so only the heap's parameters are read again.

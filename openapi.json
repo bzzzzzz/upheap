@@ -6141,11 +6141,11 @@
       }
     },
     "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags": {
-      "put": {
+      "post": {
         "tags": [
           "parameters"
         ],
-        "summary": "Links the heap's own tags (its own and its team's) to a team parameter the heap uses, so the parameter is\nsuggested for them in this heap only, besides the team's links. Admins only. Sets the heap's links to exactly the\ntags sent, so it takes no `If-Match`, as `use` and `stop-using` take none; repeating it succeeds.",
+        "summary": "Links tags of the heap (its own and its team's) to a team parameter the heap uses, and unlinks others, so the\nparameter is suggested for the linked ones in this heap only, besides the team's links. Admins only. Each tag\nnamed ends up linked or unlinked, and the others are left alone, so two writes that race don't undo each other:\nit takes no `If-Match`, as `use` and `stop-using` take none. Linking a tag linked already, or unlinking one not\nlinked, succeeds; a change that changes nothing writes nothing.",
         "operationId": "link_heap_tags",
         "parameters": [
           {
@@ -6182,7 +6182,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LinkTagsRequest"
+                "$ref": "#/components/schemas/ChangeHeapTagLinksRequest"
               }
             }
           },
@@ -6230,7 +6230,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_heap` or `too_many_tags`",
+            "description": "`tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11311,6 +11311,28 @@
             "type": "string"
           }
         }
+      },
+      "ChangeHeapTagLinksRequest": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Tags of the heap (its own or its team's) to link to the parameter. One linked already stays linked."
+          },
+          "unlink": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Tags to unlink from it. One not linked is left as it is. None may also be in `link`."
+          }
+        },
+        "additionalProperties": false
       },
       "ChangePasswordRequest": {
         "type": "object",

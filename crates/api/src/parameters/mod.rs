@@ -9,9 +9,9 @@ use std::collections::BTreeSet;
 
 use api_types::common::HeapSummaryDto;
 use api_types::parameters::{
-    AddOptionDto, ArchiveOptionDto, ArchivedOptionDto, ArrangeOptionsDto, CreateParameterDto, CreateTeamParameterDto,
-    LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto, ParameterPatchDto, TeamParameterDto,
-    TeamParameterListDto, TeamParameterPatchDto,
+    AddOptionDto, ArchiveOptionDto, ArchivedOptionDto, ArrangeOptionsDto, ChangeHeapTagLinksDto, CreateParameterDto,
+    CreateTeamParameterDto, LinkTagsDto, OptionDto, ParameterDto, ParameterKindDto, ParameterListDto,
+    ParameterPatchDto, TeamParameterDto, TeamParameterListDto, TeamParameterPatchDto,
 };
 use api_types::problem::{ParameterMergeReachDto, ParameterMergeReachEntryDto, ParameterMergeSwitchDto};
 use axum::Json;
@@ -464,32 +464,36 @@ async fn make_team_parameter(
     Ok(Json(to_team_parameter_dto(entry)))
 }
 
-/// Links the heap's own tags (its own and its team's) to a team parameter the heap uses, so the parameter is
-/// suggested for them in this heap only, besides the team's links. Admins only. Sets the heap's links to exactly the
-/// tags sent, so it takes no `If-Match`, as `use` and `stop-using` take none; repeating it succeeds.
-#[utoipa::path(put, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags", tag = "parameters", security(("session" = [])),
-    params(HeapParams, ("parameter_id" = Uuid, Path)), request_body = LinkTagsDto,
+/// Links tags of the heap (its own and its team's) to a team parameter the heap uses, and unlinks others, so the
+/// parameter is suggested for the linked ones in this heap only, besides the team's links. Admins only. Each tag
+/// named ends up linked or unlinked, and the others are left alone, so two writes that race don't undo each other:
+/// it takes no `If-Match`, as `use` and `stop-using` take none. Linking a tag linked already, or unlinking one not
+/// linked, succeeds; a change that changes nothing writes nothing.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path)), request_body = ChangeHeapTagLinksDto,
     responses(
         (status = 200, body = ParameterListDto),
         (status = 403, body = Problem),
         (status = 404, description = "Not a team parameter the heap uses", body = Problem),
         (status = 409, description = "`parameter_archived` or `heap_archived`", body = Problem),
-        (status = 422, description = "`tag_not_in_heap` or `too_many_tags`", body = Problem),
+        (status = 422, description = "`tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done)", body = Problem),
     ))]
 async fn link_heap_tags(
     State(state): State<AppState>,
     path: HeapPath,
     ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
-    ApiJson(body): ApiJson<LinkTagsDto>,
+    ApiJson(body): ApiJson<ChangeHeapTagLinksDto>,
 ) -> Result<Json<ParameterListDto>, ApiError> {
-    let tags = to_tag_set(&body.tag_ids).map_err(ServiceError::from)?;
+    let link = to_tag_set(&body.link).map_err(ServiceError::from)?;
+    let unlink = body.unlink.iter().copied().map(TagId::from_uuid).collect();
     let list = state
         .services
         .link_heap_tags(
             path.principal,
             path.heap.heap_id,
             ParameterId::from_uuid(parameter_id),
-            tags,
+            link,
+            unlink,
         )
         .await?;
     Ok(Json(to_parameter_list_dto(list)))

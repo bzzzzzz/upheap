@@ -104,16 +104,21 @@ impl World {
     }
 
     async fn link_heap(&self, heap: &str, tags: &[&str]) -> Result<TestResponse> {
+        self.change_heap(heap, tags, &[]).await
+    }
+
+    /// Links and unlinks tags of the heap's links to the parameter.
+    async fn change_heap(&self, heap: &str, link: &[&str], unlink: &[&str]) -> Result<TestResponse> {
         self.app
             .send(
-                Method::PUT,
+                Method::POST,
                 &format!(
                     "{}/parameters/{}/heap-tags",
                     self.app.heap_url(heap).await?,
                     id(&self.parameter)
                 ),
                 Some(&self.session),
-                Some(json!({ "tag_ids": tags })),
+                Some(json!({ "link": link, "unlink": unlink })),
             )
             .await
     }
@@ -252,6 +257,78 @@ async fn a_heap_links_its_own_tag_and_only_that_heap_suggests_the_parameter() ->
 
 #[gtest]
 #[tokio::test]
+async fn a_heap_links_and_unlinks_per_tag_and_a_change_that_changes_nothing_is_not_audited() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let (one, two) = (
+        w.app.new_tag_id(&w.session, &w.a, "billing").await?,
+        w.app.new_tag_id(&w.session, &w.a, "infra").await?,
+    );
+    w.link_heap(&w.a, &[&one]).await?;
+    let entries_before = w.app.audit_heaps(id(&w.parameter)).await?;
+
+    // Act
+    let again = w.change_heap(&w.a, &[&one], &[&two]).await?;
+    let entries_after_again = w.app.audit_heaps(id(&w.parameter)).await?;
+    let swapped = w.change_heap(&w.a, &[&two], &[&one]).await?;
+    let in_a = w.heap_view(&w.a).await?;
+    let both = w.change_heap(&w.a, &[&one], &[&one]).await?;
+
+    // Assert
+    expect_that!(again.status, eq(StatusCode::OK));
+    expect_that!(entries_after_again.len(), eq(entries_before.len()));
+    expect_that!(swapped.status, eq(StatusCode::OK));
+    expect_that!(in_a["heap_tag_ids"], eq(&json!([two])));
+    expect_that!(both.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(both.body["code"], eq(&json!("tag_linked_and_unlinked")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heap_may_link_no_more_than_fifty_tags_once_the_change_is_done() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let mut tags = Vec::new();
+    for index in 0..51 {
+        tags.push(w.app.new_tag_id(&w.session, &w.a, &format!("tag-{index}")).await?);
+    }
+    let first: Vec<&str> = tags[..50].iter().map(String::as_str).collect();
+    w.link_heap(&w.a, &first).await?;
+
+    // Act
+    let over = w.link_heap(&w.a, &[&tags[50]]).await?;
+    let swap = w.change_heap(&w.a, &[&tags[50]], &[&tags[0]]).await?;
+
+    // Assert
+    expect_that!(over.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(over.body["code"], eq(&json!("too_many_tags")));
+    expect_that!(swap.status, eq(StatusCode::OK));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_heaps_links_survive_stopping_and_using_the_parameter_again() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let tag = w.app.new_tag_id(&w.session, &w.a, "billing").await?;
+    w.link_heap(&w.a, &[&tag]).await?;
+
+    // Act
+    w.heap_post(&w.a, &format!("parameters/{}/stop-using", id(&w.parameter)))
+        .await?;
+    w.heap_post(&w.a, &format!("parameters/{}/use", id(&w.parameter)))
+        .await?;
+    let in_a = w.heap_view(&w.a).await?;
+
+    // Assert
+    expect_that!(in_a["heap_tag_ids"], eq(&json!([tag])));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_heap_links_only_what_it_may_and_only_a_team_parameter_it_uses() -> Result<()> {
     // Arrange
     let w = world().await?;
@@ -278,22 +355,22 @@ async fn a_heap_links_only_what_it_may_and_only_a_team_parameter_it_uses() -> Re
         .await?
         .body;
     let heap_url = w.app.heap_url(&w.a).await?;
-    let put = |parameter: Value, tags: Vec<String>| {
+    let post = |parameter: Value, tags: Vec<String>| {
         let path = format!("{heap_url}/parameters/{}/heap-tags", id(&parameter));
         let (app, session) = (&w.app, &w.session);
         async move {
-            app.send(Method::PUT, &path, Some(session), Some(json!({ "tag_ids": tags })))
+            app.send(Method::POST, &path, Some(session), Some(json!({ "link": tags })))
                 .await
         }
     };
 
     // Act
-    let foreign_tag = put(w.parameter.clone(), vec![tag_of_b]).await?;
-    let heap_parameter = put(own, vec![]).await?;
-    let not_used = put(unused, vec![]).await?;
-    let first = put(w.parameter.clone(), vec![team_tag.clone()]).await?;
+    let foreign_tag = post(w.parameter.clone(), vec![tag_of_b]).await?;
+    let heap_parameter = post(own, vec![]).await?;
+    let not_used = post(unused, vec![]).await?;
+    let first = post(w.parameter.clone(), vec![team_tag.clone()]).await?;
     let entries_after_first = w.app.audit_heaps(id(&w.parameter)).await?;
-    let repeated = put(w.parameter.clone(), vec![team_tag.clone()]).await?;
+    let repeated = post(w.parameter.clone(), vec![team_tag.clone()]).await?;
     let entries_after_repeat = w.app.audit_heaps(id(&w.parameter)).await?;
 
     // Assert

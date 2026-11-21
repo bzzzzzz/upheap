@@ -423,10 +423,10 @@ async fn a_heaps_link_to_a_team_parameter_follows_the_merge_in_that_heap_only() 
     let linked = w
         .app
         .send(
-            Method::PUT,
+            Method::POST,
             &format!("{heap_url}/parameters/{}/heap-tags", id(&parameter)),
             Some(&w.session),
-            Some(json!({ "tag_ids": [billing] })),
+            Some(json!({ "link": [billing] })),
         )
         .await?;
     anyhow::ensure!(linked.status == StatusCode::OK, "link failed: {}", linked.body);

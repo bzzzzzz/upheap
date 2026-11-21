@@ -24,7 +24,9 @@ use domain::permission::{
     ParameterAction, ParameterListAction, Permission, allowed_parameter_actions, allowed_parameter_list_actions,
     allowed_team_parameter_actions, allowed_team_parameter_list_actions,
 };
+use domain::tag::MAX_TAGS_PER_ITEM;
 use domain::team::Role;
+use domain::validation::ValidationError;
 use domain::{HeapId, ItemId, OptionId, ParameterId, TagId, TeamId, Timestamp, Version};
 use serde_json::Value;
 use store::audit::NewAuditEntry;
@@ -706,21 +708,27 @@ impl Services {
         Ok(list)
     }
 
-    /// Links the heap's tags (its own and its team's) to a team parameter it uses, so it is suggested in this heap for
-    /// exactly `tags` besides the team's links, and returns the heap's parameters. A tag that isn't one of the heap's
-    /// in use is [`ServiceError::TagNotInHeap`]. A parameter that isn't a team parameter the heap has a use row for is
-    /// [`ServiceError::NotFound`]; one archived in the heap's view is [`ParameterError::Archived`]. The same set
-    /// again succeeds and changes nothing.
+    /// Links the tags in `link` to a team parameter the heap uses and unlinks those in `unlink`, so it is suggested
+    /// in this heap for them besides the team's links, and returns the heap's parameters. A tag to link that isn't
+    /// one of the heap's in use is [`ServiceError::TagNotInHeap`]; a tag in both sets, or more than the most a
+    /// parameter may be linked to once done, is invalid. A parameter that isn't a team parameter the heap has a use
+    /// row for is [`ServiceError::NotFound`]; one archived in the heap's view is [`ParameterError::Archived`]. Each
+    /// tag ends up linked or unlinked whatever it was, and a change that changes nothing writes nothing.
     ///
-    /// No `If-Match`: the request says what the links should end up as, and there is no version for a heap's links.
-    /// The parameter is only read, under a shared lock, so its version doesn't move.
+    /// No `If-Match`: the links are written per tag, so two writes that race each do what they say and neither
+    /// undoes the other, and there is no version for a heap's links. The parameter is only read, under a shared
+    /// lock, so its version doesn't move.
     pub async fn link_heap_tags(
         &self,
         principal: Principal,
         heap_id: HeapId,
         parameter_id: ParameterId,
-        tags: BTreeSet<TagId>,
+        link: BTreeSet<TagId>,
+        unlink: BTreeSet<TagId>,
     ) -> Result<ParameterList, ServiceError> {
+        if !link.is_disjoint(&unlink) {
+            return Err(ValidationError::TagLinkedAndUnlinked.into());
+        }
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let access = authorize_heap_write(&txn, principal, heap_id, Permission::ConfigureHeap).await?;
         let parameter = lock_team_parameter_of(&txn, &access.heap, parameter_id).await?;
@@ -730,37 +738,30 @@ impl Services {
         if parameter.is_archived() || heap_use.stopped_at.is_some() {
             return Err(ParameterError::Archived { parameter_id }.into());
         }
-        load_heap_tags(&txn, heap_id, &tags).await?;
-        ensure_tags_in_use(&txn, &tags).await?;
-        let before = store::parameters::list_parameters_locking(&txn, heap_id)
-            .await?
-            .into_iter()
-            .find(|candidate| candidate.id == parameter_id)
-            .ok_or_else(|| {
-                StoreError::corrupt(
-                    "heap_parameters",
-                    &parameter_id.to_string(),
-                    "a used team parameter is missing from the heap's parameters",
-                )
-            })?;
-        if before.heap_tags == tags {
+        load_heap_tags(&txn, heap_id, &link).await?;
+        ensure_tags_in_use(&txn, &link).await?;
+        let now = self.now();
+        let (before, after) =
+            store::parameters::change_heap_links(&txn, heap_id, parameter_id, &link, &unlink, now).await?;
+        if after.len() > MAX_TAGS_PER_ITEM {
+            return Err(ValidationError::TooManyTags { max: MAX_TAGS_PER_ITEM }.into());
+        }
+        if before == after {
             return load_parameter_list(&txn, access.heap, access.membership.role).await;
         }
-        let now = self.now();
-        store::parameters::set_heap_links(&txn, heap_id, parameter_id, &tags, now).await?;
         let entry = self.parameter_audit_entry(
             access.heap.team_id,
             Some(heap_id),
             principal,
             AuditAction::ParameterUpdated,
             &parameter,
-            diff_heap_links(&before.heap_tags, &tags),
+            diff_heap_links(&before, &after),
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         let list = load_parameter_list(&txn, access.heap, access.membership.role).await?;
         txn.commit().await.map_err(StoreError::from)?;
-        tracing::info!(%heap_id, %parameter_id, user_id = %principal.user_id, links = tags.len(), "team parameter tags linked in heap");
+        tracing::info!(%heap_id, %parameter_id, user_id = %principal.user_id, links = after.len(), "team parameter tags linked in heap");
         Ok(list)
     }
 

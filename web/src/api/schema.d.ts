@@ -1332,13 +1332,15 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        put?: never;
         /**
-         * Links the heap's own tags (its own and its team's) to a team parameter the heap uses, so the parameter is
-         *     suggested for them in this heap only, besides the team's links. Admins only. Sets the heap's links to exactly the
-         *     tags sent, so it takes no `If-Match`, as `use` and `stop-using` take none; repeating it succeeds.
+         * Links tags of the heap (its own and its team's) to a team parameter the heap uses, and unlinks others, so the
+         *     parameter is suggested for the linked ones in this heap only, besides the team's links. Admins only. Each tag
+         *     named ends up linked or unlinked, and the others are left alone, so two writes that race don't undo each other:
+         *     it takes no `If-Match`, as `use` and `stop-using` take none. Linking a tag linked already, or unlinking one not
+         *     linked, succeeds; a change that changes nothing writes nothing.
          */
-        put: operations["link_heap_tags"];
-        post?: never;
+        post: operations["link_heap_tags"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2455,6 +2457,12 @@ export interface components {
             /** @description The account's email address, or its username. */
             login: string;
             password: string;
+        };
+        ChangeHeapTagLinksRequest: {
+            /** @description Tags of the heap (its own or its team's) to link to the parameter. One linked already stays linked. */
+            link?: string[];
+            /** @description Tags to unlink from it. One not linked is left as it is. None may also be in `link`. */
+            unlink?: string[];
         };
         /** @description What the signed-in user gives to change their password. */
         ChangePasswordRequest: {
@@ -5150,6 +5158,7 @@ export type BlockedLayout = components['schemas']['BlockedLayout'];
 export type BlockerGone = components['schemas']['BlockerGone'];
 export type BlockerGoneHow = components['schemas']['BlockerGoneHow'];
 export type ChangeConfirmationAddressRequest = components['schemas']['ChangeConfirmationAddressRequest'];
+export type ChangeHeapTagLinksRequest = components['schemas']['ChangeHeapTagLinksRequest'];
 export type ChangePasswordRequest = components['schemas']['ChangePasswordRequest'];
 export type Claim = components['schemas']['Claim'];
 export type ClaimRequest = components['schemas']['ClaimRequest'];
@@ -9297,7 +9306,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["LinkTagsRequest"];
+                "application/json": components["schemas"]["ChangeHeapTagLinksRequest"];
             };
         };
         responses: {
@@ -9335,7 +9344,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `tag_not_in_heap` or `too_many_tags` */
+            /** @description `tag_not_in_heap`, `tag_linked_and_unlinked` or `too_many_tags` (more than 50 linked once done) */
             422: {
                 headers: {
                     [name: string]: unknown;

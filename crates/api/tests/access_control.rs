@@ -212,6 +212,8 @@ enum RequestBody {
     ArchiveOption,
     /// No tags.
     LinkTags,
+    /// No tag to link or unlink.
+    ChangeHeapTagLinks,
     /// The user from [`Target::NewUser`].
     AddMember,
     Promote,
@@ -1180,11 +1182,11 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
-            Method::PUT,
+            Method::POST,
             "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags",
             configure,
             Target::UsedTeamParameter,
-            RequestBody::LinkTags,
+            RequestBody::ChangeHeapTagLinks,
             StatusCode::OK,
         ),
         row(
@@ -1956,6 +1958,7 @@ impl World {
             }
             RequestBody::ArchiveOption => Some(json!({ "replacement_option_id": parameter["options"][1]["id"] })),
             RequestBody::LinkTags => Some(json!({ "tag_ids": [] })),
+            RequestBody::ChangeHeapTagLinks => Some(json!({ "link": [], "unlink": [] })),
             RequestBody::NewPassword => Some(json!({ "password": PASSWORD })),
             RequestBody::ResetRequest => Some(json!({ "email": "ada@example.test" })),
             RequestBody::EmailChange => Some(json!({ "email": "new@example.test", "current_password": PASSWORD })),

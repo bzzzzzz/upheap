@@ -274,3 +274,15 @@ pub struct LinkTagsDto {
     /// them all.
     pub tag_ids: Vec<Uuid>,
 }
+
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ChangeHeapTagLinksRequest)]
+pub struct ChangeHeapTagLinksDto {
+    /// Tags of the heap (its own or its team's) to link to the parameter. One linked already stays linked.
+    #[serde(default)]
+    pub link: Vec<Uuid>,
+    /// Tags to unlink from it. One not linked is left as it is. None may also be in `link`.
+    #[serde(default)]
+    pub unlink: Vec<Uuid>,
+}

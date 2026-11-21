@@ -276,10 +276,12 @@ The tables and columns are in the migrations. These are the conventions they fol
   kinds of tag link. The team's links, to team tags only, are in `parameter_tags` like a heap parameter's and keep the
   parameter's version. A heap's own links to a team parameter it uses, to its own tags or the team's, are in
   `heap_parameter_tags`, a table of their own because a link belongs to the heap and `parameter_tags` rows have no
-  heap, and because it must stay the heap's when its tag becomes a team tag. They carry no version: the heap's write
-  holds the parameter only shared, and bumping its version would need the exclusive lock (see
-  `lock_parameter_shared`). The heap's read of its parameters puts them beside the team's links, and a tag that
-  suggests the parameter in that heap is in either.
+  heap, and because it must stay the heap's when its tag becomes a team tag. They carry no version: a heap's links are
+  written per tag, link and unlink, each naming the tags it changes and leaving the others, so two writes that race
+  both take effect and neither loses the other's, which is why they need no version. The write also holds the
+  parameter only shared, and bumping its version would need the exclusive lock (see `lock_parameter_shared`). The
+  heap's read of its parameters puts them beside the team's links, and a tag that suggests the parameter in that heap
+  is in either.
 - **Case-insensitive uniqueness** (tag names per owner) is a lowercased key column with a unique index rather than a
   collation, because MySQL compares case-insensitively by default and SQLite doesn't. Where an index can't express
   the rule, as for parameter names, which must be unique only among parameters in use, the service checks under the
@@ -587,8 +589,9 @@ a fixed time.
     many items carry each, with a `token`, a hash of that reach (`domain::tag::reach_text`). The client sends the
     write again with `confirm_reach=<token>`. If the reach changed in between, the token no longer matches and the
     write is refused again with the new reach, so what happens is what the person was shown. Nothing is stored
-    between the two requests. A merged heap tag's items, parameter links (a heap's links to team parameters too), saved views and tag-order places all move
-    to the team tag in that one transaction ([Data model](#data-model), a merged heap tag).
+    between the two requests. A merged heap tag's items, parameter links (a heap's links to team parameters too),
+    saved views and tag-order places all move to the team tag in that one transaction ([Data model](#data-model), a
+    merged heap tag).
 
     **Making a heap parameter a team parameter** works the same way, with `parameter_merge_unconfirmed` and its reach
     (`domain::parameter::reach_text`): the parameter it starts from, then each same-named heap parameter it takes in,

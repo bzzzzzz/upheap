@@ -2,8 +2,8 @@
 //! tag links are marked removed; there is no delete function, on purpose.
 //!
 //! A parameter is read and written whole: its row, its options and its tag links. A team parameter read for a heap
-//! also carries the heap's own links (`heap_parameter_tags`), which are written separately ([`set_heap_links`]). Every function that returns a
-//! parameter returns all three.
+//! also carries the heap's own links (`heap_parameter_tags`), which are written separately ([`change_heap_links`],
+//! [`set_heap_links`]). Every function that returns a parameter returns all three.
 //!
 //! A parameter is owned by a heap or by a team: exactly one of `heap_id` and `team_id` is set, which reading a row
 //! checks. A heap uses a team parameter through a `heap_parameters` row, which holds the heap's weight for it.
@@ -67,7 +67,8 @@ const fn child_lock(lock: Lock) -> Lock {
     }
 }
 
-/// Inserts a new parameter with its options and tag links, ignoring `heap_tags`. The caller has checked the tags belong to its owner.
+/// Inserts a new parameter with its options and tag links, ignoring `heap_tags`. The caller has checked the tags
+/// belong to its owner.
 /// A team parameter's own weight is stored as `0` and never read: each heap's weight is in its use row.
 pub async fn insert_parameter(db: &impl ConnectionTrait, parameter: &Parameter) -> Result<(), StoreError> {
     let id = id_to_db(parameter.id.as_uuid());
@@ -144,17 +145,17 @@ pub async fn list_parameters(db: &impl ConnectionTrait, heap_id: HeapId) -> Resu
     load_heap(db, heap_id, Lock::None).await
 }
 
-/// [`list_parameters`] (the same projection) with a locking read, for item writes that check values against the parameters after
-/// locking the heap: on MySQL a plain read would see the snapshot from before the lock was granted.
+/// [`list_parameters`] (the same projection) with a locking read, for item writes that check values against the
+/// parameters after locking the heap: on MySQL a plain read would see the snapshot from before the lock was granted.
 pub async fn list_parameters_locking(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Vec<Parameter>, StoreError> {
     load_heap(db, heap_id, Lock::Share).await
 }
 
 /// Writes `parameter` with its options and tag links if the stored row still has version `expected`, and returns
 /// it with its new version. Tags it no longer has are marked removed at `now`. `heap_tags` is ignored: a heap's
-/// links are written by [`set_heap_links`]. A team parameter's own weight is
-/// written as `0`, never the heap's: the heap's is in its use row (see [`update_heap_use`]). The owner is written
-/// too, which is how a heap parameter becomes its team's (`Parameter::into_team`).
+/// links are written by [`change_heap_links`] and [`set_heap_links`]. A team parameter's own weight is written as
+/// `0`, never the heap's: the heap's is in its use row (see [`update_heap_use`]). The owner is written too,
+/// which is how a heap parameter becomes its team's (`Parameter::into_team`).
 ///
 /// Returns `None` when the stored version differs; nothing is written then.
 pub async fn update_parameter(
@@ -534,13 +535,68 @@ pub async fn set_heap_links(
     tags: &BTreeSet<TagId>,
     now: Timestamp,
 ) -> Result<(), StoreError> {
+    let rows = heap_link_rows(db, heap_id, parameter_id).await?;
+    write_heap_links(db, heap_id, parameter_id, &rows, tags, now).await
+}
+
+/// Links the tags in `link` and unlinks those in `unlink` for the heap's links to the team parameter, leaving the
+/// others as they are, and returns the active links before and after. A tag linked already or not linked is left
+/// alone. The caller has checked the tags to link are the heap's, that none is in both sets, and that the parameter
+/// is a team parameter the heap uses.
+pub async fn change_heap_links(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+    link: &BTreeSet<TagId>,
+    unlink: &BTreeSet<TagId>,
+    now: Timestamp,
+) -> Result<(BTreeSet<TagId>, BTreeSet<TagId>), StoreError> {
+    let rows = heap_link_rows(db, heap_id, parameter_id).await?;
+    let before = rows
+        .iter()
+        .filter(|row| row.removed_at.is_none())
+        .map(|row| {
+            let read = RowReader {
+                table: "heap_parameter_tags",
+                id: &row.heap_id,
+            };
+            read.uuid(&row.tag_id).map(TagId::from_uuid)
+        })
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let after: BTreeSet<TagId> = before
+        .union(link)
+        .filter(|tag| !unlink.contains(tag))
+        .copied()
+        .collect();
+    if after != before {
+        write_heap_links(db, heap_id, parameter_id, &rows, &after, now).await?;
+    }
+    Ok((before, after))
+}
+
+async fn heap_link_rows(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+) -> Result<Vec<heap_parameter_tags::Model>, StoreError> {
+    Ok(heap_parameter_tags::Entity::find()
+        .filter(heap_parameter_tags::Column::HeapId.eq(id_to_db(heap_id.as_uuid()).as_str()))
+        .filter(heap_parameter_tags::Column::ParameterId.eq(id_to_db(parameter_id.as_uuid()).as_str()))
+        .all(db)
+        .await?)
+}
+
+/// Moves the heap's active links from `rows` to exactly `tags`.
+async fn write_heap_links(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+    rows: &[heap_parameter_tags::Model],
+    tags: &BTreeSet<TagId>,
+    now: Timestamp,
+) -> Result<(), StoreError> {
     let heap = id_to_db(heap_id.as_uuid());
     let parameter = id_to_db(parameter_id.as_uuid());
-    let rows = heap_parameter_tags::Entity::find()
-        .filter(heap_parameter_tags::Column::HeapId.eq(heap.as_str()))
-        .filter(heap_parameter_tags::Column::ParameterId.eq(parameter.as_str()))
-        .all(db)
-        .await?;
     let wanted: BTreeSet<String> = tags.iter().map(|id| id_to_db(id.as_uuid())).collect();
     let existing: Vec<(&str, bool)> = rows
         .iter()

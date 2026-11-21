@@ -379,7 +379,8 @@ pub enum ParameterListAction {
 }
 
 /// What `role` can do with `parameter` in `heap`. Only its history, for those who may configure the heap, once the
-/// parameter or the heap is archived. Making a heap parameter the team's is for admins, like configuring a heap. A team parameter the heap uses is stopped, not edited: it is edited on the team
+/// parameter or the heap is archived. Making a heap parameter the team's is for admins, like configuring a heap. A
+/// team parameter the heap uses is stopped and has the heap's tags linked to it, not edited: it is edited on the team
 /// (see [`allowed_team_parameter_actions`]), and its weight is saved with the heap's other weights.
 pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role) -> Vec<ParameterAction> {
     if !Permission::ConfigureHeap.is_granted_to(role) {

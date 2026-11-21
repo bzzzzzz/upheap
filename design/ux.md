@@ -235,8 +235,10 @@ parameter now: 3 items in 2 heaps keep their values.". A parameter linked to tag
 message ("Unlink the tags first: …") shows under the card's heading, as a failed archive does.
 
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
-parameter" to a screen reader), its weight read as "Weight {n}", its options read-only, the team's tags that suggest it read-only, and the heap's own
-tags that suggest it, which an admin edits in place (each change is saved at once), a line saying the weight is set on the Ranking page and the name and options on the Team page (both links), and Stop using for an admin
+parameter" to a screen reader), its weight read as "Weight {n}", its options read-only, the team's tags that suggest
+it read-only, and the heap's own tags that suggest it, which an admin edits in place (each change is saved at once), a
+line saying the weight is set on the Ranking page and the name and options on the Team page (both links), and Stop
+using for an admin
 (an error from the server shows under it). A card headed "{n} parameters of the team {team}", with a Team page link in
 its header, lists the team's others, each with its name, its options and a Use button for an admin; with none it says
 "{team} has no other team parameters. Make them on the Team page.". Using one gives it the weight it had, or 10.
@@ -967,8 +969,9 @@ rows that are edited in place, with "Changes in every heap of {team}." under the
 that heap tags of the team have opens the merge confirm, see Tags), then Parameters, the team's own, which each heap
 chooses to use (a New parameter button that opens the add form without a weight, and a card per parameter like a
 heap's, with the team tags that suggest it, picked from the team's tags alone, a line "Used in Launch and Support" or
-"Not used in any heap yet"; archiving an option there names the heaps whose open items switch), then Members with a search whose results are a
-listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
+"Not used in any heap yet"; archiving an option there names the heaps whose open items switch), then Members with a
+search whose results are a listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge,
+Make admin or Make member and Remove, and Leave team or a
 line saying why the only admin can't leave. Removing a member says what happens: "They lose access to Launch and
 Support. Their items stay." It's confirmed inline on a wide screen and in the member's actions sheet on a phone,
 where heap rows are 52 px and open the heap, and a member's ⋯ opens a sheet headed "Sam Ortiz · @sam · Member".
