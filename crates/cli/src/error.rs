@@ -12,6 +12,8 @@
 
 use std::error::Error as _;
 
+use api_types::oauth::RevokeReasonDto;
+
 use crate::agent::{Tool, ToolError};
 use crate::auth::login::LoginError;
 use crate::auth::loopback::LoopbackError;
@@ -86,6 +88,10 @@ pub enum CliError {
     /// title.
     #[error("the server refused the token in UPHEAP_TOKEN: {}", refusal_reason(refused))]
     EnvTokenRefused { refused: ClientError },
+    /// The server answered `401 token_revoked` to the keychain sign-in's access token because the account's password
+    /// changed. Made by [`CliError::ended_sign_in`]. `refused` is the refusal, as for `EnvTokenRefused`.
+    #[error("the sign-in to {server} ended because the account's password changed")]
+    SignInEnded { server: String, refused: ClientError },
     #[error(transparent)]
     Login(#[from] LoginError),
     #[error(transparent)]
@@ -137,7 +143,11 @@ impl CliError {
             | Self::NoInstructions { .. }
             | Self::EnvTokenRefused { .. } => 6,
             Self::Setting(_) | Self::Usage(_) => 2,
-            Self::NoSuchStep { .. } | Self::NoSuchQuestion { .. } | Self::NoAgents | Self::NoSuchRun { .. } => 4,
+            Self::NoSuchStep { .. }
+            | Self::NoSuchQuestion { .. }
+            | Self::NoAgents
+            | Self::NoSuchRun { .. }
+            | Self::SignInEnded { .. } => 4,
             Self::Lookup(
                 LookupError::MalformedHeap { .. }
                 | LookupError::MalformedItem { .. }
@@ -159,7 +169,7 @@ impl CliError {
                 | LookupError::NoChoicesToPick { .. },
             ) => 3,
             Self::QuestionRefused { .. } => 3,
-            Self::Auth(AuthError::NotSignedIn { .. }) => 4,
+            Self::Auth(AuthError::NotSignedIn { .. } | AuthError::PasswordChanged { .. }) => 4,
             Self::Auth(AuthError::Store(_) | AuthError::Lock { .. } | AuthError::RefreshNotKept(_)) => 6,
             Self::Auth(AuthError::Client(err) | AuthError::Revoke(err))
             | Self::Client(err)
@@ -183,6 +193,24 @@ impl CliError {
         }
         match self {
             Self::Client(refused) => Self::EnvTokenRefused { refused },
+            other => other,
+        }
+    }
+
+    /// This failure as the end of the keychain sign-in to `server` when it is a `401 token_revoked` because the
+    /// account's password changed, else as it is.
+    pub(crate) fn ended_sign_in(self, server: Option<String>) -> Self {
+        let (Some(server), Some(problem)) = (server, self.problem()) else {
+            return self;
+        };
+        if problem.status != 401
+            || problem.code != "token_revoked"
+            || problem.reason != Some(RevokeReasonDto::PasswordChanged)
+        {
+            return self;
+        }
+        match self {
+            Self::Client(refused) => Self::SignInEnded { server, refused },
             other => other,
         }
     }
@@ -220,6 +248,10 @@ impl CliError {
             | Self::EnvTokenRefused {
                 refused: ClientError::Problem { body, .. },
             }
+            | Self::SignInEnded {
+                refused: ClientError::Problem { body, .. },
+                ..
+            }
             | Self::NoSuchItem {
                 source: ClientError::Problem { body, .. },
                 ..
@@ -251,6 +283,10 @@ impl CliError {
             | Self::EnvTokenRefused {
                 refused: ClientError::Problem { problem, .. },
             }
+            | Self::SignInEnded {
+                refused: ClientError::Problem { problem, .. },
+                ..
+            }
             | Self::NoSuchItem {
                 source: ClientError::Problem { problem, .. },
                 ..
@@ -279,7 +315,8 @@ impl CliError {
             | Self::NoSuchItem { source: err, .. }
             | Self::ItemRefused { source: err, .. }
             | Self::TagWriteRefused { source: err, .. }
-            | Self::EnvTokenRefused { refused: err } => Some(err),
+            | Self::EnvTokenRefused { refused: err }
+            | Self::SignInEnded { refused: err, .. } => Some(err),
             _ => None,
         }
     }
@@ -336,7 +373,7 @@ impl CliError {
             (Self::Auth(AuthError::Revoke(_)), _) => {
                 Some("to forget the sign-in on this machine only, run `upheap auth logout --local`".to_owned())
             }
-            (Self::Auth(AuthError::NotSignedIn { .. }), _) | (_, Some(401)) => {
+            (Self::Auth(AuthError::NotSignedIn { .. } | AuthError::PasswordChanged { .. }), _) | (_, Some(401)) => {
                 Some("sign in with `upheap auth login`".to_owned())
             }
             (
@@ -388,6 +425,11 @@ impl CliError {
 /// Why the server refused the personal token, from the code of its `401`.
 fn refusal_reason(refused: &ClientError) -> &'static str {
     match refused {
+        ClientError::Problem { problem, .. }
+            if problem.code == "token_revoked" && problem.reason == Some(RevokeReasonDto::PasswordChanged) =>
+        {
+            "it was revoked because the account's password changed"
+        }
         ClientError::Problem { problem, .. } if problem.code == "token_revoked" => "it was revoked",
         ClientError::Problem { problem, .. } if problem.code == "token_expired" => "it has expired",
         _ => "it isn't a token this server knows",
@@ -515,6 +557,7 @@ mod tests {
                 item_key: None,
                 highest: None,
                 merge_reach: None,
+                reason: None,
                 request_id: None,
             }),
             body: String::new(),

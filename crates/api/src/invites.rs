@@ -74,7 +74,7 @@ fn to_invitation_dto(view: InvitationView) -> InvitationDto {
     params(InviteTokenParams),
     responses(
         (status = 200, body = InvitationDto),
-        (status = 401, description = "`unauthenticated`: the bearer token is invalid, expired or revoked", body = Problem),
+        (status = 401, description = "`unauthenticated` or `token_revoked`: the bearer token is invalid, expired or revoked", body = Problem),
         (status = 404, description = "No such link", body = Problem),
     ))]
 async fn open_invite(

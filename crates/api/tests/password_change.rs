@@ -87,8 +87,11 @@ async fn a_change_ends_the_other_sessions_and_cli_sign_ins_and_replaces_the_call
     expect_that!(own.status, eq(StatusCode::OK));
     expect_that!(ended_session.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(ended_access.status, eq(StatusCode::UNAUTHORIZED));
+    expect_that!(problem_code(&ended_access), eq("token_revoked"));
+    expect_that!(ended_access.body["reason"], eq(&json!("password_changed")));
     expect_that!(refreshed.status, eq(StatusCode::BAD_REQUEST));
     expect_that!(refreshed.body["error"], eq(&json!("invalid_grant")));
+    expect_that!(refreshed.body["reason"], eq(&json!("password_changed")));
     expect_that!(old.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(problem_code(&old), eq("invalid_credentials"));
     expect_that!(new.status, eq(StatusCode::OK));
@@ -440,6 +443,7 @@ async fn a_change_revokes_personal_tokens_and_counts_them() -> Result<()> {
     expect_that!(changed.body, eq(&json!({ "ended_sign_ins": 1 })));
     expect_that!(used.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(problem_code(&used), eq("token_revoked"));
+    expect_that!(used.body["reason"], eq(&json!("password_changed")));
     Ok(())
 }
 

@@ -85,6 +85,37 @@ async fn a_revoked_token_exits_6_and_says_so() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_token_revoked_by_a_password_change_says_so() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let (secret, _) = make_token(&server, &ada, "90_days").await?;
+    let cli = machine_with(&server, &secret)?;
+    server
+        .send(
+            &ada,
+            "POST",
+            "/me/password",
+            Some(json!({ "current_password": "a long test password", "password": "another long test password" })),
+        )
+        .await?;
+
+    // Act
+    let added = cli.run(&["item", "add", "Rotate the certs"]).await;
+
+    // Assert
+    expect_that!(added.exited(6), eq(true));
+    expect_that!(
+        added.stderr,
+        eq(&format!(
+            "error: the server refused the token in UPHEAP_TOKEN: it was revoked because the account's password changed\n{HINT}"
+        ))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn an_expired_token_exits_6_and_says_so() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;

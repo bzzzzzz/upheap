@@ -750,7 +750,7 @@
             }
           },
           "401": {
-            "description": "`unauthenticated`: the bearer token is invalid, expired or revoked",
+            "description": "`unauthenticated` or `token_revoked`: the bearer token is invalid, expired or revoked",
             "content": {
               "application/json": {
                 "schema": {
@@ -13933,6 +13933,17 @@
           "error_description": {
             "type": "string",
             "description": "What was wrong, for people. May change; branch on `error`."
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RevokeReason",
+                "description": "Why the refresh token was revoked, on `invalid_grant` for a revoked refresh token, when the server knows:\n`password_changed`. An extra parameter, which RFC 6749 §5.2 allows."
+              }
+            ]
           }
         }
       },
@@ -14641,6 +14652,17 @@
               {
                 "$ref": "#/components/schemas/MergeReach",
                 "description": "The heap tags a team tag write would merge, for `tag_merge_unconfirmed`: repeat the write with `token` as\n`confirm_reach` to merge them."
+              }
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RevokeReason",
+                "description": "Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`."
               }
             ]
           },
@@ -15451,6 +15473,13 @@
             "minimum": 0
           }
         }
+      },
+      "RevokeReason": {
+        "type": "string",
+        "description": "Why a sign-in or personal token was revoked, when the server records it. More can join.",
+        "enum": [
+          "password_changed"
+        ]
       },
       "Role": {
         "type": "string",

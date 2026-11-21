@@ -13,15 +13,15 @@
 //! response, as the RFC defines no error for it there.
 
 use api_types::oauth::{
-    ApprovalDto, AuthorizationRequestDto, ClientDto, OAuthErrorDto, RevokeRequestForm, TokenRequestForm,
-    TokenResponseDto,
+    ApprovalDto, AuthorizationRequestDto, ClientDto, OAuthErrorDto, RevokeReasonDto, RevokeRequestForm,
+    TokenRequestForm, TokenResponseDto,
 };
 use axum::extract::State;
 use axum::extract::rejection::FormRejection;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
-use domain::oauth::{AuthorizationError, DeviceName};
+use domain::oauth::{AuthorizationError, DeviceName, GrantError};
 use service::ServiceError;
 use service::oauth::{CodeExchange, OAuthSecret, TokenPair};
 use utoipa_axum::router::OpenApiRouter;
@@ -115,6 +115,8 @@ struct OAuthRefusal {
     status: StatusCode,
     error: &'static str,
     description: String,
+    /// Why a revoked refresh token was revoked, when known.
+    reason: Option<RevokeReasonDto>,
 }
 
 impl OAuthRefusal {
@@ -123,6 +125,7 @@ impl OAuthRefusal {
             status: StatusCode::BAD_REQUEST,
             error: "invalid_request",
             description: description.into(),
+            reason: None,
         }
     }
 
@@ -138,11 +141,16 @@ impl OAuthRefusal {
                 status: StatusCode::BAD_REQUEST,
                 error: "invalid_grant",
                 description: grant.to_string(),
+                reason: match grant {
+                    GrantError::RefreshTokenRevoked { reason } => reason.map(RevokeReasonDto::from),
+                    _ => None,
+                },
             }),
             ServiceError::Authorization(AuthorizationError::ClientUnknown) => Ok(Self {
                 status: StatusCode::UNAUTHORIZED,
                 error: "invalid_client",
                 description: AuthorizationError::ClientUnknown.to_string(),
+                reason: None,
             }),
             other => Err(ApiError::Service(other)),
         }
@@ -155,6 +163,7 @@ impl IntoResponse for OAuthRefusal {
         let body = OAuthErrorDto {
             error: self.error.to_owned(),
             error_description: self.description,
+            reason: self.reason,
         };
         (self.status, [(header::CACHE_CONTROL, "no-store")], Json(body)).into_response()
     }
@@ -245,6 +254,7 @@ async fn issue_token(
                 status: StatusCode::BAD_REQUEST,
                 error: "unsupported_grant_type",
                 description: "grant_type must be authorization_code or refresh_token".to_owned(),
+                reason: None,
             }
             .into());
         }

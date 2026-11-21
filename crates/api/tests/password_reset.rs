@@ -132,6 +132,7 @@ async fn setting_a_password_signs_in_and_ends_every_other_sign_in() -> Result<()
     expect_that!(ended_access.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(refreshed.status, eq(StatusCode::BAD_REQUEST));
     expect_that!(refreshed.body["error"], eq(&json!("invalid_grant")));
+    expect_that!(refreshed.body["reason"], eq(&json!("password_changed")));
     expect_that!(old.status, eq(StatusCode::UNAUTHORIZED));
     expect_that!(new.status, eq(StatusCode::OK));
     expect_that!(state(&opened_after), eq("used"));

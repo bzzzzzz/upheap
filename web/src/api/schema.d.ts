@@ -3617,6 +3617,7 @@ export interface components {
             error: string;
             /** @description What was wrong, for people. May change; branch on `error`. */
             error_description: string;
+            reason?: null | components["schemas"]["RevokeReason"];
         };
         /** @description A token revocation request (RFC 7009 §2.1), form-encoded. */
         OAuthRevokeRequest: {
@@ -3916,6 +3917,7 @@ export interface components {
              */
             item_key?: string | null;
             merge_reach?: null | components["schemas"]["MergeReach"];
+            reason?: null | components["schemas"]["RevokeReason"];
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -4280,6 +4282,11 @@ export interface components {
              */
             round: number;
         };
+        /**
+         * @description Why a sign-in or personal token was revoked, when the server records it. More can join.
+         * @enum {string}
+         */
+        RevokeReason: "password_changed";
         /** @enum {string} */
         Role: "admin" | "member";
         /** @description A run: one go an agent has at an item's turn. */
@@ -5157,6 +5164,7 @@ export type RequestPasswordReset = components['schemas']['RequestPasswordReset']
 export type ResultRow = components['schemas']['ResultRow'];
 export type Results = components['schemas']['Results'];
 export type Review = components['schemas']['Review'];
+export type RevokeReason = components['schemas']['RevokeReason'];
 export type Role = components['schemas']['Role'];
 export type Run = components['schemas']['Run'];
 export type RunEnd = components['schemas']['RunEnd'];
@@ -5788,7 +5796,7 @@ export interface operations {
                     "application/json": components["schemas"]["Invitation"];
                 };
             };
-            /** @description `unauthenticated`: the bearer token is invalid, expired or revoked */
+            /** @description `unauthenticated` or `token_revoked`: the bearer token is invalid, expired or revoked */
             401: {
                 headers: {
                     [name: string]: unknown;

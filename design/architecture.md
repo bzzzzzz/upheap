@@ -595,6 +595,10 @@ a fixed time.
      briefly; access tokens are short-lived and refresh tokens rotate ([Non-web client tokens](#non-web-client-tokens)).
    - A bearer token may also be a personal token ([Personal tokens](#personal-tokens)), told apart by its `uph_`
      prefix. A revoked or expired one is refused with the code `token_revoked` or `token_expired`, so the CLI can say why.
+     An OAuth access token in a revoked family is refused with `token_revoked` too, and an unknown or expired one
+     with `unauthenticated`. A revocation by a password change or reset records the reason `password_changed` next
+     to `revoked_at`; the problem's `reason` carries it, and `/oauth/token` adds it to the `invalid_grant` refusal as
+     an extra parameter (RFC 6749 §5.2 allows them). Other revocations record none.
    - `Authorization: Bearer` resolves to the same `Principal` a cookie does, on every endpoint. A request with a
      bearer token is authenticated by it alone, with no fallback to the cookie, and needs no CSRF header: a
      cross-site page can't set that header either, and CSRF is a cookie problem. Other `Authorization` schemes, such
@@ -1032,7 +1036,8 @@ section is how it maps onto this API.
    `UPHEAP_TOKEN`, when set, wins over all of it: the CLI sends that personal token and reads no keychain, takes no
    lock and needs no config directory, and a token never needs refreshing. A `401` while it is set means the
    environment holds a token the server refuses, which `auth login` can't fix, so it is exit 6, not 4, and the message
-   says whether the token was revoked, has expired or isn't known.
+   says whether the token was revoked, has expired or isn't known. With the reason `password_changed`, the CLI says
+   the sign-in, or the token in `UPHEAP_TOKEN`, ended because the account's password changed.
 7. **`work run` is the agent loop** over the `/work` routes. It claims the next item (`POST /work/runs`), reads the
    heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
    standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. The code that starts the

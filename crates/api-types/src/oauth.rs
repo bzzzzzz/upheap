@@ -4,7 +4,7 @@
 //! The consent page's endpoints take JSON and answer problems; the client's, `POST /oauth/token` and
 //! `POST /oauth/revoke`, take form-encoded bodies and refuse in the RFC 6749 §5.2 format, [`OAuthErrorDto`].
 
-use domain::oauth::AuthorizationParams;
+use domain::oauth::{AuthorizationParams, RevokeReason};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -123,6 +123,31 @@ pub struct OAuthErrorDto {
     pub error: String,
     /// What was wrong, for people. May change; branch on `error`.
     pub error_description: String,
+    /// Why the refresh token was revoked, on `invalid_grant` for a revoked refresh token, when the server knows:
+    /// `password_changed`. An extra parameter, which RFC 6749 §5.2 allows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<RevokeReasonDto>,
+}
+
+/// Why a sign-in or personal token was revoked, when the server records it. More can join.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = RevokeReason)]
+pub enum RevokeReasonDto {
+    /// The account's password was changed or reset.
+    PasswordChanged,
+    /// A reason this client doesn't know: one the server added later. Only read, never sent, so it isn't in the API's
+    /// schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<RevokeReason> for RevokeReasonDto {
+    fn from(reason: RevokeReason) -> Self {
+        match reason {
+            RevokeReason::PasswordChanged => Self::PasswordChanged,
+        }
+    }
 }
 
 // The forms and the token response carry secrets: codes, verifiers and tokens. Their `Debug` says whether each is

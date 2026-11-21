@@ -53,6 +53,7 @@ mod m20261218_000047_email_change_links;
 mod m20261219_000048_turn_watches;
 mod m20261220_000049_email_confirmations;
 mod m20261221_000050_team_parameters;
+mod m20261222_000051_revoke_reasons;
 
 pub struct Migrator;
 
@@ -110,6 +111,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261219_000048_turn_watches::Migration),
             Box::new(m20261220_000049_email_confirmations::Migration),
             Box::new(m20261221_000050_team_parameters::Migration),
+            Box::new(m20261222_000051_revoke_reasons::Migration),
         ]
     }
 }
