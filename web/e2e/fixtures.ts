@@ -322,13 +322,19 @@ export type AppPage =
  * Settings.
  */
 export async function goTo(page: Page, name: AppPage) {
+  // `isVisible` doesn't wait, and right after `page.goto` the navigation may not have rendered yet, which would take
+  // the phone's More path on any width. So wait first for one of the controls the choice depends on to show.
+  const more = page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" });
   if (name === "Context" || name === "Tags" || name === "Parameters" || name === "Ranking") {
     const tab = page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name, exact: true });
+    const settings = page.getByRole("link", { name: "Settings", exact: true });
+    await expect(tab.or(settings).or(more).filter({ visible: true }).first()).toBeVisible();
     if (!(await tab.isVisible())) await goTo(page, "Settings");
     await tab.click();
     return;
   }
   const link = page.getByRole("link", { name, exact: true });
+  await expect(link.or(more).filter({ visible: true }).first()).toBeVisible();
   if (await link.isVisible()) {
     await link.click();
   } else {
