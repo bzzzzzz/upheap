@@ -458,9 +458,6 @@ fn classify_service(err: &ServiceError) -> Classified {
             parameter_merge_reach: Some(to_parameter_merge_reach_dto(reach)),
             ..simple(StatusCode::CONFLICT, "parameter_merge_unconfirmed", Category::Conflict)
         },
-        ServiceError::ParameterMergeLinked { .. } => {
-            simple(StatusCode::CONFLICT, "parameter_merge_linked", Category::Conflict)
-        }
         ServiceError::Parameter(error) => classify_parameter(error, simple),
         ServiceError::ParameterNameTaken { .. } => Classified {
             field: Some("name"),

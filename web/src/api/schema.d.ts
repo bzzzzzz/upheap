@@ -1563,9 +1563,9 @@ export interface paths {
          *     only. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a
          *     `parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team
          *     parameter at the weight it had, and each item's value moves to the option with the same label; for an open item
-         *     whose option the team parameter has archived, that is the option in use it was replaced by (`switched`). A
-         *     parameter linked to tags can't be merged: `parameter_merge_linked` names them. Repeating the write on a team
-         *     parameter the heap uses succeeds and changes nothing.
+         *     whose option the team parameter has archived, that is the option in use it was replaced by (`switched`). The tags
+         *     a parameter is linked to become its heap's links to the team parameter, for that heap only (`linked_tags`).
+         *     Repeating the write on a team parameter the heap uses succeeds and changes nothing.
          */
         post: operations["make_team_parameter"];
         delete?: never;
@@ -4078,6 +4078,8 @@ export interface components {
              * @description Items with a value for the parameter, open or closed.
              */
             items: number;
+            /** @description The names of its tags, sorted: each becomes its heap's link to the team parameter, for that heap only. */
+            linked_tags: string[];
             /** Format: uuid */
             parameter_id: string;
             /** @description The parameter's name as written. */
@@ -10278,7 +10280,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `parameter_merge_unconfirmed`, `parameter_merge_linked`, `parameter_archived` or `heap_archived` */
+            /** @description `parameter_merge_unconfirmed`, `parameter_archived` or `heap_archived` */
             409: {
                 headers: {
                     [name: string]: unknown;

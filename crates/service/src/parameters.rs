@@ -121,19 +121,10 @@ pub struct ParameterReachEntry {
     /// The options of it in use that match an option the team parameter has archived: open items on them get the
     /// option in use that one resolves to. Empty for the one the merge starts from.
     pub switched: Vec<OptionSwitch>,
+    /// The names of the tags it is linked to, sorted: each becomes its heap's link to the team parameter.
+    pub linked_tags: Vec<String>,
     /// Whether it is the one the merge starts from.
     pub starting: bool,
-}
-
-/// A parameter that stops a merge because it is linked to tags.
-#[derive(Clone, Debug)]
-pub struct LinkedParameter {
-    pub heap: String,
-    /// Whether the heap is archived, so its parameter can't be edited to unlink the tags until it is unarchived.
-    pub heap_archived: bool,
-    pub parameter: String,
-    /// By name.
-    pub tags: Vec<String>,
 }
 
 /// A heap parameter that merges into the one a merge starts from, with its heap and how its options map.
@@ -556,8 +547,8 @@ impl Services {
     ///
     /// That can't be undone, so it needs `confirm`, the token of the reach: without it, or with a stale one, the write
     /// fails with [`ServiceError::ParameterMergeUnconfirmed`] and the current reach, even when there is nothing to
-    /// merge. A parameter among them linked to tags fails it first with [`ServiceError::ParameterMergeLinked`], as
-    /// team parameters can't be linked to tags.
+    /// merge. Each parameter's tag links become its heap's own links to the team parameter, for that heap only; the
+    /// team parameter has no links of its own.
     ///
     /// Repeating the write once it went through, on a team parameter the heap uses, changes nothing and returns it,
     /// without a confirmation.
@@ -626,7 +617,6 @@ impl Services {
             .plan_parameter_merge(&txn, team_id, &heaps, heap_id, &start, now)
             .await?;
         let (reach, values) = parameter_reach_of(&txn, heap, &start, &others).await?;
-        ensure_no_tag_links(&txn, &reach.entries).await?;
         if confirm != Some(reach.token.as_str()) {
             return Err(ServiceError::ParameterMergeUnconfirmed { reach });
         }
@@ -926,9 +916,14 @@ impl Services {
         reach: &ParameterMergeReach,
         now: Timestamp,
     ) -> Result<(), ServiceError> {
+        // The team parameter has no links of its own: each parameter's links continue as its heap's.
+        let start_tags = &reach.entries[0].parameter.tags;
         write_heap_use(txn, start_heap.id, team_parameter.id, start_weight, now).await?;
+        store::parameters::set_heap_links(txn, start_heap.id, team_parameter.id, start_tags, now).await?;
         for other in others {
             write_heap_use(txn, other.heap.id, team_parameter.id, other.parameter.weight, now).await?;
+            store::parameters::set_heap_links(txn, other.heap.id, team_parameter.id, &other.parameter.tags, now)
+                .await?;
             self.move_values(txn, principal, team_id, team_parameter, other, values, now)
                 .await?;
             move_views(txn, team_parameter.id, other).await?;
@@ -954,6 +949,7 @@ impl Services {
                     "weight": entry.parameter.weight.get(),
                     "items": entry.items,
                     "added": entry.added.iter().map(OptionLabel::as_str).collect::<Vec<_>>(),
+                    "tags": entry.parameter.tags.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 })
             })
             .collect();
@@ -1401,16 +1397,20 @@ async fn parameter_reach_of(
         items: count(start.id),
         added: Vec::new(),
         switched: Vec::new(),
+        linked_tags: linked_tag_names(db, start).await?,
         starting: true,
     }];
-    entries.extend(others.iter().map(|other| ParameterReachEntry {
-        heap: other.heap.clone(),
-        parameter: other.parameter.clone(),
-        items: count(other.parameter.id),
-        added: other.merge.added.clone(),
-        switched: other.merge.switched.clone(),
-        starting: false,
-    }));
+    for other in others {
+        entries.push(ParameterReachEntry {
+            heap: other.heap.clone(),
+            parameter: other.parameter.clone(),
+            items: count(other.parameter.id),
+            added: other.merge.added.clone(),
+            switched: other.merge.switched.clone(),
+            linked_tags: linked_tag_names(db, &other.parameter).await?,
+            starting: false,
+        });
+    }
     let text = reach_text(entries.iter().map(|entry| {
         (
             entry.parameter.id,
@@ -1424,34 +1424,17 @@ async fn parameter_reach_of(
     Ok((ParameterMergeReach { token, entries }, values))
 }
 
-/// Refuses a merge that takes in a parameter linked to tags, naming each with its tags. Nothing carries tag links over
-/// to a team parameter yet.
-async fn ensure_no_tag_links(db: &impl ConnectionTrait, entries: &[ParameterReachEntry]) -> Result<(), ServiceError> {
-    let mut linked = Vec::new();
-    for entry in entries.iter().filter(|entry| !entry.parameter.tags.is_empty()) {
-        let mut tags = Vec::new();
-        for tag_id in &entry.parameter.tags {
-            let tag = store::tags::find_tag(db, *tag_id).await?.ok_or_else(|| {
-                StoreError::corrupt(
-                    "parameter_tags",
-                    &entry.parameter.id.to_string(),
-                    "a link to a missing tag",
-                )
-            })?;
-            tags.push(tag.name.as_str().to_owned());
-        }
-        tags.sort();
-        linked.push(LinkedParameter {
-            heap: entry.heap.name.as_str().to_owned(),
-            heap_archived: entry.heap.is_archived(),
-            parameter: entry.parameter.name.as_str().to_owned(),
-            tags,
-        });
+/// The names of the tags `parameter` is linked to, sorted.
+async fn linked_tag_names(db: &impl ConnectionTrait, parameter: &Parameter) -> Result<Vec<String>, ServiceError> {
+    let mut names = Vec::new();
+    for tag_id in &parameter.tags {
+        let tag = store::tags::find_tag(db, *tag_id).await?.ok_or_else(|| {
+            StoreError::corrupt("parameter_tags", &parameter.id.to_string(), "a link to a missing tag")
+        })?;
+        names.push(tag.name.as_str().to_owned());
     }
-    if linked.is_empty() {
-        return Ok(());
-    }
-    Err(ServiceError::ParameterMergeLinked { linked })
+    names.sort();
+    Ok(names)
 }
 
 /// Makes `heap_id` use the team parameter `parameter_id` at `weight`, from `now`.

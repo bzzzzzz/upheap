@@ -78,7 +78,7 @@ pub async fn run(args: PromoteArgs, app: &App, out: &mut Output) -> Result<(), C
 }
 
 /// The refusal `err` of the write as the error to report: with the reach and the confirming command for
-/// `parameter_merge_unconfirmed`. Any other refusal, such as `parameter_merge_linked`, stays as the server gave it.
+/// `parameter_merge_unconfirmed`. Any other refusal stays as the server gave it.
 fn refused(err: ClientError, typed: &str, name: &str, heap: &HeapHandle) -> CliError {
     let lines = match &err {
         ClientError::Problem { problem, .. } if problem.code == "parameter_merge_unconfirmed" => problem
@@ -132,6 +132,11 @@ fn merge_lines(reach: &ParameterMergeReachDto, typed: &str, name: &str, heap: &H
                 .collect();
             format!("  moves {}", switches.join(", "))
         };
+        let links = if entry.linked_tags.is_empty() {
+            String::new()
+        } else {
+            format!("  links {}", entry.linked_tags.join(", "))
+        };
         // The heap it starts from is never archived: an archived heap can't make a team parameter.
         let marks = match (entry.starting, entry.archived) {
             (true, _) => "  (this heap)",
@@ -139,7 +144,7 @@ fn merge_lines(reach: &ParameterMergeReachDto, typed: &str, name: &str, heap: &H
             (false, false) => "",
         };
         lines.push(format!(
-            "  {:<slug_width$}  {:<name_width$}  {items}{adds}{moves}{marks}",
+            "  {:<slug_width$}  {:<name_width$}  {items}{adds}{moves}{links}{marks}",
             entry.heap.slug, entry.parameter_name
         ));
     }

@@ -604,10 +604,12 @@ a fixed time.
     (`domain::parameter::reach_text`): the parameter it starts from, then each same-named heap parameter it takes in,
     each with its item count, the options it adds and the options it switches (a live option that matches one the team
     parameter archived, whose open items get its replacement). A reach of the starting parameter alone still needs the
-    confirm, since the move to the team can't be undone. A parameter linked to tags among them is refused first, with
-    `parameter_merge_linked` and a message naming each heap, parameter and tags, because the merge doesn't carry tag
-    links over; nothing changes and there is no reach in the body. Repeating the write on a team parameter the heap
-    uses succeeds with no confirm and changes nothing.
+    confirm, since the move to the team can't be undone. Each parameter's tag links become its heap's links to the
+    team parameter (`heap_parameter_tags`), never team links, so no other heap gets suggestions. The starting
+    parameter's own links end, as it is the team's now, and continue as its heap's links; a merged parameter keeps its
+    link rows. The reach lists the tags per row, but they aren't part of its token: links can be edited after the
+    merge, so a link changed in between carries over as it is at the confirm. Repeating the write on a team parameter
+    the heap uses succeeds with no confirm and changes nothing.
 
 ## Authentication and authorization
 

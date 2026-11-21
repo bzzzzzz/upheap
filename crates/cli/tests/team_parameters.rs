@@ -327,7 +327,7 @@ async fn promoting_a_heap_parameter_prints_the_reach_and_goes_ahead_when_confirm
 
 #[gtest]
 #[tokio::test]
-async fn promoting_a_parameter_linked_to_tags_is_refused_with_the_servers_message() -> Result<()> {
+async fn promoting_a_parameter_linked_to_tags_lists_the_links_and_goes_through() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
     let (ada, _) = ada_with_items(&server).await?;
@@ -341,14 +341,26 @@ async fn promoting_a_parameter_linked_to_tags_is_refused_with_the_servers_messag
 
     // Act
     let refused = cli.run(&["parameter", "promote", "Tier"]).await;
+    let (_, after) = refused
+        .stderr
+        .split_once("To go ahead, run:\n")
+        .expect("the refusal names a command");
+    let command: Vec<&str> = after
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .skip(1)
+        .collect();
+    let promoted = cli.run(&command).await;
 
     // Assert
     expect_that!(refused.exited(3), eq(true));
     expect_that!(
         refused.stderr,
-        eq(
-            "error: Unlink the tags first: team parameters can't be linked to tags yet. Personal's \u{201c}Tier\u{201d}: billing. (parameter_merge_linked)\n"
-        )
+        contains_substring("  personal  Tier  0 items  links billing  (this heap)\n")
     );
+    expect_that!(promoted.exited(0), eq(true));
+    expect_that!(promoted.stdout, eq("Made \"Tier\" a team parameter of ada.\n"));
     Ok(())
 }
