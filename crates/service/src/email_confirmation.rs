@@ -133,7 +133,7 @@ impl Services {
     /// [`ServiceError::InvalidCredentials`]. With the right password it is also counted as an address change of the
     /// account ([`Services::count_address_change`]), whether the address is free or taken, and one past that limit
     /// fails with [`ServiceError::TooManyAddressChanges`]: the sign-in count is keyed by the address, so a changed
-    /// address starts it over, and the account's count is what limits the mails.
+    /// address starts it over, and the account's count is what limits the addresses it mails.
     ///
     /// In one transaction the address is set (a conditional update, so an account that is confirmed fails with
     /// [`ServiceError::InvalidCredentials`] and nothing changes), the account's working password reset link is

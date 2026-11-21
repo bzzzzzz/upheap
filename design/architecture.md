@@ -736,7 +736,7 @@ a fixed time.
      browser). It takes the current password and the new address; the address changes only when a link mailed to the
      new one is applied. Tries are counted per session in the password change's count with its limit, before the
      password is checked, and a wrong password adds one to the account's sign-in count; an ask with the right one
-     counts as an address change of the account (above), which limits the mails. An address another account has gets the same
+     counts as an address change of the account (above), which limits the addresses it mails. An address another account has gets the same
      `202` and the same history entry as a free one, with no link and no mail, so the answer reveals nothing about
      accounts. A free one is a row in `email_change_links` (a token's SHA-256, the user, the new address, an expiry a
      day on), made in one transaction with the cancelling of the user's earlier working one. The table is apart from

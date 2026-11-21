@@ -424,9 +424,11 @@ async fn the_sixth_ask_of_a_session_is_refused() -> Result<()> {
 #[gtest]
 #[tokio::test]
 async fn new_sessions_dont_start_the_accounts_address_changes_over() -> Result<()> {
-    // Arrange: five asks, each from a session of its own.
+    // Arrange: five asks, each from a session of its own, the first for an address another account has, which
+    // counts as a free one does.
     let dir = tempfile::tempdir()?;
-    let (app, first) = start(dir.path()).await?;
+    let (app, first, plain) = start_with_plain(dir.path()).await?;
+    plain.register("grace0@example.test").await?;
     let mut sessions = vec![first];
     for _ in 0..5 {
         let signed_in = sign_in(&app, EMAIL).await?;
@@ -436,7 +438,7 @@ async fn new_sessions_dont_start_the_accounts_address_changes_over() -> Result<(
         let asked = ask_as(&app, session, &format!("grace{n}@example.test"), PASSWORD).await?;
         assert_eq!(asked.status, StatusCode::ACCEPTED);
     }
-    common::wait_for_mails(dir.path(), 5).await?;
+    common::wait_for_mails(dir.path(), 4).await?;
 
     // Act
     let sixth = ask_as(&app, &sessions[5], "grace5@example.test", PASSWORD).await?;
@@ -445,7 +447,7 @@ async fn new_sessions_dont_start_the_accounts_address_changes_over() -> Result<(
     expect_that!(sixth.status, eq(StatusCode::TOO_MANY_REQUESTS));
     expect_that!(problem_code(&sixth), eq("too_many_attempts"));
     expect_that!(sixth.headers.contains_key("retry-after"), eq(true));
-    expect_that!(std::fs::read_dir(dir.path())?.count(), eq(5));
+    expect_that!(std::fs::read_dir(dir.path())?.count(), eq(4));
     Ok(())
 }
 

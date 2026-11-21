@@ -26,7 +26,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
 /// Tries are limited per session, with the same limit as sign-in: past it the session gets `429` before the password
 /// is checked. A wrong current password also adds one to the account's sign-in attempts. Asks with the right password
 /// are limited per account, five in 15 minutes, shared with `POST /auth/confirmation-address`: a new session or a
-/// success doesn't start that count over, so it limits the mails an account sends.
+/// success doesn't start that count over, so it limits the addresses an account mails.
 #[utoipa::path(post, path = "/me/email-changes", tag = "me", security(("session" = [])),
     request_body = RequestEmailChangeDto,
     responses(
