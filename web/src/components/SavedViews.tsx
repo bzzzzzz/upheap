@@ -27,18 +27,21 @@ const rowClass =
  * The heap's saved views (ux.md, The list §6): tap one to apply it, name the list's settings as a new one, and rename,
  * update or archive a view from its ⋯. The server's `allowed_actions` say which of those show. Applying calls
  * `onChange` with the view's settings, which replace the list's, the agent filters included, and then `onApplied`.
+ * Archiving calls `onArchived`, which closes the panel: the open panel keeps the page out of reach, its Undo toast too.
  */
 export function ViewsSection({
   heapRef,
   view,
   onChange,
   onApplied,
+  onArchived,
   enabled,
 }: {
   heapRef: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
   onApplied: () => void;
+  onArchived: () => void;
   /** Whether to load the views: while the panel is open. */
   enabled: boolean;
 }) {
@@ -72,14 +75,13 @@ export function ViewsSection({
       .mutateAsync({ view: saved, patch: { view: viewInputOf(view) } })
       .then(() => setToast({ message: `Updated ${saved.name}.` }), failed);
   const remove = (saved: SavedView) =>
-    archive.mutateAsync(saved).then(
-      () =>
-        setToast({
-          message: `Archived ${saved.name}.`,
-          undo: () => void unarchive.mutateAsync(saved).then(undefined, failed),
-        }),
-      failed,
-    );
+    archive.mutateAsync(saved).then(() => {
+      setToast({
+        message: `Archived ${saved.name}.`,
+        undo: () => void unarchive.mutateAsync(saved).then(undefined, failed),
+      });
+      onArchived();
+    }, failed);
 
   if (!views.data) {
     return (

@@ -82,7 +82,7 @@ test("the need filter comes from the link, as the server applies it", async ({ p
   await expect(on).toContainText("1 of 3");
 });
 
-test("the sort sits in the toolbar, and on a phone at the top of the panel", async ({ page }) => {
+test("the sort sits in the toolbar, and on a phone in the panel after the views", async ({ page }) => {
   await addItem(page, "Slog", { effort: "XL" });
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
 

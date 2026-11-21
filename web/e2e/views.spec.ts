@@ -100,10 +100,10 @@ test("an archived view comes back with Undo", async ({ page }) => {
 
   await panel.getByRole("button", { name: "More for Old" }).click();
   await page.getByRole("menuitem", { name: "Archive" }).click();
-  await expect(panel.getByRole("button", { name: "Old", exact: true })).toHaveCount(0);
+  // Archiving closes the panel, so the toast's Undo is in reach.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText("Archived Old.")).toBeVisible();
 
-  await closePanel(page);
   await page.getByRole("button", { name: "Undo" }).click();
   panel = await openFilters(page);
   await expect(panel.getByRole("button", { name: "Old, current view", exact: true })).toBeVisible();
