@@ -15,11 +15,12 @@ export function useParameters(heap: HeapRef, enabled = true) {
 }
 
 /** The team's own parameters, in use and archived, each by name. */
-export function useTeamParameters(team: string) {
+export function useTeamParameters(team: string, enabled = true) {
   return useQuery({
     queryKey: teamParametersKey(team),
     queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}/parameters", { params: { path: { team } } })),
     staleTime: 30_000,
+    enabled,
   });
 }
 

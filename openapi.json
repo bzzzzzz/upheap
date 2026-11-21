@@ -1230,7 +1230,7 @@
         "tags": [
           "me"
         ],
-        "summary": "The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.\nEvery heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row\ncarries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score\nin its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap\nname, then the item's position in its heap. The view takes no tag, parameter or sort; `team`, a team's slug,\nlimits the list to that team's heaps, and a team you aren't in is `not_found`. At most 500 rows come back,\npinned first; `count` is the true total. Read-only, for any member.",
+        "summary": "The non-closed items of every active heap the signed-in user can view, in one ranked list, each with its heap.\nEvery heap is ranked and grouped as its own list (`GET /teams/{team}/heaps/{heap}/items`) ranks it, so each row\ncarries the same reasons and actions; then each group is merged across heaps, ordered by the item's ranking score\nin its own heap times your priority for that heap, highest first (blockers' inheritance included), then by heap\nname, then the item's position in its heap. The view takes no sort; `team`, a team's slug, limits the list to that\nteam's heaps, and a team you aren't in is `not_found`. `tag` and `param` filter by that team's tags and its team\nparameters' options, and are refused without `team` (`invalid_query`); a heap that doesn't use a team parameter\nnamed has no rows. At most 500 rows come back,\npinned first; `count` is the true total. Read-only, for any member.",
         "operationId": "get_items",
         "parameters": [
           {
@@ -1289,6 +1289,21 @@
             }
           },
           {
+            "name": "tag",
+            "in": "query",
+            "description": "Keep items with any of these tags, comma-separated. Only with `team`, and tags of that team.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
             "name": "effort",
             "in": "query",
             "description": "Keep items with any of these efforts, comma-separated.",
@@ -1325,6 +1340,21 @@
               "type": "array",
               "items": {
                 "$ref": "#/components/schemas/Need"
+              }
+            },
+            "style": "form",
+            "explode": false
+          },
+          {
+            "name": "param",
+            "in": "query",
+            "description": "Options of the parameters of `team`, comma-separated, and only with `team`. For each parameter they belong\nto, keep items with any of its options listed. An archived option keeps the items that switched to its\nreplacement. Heaps that don't use every parameter named have no rows.",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
               }
             },
             "style": "form",
@@ -1404,6 +1434,16 @@
           },
           "404": {
             "description": "`not_found`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`tag_not_in_heap` or `option_not_in_heap`",
             "content": {
               "application/json": {
                 "schema": {
@@ -10247,7 +10287,7 @@
           "in_progress_count": {
             "type": "integer",
             "format": "int32",
-            "description": "How many items are in progress, over all heaps, whatever the view and its filters leave out.",
+            "description": "How many items are in progress, summed over the heaps listed, whatever the view and its filters leave out.",
             "minimum": 0
           },
           "pinned": {

@@ -158,6 +158,64 @@ test("a team choice limits the list to that team, in the address, and Back retur
   await expect(row(page, "Plan the launch")).toBeVisible();
 });
 
+test("with a team chosen, its tag narrows the list across its heaps, and All teams drops it", async ({
+  page,
+  heapPath,
+}) => {
+  const launch = await makeLaunchHeap(page);
+  const [, , team] = launch.split("/");
+  const ops = await page.request.post(`/api/v1/teams/${team}/heaps`, { headers, data: { name: "Ops" } });
+  expect(ops.status()).toBe(201);
+  const opsPath = `/teams/${team}/heaps/${(await ops.json()).slug}`;
+  const made = await page.request.post(`/api/v1/teams/${team}/tags`, { headers, data: { name: "security" } });
+  expect(made.status()).toBe(201);
+  const tagId = (await made.json()).id;
+  for (const [path, title, tagged] of [
+    [launch, "Plan the launch", false],
+    [launch, "Harden the launch", true],
+    [opsPath, "Rotate the keys", true],
+    [opsPath, "Water the plants", false],
+  ] as const) {
+    const created = await page.request.post(`/api/v1${path}/items`, {
+      headers,
+      data: { title, need: "expected", ...(tagged && { tag_ids: [tagId] }) },
+    });
+    expect(created.status()).toBe(201);
+  }
+  await seed(page, heapPath, "Personal chore");
+
+  // Without a team there is no Tags row.
+  await page.goto("/all");
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  const panel = page.getByRole("dialog", { name: "Filters" });
+  await expect(panel.getByRole("group", { name: "Tags (any)" })).toHaveCount(0);
+
+  await panel.getByRole("radiogroup", { name: "Team" }).getByText("Acme", { exact: true }).click();
+  await panel
+    .getByRole("group", { name: "Tags (any)" })
+    .getByRole("button", { name: /^security\s?, team tag$/ })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`[?&]tag=${tagId}`));
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+
+  await expect(row(page, "Harden the launch")).toBeVisible();
+  await expect(row(page, "Rotate the keys")).toBeVisible();
+  await expect(row(page, "Plan the launch")).toHaveCount(0);
+  await expect(row(page, "Water the plants")).toHaveCount(0);
+  const on = page.getByRole("group", { name: "Filters on" });
+  await expect(on.getByRole("button", { name: "Remove filter security" })).toBeVisible();
+
+  // Another choice of team leaves the tag behind.
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await panel.getByRole("radiogroup", { name: "Team" }).getByText("All teams", { exact: true }).click();
+  await expect(page).not.toHaveURL(/tag=/);
+  await expect(page).not.toHaveURL(/team=/);
+  await page.keyboard.press("Escape");
+  await expect(row(page, "Plan the launch")).toBeVisible();
+  await expect(row(page, "Personal chore")).toBeVisible();
+});
+
 test("the heap switcher's All <team> items row opens the team's list", async ({ page, heapPath }) => {
   const launch = await makeLaunchHeap(page);
   await seed(page, heapPath, "Rotate the certs");

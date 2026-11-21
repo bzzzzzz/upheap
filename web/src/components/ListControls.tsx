@@ -2,9 +2,9 @@ import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import type { HeapRef } from "../api/client";
-import type { BlockedLayout, Me, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/schema";
-import { useParameters } from "../api/queries/parameters";
-import { heapTags, useTags } from "../api/queries/tags";
+import type { BlockedLayout, Me, Parameter, ParameterList, RemindersMode, Size, StateMode, Tag } from "../api/schema";
+import { useParameters, useTeamParameters } from "../api/queries/parameters";
+import { heapTags, useTags, useTeamTags } from "../api/queries/tags";
 import { TeamMark } from "./TeamMark";
 import {
   AGENT_STATE_LABELS,
@@ -44,10 +44,31 @@ import {
 export type Panel = "filters" | null;
 
 /**
- * The heap the controls and chips are for, or none for the list across heaps, which has no sort, tags, parameters or
- * reminders to come. Their queries are asked of this placeholder only while disabled, so it is never fetched.
+ * The heap the controls and chips are for, or none for the list across heaps, which has no sort or reminders to come,
+ * and has tags and parameters only from a chosen team. Their queries are asked of this placeholder only while
+ * disabled, so it is never fetched.
  */
 const NO_HEAP: HeapRef = { team: "", heap: "" };
+
+/** What a filter row needs of a parameter, which a heap's parameter and a team's both have. */
+type ParameterRow = Pick<Parameter, "id" | "name" | "options" | "archived_options">;
+
+/**
+ * The tags and parameters the filters offer: the heap's when `heapRef` is set, else the chosen team's when `teamSlug`
+ * is set. Each is `undefined` while it loads, or when there is neither.
+ */
+function useFilterSources(heapRef: HeapRef | undefined, teamSlug: string | undefined) {
+  const teamOnly = heapRef === undefined && teamSlug !== undefined;
+  const heapTagList = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
+  const heapParameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
+  const teamTagList = useTeamTags(teamSlug ?? "", teamOnly);
+  const teamParameters = useTeamParameters(teamSlug ?? "", teamOnly);
+  const tags: Tag[] | undefined = heapRef ? heapTagList.data && heapTags(heapTagList.data) : teamTagList.data?.tags;
+  const parameters: { parameters: ParameterRow[]; archived: ParameterRow[] } | undefined = heapRef
+    ? heapParameters.data
+    : teamParameters.data;
+  return { tags, parameters };
+}
 
 /**
  * How many items the view lists (`listed`) and would list without its filters (`total`), when the list says: the one
@@ -226,9 +247,8 @@ export function FilterChips({
   total: number | undefined;
   team?: TeamScope;
 }) {
-  const tags = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
-  const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
-  const options = [...(parameters.data?.parameters ?? []), ...(parameters.data?.archived ?? [])].flatMap((parameter) =>
+  const { tags, parameters } = useFilterSources(heapRef, team?.chosen);
+  const options = [...(parameters?.parameters ?? []), ...(parameters?.archived ?? [])].flatMap((parameter) =>
     [...parameter.options, ...parameter.archived_options].map((option) => ({
       id: option.id,
       label: `${parameter.name}: ${option.label}`,
@@ -238,7 +258,7 @@ export function FilterChips({
   const filters = [
     ...splitList(view.tag).map((id) => ({
       key: `tag:${id}`,
-      label: (tags.data && heapTags(tags.data).find((tag) => tag.id === id)?.name) ?? "A tag",
+      label: tags?.find((tag) => tag.id === id)?.name ?? "A tag",
       remove: () => onChange({ ...view, tag: toggled(view.tag, id) }),
     })),
     ...splitList(view.need).map((need) => ({
@@ -411,7 +431,7 @@ function ShowSection({
 
 /**
  * The filters: tags, need, effort, impact, each custom parameter, then the agent state and where its turn goes. The
- * tags and parameters are a heap's.
+ * tags and parameters are a heap's, or the chosen team's on the list across heaps; without either they have no rows.
  */
 function NarrowSection({
   heapRef,
@@ -424,10 +444,8 @@ function NarrowSection({
   onChange: (view: ListSearch) => void;
   team?: TeamScope;
 }) {
-  const tags = useTags(heapRef ?? NO_HEAP, heapRef !== undefined);
-  const parameters = useParameters(heapRef ?? NO_HEAP, heapRef !== undefined);
+  const { tags, parameters } = useFilterSources(heapRef, team?.chosen);
   const chosenTags = splitList(view.tag);
-  const heapTagList = tags.data ? heapTags(tags.data) : [];
   const chosenNeeds = splitList(view.need);
   const chosenOptions = splitList(view.param);
   return (
@@ -446,12 +464,12 @@ function NarrowSection({
           />
         </div>
       )}
-      {heapRef && (
+      {(heapRef || team?.chosen) && (
         <PanelRow label="Tags (any)">
-          {tags.data && heapTagList.length === 0 && (
-            <span className="text-sm text-muted">This heap has no tags yet.</span>
+          {tags && tags.length === 0 && (
+            <span className="text-sm text-muted">This {heapRef ? "heap" : "team"} has no tags yet.</span>
           )}
-          {heapTagList.map((tag) => (
+          {tags?.map((tag) => (
             <Toggle
               key={tag.id}
               pressed={chosenTags.includes(tag.id)}
@@ -487,7 +505,7 @@ function NarrowSection({
           ))}
         </PanelRow>
       ))}
-      {parameters.data?.parameters.map((parameter) => (
+      {parameters?.parameters.map((parameter) => (
         <PanelRow key={parameter.id} label={`${parameter.name} (any)`}>
           {[...parameter.options, ...chosenArchived(parameter, chosenOptions)].map((option) => (
             <Toggle
@@ -501,7 +519,7 @@ function NarrowSection({
         </PanelRow>
       ))}
       {/* Archived parameters no longer filter; a filter a link still has on one is shown so it can be removed. */}
-      {parameters.data?.archived.map((parameter) => {
+      {parameters?.archived.map((parameter) => {
         const chosen = [...parameter.options, ...parameter.archived_options].filter((option) =>
           chosenOptions.includes(option.id),
         );
@@ -774,7 +792,7 @@ function sortFrom(value: string): Pick<ListSearch, "sort" | "sort_parameter"> {
 }
 
 /** Archived options of `parameter` that the filter still names, labelled as archived so they can be removed. */
-function chosenArchived(parameter: Parameter, chosen: string[]) {
+function chosenArchived(parameter: Pick<Parameter, "archived_options">, chosen: string[]) {
   return parameter.archived_options
     .filter((option) => chosen.includes(option.id))
     .map((option) => ({ id: option.id, label: `${option.label} (archived)` }));

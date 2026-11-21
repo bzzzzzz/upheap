@@ -44,6 +44,8 @@ pub struct SharedArgs {
 pub enum UsageError {
     #[error("--sort-parameter sorts by a custom parameter, so it doesn't go with --sort {sort}; leave out one of them")]
     SortWithSortParameter { sort: String },
+    #[error("--tag with --all-heaps needs --team: a tag belongs to a team or to one heap")]
+    AllHeapsTagWithoutTeam,
     #[error("--sort parameter needs the parameter to sort by: add --sort-parameter <name>")]
     SortWithoutParameter,
     #[error("`{item}` is in {item_heap}, but --heap says {flag_heap}; leave out one of them")]

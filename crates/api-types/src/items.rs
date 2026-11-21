@@ -150,7 +150,8 @@ fn with_agent_filters(
 
 /// The view of the list across all heaps (`GET /me/items`). Every parameter is optional; leaving them all out gives
 /// the default view: in-progress items pinned, open items shown, blocked items hidden, by priority. The list has no
-/// single heap, so it takes no `tag`, `param`, `sort` or `sort_parameter`, and refuses any parameter it doesn't know.
+/// single heap, so it takes no `sort` or `sort_parameter`, takes `tag` and `param` only with `team`, and refuses any
+/// parameter it doesn't know.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 #[serde(deny_unknown_fields)]
@@ -168,6 +169,15 @@ pub struct AcrossHeapsQuery {
     pub blocked: Option<StateModeDto>,
     /// Whether shown blocked items get their own group or are mixed in with the open items. Defaults to `grouped`.
     pub blocked_layout: Option<BlockedLayoutDto>,
+    /// Keep items with any of these tags, comma-separated. Only with `team`, and tags of that team.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
+    pub tag: Vec<Uuid>,
     /// Keep items with any of these efforts, comma-separated.
     #[serde(
         default,
@@ -195,6 +205,17 @@ pub struct AcrossHeapsQuery {
     )]
     #[param(value_type = Option<Vec<NeedDto>>, style = Form, explode = false)]
     pub need: Vec<NeedDto>,
+    /// Options of the parameters of `team`, comma-separated, and only with `team`. For each parameter they belong
+    /// to, keep items with any of its options listed. An archived option keeps the items that switched to its
+    /// replacement. Heaps that don't use every parameter named have no rows.
+    #[serde(
+        default,
+        deserialize_with = "comma_separated",
+        serialize_with = "comma_joined",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    #[param(value_type = Option<Vec<Uuid>>, style = Form, explode = false)]
+    pub param: Vec<Uuid>,
     /// Keep items in any of these agent states, comma-separated.
     #[serde(
         default,
@@ -217,8 +238,7 @@ pub struct AcrossHeapsQuery {
 }
 
 impl AcrossHeapsQuery {
-    /// The view the query asks for, with defaults for what it leaves out: sorted by priority, with no tag or
-    /// parameter filter.
+    /// The view the query asks for, with defaults for what it leaves out: sorted by priority.
     pub fn to_view(&self) -> Result<ListView, ValidationError> {
         ListViewInputDto {
             open: self.open,
@@ -228,11 +248,11 @@ impl AcrossHeapsQuery {
             reminders: None,
             sort: None,
             sort_parameter: None,
-            tag: Vec::new(),
+            tag: self.tag.clone(),
             effort: self.effort.clone(),
             impact: self.impact.clone(),
             need: self.need.clone(),
-            param: Vec::new(),
+            param: self.param.clone(),
         }
         .to_view()
         .and_then(|view| with_agent_filters(view, &self.agent, &self.going_to))
@@ -257,7 +277,7 @@ pub struct AcrossHeapsListDto {
     pub blocked: Vec<AcrossHeapsItemDto>,
     /// How many items the filters keep but are left out because their state is hidden, over all heaps.
     pub hidden_count: u32,
-    /// How many items are in progress, over all heaps, whatever the view and its filters leave out.
+    /// How many items are in progress, summed over the heaps listed, whatever the view and its filters leave out.
     pub in_progress_count: u32,
 }
 

@@ -98,7 +98,8 @@ export function AllItemsPage({
   const team: TeamScope = {
     me,
     chosen: view.team,
-    onChange: (slug) => onViewChange({ ...view, team: slug }),
+    // A team's tags and parameters' options mean nothing in another team's list.
+    onChange: (slug) => onViewChange({ ...view, team: slug, tag: undefined, param: undefined }),
   };
   const heapLabel = (row: AcrossHeapsItem) => {
     const team = manyTeams && !chosen ? titleTeam(me, heapOf(row)) : undefined;

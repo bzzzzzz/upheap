@@ -79,10 +79,11 @@ export function useUpdateTagIn(scope: TagScope) {
   });
 }
 
-export function useTeamTags(team: string) {
+export function useTeamTags(team: string, enabled = true) {
   return useQuery({
     queryKey: teamTagsKey(team),
     queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}/tags", { params: { path: { team } } })),
     staleTime: 30_000,
+    enabled,
   });
 }
