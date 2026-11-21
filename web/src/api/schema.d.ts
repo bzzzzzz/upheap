@@ -3613,11 +3613,7 @@ export interface components {
             error: string;
             /** @description What was wrong, for people. May change; branch on `error`. */
             error_description: string;
-            /**
-             * @description Why the refresh token was revoked, on `invalid_grant` for a revoked refresh token, when the server knows:
-             *     `password_changed`. An extra parameter, which RFC 6749 §5.2 allows.
-             */
-            reason?: string | null;
+            reason?: null | components["schemas"]["RevokeReason"];
         };
         /** @description A token revocation request (RFC 7009 §2.1), form-encoded. */
         OAuthRevokeRequest: {
@@ -3909,8 +3905,7 @@ export interface components {
              */
             item_key?: string | null;
             merge_reach?: null | components["schemas"]["MergeReach"];
-            /** @description Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`. */
-            reason?: string | null;
+            reason?: null | components["schemas"]["RevokeReason"];
             /** @description Present on unexpected errors, so the operator can find the details in the log. */
             request_id?: string | null;
             /** Format: int32 */
@@ -4275,6 +4270,11 @@ export interface components {
              */
             round: number;
         };
+        /**
+         * @description Why a sign-in or personal token was revoked, when the server records it. More can join.
+         * @enum {string}
+         */
+        RevokeReason: "password_changed";
         /** @enum {string} */
         Role: "admin" | "member";
         /** @description A run: one go an agent has at an item's turn. */
@@ -5152,6 +5152,7 @@ export type RequestPasswordReset = components['schemas']['RequestPasswordReset']
 export type ResultRow = components['schemas']['ResultRow'];
 export type Results = components['schemas']['Results'];
 export type Review = components['schemas']['Review'];
+export type RevokeReason = components['schemas']['RevokeReason'];
 export type Role = components['schemas']['Role'];
 export type Run = components['schemas']['Run'];
 export type RunEnd = components['schemas']['RunEnd'];

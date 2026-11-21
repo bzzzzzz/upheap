@@ -10,8 +10,9 @@ use sea_orm::sea_query::Condition;
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db};
+use crate::codes::{RowReader, id_to_db, revoke_reason_to_db};
 use crate::entities::personal_tokens;
+use crate::oauth::TokenRevocation;
 
 const TABLE: &str = "personal_tokens";
 
@@ -36,9 +37,7 @@ pub struct PersonalToken {
     pub created_at: Timestamp,
     pub expires_at: Option<Timestamp>,
     pub last_used_at: Option<Timestamp>,
-    pub revoked_at: Option<Timestamp>,
-    /// Why it was revoked, when that was recorded.
-    pub revoke_reason: Option<RevokeReason>,
+    pub revocation: Option<TokenRevocation>,
 }
 
 pub async fn insert_personal_token(db: &impl ConnectionTrait, token: &NewPersonalToken<'_>) -> Result<(), StoreError> {
@@ -126,7 +125,7 @@ pub async fn revoke_user_personal_tokens(
         .col_expr(personal_tokens::Column::RevokedAt, now.as_millis().into())
         .col_expr(
             personal_tokens::Column::RevokeReason,
-            reason.map(RevokeReason::as_str).into(),
+            reason.map(revoke_reason_to_db).into(),
         )
         .filter(personal_tokens::Column::UserId.eq(id_to_db(user_id.as_uuid())))
         .filter(is_live(now))
@@ -177,7 +176,6 @@ fn to_token(row: personal_tokens::Model) -> Result<PersonalToken, StoreError> {
         created_at: read.timestamp(row.created_at)?,
         expires_at: read.optional_timestamp(row.expires_at)?,
         last_used_at: read.optional_timestamp(row.last_used_at)?,
-        revoked_at: read.optional_timestamp(row.revoked_at)?,
-        revoke_reason: read.revoke_reason(row.revoke_reason.as_deref())?,
+        revocation: read.token_revocation(row.revoked_at, row.revoke_reason.as_deref())?,
     })
 }

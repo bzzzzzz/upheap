@@ -266,9 +266,9 @@ impl Services {
         let family = store::oauth::lock_token_family(&txn, token.family.id)
             .await?
             .ok_or(GrantError::RefreshTokenUnknown)?;
-        if family.revoked_at.is_some() {
+        if let Some(revocation) = family.revocation {
             return Err(GrantError::RefreshTokenRevoked {
-                reason: family.revoke_reason,
+                reason: revocation.reason,
             }
             .into());
         }
@@ -348,9 +348,9 @@ impl Services {
         let family = store::oauth::find_access_token_family(&self.db, &token.to_hash(), self.now())
             .await?
             .ok_or(ServiceError::Unauthenticated)?;
-        if family.revoked_at.is_some() {
+        if let Some(revocation) = family.revocation {
             return Err(ServiceError::TokenRevoked {
-                reason: family.revoke_reason,
+                reason: revocation.reason,
             });
         }
         self.ensure_not_local_user_while_passwords_off(family.user_id).await?;

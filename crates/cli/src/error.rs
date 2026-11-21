@@ -12,7 +12,7 @@
 
 use std::error::Error as _;
 
-use domain::oauth::RevokeReason;
+use api_types::oauth::RevokeReasonDto;
 
 use crate::agent::{Tool, ToolError};
 use crate::auth::login::LoginError;
@@ -205,7 +205,7 @@ impl CliError {
         };
         if problem.status != 401
             || problem.code != "token_revoked"
-            || problem.reason.as_deref() != Some(RevokeReason::PasswordChanged.as_str())
+            || problem.reason != Some(RevokeReasonDto::PasswordChanged)
         {
             return self;
         }
@@ -426,8 +426,7 @@ impl CliError {
 fn refusal_reason(refused: &ClientError) -> &'static str {
     match refused {
         ClientError::Problem { problem, .. }
-            if problem.code == "token_revoked"
-                && problem.reason.as_deref() == Some(RevokeReason::PasswordChanged.as_str()) =>
+            if problem.code == "token_revoked" && problem.reason == Some(RevokeReasonDto::PasswordChanged) =>
         {
             "it was revoked because the account's password changed"
         }

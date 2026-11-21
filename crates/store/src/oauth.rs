@@ -20,7 +20,7 @@ use sea_orm::{
 };
 
 use crate::StoreError;
-use crate::codes::{RowReader, id_to_db};
+use crate::codes::{RowReader, id_to_db, revoke_reason_to_db};
 use crate::entities::{oauth_auth_codes, oauth_token_families, oauth_tokens};
 
 /// Errors name a code, family or token by its user or family: hashes are derived from secrets, which don't belong in
@@ -59,10 +59,16 @@ pub struct TokenFamily {
     pub id: TokenFamilyId,
     pub user_id: UserId,
     pub client_id: String,
-    /// When the family was revoked, which ends every token in it. `None` while it's live.
-    pub revoked_at: Option<Timestamp>,
-    /// Why it was revoked, when that was recorded. `None` when it's live, and for a revocation that recorded none.
-    pub revoke_reason: Option<RevokeReason>,
+    /// How the family was revoked, which ends every token in it. `None` while it's live.
+    pub revocation: Option<TokenRevocation>,
+}
+
+/// When a token family or personal token was revoked, and why when that was recorded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TokenRevocation {
+    pub at: Timestamp,
+    /// `None` for a revocation that recorded no reason.
+    pub reason: Option<RevokeReason>,
 }
 
 /// A sign-in that can still be used: its family isn't revoked and it holds a refresh token that is unused and
@@ -295,7 +301,7 @@ pub async fn revoke_user_token_families(
         .col_expr(oauth_token_families::Column::RevokedAt, now.as_millis().into())
         .col_expr(
             oauth_token_families::Column::RevokeReason,
-            reason.map(RevokeReason::as_str).into(),
+            reason.map(revoke_reason_to_db).into(),
         )
         .filter(oauth_token_families::Column::UserId.eq(id_to_db(user_id.as_uuid())))
         .filter(oauth_token_families::Column::RevokedAt.is_null())
@@ -384,8 +390,7 @@ fn to_family(row: oauth_token_families::Model) -> Result<TokenFamily, StoreError
         id: TokenFamilyId::from_uuid(read.uuid(&row.id)?),
         user_id: UserId::from_uuid(read.uuid(&row.user_id)?),
         client_id: row.client_id,
-        revoked_at: read.optional_timestamp(row.revoked_at)?,
-        revoke_reason: read.revoke_reason(row.revoke_reason.as_deref())?,
+        revocation: read.token_revocation(row.revoked_at, row.revoke_reason.as_deref())?,
     })
 }
 

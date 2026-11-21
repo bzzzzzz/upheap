@@ -3,6 +3,7 @@
 //! Every [`ServiceError`] variant is matched exhaustively, so a new variant doesn't compile until it has a
 //! status and a code. Clients branch on `code`, never on `title` or `detail`.
 
+use api_types::oauth::RevokeReasonDto;
 use api_types::problem::MergeReachDto;
 use axum::Json;
 use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
@@ -13,7 +14,7 @@ use domain::comment::CommentError;
 use domain::email_change::EmailChangeLinkError;
 use domain::invite_link::InviteLinkError;
 use domain::item::ItemError;
-use domain::oauth::{AuthorizationError, RevokeReason};
+use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
 use domain::password_reset::ResetLinkError;
 use domain::question::QuestionError;
@@ -106,7 +107,7 @@ struct Classified {
     highest: Option<String>,
     merge_reach: Option<MergeReachDto>,
     /// Why a token was revoked, on `token_revoked`.
-    reason: Option<&'static str>,
+    reason: Option<RevokeReasonDto>,
     category: Category,
 }
 
@@ -173,7 +174,7 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Unauthenticated => simple(StatusCode::UNAUTHORIZED, "unauthenticated", Category::Permission),
         ServiceError::TokenRevoked { reason } => Classified {
             title: "The token was revoked".to_owned(),
-            reason: reason.map(RevokeReason::as_str),
+            reason: reason.map(RevokeReasonDto::from),
             ..simple(StatusCode::UNAUTHORIZED, "token_revoked", Category::Permission)
         },
         ServiceError::TokenExpired => Classified {
@@ -628,7 +629,7 @@ pub(crate) fn problem_of(err: &ApiError) -> (StatusCode, Problem) {
         item_key: classified.item_key,
         highest: classified.highest,
         merge_reach: classified.merge_reach,
-        reason: classified.reason.map(str::to_owned),
+        reason: classified.reason,
         request_id,
     };
     (classified.status, body)

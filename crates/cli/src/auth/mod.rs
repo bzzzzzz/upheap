@@ -17,7 +17,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use api_types::oauth::{CLI_CLIENT_ID, RevokeRequestForm, TokenRequestForm, TokenResponseDto};
+use api_types::oauth::{CLI_CLIENT_ID, RevokeReasonDto, RevokeRequestForm, TokenRequestForm, TokenResponseDto};
 
 use crate::client::{ApiClient, ClientError};
 pub use store::{KeychainStore, MemoryTokenStore, StoredTokens, TokenStore, TokenStoreError};
@@ -84,7 +84,7 @@ pub async fn access_token(
         Err(ClientError::OAuthRefused { refusal, .. }) if refusal.error == "invalid_grant" => {
             tracing::info!(error = %refusal.error_description, "refresh token refused; forgetting the sign-in");
             delete_tokens(store, server).await?;
-            if refusal.reason.as_deref() == Some(domain::oauth::RevokeReason::PasswordChanged.as_str()) {
+            if refusal.reason == Some(RevokeReasonDto::PasswordChanged) {
                 return Err(AuthError::PasswordChanged {
                     server: server.to_owned(),
                 });

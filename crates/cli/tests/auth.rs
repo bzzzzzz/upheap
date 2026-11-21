@@ -276,6 +276,29 @@ async fn a_password_change_is_reported_when_a_fresh_access_token_is_refused() ->
 
 #[gtest]
 #[tokio::test]
+async fn a_sign_in_ended_another_way_is_reported_as_revoked_not_as_a_password_change() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let listed = server.send(&ada, "GET", "/me/sign-ins", None).await?;
+    let id = listed["sign_ins"][0]["id"].as_str().context("sign-in id")?;
+    server.send(&ada, "DELETE", &format!("/me/sign-ins/{id}"), None).await?;
+
+    // Act
+    let heaps = cli.run(&["heap", "list"]).await;
+
+    // Assert
+    expect_that!(
+        heaps.stderr,
+        eq("error: The token was revoked (token_revoked)\nhint: sign in with `upheap auth login`\n")
+    );
+    expect_that!(heaps.exited(4), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn logout_revokes_the_sign_in_on_the_server_and_forgets_it() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;

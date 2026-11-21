@@ -13935,11 +13935,15 @@
             "description": "What was wrong, for people. May change; branch on `error`."
           },
           "reason": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Why the refresh token was revoked, on `invalid_grant` for a revoked refresh token, when the server knows:\n`password_changed`. An extra parameter, which RFC 6749 §5.2 allows."
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RevokeReason",
+                "description": "Why the refresh token was revoked, on `invalid_grant` for a revoked refresh token, when the server knows:\n`password_changed`. An extra parameter, which RFC 6749 §5.2 allows."
+              }
+            ]
           }
         }
       },
@@ -14645,11 +14649,15 @@
             ]
           },
           "reason": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`."
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RevokeReason",
+                "description": "Why a token was revoked, on `token_revoked`, when the server knows: `password_changed`."
+              }
+            ]
           },
           "request_id": {
             "type": [
@@ -15458,6 +15466,13 @@
             "minimum": 0
           }
         }
+      },
+      "RevokeReason": {
+        "type": "string",
+        "description": "Why a sign-in or personal token was revoked, when the server records it. More can join.",
+        "enum": [
+          "password_changed"
+        ]
       },
       "Role": {
         "type": "string",

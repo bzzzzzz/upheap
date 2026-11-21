@@ -8,6 +8,7 @@ use domain::{Timestamp, Version};
 use uuid::Uuid;
 
 use crate::StoreError;
+use crate::oauth::TokenRevocation;
 
 /// Most IDs in one `IN (…)` list, well under every backend's limit on bound parameters.
 pub(crate) const IN_LIST_CHUNK: usize = 500;
@@ -51,14 +52,43 @@ impl RowReader<'_> {
         ItemKey::parse(raw).map_err(|_| self.corrupt(format!("invalid item key {raw:?}")))
     }
 
-    /// A stored revoke reason: `None` for NULL, which records no reason.
-    pub fn revoke_reason(&self, raw: Option<&str>) -> Result<Option<RevokeReason>, StoreError> {
-        raw.map(|raw| RevokeReason::parse(raw).ok_or_else(|| self.corrupt(format!("unknown revoke reason {raw:?}"))))
-            .transpose()
+    /// A stored token revocation: `None` for a row that isn't revoked. A reason without a time is corrupt; a time
+    /// without a reason is a revocation that recorded none.
+    pub fn token_revocation(
+        &self,
+        revoked_at: Option<i64>,
+        reason: Option<&str>,
+    ) -> Result<Option<TokenRevocation>, StoreError> {
+        let Some(at) = revoked_at else {
+            return match reason {
+                None => Ok(None),
+                Some(_) => Err(self.corrupt("revoke_reason is set without revoked_at".to_owned())),
+            };
+        };
+        let reason = reason
+            .map(|raw| revoke_reason_from_db(raw).ok_or_else(|| self.corrupt(format!("unknown revoke reason {raw:?}"))))
+            .transpose()?;
+        Ok(Some(TokenRevocation {
+            at: self.timestamp(at)?,
+            reason,
+        }))
     }
 
     pub fn corrupt(&self, problem: String) -> StoreError {
         StoreError::corrupt(self.table, self.id, problem)
+    }
+}
+
+pub(crate) const fn revoke_reason_to_db(reason: RevokeReason) -> &'static str {
+    match reason {
+        RevokeReason::PasswordChanged => "password_changed",
+    }
+}
+
+fn revoke_reason_from_db(raw: &str) -> Option<RevokeReason> {
+    match raw {
+        "password_changed" => Some(RevokeReason::PasswordChanged),
+        _ => None,
     }
 }
 

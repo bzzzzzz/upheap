@@ -13,15 +13,15 @@
 //! response, as the RFC defines no error for it there.
 
 use api_types::oauth::{
-    ApprovalDto, AuthorizationRequestDto, ClientDto, OAuthErrorDto, RevokeRequestForm, TokenRequestForm,
-    TokenResponseDto,
+    ApprovalDto, AuthorizationRequestDto, ClientDto, OAuthErrorDto, RevokeReasonDto, RevokeRequestForm,
+    TokenRequestForm, TokenResponseDto,
 };
 use axum::extract::State;
 use axum::extract::rejection::FormRejection;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
-use domain::oauth::{AuthorizationError, DeviceName, GrantError, RevokeReason};
+use domain::oauth::{AuthorizationError, DeviceName, GrantError};
 use service::ServiceError;
 use service::oauth::{CodeExchange, OAuthSecret, TokenPair};
 use utoipa_axum::router::OpenApiRouter;
@@ -116,7 +116,7 @@ struct OAuthRefusal {
     error: &'static str,
     description: String,
     /// Why a revoked refresh token was revoked, when known.
-    reason: Option<&'static str>,
+    reason: Option<RevokeReasonDto>,
 }
 
 impl OAuthRefusal {
@@ -142,7 +142,7 @@ impl OAuthRefusal {
                 error: "invalid_grant",
                 description: grant.to_string(),
                 reason: match grant {
-                    GrantError::RefreshTokenRevoked { reason } => reason.map(RevokeReason::as_str),
+                    GrantError::RefreshTokenRevoked { reason } => reason.map(RevokeReasonDto::from),
                     _ => None,
                 },
             }),
@@ -163,7 +163,7 @@ impl IntoResponse for OAuthRefusal {
         let body = OAuthErrorDto {
             error: self.error.to_owned(),
             error_description: self.description,
-            reason: self.reason.map(str::to_owned),
+            reason: self.reason,
         };
         (self.status, [(header::CACHE_CONTROL, "no-store")], Json(body)).into_response()
     }
