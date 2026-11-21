@@ -519,8 +519,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    also back into the future, and not cleared; it has no steps and no Send to an agent button. Stage lists as written and with context, and defined on
    a task only (a note says "Defined needs a task"); picking one saves silently, like every change in the item.
 7. On a wide screen and a tablet, ↑ ↓ in the pane header walk the list without closing the pane, so triage is open,
-   change, next. The arrow keys walk too while the focus is on the pane or its header, not in a field. On a phone
-   the sheet closes and the next row is one tap away, so the sheet has no Next button.
+   change, next. The arrow keys walk too while the focus is on the pane or its header, not in a field, so Space and
+   Page Up / Page Down scroll a long item there. On a phone the sheet closes and the next row is one tap away, so the
+   sheet has no Next button.
 8. The key (`k3x9a`) in the header, with a link icon after it, is the button that copies the item's short link
    (`/h/<team>/<heap>/<key>`), named "Copy link to k3x9a", with "Copy link" on hover. The header stays in view, so the
    icon turns into a check for 2 s to confirm, and a screen reader hears "Link copied"; a copy that fails (no
@@ -1320,9 +1321,9 @@ The wide screen shows its keys, and `?` lists them all:
 3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
    `S` `B` `X` when a row can change state, `N`, `/`, and `G C` with no item open; walking and closing with one open;
    selecting in select mode. It ends with `?`, All keys.
-4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. `G` then `O` goes to the heap's Open
-   list, closing an open item, and `G` then `C` to its Closed page; any other key after `G` cancels it. Keys are
-   ignored in a field.
+4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Wherever the sidebar shows a heap, `G`
+   then `O` goes to its Open list, closing an open item, and `G` then `C` to its Closed page; any other key after `G`
+   cancels it. Keys are ignored in a field.
 
 Later: ⌘K in the sidebar finds any item by title or key in every heap; Tab acts on the highlighted item (start,
 done, due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching

@@ -198,7 +198,7 @@ export function ItemRow({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="relative isolate overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent"
+      className="relative isolate overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 lg:pointer-fine:scroll-mb-12 has-[[data-row-link]:focus-visible]:outline-accent"
     >
       {swipe.showActions && (
         <SwipeActions
@@ -335,10 +335,11 @@ export function ItemRow({
           )}
         </div>
         {!selection && canChangeState && (
-          // The keys that work on the focused row, on a wide screen.
+          // The keys that work on the focused row, on a wide screen. The rows keep clear of the hint bar under the list
+          // (scroll-mb) as the arrow keys move.
           <span
             aria-hidden="true"
-            className="hidden shrink-0 items-center gap-1 lg:pointer-fine:group-focus-within/row:inline-flex"
+            className="hidden shrink-0 items-center gap-1 lg:pointer-fine:group-has-[[data-row-link]:focus-visible]/row:inline-flex"
           >
             {startable && <Kbd title="Start">S</Kbd>}
             {blockable && <Kbd title="Block">B</Kbd>}
@@ -391,7 +392,7 @@ export function ComingRow({
   };
   return (
     // Its own stacking context, as ItemRow's.
-    <li className="relative isolate rounded-lg has-[[data-row-link]:focus-visible]:outline-2 has-[[data-row-link]:focus-visible]:outline-accent">
+    <li className="relative isolate rounded-lg has-[[data-row-link]:focus-visible]:outline-2 lg:pointer-fine:scroll-mb-12 has-[[data-row-link]:focus-visible]:outline-accent">
       <div
         className={`flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
           selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"

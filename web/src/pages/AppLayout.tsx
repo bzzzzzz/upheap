@@ -83,11 +83,12 @@ export function AppLayout() {
   const shellHeapSlug = shellHeap?.heap;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Any key after `g` ends the wait, also one handled elsewhere or typed in a field.
+      const second = goingTo.current;
+      goingTo.current = false;
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
-      const second = goingTo.current;
-      goingTo.current = false;
       if (event.key === "?") {
         event.preventDefault();
         setHelpOpen(true);
@@ -216,12 +217,7 @@ function NavLink({
   ...link
 }: LinkProps & { icon: LucideIcon; label: ReactNode; current?: boolean; count?: number; hint?: string }) {
   return (
-    <Link
-      {...link}
-      {...(current && { "data-status": "active", "aria-current": "page" })}
-      {...(hint && { "aria-keyshortcuts": hint.toLowerCase() })}
-      className={navItemClass}
-    >
+    <Link {...link} {...(current && { "data-status": "active", "aria-current": "page" })} className={navItemClass}>
       <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">{label}</span>
       {hint && <Kbd className={`${WIDE_HINT} ${count === undefined ? "ml-auto" : ""}`}>{hint}</Kbd>}

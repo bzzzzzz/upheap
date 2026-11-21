@@ -9,8 +9,8 @@ const GROUPS: { title: string; keys: { keys: string[]; does: string }[] }[] = [
     title: "Anywhere",
     keys: [
       { keys: ["?"], does: "Show these keys" },
-      { keys: ["G O"], does: "Go to Open" },
-      { keys: ["G C"], does: "Go to Closed" },
+      { keys: ["G O"], does: "Go to the heap's Open list" },
+      { keys: ["G C"], does: "Go to the heap's Closed items" },
     ],
   },
   {

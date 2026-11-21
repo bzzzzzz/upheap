@@ -164,7 +164,7 @@ export function ItemPane({
           ) {
             event.preventDefault();
             event.currentTarget
-              .querySelector<HTMLElement>(`a[aria-label="${event.key === "ArrowUp" ? "Previous" : "Next"} item"]`)
+              .querySelector<HTMLElement>(`a[data-walk="${event.key === "ArrowUp" ? "previous" : "next"}"]`)
               ?.click();
             return;
           }
@@ -318,6 +318,7 @@ function WalkLink({
       // The list beside or under the pane keeps its place.
       resetScroll={false}
       aria-label={label}
+      data-walk={label === "Previous item" ? "previous" : "next"}
       onClick={onWalk}
       className={className}
     >
