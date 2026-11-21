@@ -189,9 +189,10 @@ give the provider:
 - the base URL `{BASE_URL}/scim/v2`, and
 - the token as a bearer token: `Authorization: Bearer <token>`. Rotating it is changing the setting and restarting.
 
-Each user's `externalId` must be the person's OpenID Connect subject, the value of the ID token claim `UPHEAP_OIDC_SUBJECT_CLAIM` names (`sub` by default): that is how a pushed
-user is matched to an account, never by email or user name. A pushed person with no account yet gets their teams when
-they first sign in; a push never makes an account. A pushed group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its
+Each user's `externalId` must be the person's OpenID Connect subject, the value of the ID token claim
+`UPHEAP_OIDC_SUBJECT_CLAIM` names (`sub` by default): that is how a pushed user is matched to an account, never by email
+or user name. A pushed person with no account yet gets their teams when they first sign in; a push never makes an
+account. A pushed group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its
 `displayName` or its `externalId`, so the same map works whether the token carries names or IDs. List each group once, in the form the
 provider pushes it: a team follows the pushes only once every group it lists has been pushed. Members join and leave
 the mapped teams as the push arrives, with the same entries in the team's activity as at sign-in. Each mapped team is decided on

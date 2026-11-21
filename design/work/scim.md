@@ -34,9 +34,9 @@ SCIM endpoints with a token, creating, changing and deactivating users and group
   says how to make one). The server stops at startup if it's set without the OIDC provider, or is too short. Unset,
   the SCIM endpoints answer `404` as any unknown path does. Rotating it is changing the setting and restarting.
 - The SCIM base URL to give the provider is `{BASE_URL}/scim/v2`.
-- At the provider, the SCIM user's `externalId` must be the person's OIDC subject: the value of the ID token claim `UPHEAP_OIDC_SUBJECT_CLAIM`
-  names (Okta: `sub`, the user's ID, `user.id`, mapped to `externalId` in the app's attribute mappings; Entra ID: `oid`,
-  with `objectId` mapped to `externalId`).
+- At the provider, the SCIM user's `externalId` must be the person's OIDC subject: the value of the ID token claim
+  `UPHEAP_OIDC_SUBJECT_CLAIM` names (Okta: `sub`, the user's ID, `user.id`, mapped to `externalId` in the app's
+  attribute mappings; Entra ID: `oid`, with `objectId` mapped to `externalId`).
 - The map stays `UPHEAP_OIDC_GROUP_TEAMS`. A SCIM group matches a configured group when its `displayName` or its
   `externalId` equals it, so the same map works whether the provider's claim carries names or IDs.
 
