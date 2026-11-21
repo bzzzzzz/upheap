@@ -227,7 +227,6 @@ export function ListControls({
               onChange={onChange}
               onApplied={() => phone && close()}
               onLeave={close}
-              enabled={panel === "filters"}
             />
             <hr className="border-line" />
           </>

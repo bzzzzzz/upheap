@@ -353,10 +353,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    in a bar. Tapping a view applies it: its Show settings, sort and filters replace the list's in the URL, the agent
    filters are cleared and the search stays. On a phone this also closes the sheet. A view whose settings equal the
    list's has a check. "Save as view…" names the current settings in place. Each view's ⋯ offers Rename…, Update to
-   current settings (when the list's settings, the agent filters aside, differ from it) and Archive. Both close the
-   panel, so their toast shows: "Updated <name>.", or "Archived <name>." with Undo. The URL holds the settings, never
-   a view, so links keep what they showed. The controls show only where the server allows them. The All items page
-   has no saved views.
+   current settings (when the list's settings, the agent filters aside, differ from it) and Archive. Update and
+   Archive close the panel, so their toast shows: "Updated <name>.", or "Archived <name>." with Undo. The URL holds
+   the settings, never a view, so links keep what they showed. The controls show only where the server allows them.
+   The All items page has no saved views.
 7. One Filters panel holds the saved views, what the list shows and its filters: Views (point 6), Show (Open, In progress, Blocked as Pinned, Shown or
    Hidden, a dot on a changed one; shown blocked items in their own group or mixed in; Reminders to come, Hidden or
    Shown, point 16), then Narrow down (tags, with the team's tags beside the heap's and marked with the team icon, need,

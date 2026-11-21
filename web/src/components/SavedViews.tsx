@@ -26,7 +26,7 @@ const rowClass =
 /**
  * The heap's saved views (ux.md, The list §6): tap one to apply it, name the list's settings as a new one, and rename,
  * update or archive a view from its ⋯. The server's `allowed_actions` say which of those show. Applying calls
- * `onChange` with the view's settings, which replace the list's, the agent filters included, and then `onApplied`.
+ * `onChange` with the view's settings, which replace the list's, so its agent filters are cleared, and then `onApplied`.
  * Updating and archiving call `onLeave` first, which closes the panel: the open panel keeps the page out of reach,
  * the toast that says how it went too.
  */
@@ -36,17 +36,14 @@ export function ViewsSection({
   onChange,
   onApplied,
   onLeave,
-  enabled,
 }: {
   heapRef: HeapRef;
   view: ListSearch;
   onChange: (view: ListSearch) => void;
   onApplied: () => void;
   onLeave: () => void;
-  /** Whether to load the views: while the panel is open. */
-  enabled: boolean;
 }) {
-  const views = useSavedViews(heapRef, enabled);
+  const views = useSavedViews(heapRef);
   const create = useCreateSavedView(heapRef);
   const rename = useUpdateSavedView(heapRef);
   const update = useUpdateSavedView(heapRef);

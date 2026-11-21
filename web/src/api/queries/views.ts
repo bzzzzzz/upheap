@@ -4,12 +4,11 @@ import type { CreateSavedViewRequest, SavedView, SavedViewPatchRequest } from ".
 import { savedViewsKey } from "./keys";
 
 /** The heap's saved views in use, by name. */
-export function useSavedViews(heap: HeapRef, enabled: boolean) {
+export function useSavedViews(heap: HeapRef) {
   return useQuery({
     queryKey: savedViewsKey(heap),
     queryFn: async () => unwrap(await api.GET("/api/v1/teams/{team}/heaps/{heap}/views", { params: { path: heap } })),
     staleTime: 30_000,
-    enabled,
   });
 }
 
