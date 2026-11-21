@@ -80,6 +80,45 @@ test("a team parameter is made on the Team page, used and weighted in one heap, 
   await expect(parameters).toContainText(/Used in /);
 });
 
+test("a team parameter is linked to a team tag on the Team page and to a heap tag in one heap", async ({
+  page,
+  heapPath,
+}) => {
+  const team = /\/teams\/([^/]+)\//.exec(heapPath)?.[1] ?? "";
+
+  // On the Team page: a team tag, a team parameter, and the link, which only shows once the server has answered.
+  await page.goto(`/teams/${team}`);
+  const tags = page.getByRole("region", { name: "Tags", exact: true });
+  await tags.getByLabel("New team tag name").fill("billing");
+  await tags.getByRole("button", { name: "Add tag" }).click();
+  await expect(tags.getByRole("button", { name: "Edit billing" })).toBeVisible();
+  const parameters = page.getByRole("region", { name: "Parameters", exact: true });
+  await parameters.getByRole("button", { name: "New parameter" }).click();
+  await parameters.getByLabel("New parameter name").fill("Tier");
+  await parameters.getByLabel(/^Options of the new parameter/).fill("Gold\nSilver");
+  await parameters.getByRole("button", { name: "Add parameter" }).click();
+  await expect(parameters.getByRole("heading", { name: "Tier", exact: true })).toBeVisible();
+  const input = parameters.getByLabel("Tags that suggest Tier");
+  await input.fill("bill");
+  await page.getByRole("option", { name: /^billing\s?, team tag/ }).click();
+  await expect(parameters.getByRole("button", { name: "Remove tag billing" })).toBeVisible();
+  await expect(parameters).toContainText("suggests Tier in every heap that uses it");
+
+  // A heap using it shows the team's link as a chip, and links a tag of its own on the card.
+  await page.goto(heapPath);
+  await goTo(page, "Parameters");
+  await page
+    .getByRole("region", { name: /^1 parameter of the team / })
+    .getByRole("button", { name: "Use Tier" })
+    .click();
+  const used = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: /^Tier/ }) });
+  await expect(used.getByRole("list", { name: "Suggested by tags" })).toContainText("billing");
+  await used.getByLabel("Tags that suggest Tier").fill("ops");
+  await page.keyboard.press("Enter");
+  await expect(used.getByRole("button", { name: "Remove tag ops" })).toBeVisible();
+  await expect(used.getByRole("list", { name: "Suggested by tags" })).toContainText("billing");
+});
+
 /** In the heap at `path`, makes a parameter `name` with `options`, one per line. */
 async function newParameter(page: Page, path: string, name: string, options: string) {
   await page.goto(path);

@@ -57,7 +57,10 @@ export function useCreateParameter(scope: ParameterScope) {
   });
 }
 
-/** Every change to one parameter that takes its version: name and weight, options, tags. A team's has no weight or tags. */
+/**
+ * Every change to one parameter that takes its version: name and weight, options, tags. A team's has no weight, and
+ * its tags are the team's links.
+ */
 export type ParameterChange =
   | { kind: "patch"; patch: ParameterPatchRequest }
   | { kind: "add_option"; label: string }
@@ -94,7 +97,12 @@ export function useChangeParameter(scope: ParameterScope) {
               }),
             );
           case "link_tags":
-            throw new Error("A team parameter has no tag links.");
+            return unwrap(
+              await api.PUT("/api/v1/teams/{team}/parameters/{parameter_id}/tags", {
+                ...params,
+                body: { tag_ids: change.tagIds },
+              }),
+            );
         }
       }
       const params = { params: { path: { ...scope.heap, parameter_id: parameter.id }, header } };
@@ -131,6 +139,25 @@ export function useChangeParameter(scope: ParameterScope) {
     },
     // Also after a conflict, so the page shows the version someone else saved. Tag links don't show on items.
     onSettled: (_data, _error, { change }) => invalidateParameters(queryClient, scope, change.kind !== "link_tags"),
+  });
+}
+
+/**
+ * Sets a heap's own links of its tags to a team parameter it uses, which suggest the parameter in this heap only. The
+ * links have no version; the answer is the heap's new list.
+ */
+export function useLinkHeapTags(heap: HeapRef) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ parameterId, tagIds }: { parameterId: string; tagIds: string[] }) =>
+      unwrap(
+        await api.PUT("/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags", {
+          params: { path: { ...heap, parameter_id: parameterId } },
+          body: { tag_ids: tagIds },
+        }),
+      ),
+    // Tag links don't show on items, so only the heap's parameters are read again.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: parametersKey(heap) }),
   });
 }
 
