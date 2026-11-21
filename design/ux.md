@@ -143,15 +143,17 @@ bar are as on Waiting for me.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
-that is `/waiting`, `/agents` and `/all`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
-there and active, else the first active heap, else the first.
+that is `/waiting`, `/agents` and `/all`; Teams, a team's page and its activity, and Account keep their shell without
+one. The heap kept is the one opened last that is still there and active, else the first active heap, else the first.
+On a phone those pages have no tabs, so the top bar starts with Back: it goes to the page before, or, when the tab
+opened on the page from a link, to the heap kept.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar, the content column and the
 item pane wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The block is
 that wide whether or not an item is open, so opening or closing one never moves the sidebar or the list's left edge:
-an item is opened many times a session. A list that opens items beside it (a heap's list, All items) fills the room
-next to the sidebar, and the pane opens on its right, so the list narrows from the right. Other pages keep the content
-column's reading width (48rem), next to the sidebar.
+an item is opened many times a session. Every page fills the room next to the sidebar, so the content's left and
+right edges are the same from one page to the next. On a list that opens items beside it (a heap's list, All items)
+the pane opens on the right, so the list narrows from the right. A card fills that room too, and a short field in it keeps the width its value needs.
 
 ### Heap settings
 
@@ -284,8 +286,9 @@ the keyboard covers, from the visual viewport. The heap switcher and More open a
 tabs.
 
 Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
-The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". From 8 unarchived
-heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
+The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". Each unarchived heap's
+row has its open count on the right, the number its Open view shows, which a screen reader hears as ", 2 open" in the
+row's name, as on the All rows; archived heaps and Recent have none. From 8 unarchived heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
 opened in this browser, not the one on screen, as chips on a phone. Recent and the folds are kept in localStorage,
 since a "last opened" on the server would cost a write on every heap visit;
 they don't follow the user to another device. Search gives a flat list with the team and an
@@ -528,6 +531,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    nothing to say the chip is plain text, and an item that isn't in the list on screen has no chip. The list row
    doesn't show any of this.
 10. The item says when it was created and by whom ("Added by Sam 4 days ago"), on the line of History's toggle.
+    On a phone, where that line is easy to miss, the fields (point 16) end with an Added row as well.
 11. **Steps**, on a task, sit inline at every width (on a phone they are not a row that opens a sheet) under the
     heading "Steps 2/5", with the count of point 1 (just "Steps" when there is none). Each step is a row: a
     grip before the checkbox (editors only; on a wide screen it shows when the row is hovered or has focus, on a phone
@@ -635,7 +639,9 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     send back.", the focus goes to the agent chip, and the Changes asked… chip is gone. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
-    each, with the label on the left. A parameter's label is violet. An unset effort, impact or due date reads "Set
+    each, with the label on the left. On a phone the last row is Added, "Sam · 4 days ago" ("You · …" for your own,
+    the age alone when nobody can be named), in plain text that
+    never opens an editor. Wider screens show it only on History's line (point 10). A parameter's label is violet. An unset effort, impact or due date reads "Set
     effort", "Set impact", "Set due" (a parameter "Set <name>") in muted text; when the server's held-back lines
     (point 9) name it, it is marked with an amber pill. With a mouse a value has no border at rest, a tint and ▾ when
     pointed at or focused; on a touch screen the ▾ always shows and the value is 44 px tall. A click opens a popover
@@ -1093,7 +1099,8 @@ taken email says "An account with that email already exists and can't sign in th
 server." The invite page's signed-out state is the same, its button still returning to the invite.
 
 Wherever a page says to ask whoever runs the server (the forgotten-password line, the provider refusal, the reset page,
-a team with no admin), the operator's contact line, when set, shows under it as its own line in the muted text style.
+a team with no admin), the operator's contact line, when set, shows under it as its own line in the muted text style. The mail that tells an old address it was changed carries it the same way, on its own line under "ask whoever
+runs this Upheap server".
 
 A first sign-in through the provider continues at `/login/provider`, in the same card: **Pick a username**, "Signed in
 through Acme SSO as:" with the name and email as plain text, the Username input (the same hint, focused, empty),

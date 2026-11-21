@@ -9,7 +9,9 @@ pub(crate) mod sign_ins;
 use api_types::agents::{DecisionRowDto, DecisionsDto, ResultRowDto, ResultsDto, ResultsQuery, RunLinkDto};
 use api_types::common::HeapSummaryDto;
 use api_types::common::{ItemActionDto, ItemRefDto};
-use api_types::items::{AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery};
+use api_types::items::{
+    AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery, SearchQuery, SearchResultsDto, SearchRowDto,
+};
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
 use api_types::waiting::{
     WaitingBlockerDto, WaitingDto, WaitingItemDto, WaitingLeftTeamDto, WaitingRowDto, WaitingRowKindDto,
@@ -45,6 +47,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(get_decisions))
         .routes(routes!(get_results))
         .routes(routes!(get_items))
+        .routes(routes!(get_search))
 }
 
 /// What `GET /me` answers for `me`.
@@ -279,6 +282,37 @@ async fn get_items(
         blocked: group(list.blocked),
         hidden_count: list.hidden_count,
         in_progress_count: list.in_progress_count,
+    }))
+}
+
+/// Items found by title or key in every active heap the signed-in user can view, closed ones included. `q` is
+/// trimmed, and matched as a case-insensitive substring of the title (`%` and `_` match only themselves; case folding
+/// is the database's: ASCII only on SQLite, and MySQL also ignores accents) or as an exact key. The item with that key comes first, then open items,
+/// newest created first, then closed items, most recently closed first. At most 50 rows come back, and `truncated`
+/// says whether more matched. A blank `q` matches every title. Read-only, for any member.
+#[utoipa::path(get, path = "/me/search", tag = "me", security(("session" = [])),
+    params(SearchQuery),
+    responses(
+        (status = 200, body = SearchResultsDto),
+        (status = 400, description = "`invalid_query`", body = Problem),
+        (status = 401, description = "`unauthenticated`", body = Problem),
+    ))]
+async fn get_search(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ApiQuery(query): ApiQuery<SearchQuery>,
+) -> Result<Json<SearchResultsDto>, ApiError> {
+    let results = state.services.search_items(principal, query.q.trim()).await?;
+    Ok(Json(SearchResultsDto {
+        rows: results
+            .rows
+            .into_iter()
+            .map(|hit| SearchRowDto {
+                item: hit.item.into(),
+                heap: to_item_heap_dto(&hit.heap, &hit.team),
+            })
+            .collect(),
+        truncated: results.truncated,
     }))
 }
 

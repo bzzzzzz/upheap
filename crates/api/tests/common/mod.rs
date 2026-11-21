@@ -264,6 +264,17 @@ impl TestApp {
         Ok((list.count, list.pinned.len() + list.ranked.len() + list.blocked.len()))
     }
 
+    /// How many rows a search for `text` holds for the user with `user_id` when it is capped at `max_rows`, and
+    /// whether it says more matched, which the cap's real size makes too many items to make in a test.
+    pub async fn search_capped(&self, user_id: &str, text: &str, max_rows: usize) -> Result<(usize, bool)> {
+        let principal = service::Principal {
+            user_id: UserId::from_uuid(user_id.parse()?),
+            run: None,
+        };
+        let found = self.services.search_items_capped(principal, text, max_rows).await?;
+        Ok((found.rows.len(), found.truncated))
+    }
+
     /// How many decisions wait for the user with `user_id`, and how many rows the list holds when it is capped at
     /// `max_rows`, which the cap's real size makes too many items to make in a test.
     pub async fn decisions_capped(&self, user_id: &str, max_rows: usize) -> Result<(u32, usize)> {

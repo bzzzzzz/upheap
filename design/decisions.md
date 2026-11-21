@@ -50,8 +50,10 @@ grouped, and ranking runs over every non-closed item so blockers inherit from hi
 **Instead of.** Pagination and a server search endpoint from the start.
 
 **Consequences.** No request per keystroke, and stable positions are trivial. If heaps outgrow the assumption,
-search moves to the server behind a `q=` parameter with per-database full-text indexes. The size assumption is
-written down in [architecture.md](architecture.md#computation).
+the list's own search moves to the server behind a `q=` parameter with per-database full-text indexes. Finding an
+item in any heap, closed ones included, is a separate search on the server, as portable `LIKE`
+([architecture.md](architecture.md#search)). The size assumption is written down in
+[architecture.md](architecture.md#computation).
 
 ## 4. The ranking formula is a version in code, not a setting per heap
 
@@ -646,3 +648,23 @@ parameter.
 **Consequences.** It can't be undone: there is no demoting a team parameter to heap parameters. A parameter linked to
 tags can't be merged until team parameters can hold tag links, so the admin unlinks them first. Rankings can shift in a
 heap whose options were in another order, since the options now follow the team parameter's order.
+
+## 47. The operator is a role on an account, granted only by a server command
+
+**Context.** The operator manages accounts (reset links, confirmations, making a team admin, 41) only from a shell
+on the server, because the web app has no site-wide role: roles exist per team, and the app only checks that someone
+is signed in. Pages for the operator (listing accounts, deactivating a local one, making a reset link) need to know
+who may use them.
+
+**Decision.** An account is an operator when it holds the operator role, stored in the database. Only a server
+command grants or removes it (`upheap-server user make-operator` and `user remove-operator`), which opens the
+database as `team make-admin` does; nothing in the API or the web app can. Each grant and removal is audited and
+shows in the account's history. The API refuses an operator endpoint to anyone else.
+
+**Instead of.** A setting that lists the operators' usernames or emails, which needs no new data but takes a restart
+to change and leaves no record of who was made one, or when. Letting an operator grant the role from the web app,
+which turns one stolen session into a way to make more operators.
+
+**Consequences.** Becoming an operator still takes a shell on the server, once; everything after that can be done
+signed in. A server with no operator works as before, from the shell. Removing the role ends nothing else: the
+account and its sign-ins stay.

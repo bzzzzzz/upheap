@@ -4,6 +4,7 @@
 import {
   Link,
   Outlet,
+  useCanGoBack,
   useMatch,
   useParams,
   useRouter,
@@ -17,6 +18,7 @@ import {
   Building2,
   ChartColumn,
   ChevronDown,
+  ChevronLeft,
   ChevronsUpDown,
   CircleCheck,
   Ellipsis,
@@ -63,8 +65,6 @@ export function AppLayout() {
   const onAgents = useMatch({ from: "/app/agents", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
   const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
-  // The pages that open an item in a pane beside the list.
-  const withPane = (onList && heapRef !== undefined) || onAll;
   const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
   const shellHeap = heapRef ?? ((onWaiting || onAgents || onAll || onData) && me ? keptHeap(me, allTeam) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
@@ -75,10 +75,10 @@ export function AppLayout() {
   return (
     // On a wide screen the shell is one centred block, at most the sidebar plus the content column plus the item
     // pane wide (15rem + 48rem + 26rem + padding), whether or not an item is open, so opening or closing one never
-    // moves the sidebar or the list's left edge. A page that opens items beside it (`withPane`) fills the room next
-    // to the sidebar, and an open item pane (`data-item-pane`) takes its right-hand part and padding, so the list
-    // narrows from the right. Other pages keep the content column's reading width, next to the sidebar. The left half
-    // behind the block takes the sidebar's colour, so the sidebar reaches the edge of the screen.
+    // moves the sidebar or the list's left edge. Every page fills the room next to the sidebar, so the content's
+    // edges stay put from one page to the next, and an open item pane (`data-item-pane`) takes the right-hand part
+    // and padding, so the list narrows from the right. The left half behind the block takes the sidebar's colour, so
+    // the sidebar reaches the edge of the screen.
     <ToastProvider>
       <NoticeLine />
       <ConnectionBanner />
@@ -89,9 +89,7 @@ export function AppLayout() {
             <div className="min-w-0 flex-1 bg-canvas">
               {me && <PhoneTopBar me={me} heapRef={shellHeap} />}
               {/* On a phone, room at the bottom for the tabs. */}
-              <div
-                className={`mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:has-[[data-item-pane]]:pr-0 ${withPane ? "lg:max-w-none" : ""}`}
-              >
+              <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:max-w-none lg:has-[[data-item-pane]]:pr-0">
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
                 <Outlet />
               </div>
@@ -373,6 +371,7 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
   const team = titleTeam(me, heapRef);
   return (
     <header className="sticky top-0 z-10 flex items-center bg-canvas/95 px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 backdrop-blur sm:hidden">
+      {!heapRef && <PhoneBack me={me} />}
       <HeapSwitcher me={me} heapRef={heapRef}>
         {(props) => (
           <button
@@ -391,6 +390,31 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
       </HeapSwitcher>
       <PhoneSelect heapRef={heapRef} />
     </header>
+  );
+}
+
+/**
+ * Back, at the left of the phone's top bar on a page with no heap in the shell, which has no tabs to go on from
+ * (ux.md, Layout): the page before it, or the heap the shell would keep when the tab opened on this page. None when
+ * there is neither, for an account with no heap.
+ */
+function PhoneBack({ me }: { me: Me }) {
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
+  const kept = keptHeap(me);
+  if (!canGoBack && !kept) return null;
+  return (
+    <button
+      type="button"
+      aria-label="Back"
+      onClick={() => {
+        if (canGoBack) router.history.back();
+        else if (kept) void router.navigate({ to: "/teams/$team/heaps/$heap", params: kept });
+      }}
+      className="-ml-2 flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none focus-visible:outline-2 focus-visible:outline-accent"
+    >
+      <ChevronLeft aria-hidden="true" className="size-6" />
+    </button>
   );
 }
 
