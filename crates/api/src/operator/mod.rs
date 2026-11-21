@@ -168,6 +168,7 @@ async fn reactivate_account(
         (status = 401, description = "`unauthenticated`", body = Problem),
         (status = 403, description = "`password_sign_in_off`", body = Problem),
         (status = 404, description = "The caller isn't an operator, or there is no such account", body = Problem),
+        (status = 409, description = "`account_provider_managed`: the sign-in provider owns the account's state", body = Problem),
     ))]
 async fn make_reset_link(
     State(state): State<AppState>,

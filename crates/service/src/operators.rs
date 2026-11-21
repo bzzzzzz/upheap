@@ -233,7 +233,7 @@ impl Services {
     /// Makes a reset link for the account `user_id`, as [`Services::create_password_reset_link`] does, with the
     /// caller as the entry's actor. The link is in the answer and nowhere else.
     ///
-    /// Fails with [`ServiceError::AccountProviderManaged`] for a provider account, which has no password.
+    /// Fails with [`ServiceError::AccountProviderManaged`] for a provider account, whose state the provider owns.
     pub async fn create_operator_reset_link(
         &self,
         principal: Principal,

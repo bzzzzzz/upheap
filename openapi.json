@@ -2661,6 +2661,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "`account_provider_managed`: the sign-in provider owns the account's state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [

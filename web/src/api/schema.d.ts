@@ -7296,6 +7296,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `account_provider_managed`: the sign-in provider owns the account's state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     count_sign_ins: {
