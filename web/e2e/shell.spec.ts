@@ -334,6 +334,42 @@ test("on a phone, More opens above the tabs, and + adds an item from any of the 
   await expect(row(page, "Water the plants")).toBeVisible();
 });
 
+test("on a phone, a page outside a heap goes back from the top bar, to the page before or else to the heap", async ({
+  page,
+  heapPath,
+}) => {
+  test.skip(!isPhone(page), "Only a phone's top bar has Back; the rail and the sidebar stay on every page.");
+  const back = page.getByRole("button", { name: "Back", exact: true });
+  // A heap's pages have the tabs to go on from.
+  await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
+  await expect(back).toHaveCount(0);
+
+  // Back steps through the pages the tab came by.
+  await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
+  await page
+    .getByRole("navigation", { name: "More" })
+    .getByRole("link", { name: /^Teams( |$)/ })
+    .click();
+  await expect(page).toHaveURL(/\/teams$/);
+  await page
+    .getByRole("link", { name: /^Open / })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/teams\/[^/]+$/);
+  await back.click();
+  await expect(page).toHaveURL(/\/teams$/);
+  await back.click();
+  await expect(page).toHaveURL(HEAP_URL);
+  await expect(back).toHaveCount(0);
+
+  // A tab opened on the page, from a link, has nothing before it, so Back opens the heap opened last.
+  const linked = await page.context().newPage();
+  await linked.goto("/account");
+  await expect(linked.getByRole("heading", { name: "Account", level: 1 })).toBeVisible();
+  await linked.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(linked).toHaveURL(new RegExp(`${heapPath}$`));
+});
+
 test("Sign out is on the Account page, not in the navigation", async ({ page }) => {
   const signOut = page.getByRole("button", { name: "Sign out", exact: true });
   await expect(page.getByRole("navigation", { name: "Heap views" })).toBeVisible();
