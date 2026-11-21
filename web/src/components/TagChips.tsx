@@ -1,9 +1,10 @@
 import type { ItemTag } from "../api/schema";
+import { tagButtonColor } from "./tagColor";
 
 /**
- * An item's tags in a list row, in the order the server sends them, as grey chips (violet is kept for parameters).
+ * An item's tags in a list row, in the order the server sends them, as outlined chips in the tag's own colour (violet is kept for parameters).
  * Each chip is a toggle button that adds the tag to the list's tag filter or, when it is in `active`, removes it;
- * active chips are outlined in the accent (ux.md, The list). The button sits above the row's link, so pressing it
+ * active chips keep their colour and get an accent ring (ux.md, The list). The button sits above the row's link, so pressing it
  * doesn't open the item.
  */
 export function TagChips({
@@ -30,10 +31,8 @@ export function TagChips({
               aria-pressed={on}
               aria-label={`Filter by tag ${tag.name}`}
               onClick={() => onToggle(tag.id)}
-              className={`relative z-10 cursor-pointer rounded-md border px-1.5 text-xs before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${
-                on
-                  ? "border-accent bg-transparent text-accent-ink"
-                  : "border-transparent bg-sunken text-ink-soft hover:text-ink"
+              className={`relative z-10 cursor-pointer rounded-md border bg-transparent px-1.5 text-xs before:absolute before:inset-x-0 before:-inset-y-1 before:content-[''] ${tagButtonColor(tag.color)} ${
+                on ? "ring-2 ring-accent ring-offset-1 ring-offset-surface" : ""
               }`}
             >
               {tag.name}

@@ -65,6 +65,32 @@
   --avatar-4-ink: #9d174d;
   --avatar-5: #e0f2fe;
   --avatar-5-ink: #075985;
+  /* Tag colours (ux.md, Principles): the border, the text and the text under the pointer, per colour. The border is
+   * the same in both modes. Violet, amber and red are left out, so parameters, the accent and overdue keep their meaning. */
+  --tag-blue: #3b82f6;
+  --tag-blue-ink: #1d4ed8;
+  --tag-blue-ink-hover: #1e40af;
+  --tag-sky: #0ea5e9;
+  --tag-sky-ink: #0369a1;
+  --tag-sky-ink-hover: #075985;
+  --tag-teal: #14b8a6;
+  --tag-teal-ink: #0f766e;
+  --tag-teal-ink-hover: #115e59;
+  --tag-green: #22c55e;
+  --tag-green-ink: #15803d;
+  --tag-green-ink-hover: #166534;
+  --tag-lime: #84cc16;
+  --tag-lime-ink: #4d7c0f;
+  --tag-lime-ink-hover: #3f6212;
+  --tag-rose: #f43f5e;
+  --tag-rose-ink: #be123c;
+  --tag-rose-ink-hover: #9f1239;
+  --tag-pink: #ec4899;
+  --tag-pink-ink: #be185d;
+  --tag-pink-ink-hover: #9d174d;
+  --tag-grey: #78716c;
+  --tag-grey-ink: #44403c;
+  --tag-grey-ink-hover: #292524;
 
   @variant dark {
     color-scheme: dark;
@@ -100,6 +126,22 @@
     --avatar-4-ink: #fbcfe8;
     --avatar-5: #0c4a6e;
     --avatar-5-ink: #bae6fd;
+    --tag-blue-ink: #93c5fd;
+    --tag-blue-ink-hover: #bfdbfe;
+    --tag-sky-ink: #7dd3fc;
+    --tag-sky-ink-hover: #bae6fd;
+    --tag-teal-ink: #5eead4;
+    --tag-teal-ink-hover: #99f6e4;
+    --tag-green-ink: #86efac;
+    --tag-green-ink-hover: #bbf7d0;
+    --tag-lime-ink: #bef264;
+    --tag-lime-ink-hover: #d9f99d;
+    --tag-rose-ink: #fda4af;
+    --tag-rose-ink-hover: #fecdd3;
+    --tag-pink-ink: #f9a8d4;
+    --tag-pink-ink-hover: #fbcfe8;
+    --tag-grey-ink: #d6d3d1;
+    --tag-grey-ink-hover: #e7e5e4;
   }
 }
 
@@ -137,6 +179,30 @@
   --color-avatar-4-ink: var(--avatar-4-ink);
   --color-avatar-5: var(--avatar-5);
   --color-avatar-5-ink: var(--avatar-5-ink);
+  --color-tag-blue: var(--tag-blue);
+  --color-tag-blue-ink: var(--tag-blue-ink);
+  --color-tag-blue-ink-hover: var(--tag-blue-ink-hover);
+  --color-tag-sky: var(--tag-sky);
+  --color-tag-sky-ink: var(--tag-sky-ink);
+  --color-tag-sky-ink-hover: var(--tag-sky-ink-hover);
+  --color-tag-teal: var(--tag-teal);
+  --color-tag-teal-ink: var(--tag-teal-ink);
+  --color-tag-teal-ink-hover: var(--tag-teal-ink-hover);
+  --color-tag-green: var(--tag-green);
+  --color-tag-green-ink: var(--tag-green-ink);
+  --color-tag-green-ink-hover: var(--tag-green-ink-hover);
+  --color-tag-lime: var(--tag-lime);
+  --color-tag-lime-ink: var(--tag-lime-ink);
+  --color-tag-lime-ink-hover: var(--tag-lime-ink-hover);
+  --color-tag-rose: var(--tag-rose);
+  --color-tag-rose-ink: var(--tag-rose-ink);
+  --color-tag-rose-ink-hover: var(--tag-rose-ink-hover);
+  --color-tag-pink: var(--tag-pink);
+  --color-tag-pink-ink: var(--tag-pink-ink);
+  --color-tag-pink-ink-hover: var(--tag-pink-ink-hover);
+  --color-tag-grey: var(--tag-grey);
+  --color-tag-grey-ink: var(--tag-grey-ink);
+  --color-tag-grey-ink-hover: var(--tag-grey-ink-hover);
 }
 
 @layer base {

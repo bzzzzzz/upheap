@@ -17,6 +17,7 @@ import { PopoverSheet } from "./PopoverSheet";
 import { formatDate } from "./reminders";
 import { SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
+import { tagChipColor } from "./tagColor";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
@@ -174,7 +175,10 @@ export function ItemFieldList({
           display={
             <span className="flex flex-wrap gap-1">
               {item.tags.map((tag) => (
-                <span key={tag.id} className="rounded-md bg-sunken px-1.5 text-xs text-ink-soft">
+                <span
+                  key={tag.id}
+                  className={`rounded-md border bg-transparent px-1.5 text-xs ${tagChipColor(tag.color)}`}
+                >
                   {tag.name}
                 </span>
               ))}

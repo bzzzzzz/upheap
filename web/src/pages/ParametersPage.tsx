@@ -794,7 +794,7 @@ function LinkedTags({ parameter, heapRef, canEdit }: { parameter: CardParameter;
   }
   const linked: ItemTag[] = heapTags(tags.data)
     .filter((tag) => parameter.tag_ids.includes(tag.id))
-    .map((tag) => ({ id: tag.id, name: tag.name }));
+    .map((tag) => ({ id: tag.id, name: tag.name, color: tag.color }));
 
   if (!canEdit) {
     if (linked.length === 0) return null;

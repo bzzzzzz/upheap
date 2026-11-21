@@ -2607,6 +2607,7 @@ export interface components {
             view?: components["schemas"]["ListViewInput"];
         };
         CreateTagRequest: {
+            color?: null | components["schemas"]["TagColor"];
             description?: string | null;
             /** @description 1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case. */
             name: string;
@@ -3405,6 +3406,7 @@ export interface components {
         ItemState: "open" | "in_progress" | "blocked" | "done" | "wont_do" | "became";
         /** @description A tag on an item: enough to show it. */
         ItemTag: {
+            color: components["schemas"]["TagColor"];
             /** Format: uuid */
             id: string;
             name: string;
@@ -4577,6 +4579,7 @@ export interface components {
         StepState: "open" | "ticked" | "dropped";
         Tag: {
             allowed_actions: components["schemas"]["TagAction"][];
+            color: components["schemas"]["TagColor"];
             description?: string | null;
             /**
              * Format: uuid
@@ -4599,6 +4602,11 @@ export interface components {
          */
         TagAction: "edit";
         /**
+         * @description A tag's colour, one of a fixed palette, in the order a colour is picked in.
+         * @enum {string}
+         */
+        TagColor: "blue" | "sky" | "teal" | "green" | "lime" | "rose" | "pink" | "grey";
+        /**
          * @description Who owns a tag.
          * @enum {string}
          */
@@ -4618,6 +4626,8 @@ export interface components {
         TagListAction: "create";
         /** @description A partial edit. Leave a field out to keep it; send `null` to clear the description. */
         TagPatchRequest: {
+            /** @description The colour can be changed but not cleared; `null` is refused. */
+            color?: components["schemas"]["TagColor"];
             description?: string | null;
             name?: string | null;
         };
@@ -5258,6 +5268,7 @@ export type StepProgress = components['schemas']['StepProgress'];
 export type StepState = components['schemas']['StepState'];
 export type Tag = components['schemas']['Tag'];
 export type TagAction = components['schemas']['TagAction'];
+export type TagColor = components['schemas']['TagColor'];
 export type TagKind = components['schemas']['TagKind'];
 export type TagList = components['schemas']['TagList'];
 export type TagListAction = components['schemas']['TagListAction'];

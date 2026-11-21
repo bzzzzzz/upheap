@@ -2,15 +2,16 @@
 // as a row, and the form that edits it. What differs between a heap's tags and a team's comes in as `TagSettings`.
 import { Ellipsis, Pencil, Users } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Button, Menu, MenuTrigger } from "react-aria-components";
+import { Button, Label, Menu, MenuTrigger, Radio, RadioGroup } from "react-aria-components";
 
 import { ApiProblem } from "../api/client";
-import type { HeapSummary, MergeReach, Tag } from "../api/schema";
+import type { HeapSummary, MergeReach, Tag, TagColor } from "../api/schema";
 import { type AuditScope } from "../api/queries/audit";
 import { useCreateTagIn, useUpdateTagIn, type TagScope } from "../api/queries/tags";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
 import { MenuEntry, MenuPopover } from "../components/Menu";
+import { tagChipColor, tagColors, tagDotColor } from "../components/tagColor";
 import { useToast } from "../components/UndoToast";
 import { useReturnFocus } from "../components/useConfirmation";
 import { RequestId } from "../components/RequestId";
@@ -19,8 +20,14 @@ import { plural } from "../components/words";
 import { MergeConfirm } from "./MergeConfirm";
 import { cardClass, cardTitleClass, inputClass } from "./settingsForm";
 
-export const chipClass =
-  "inline-flex h-6 max-w-full shrink-0 items-center truncate rounded-full border border-line bg-sunken px-[9px] text-[13px] font-medium text-ink max-sm:h-[26px] max-sm:px-2.5 max-sm:text-sm";
+const chipShape =
+  "inline-flex h-6 max-w-full shrink-0 items-center truncate rounded-full border px-[9px] text-[13px] font-medium max-sm:h-[26px] max-sm:px-2.5 max-sm:text-sm";
+
+/** A name in a chip, grey. A tag's own chip is in its colour (`tagChipClass`). */
+export const chipClass = `${chipShape} border-line bg-sunken text-ink`;
+
+/** A tag's chip: its border and text in the tag's colour, with no fill. */
+const tagChipClass = (color: TagColor) => `${chipShape} bg-transparent ${tagChipColor(color)}`;
 
 /** The card of tag rows. */
 export const tagCardClass = "overflow-hidden rounded-[14px] border border-line bg-surface";
@@ -151,7 +158,7 @@ export function TagRow({ tag, settings, heap }: { tag: Tag; settings: TagSetting
     <li className="py-2.5 pr-1 pl-3.5 sm:px-4 sm:py-3.5">
       <div className="flex items-center gap-2 sm:gap-4">
         <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-4">
-          <span className={chipClass}>{tag.name}</span>
+          <span className={tagChipClass(tag.color)}>{tag.name}</span>
           {tag.description ? (
             <span className="min-w-0 text-sm text-ink-soft">{tag.description}</span>
           ) : (
@@ -184,7 +191,7 @@ function MakeTeamTag({ tag, heap, team, teamName }: { tag: Tag; heap: HeapSummar
   const showToast = useToast();
   const [reach, setReach] = useState<MergeReach | null>(null);
   const settings: TagSettings = { scope: { kind: "team", team }, teamName };
-  const variables = { body: { name: tag.name, description: tag.description } };
+  const variables = { body: { name: tag.name, description: tag.description, color: tag.color } };
   const make = () =>
     create.mutate(variables, {
       onError: (error) => {
@@ -236,7 +243,7 @@ function MakeTeamTag({ tag, heap, team, teamName }: { tag: Tag; heap: HeapSummar
 }
 
 /**
- * The tag's name and description, saved together. Saving, Cancel or Escape close the form; Save with nothing changed
+ * The tag's name, description and colour, saved together. Saving, Cancel or Escape close the form; Save with nothing changed
  * just closes it. A newer version from the server (someone else's edit) replaces what's typed.
  */
 function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; onClose: () => void }) {
@@ -245,6 +252,7 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
   const team = settings.scope.kind === "team";
   const [name, setName] = useState(tag.name);
   const [description, setDescription] = useState(tag.description ?? "");
+  const [color, setColor] = useState(tag.color);
   const [shownVersion, setShownVersion] = useState(tag.version);
   // The refused write, as it was sent: a refetch behind the confirm resets the fields, and the confirm must send, and
   // name, what the person asked for, so a newer version is refused as a conflict.
@@ -254,13 +262,15 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
     setShownVersion(tag.version);
     setName(tag.name);
     setDescription(tag.description ?? "");
+    setColor(tag.color);
   }
-  const changed = name !== tag.name || description !== (tag.description ?? "");
+  const changed = name !== tag.name || description !== (tag.description ?? "") || color !== tag.color;
   const variables = {
     tag,
     patch: {
       ...(name !== tag.name && { name }),
       ...(description !== (tag.description ?? "") && { description: description || null }),
+      ...(color !== tag.color && { color }),
     },
   };
   const save = (event: FormEvent) => {
@@ -304,6 +314,7 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
           placeholder="No description"
           className={`${inputClass} sm:flex-[999_1_240px]`}
         />
+        <ColorPicker color={color} onChange={setColor} name={name.trim() || tag.name} />
         <div className="flex gap-2">
           <button
             type="submit"
@@ -339,6 +350,47 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
         />
       )}
     </>
+  );
+}
+
+/**
+ * The Colour row of the edit form: the palette as round swatches, the picked one ringed, and under them a chip with
+ * the name in the picked colour. On a phone the swatches wrap to two rows of four, each a 44 px target.
+ */
+function ColorPicker({
+  color,
+  onChange,
+  name,
+}: {
+  color: TagColor;
+  onChange: (color: TagColor) => void;
+  name: string;
+}) {
+  return (
+    <RadioGroup
+      value={color}
+      onChange={(value) => onChange(value as TagColor)}
+      orientation="horizontal"
+      className="flex basis-full flex-col gap-1.5"
+    >
+      <Label className="text-sm font-medium">Colour</Label>
+      <div className="flex gap-1.5 max-sm:grid max-sm:w-fit max-sm:grid-cols-4 max-sm:gap-0">
+        {tagColors.map(({ code, label }) => (
+          <Radio
+            key={code}
+            value={code}
+            aria-label={label}
+            className="group flex size-7 cursor-pointer items-center justify-center rounded-full outline-none max-sm:size-11"
+          >
+            <span
+              aria-hidden="true"
+              className={`size-6 rounded-full ${tagDotColor(code)} group-data-[selected]:ring-2 group-data-[selected]:ring-ink group-data-[selected]:ring-offset-2 group-data-[selected]:ring-offset-accent-soft group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-offset-2 group-data-[focus-visible]:outline-accent`}
+            />
+          </Radio>
+        ))}
+      </div>
+      <span className={`${tagChipClass(color)} self-start`}>{name}</span>
+    </RadioGroup>
   );
 }
 
