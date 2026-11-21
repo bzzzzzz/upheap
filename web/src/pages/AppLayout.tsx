@@ -27,6 +27,7 @@ import {
   Layers,
   List,
   Plus,
+  Search,
   Settings,
   Shield,
   User,
@@ -39,8 +40,9 @@ import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useHeap, useSetHeapArchived } from "../api/queries/heaps";
 import { useMe, useDecisions, useWaiting } from "../api/queries/me";
-import { AddItemDialog } from "../components/AddItem";
-import { Kbd, WIDE_HINT } from "../components/Kbd";
+import { AddItemDialog, OVERLAY } from "../components/AddItem";
+import { FindPalette } from "../components/FindPalette";
+import { Kbd, MAC, WIDE_HINT } from "../components/Kbd";
 import { KeysHelp } from "../components/KeysHelp";
 import { ConnectionBanner } from "../components/ConnectionBanner";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
@@ -79,6 +81,8 @@ export function AppLayout() {
   // Open or Closed. `g` waits for the next key, which either completes it or cancels it, and is not otherwise handled.
   const navigate = useNavigate();
   const [helpOpen, setHelpOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [addingFrom, setAddingFrom] = useState<{ heap: HeapRef; title: string } | null>(null);
   const goingTo = useRef(false);
   const shellTeam = shellHeap?.team;
   const shellHeapSlug = shellHeap?.heap;
@@ -87,6 +91,12 @@ export function AppLayout() {
       // Any key after `g` ends the wait, also one handled elsewhere or typed in a field.
       const second = goingTo.current;
       goingTo.current = false;
+      // ⌘K (Ctrl K off a Mac) works in fields too, and not over another dialog, the palette itself included.
+      if ((MAC ? event.metaKey : event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (!document.querySelector(OVERLAY)) setFindOpen(true);
+        return;
+      }
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
@@ -124,7 +134,7 @@ export function AppLayout() {
       <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : onAll ? "all" : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[92rem]">
-            {me && <Sidebar me={me} heapRef={shellHeap} />}
+            {me && <Sidebar me={me} heapRef={shellHeap} onFind={() => setFindOpen(true)} />}
             <div className="min-w-0 flex-1 bg-canvas">
               {me && <PhoneTopBar me={me} heapRef={shellHeap} />}
               {/* On a phone, room at the bottom for the tabs. */}
@@ -136,9 +146,31 @@ export function AppLayout() {
             {me && shellHeap && <PhoneTabs me={me} heapRef={shellHeap} />}
           </div>
         </div>
+        {addingFrom && (
+          <FindAdd heapRef={addingFrom.heap} title={addingFrom.title} onClose={() => setAddingFrom(null)} />
+        )}
       </ListSearchProvider>
       <KeysHelp isOpen={helpOpen} onOpenChange={setHelpOpen} />
+      {me && (
+        <FindPalette
+          isOpen={findOpen}
+          onOpenChange={setFindOpen}
+          me={me}
+          shellHeap={shellHeap}
+          onAdd={(heap, title) => setAddingFrom({ heap, title })}
+        />
+      )}
     </ToastProvider>
+  );
+}
+
+/** The Add dialog the Find palette opens, starting from the list on screen, as the phone's Add does. */
+function FindAdd({ heapRef, title, onClose }: { heapRef: HeapRef; title: string; onClose: () => void }) {
+  const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
+  const { search } = useListSearch();
+  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
+  return (
+    <AddItemDialog heapRef={heapRef} view={view} search={search} acrossHeaps={onAll} title={title} onClose={onClose} />
   );
 }
 
@@ -302,7 +334,7 @@ function heapViews(heapRef: HeapRef, itemOpen: boolean) {
 }
 
 /** The sidebar on a wide screen, folded into a rail on a tablet; hidden on a phone. */
-function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
+function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined; onFind: () => void }) {
   const links = useShellLinks(me, heapRef);
   const { item: itemKey } = useParams({ strict: false });
   const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
@@ -321,6 +353,16 @@ function Sidebar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
       </div>
 
       <div className="flex flex-col gap-1 lg:gap-0.5 lg:border-b lg:border-line lg:pb-4">
+        <button
+          type="button"
+          onClick={onFind}
+          aria-keyshortcuts={MAC ? "Meta+K" : "Control+K"}
+          className={`${navItemClass} outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent`}
+        >
+          <Search aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
+          <span className="max-w-full truncate">Find</span>
+          <Kbd className={`${WIDE_HINT} ml-auto`}>{MAC ? "⌘K" : "Ctrl K"}</Kbd>
+        </button>
         <WaitingLink />
         <AgentsLink />
         <NavLink

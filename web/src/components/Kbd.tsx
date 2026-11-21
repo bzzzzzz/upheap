@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+/** Whether the keyboard is a Mac's, which has ⌘ where the others have Ctrl. */
+export const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
 /** Shown on a wide screen with a fine pointer only: the keys are on screen where there is room and a keyboard. */
 export const WIDE_HINT = "hidden lg:pointer-fine:inline-flex";
 

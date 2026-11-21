@@ -415,3 +415,24 @@ export async function heapTagOnNewItem(page: Page, path: string, title: string, 
   await expect(itemPane(page).getByRole("button", { name: `Remove tag ${name}` })).toBeVisible();
   await closeItem(page);
 }
+
+const apiHeaders = { "x-csrf-protection": "1" };
+
+/** Adds a note through the API and returns its key and its address in the API. */
+export async function seed(page: Page, heapPath: string, title: string, sendToAgent = false) {
+  const created = await page.request.post(`/api/v1${heapPath}/items`, {
+    headers: apiHeaders,
+    data: { title, need: "expected" },
+  });
+  expect(created.status()).toBe(201);
+  const { key, id } = await created.json();
+  const item = `/api/v1${heapPath}/items/${key}`;
+  if (sendToAgent) {
+    const sent = await page.request.post(`${item}/turn`, {
+      headers: apiHeaders,
+      data: { reach: "one", line: "Use the new CA." },
+    });
+    expect(sent.status()).toBe(201);
+  }
+  return { key, id, item };
+}

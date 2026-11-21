@@ -118,12 +118,12 @@ Acme"), on the phone's top bar as well, except for a heap in the personal team.
 A phone's tabs have room for four: Waiting sits left of the + and Agents right of it, and Closed, Settings, Activity
 and Data go into More with the account pages. More shows as active on the pages it holds, Closed among them.
 
-**Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
-me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count as a small badge on
-the icon. There is no count at zero, and the entry stays. The count is the number of open questions across the
-person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the list is, so a
-question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and after a reply
-or an item's change.
+**Waiting for me** comes right after Find at the top of the sidebar and the rail, above the heap switcher: an inbox
+icon, "Waiting for me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count
+as a small badge on the icon. There is no count at zero, and the entry stays. The count is the number of open
+questions across the person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the
+list is, so a question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and
+after a reply or an item's change.
 
 **Agents** sits under Waiting for me, in the same block: a bot icon, "Agents" with the number of rows under Your
 decision (Agents) shown as Waiting for me's count is: on the right in the sidebar, as a badge on the icon in the rail
@@ -1366,7 +1366,7 @@ The wide screen shows its keys, and `?` lists them all:
 
 1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
    the search box, `S` `B` `X` at the end of the focused row, `G O` and `G C` beside Open and Closed in the sidebar,
-   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog.
+   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog, `⌘K` (`Ctrl K`) on Find in the sidebar.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
 3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
    `S` `B` `X` when a row can change state, `N`, `/`, and `G C` with no item open; walking and closing with one open;
@@ -1374,7 +1374,7 @@ The wide screen shows its keys, and `?` lists them all:
 4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Wherever the sidebar shows a heap, `G`
    then `O` goes to its Open list, closing an open item, and `G` then `C` to its Closed page; any other key after `G`
    cancels it. Keys are ignored in a field.
-
-Later: ⌘K in the sidebar finds any item by title or key in every heap; Tab acts on the highlighted item (start,
-done, due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching
-every heap needs a server search endpoint; today's search filters only the loaded list.
+5. `⌘K` (`Ctrl K` off a Mac) anywhere, or Find at the top of the sidebar, opens Find. It finds items by title or
+   key in every heap, goes to a heap, and adds "Add “text” as a new item" to the heap on screen. ↑ ↓ and Enter
+   open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy link, as the item allows), and
+   Shift+Tab goes back.
