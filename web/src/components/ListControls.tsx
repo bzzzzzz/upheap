@@ -5,7 +5,7 @@ import type { HeapRef } from "../api/client";
 import type { BlockedLayout, Me, Parameter, ParameterList, RemindersMode, Size, StateMode } from "../api/schema";
 import { useParameters } from "../api/queries/parameters";
 import { heapTags, useTags } from "../api/queries/tags";
-import { TeamTagMark } from "./TeamTagMark";
+import { TeamMark } from "./TeamMark";
 import {
   AGENT_STATE_LABELS,
   AGENT_STATES,
@@ -458,7 +458,7 @@ function NarrowSection({
               onClick={() => onChange({ ...view, tag: toggled(view.tag, tag.id) })}
             >
               {tag.name}
-              {tag.kind === "team" && <TeamTagMark />}
+              {tag.kind === "team" && <TeamMark of="tag" />}
             </Toggle>
           ))}
         </PanelRow>

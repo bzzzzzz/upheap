@@ -14,12 +14,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::text::parse_required;
 use crate::validation::{Field, ValidationError};
-use crate::{HeapId, OptionId, ParameterId, TagId, Timestamp, Version};
+use crate::{HeapId, OptionId, ParameterId, TagId, TeamId, Timestamp, Version};
 
 /// Most options in use one parameter can have. Real parameters have a handful; this bounds requests and the list.
 pub const MAX_OPTIONS: usize = 50;
 
-/// A parameter name: trimmed, 1 to 50 characters. Unique among a heap's parameters in use, ignoring case.
+/// A parameter name: trimmed, 1 to 50 characters. Unique among the parameters in use of a heap and its team,
+/// ignoring case.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParameterName(String);
 
@@ -148,11 +149,19 @@ pub struct ParameterPatch {
     pub weight: Option<Weight>,
 }
 
+/// Who owns a parameter: one heap, or a whole team, whose heaps each choose whether to use it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParameterOwner {
+    Heap(HeapId),
+    Team(TeamId),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Parameter {
     pub id: ParameterId,
-    pub heap_id: HeapId,
+    pub owner: ParameterOwner,
     pub name: ParameterName,
+    /// A heap parameter's weight. A team parameter read for a heap carries that heap's weight for it.
     pub weight: Weight,
     /// The options in use, highest priority first.
     pub options: Vec<ParameterOption>,
@@ -176,10 +185,15 @@ pub struct ResolvedValue<'a> {
 
 impl Parameter {
     /// A parameter in use, created at `now`. Fails if the options are too many or two share a label.
-    pub fn new(id: ParameterId, heap_id: HeapId, fields: NewParameter, now: Timestamp) -> Result<Self, ParameterError> {
+    pub fn new(
+        id: ParameterId,
+        owner: ParameterOwner,
+        fields: NewParameter,
+        now: Timestamp,
+    ) -> Result<Self, ParameterError> {
         let parameter = Self {
             id,
-            heap_id,
+            owner,
             name: fields.name,
             weight: fields.weight,
             options: fields.options,
@@ -195,6 +209,11 @@ impl Parameter {
 
     pub const fn is_archived(&self) -> bool {
         self.archived_at.is_some()
+    }
+
+    /// Whether the team owns the parameter.
+    pub const fn is_team_owned(&self) -> bool {
+        matches!(self.owner, ParameterOwner::Team(_))
     }
 
     /// The parameter with `patch` applied, or `None` when the patch changes nothing. Keeps the old version; the
@@ -416,11 +435,28 @@ mod tests {
         };
         Parameter::new(
             ParameterId::from_uuid(Uuid::from_u128(100)),
-            HeapId::from_uuid(Uuid::nil()),
+            ParameterOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             fields,
             at(0),
         )
         .expect("valid")
+    }
+
+    #[gtest]
+    fn a_new_parameter_has_the_owner_it_was_made_for() {
+        let team = ParameterOwner::Team(TeamId::from_uuid(Uuid::from_u128(7)));
+        let fields = NewParameter {
+            name: ParameterName::parse("Customer").expect("valid"),
+            weight: Weight::OFF,
+            options: vec![option(1, "Enterprise")],
+            tags: BTreeSet::new(),
+        };
+
+        let created = Parameter::new(ParameterId::from_uuid(Uuid::nil()), team, fields, at(0)).expect("valid");
+
+        expect_that!(created.owner, eq(team));
+        expect_that!(created.is_team_owned(), is_true());
+        expect_that!(customer().is_team_owned(), is_false());
     }
 
     #[gtest]
@@ -434,7 +470,7 @@ mod tests {
 
         let created = Parameter::new(
             ParameterId::from_uuid(Uuid::nil()),
-            HeapId::from_uuid(Uuid::nil()),
+            ParameterOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             fields,
             at(0),
         );

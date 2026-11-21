@@ -122,7 +122,7 @@ What it is not:
 ## Heaps
 
 1. A heap is a collection of items with its own ranking, tags and custom parameters. Its team's tags work in it too
-   (Manage tags §2).
+   (Manage tags §2), and so do the team's parameters it uses (Custom parameters §1).
 2. Every heap is owned by a team (Teams §4–5). A personal heap is one in the user's personal team.
 3. A person can belong to several teams and heaps, and switches between them.
 4. Items have no assignee or owner. A shared heap has one ranking for the whole team, and "my plate" means the heaps I
@@ -236,11 +236,15 @@ What it is not:
 
 ## Custom parameters
 
-1. Team admins can define custom parameters for a heap. A parameter has a name and a list of options.
+1. Team admins can define custom parameters for a heap, or for its team. A parameter has a name and a list of
+   options. A team parameter is one parameter for the whole team: its name, options and their order are set once and
+   change in every heap that uses it. Each heap chooses which of its team's parameters to use, and weights each on its
+   own, so the weight is part of the heap's ranking. A heap parameter and a team parameter of the team never share a
+   name.
 2. The order of a parameter's options determines their relative priority within that parameter. Each parameter also
    has a weight controlling its influence relative to the heap's other factors (Priority §1).
-3. A custom parameter can be linked to one or more of its heap's tags, the team's included. When a user adds that
-   tag to an item in the heap, the app suggests the linked parameters.
+3. A heap's custom parameter can be linked to one or more of its heap's tags, the team's included. When a user adds
+   that tag to an item in the heap, the app suggests the linked parameters.
 4. Effort and impact apply to every item. They share one weight: they count together as a single value-per-effort
    factor, so a small high-impact item ranks above a large item with the same impact. The exact combination is part
    of the formula.
@@ -340,6 +344,7 @@ A supporting view, for team admins only.
 
 1. An admin can create and rename custom parameters, edit and reorder their options, link them to tags, and
    archive them (Nothing is deleted §5).
+2. A team's parameters are made and edited on the Team page; a heap's settings choose which of them it uses.
 
 ## Nothing is deleted
 
@@ -352,9 +357,10 @@ A supporting view, for team admins only.
 5. Custom parameters and their options are archived instead of removed:
    - Archiving an option requires the admin to pick a replacement option. Items in a non-terminal state (open, in
      progress, blocked) switch to the replacement. Items in a terminal state (done, won't do) keep the archived
-     option.
+     option. For a team parameter this reaches the open items in every heap of the team.
    - A whole parameter can be archived only when no non-terminal item uses it. Terminal items keep their archived
-     values.
+     values. A team parameter is archived only when no non-terminal item in any heap of the team uses it, and a heap
+     stops using one only when none of its non-terminal items has a value for it.
 
 ## Roles and permissions
 
@@ -374,7 +380,8 @@ A supporting view, for team admins only.
 | Make, see and revoke the team's invite links (not on a group-managed team) | | ✓ |
 | Make a member an admin, demote an admin | | ✓ |
 | Create, rename, archive and unarchive heaps | | ✓ |
-| Configure a heap's ranking: its weights, tag order, parameters and options | | ✓ |
+| Configure a heap's ranking: its weights, tag order, parameters and options, and which of the team's parameters it uses | | ✓ |
+| Define the team's parameters and options | | ✓ |
 | Archive parameters and options | | ✓ |
 
 ## Audit log

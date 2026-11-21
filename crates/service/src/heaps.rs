@@ -317,7 +317,8 @@ impl Services {
     ///
     /// Weights equal to the stored ones are skipped. The heap's version moves on whenever any weight changes, with a
     /// `heap_updated` entry only when one of its own weights changes; each parameter whose weight changes gets a
-    /// `parameter_updated` entry and its next version. A request that changes nothing succeeds and writes nothing.
+    /// `parameter_updated` entry, and a heap parameter its next version. A team parameter's weight is the heap's, in
+    /// its use row, so the team parameter's own version doesn't move. A request that changes nothing succeeds and writes nothing.
     pub async fn update_weights(
         &self,
         principal: Principal,
@@ -355,7 +356,7 @@ impl Services {
         let now = self.now();
         let mut parameters_changed = 0_usize;
         for requested in &change.parameters {
-            let current = lock_listed(&txn, heap_id, requested.id, requested.version).await?;
+            let current = lock_listed(&txn, &heap, requested.id, requested.version).await?;
             let patch = ParameterPatch {
                 weight: Some(requested.weight),
                 ..ParameterPatch::default()
@@ -363,17 +364,23 @@ impl Services {
             let Some(edited) = current.apply_patch(&patch)? else {
                 continue;
             };
-            let diff = diff_parameters(&current, &edited);
-            self.write_parameter(
-                &txn,
-                &heap,
-                principal,
-                &edited,
-                AuditAction::ParameterUpdated,
-                diff,
-                now,
-            )
-            .await?;
+            if current.is_team_owned() {
+                self.write_heap_weight(&txn, &heap, principal, &current, &edited, now)
+                    .await?;
+            } else {
+                let diff = diff_parameters(&current, &edited);
+                self.write_parameter(
+                    &txn,
+                    heap.team_id,
+                    Some(heap.id),
+                    principal,
+                    &edited,
+                    AuditAction::ParameterUpdated,
+                    diff,
+                    now,
+                )
+                .await?;
+            }
             parameters_changed += 1;
         }
 

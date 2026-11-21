@@ -147,7 +147,10 @@ async fn items_show_every_parameter_in_use_set_or_unset() -> Result<()> {
               "option": { "id": enterprise, "label": "Enterprise", "archived": false } },
         ]))
     );
-    expect_that!(parameters.body["allowed_actions"], eq(&json!(["create"])));
+    expect_that!(
+        parameters.body["allowed_actions"],
+        eq(&json!(["create", "use_team_parameter"]))
+    );
     expect_that!(
         parameters.body["parameters"][1]["allowed_actions"],
         eq(&json!(["edit", "archive", "view_history"]))

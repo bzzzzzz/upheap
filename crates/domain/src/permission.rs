@@ -20,7 +20,7 @@ pub enum Permission {
     EditItems,
     /// Create, rename, archive and unarchive heaps.
     ManageHeaps,
-    /// Change parameters, weights and the ranking policy.
+    /// Change parameters, a heap's and its team's, weights and the ranking policy.
     ConfigureHeap,
     /// See the team, its members and its heaps.
     ViewTeam,
@@ -357,6 +357,8 @@ pub enum ParameterAction {
     Edit,
     /// Take it out of use. Refused while an open item has a value for it.
     Archive,
+    /// A team parameter in a heap: stop the heap using it. Refused while an open item of the heap has a value for it.
+    StopUsing,
     /// Read its history. Parameter changes are shown to those who may make them (see [`audit_permission`]), so this
     /// stays offered on archived parameters and in archived heaps.
     ViewHistory,
@@ -367,16 +369,22 @@ pub enum ParameterAction {
 pub enum ParameterListAction {
     /// Add a parameter.
     Create,
+    /// Make the heap use one of its team's parameters.
+    UseTeamParameter,
 }
 
 /// What `role` can do with `parameter` in `heap`. Only its history, for those who may configure the heap, once the
-/// parameter or the heap is archived.
+/// parameter or the heap is archived. A team parameter the heap uses is stopped, not edited: it is edited on the team
+/// (see [`allowed_team_parameter_actions`]), and its weight is saved with the heap's other weights.
 pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role) -> Vec<ParameterAction> {
     if !Permission::ConfigureHeap.is_granted_to(role) {
         return Vec::new();
     }
     if parameter.is_archived() || heap.is_archived() {
         return vec![ParameterAction::ViewHistory];
+    }
+    if parameter.is_team_owned() {
+        return vec![ParameterAction::StopUsing, ParameterAction::ViewHistory];
     }
     vec![
         ParameterAction::Edit,
@@ -388,6 +396,30 @@ pub fn allowed_parameter_actions(parameter: &Parameter, heap: &Heap, role: Role)
 /// What `role` can do with the parameters of `heap`. Empty for archived heaps.
 pub fn allowed_parameter_list_actions(heap: &Heap, role: Role) -> Vec<ParameterListAction> {
     if !can_configure(heap, role) {
+        return Vec::new();
+    }
+    vec![ParameterListAction::Create, ParameterListAction::UseTeamParameter]
+}
+
+/// What `role` can do with a team's parameter, whatever state the team's heaps are in. Only its history, for those
+/// who may configure heaps, once it is archived.
+pub fn allowed_team_parameter_actions(parameter: &Parameter, role: Role) -> Vec<ParameterAction> {
+    if !Permission::ConfigureHeap.is_granted_to(role) {
+        return Vec::new();
+    }
+    if parameter.is_archived() {
+        return vec![ParameterAction::ViewHistory];
+    }
+    vec![
+        ParameterAction::Edit,
+        ParameterAction::Archive,
+        ParameterAction::ViewHistory,
+    ]
+}
+
+/// What `role` can do with a team's parameter list.
+pub fn allowed_team_parameter_list_actions(role: Role) -> Vec<ParameterListAction> {
+    if !Permission::ConfigureHeap.is_granted_to(role) {
         return Vec::new();
     }
     vec![ParameterListAction::Create]
@@ -617,6 +649,89 @@ mod tests {
             archived_at: archived.then_some(Timestamp::EPOCH),
             version: Version::INITIAL,
         }
+    }
+
+    fn parameter(owner: crate::parameter::ParameterOwner, archived: bool) -> Parameter {
+        use crate::parameter::{NewParameter, ParameterName, Weight};
+        let fields = NewParameter {
+            name: ParameterName::parse("Customer").expect("valid"),
+            weight: Weight::DEFAULT,
+            options: Vec::new(),
+            tags: std::collections::BTreeSet::new(),
+        };
+        let parameter = Parameter::new(
+            crate::ParameterId::from_uuid(Uuid::from_u128(3)),
+            owner,
+            fields,
+            Timestamp::EPOCH,
+        )
+        .expect("valid");
+        Parameter {
+            archived_at: archived.then_some(Timestamp::EPOCH),
+            ..parameter
+        }
+    }
+
+    fn team_owner() -> crate::parameter::ParameterOwner {
+        crate::parameter::ParameterOwner::Team(TeamId::from_uuid(Uuid::from_u128(1)))
+    }
+
+    #[gtest]
+    fn a_team_parameter_in_a_heap_is_stopped_by_admins_while_both_are_active() {
+        let used = parameter(team_owner(), false);
+        let stopped = parameter(team_owner(), true);
+
+        expect_that!(
+            allowed_parameter_actions(&used, &heap(false), Role::Admin),
+            elements_are![eq(&ParameterAction::StopUsing), eq(&ParameterAction::ViewHistory)]
+        );
+        expect_that!(
+            allowed_parameter_actions(&stopped, &heap(false), Role::Admin),
+            elements_are![eq(&ParameterAction::ViewHistory)]
+        );
+        expect_that!(
+            allowed_parameter_actions(&used, &heap(true), Role::Admin),
+            elements_are![eq(&ParameterAction::ViewHistory)]
+        );
+        expect_that!(allowed_parameter_actions(&used, &heap(false), Role::Member), is_empty());
+    }
+
+    #[gtest]
+    fn admins_use_team_parameters_in_an_active_heap_only() {
+        expect_that!(
+            allowed_parameter_list_actions(&heap(false), Role::Admin),
+            elements_are![
+                eq(&ParameterListAction::Create),
+                eq(&ParameterListAction::UseTeamParameter)
+            ]
+        );
+        expect_that!(allowed_parameter_list_actions(&heap(true), Role::Admin), is_empty());
+        expect_that!(allowed_parameter_list_actions(&heap(false), Role::Member), is_empty());
+    }
+
+    #[gtest]
+    fn a_team_parameter_is_edited_by_admins_until_it_is_archived() {
+        let live = parameter(team_owner(), false);
+        let archived = parameter(team_owner(), true);
+
+        expect_that!(
+            allowed_team_parameter_actions(&live, Role::Admin),
+            elements_are![
+                eq(&ParameterAction::Edit),
+                eq(&ParameterAction::Archive),
+                eq(&ParameterAction::ViewHistory)
+            ]
+        );
+        expect_that!(
+            allowed_team_parameter_actions(&archived, Role::Admin),
+            elements_are![eq(&ParameterAction::ViewHistory)]
+        );
+        expect_that!(allowed_team_parameter_actions(&live, Role::Member), is_empty());
+        expect_that!(
+            allowed_team_parameter_list_actions(Role::Admin),
+            elements_are![eq(&ParameterListAction::Create)]
+        );
+        expect_that!(allowed_team_parameter_list_actions(Role::Member), is_empty());
     }
 
     #[gtest]

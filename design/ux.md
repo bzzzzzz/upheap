@@ -217,10 +217,18 @@ label is an input, a list icon after the label, named "Items with Energy: Low"; 
 option row itself. Archived parameters are listed last, and their options aren't links. On a phone everything stacks
 in one column, main buttons span the width, and every control is 44 px to a finger.
 
+A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
+parameter" to a screen reader), its weight read as "Weight {n}", its options and tags read-only, a line saying the
+weight is set on the Ranking page and the name and options on the Team page (both links), and Stop using for an admin
+(an error from the server shows under it). A card headed "{n} parameters of the team {team}", with a Team page link in
+its header, lists the team's others, each with its name, its options and a Use button for an admin; with none it says
+"{team} has no other team parameters. Make them on the Team page.". Using one gives it the weight it had, or 10.
+
 **Ranking** (the canvas boards "Wide · Ranking" and "Phone · Ranking") sets how much each factor counts. A Built in
 card has a row each for need, age, deadline and value per effort, and a Parameters card, shown when the heap has
 parameters in use, has one per parameter, with its options as the description ("Low, then Medium, then High"), each
-label a violet link to the heap's list filtered by that option. On a phone the links stay inline, the one place they
+label a violet link to the heap's list filtered by that option. A team's parameter the heap uses is in the card with
+the team icon after its name, and its weight is set here with the others. On a phone the links stay inline, the one place they
 are smaller than 44 px. Every option shows, however many lines they take. Between them, a **Tags** card holds the
 Tags weight as a factor row ("Tag order") and the heap's tag order as a numbered list, the highest first. Each row
 says, dim, what the tag does next to an untagged item ("lifts", "as untagged", "holds back"), and a line under the list
@@ -932,7 +940,10 @@ The Team page follows the settings layout ([Rules](#rules) §3): the name with t
 Activity, Data) under a ⋯, then Heaps with + New heap and rows with their open count, Open and a ⋯ (Rename, Link name,
 Archive or Unarchive, History), then Tags, the team's own, used in every heap of the team (a New team tag card, and
 rows that are edited in place, with "Changes in every heap of {team}." under the form and the same History; a name
-that heap tags of the team have opens the merge confirm, see Tags), then Members with a search whose results are a
+that heap tags of the team have opens the merge confirm, see Tags), then Parameters, the team's own, which each heap
+chooses to use (a New parameter button that opens the add form without a weight, and a card per parameter like a
+heap's, with a line "Used in Launch and Support" or "Not used in any heap yet"; archiving an option there names the
+heaps whose open items switch), then Members with a search whose results are a
 listbox under it (arrows move, Enter adds), member rows with an initials avatar, role badge, Make admin or Make member and Remove, and Leave team or a
 line saying why the only admin can't leave. Removing a member says what happens: "They lose access to Launch and
 Support. Their items stay." It's confirmed inline on a wide screen and in the member's actions sheet on a phone,

@@ -83,6 +83,10 @@ pub enum UsageError {
     OrderRepeatsOption { option: String },
     #[error("--replace-with names {option}, the option being archived; name another option of {parameter}")]
     ReplaceWithItself { option: String, parameter: String },
+    #[error(
+        "`{name}` is a parameter of the team {team}, so it is changed with --team {team}; its weight in a heap is set with `upheap heap weights`"
+    )]
+    TeamParameterInHeap { name: String, team: String },
     #[error("give the reply: --pick a choice, or --comment")]
     EmptyReply,
     #[error("UPHEAP_RUN isn't a run ID")]

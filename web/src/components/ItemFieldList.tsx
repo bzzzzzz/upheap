@@ -12,6 +12,7 @@ import { NEED_HINTS, NEED_LABELS, NEEDS, SIZE_LABELS, SIZES } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
+import { TeamMark } from "./TeamMark";
 import { PopoverSheet } from "./PopoverSheet";
 import { formatDate } from "./reminders";
 import { SheetChoice } from "./Sheet";
@@ -196,11 +197,15 @@ export function ItemFieldList({
           const archivedOption =
             current.option !== null && !parameter?.options.some((option) => option.id === current.option?.id);
           const label = `${current.name}${current.parameter_archived ? " (archived)" : ""}`;
+          const team = [...(parameters.data?.parameters ?? []), ...(parameters.data?.archived ?? [])].some(
+            (p) => p.id === current.parameter_id && p.kind === "team",
+          );
           return (
             <Field
               key={current.parameter_id}
               layout="row"
               label={label}
+              mark={team ? <TeamMark of="parameter" /> : undefined}
               tone="param"
               value={current.option ? `${current.option.label}${archivedOption ? " (archived)" : ""}` : null}
               empty={`Set ${current.name}`}
@@ -251,6 +256,7 @@ export function ItemFieldList({
 function Field({
   layout,
   label,
+  mark,
   tone = "ink",
   title,
   value,
@@ -266,6 +272,8 @@ function Field({
 }: {
   layout: "cell" | "row";
   label: string;
+  /** After the label, such as the mark of a team's parameter. */
+  mark?: ReactNode;
   tone?: "ink" | "param";
   /** The editor's title, when it isn't the label. */
   title?: string;
@@ -343,14 +351,20 @@ function Field({
   if (layout === "cell") {
     return (
       <div className="flex min-w-0 flex-col gap-0.5">
-        <dt className={labelClass}>{label}</dt>
+        <dt className={labelClass}>
+          {label}
+          {mark}
+        </dt>
         <dd className="min-w-0">{content}</dd>
       </div>
     );
   }
   return (
     <div className="flex items-center gap-2">
-      <dt className={`w-24 shrink-0 break-words ${labelClass}`}>{label}</dt>
+      <dt className={`w-24 shrink-0 break-words ${labelClass}`}>
+        {label}
+        {mark}
+      </dt>
       <dd className="min-w-0 flex-1">{content}</dd>
     </div>
   );

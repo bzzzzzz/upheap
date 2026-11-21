@@ -52,6 +52,7 @@ mod m20261217_000046_tag_merges;
 mod m20261218_000047_email_change_links;
 mod m20261219_000048_turn_watches;
 mod m20261220_000049_email_confirmations;
+mod m20261221_000050_team_parameters;
 
 pub struct Migrator;
 
@@ -108,6 +109,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20261218_000047_email_change_links::Migration),
             Box::new(m20261219_000048_turn_watches::Migration),
             Box::new(m20261220_000049_email_confirmations::Migration),
+            Box::new(m20261221_000050_team_parameters::Migration),
         ]
     }
 }

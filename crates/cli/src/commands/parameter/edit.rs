@@ -1,20 +1,23 @@
-//! `upheap parameter edit <parameter>`: change a parameter's name, weight, tags or option order.
+//! `upheap parameter edit <parameter>`: change a parameter's name, weight, tags or option order; with `--team`, a team
+//! parameter's name or option order.
 //!
 //! The API has one endpoint for each kind of change, so this makes one write per kind, in a fixed order, each at the
 //! version the last one returned. A failure after the first write leaves the earlier ones saved, and says which.
 
 use api_types::parameters::{
-    ArrangeOptionsDto, LinkTagsDto, OptionDto, ParameterDto, ParameterListDto, ParameterPatchDto,
+    ArrangeOptionsDto, LinkTagsDto, OptionDto, ParameterDto, ParameterListDto, ParameterPatchDto, TeamParameterDto,
+    TeamParameterListDto, TeamParameterPatchDto,
 };
 use api_types::tags::TagListDto;
 use clap::Args;
 
-use super::{arrangement, describe_weight_flag, weight_parser};
+use super::{arrangement, describe_weight_flag, find_own_parameter, weight_parser};
 use crate::client::{Fetched, NO_QUERY};
-use crate::commands::heap_api::{HeapApi, named_heap, resolve_heap_handle};
+use crate::commands::heap_api::{HeapApi, TeamApi, named_heap, resolve_heap_handle};
 use crate::commands::item::common::merge_tag_ids;
 use crate::commands::{HeapArgs, SharedArgs, UsageError};
-use crate::lookup::{HeapHandle, LookupError, find_option, find_parameter, resolve_tags};
+use crate::config::SettingError;
+use crate::lookup::{LookupError, find_option, find_team_option, find_team_parameter, resolve_tags};
 use crate::output::{Mode, Output};
 use crate::{App, CliError};
 
@@ -26,18 +29,22 @@ pub struct EditArgs {
     /// A new name, 1 to 50 characters, not used by another parameter in use ignoring case
     #[arg(long, id = "new_name", value_name = "NAME")]
     pub name: Option<String>,
-    #[arg(long, value_name = "N", value_parser = weight_parser(), help = describe_weight_flag())]
+    #[arg(long, value_name = "N", value_parser = weight_parser(), help = describe_weight_flag(), conflicts_with = "team")]
     pub weight: Option<u8>,
     /// Suggest the parameter for a tag of the heap, by name or ID. Repeat for more
-    #[arg(long, value_name = "NAME")]
+    #[arg(long, value_name = "NAME", conflicts_with = "team")]
     pub tag: Vec<String>,
     /// Stop suggesting it for a tag, by name or ID. Repeat for more
-    #[arg(long, value_name = "NAME")]
+    #[arg(long, value_name = "NAME", conflicts_with = "team")]
     pub untag: Vec<String>,
     /// Every option of the parameter, highest priority first, by label or ID, separated by commas. An option whose
     /// label has a comma is named by its ID, which `parameter list --json` shows
     #[arg(long, value_name = "OPTIONS", value_delimiter = ',')]
     pub order: Vec<String>,
+    /// Find the parameter among this team's instead of a heap's, to change it in every heap that uses it: the
+    /// team's slug. A heap's weight for it is set with `upheap heap weights`
+    #[arg(long, value_name = "TEAM", conflicts_with = "name")]
+    pub team: Option<String>,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -150,17 +157,28 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
         }
         return Ok(());
     }
-    let name = named_heap(args.heap.name.as_deref(), app)?;
+    let heap_name = match &args.team {
+        Some(_) => None,
+        None => Some(named_heap(args.heap.name.as_deref(), app)?),
+    };
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
-    let heap = resolve_heap_handle(name, &client, &token).await?;
+    if let Some(team) = &args.team {
+        let api = TeamApi {
+            client: &client,
+            token: &token,
+            team,
+        };
+        return edit_team_parameter(&args, team, &api, out).await;
+    }
+    let heap = resolve_heap_handle(heap_name.ok_or(SettingError::NoHeap)?, &client, &token).await?;
     let api = HeapApi {
         client: &client,
         token: &token,
         heap: &heap,
     };
     let list = api.get::<ParameterListDto>(&["parameters"], NO_QUERY).await?;
-    let parameter = find_parameter(&args.parameter, &list.value, &heap)?;
+    let parameter = find_own_parameter(&args.parameter, &list.value, &heap)?;
     let tag_ids = if args.tag.is_empty() && args.untag.is_empty() {
         None
     } else {
@@ -178,7 +196,12 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
     let order = if args.order.is_empty() {
         None
     } else {
-        Some(arrangement(&check_order(&args.order, parameter, &heap)?, None))
+        Some(arrangement(
+            &check_order(&args.order, &parameter.name, &parameter.options, |typed| {
+                find_option(typed, parameter, &heap)
+            })?,
+            None,
+        ))
     };
     let mut writes = Vec::new();
     if args.name.is_some() || args.weight.is_some() {
@@ -228,16 +251,17 @@ pub async fn run(args: EditArgs, app: &App, out: &mut Output) -> Result<(), CliE
     Ok(())
 }
 
-/// The options of `parameter` in the order `typed` gives, each named by label or ID. Every option in use must be
-/// named once.
+/// The `options` of the parameter called `parameter` in the order `typed` gives, each named by label or ID and
+/// found by `find`. Every option in use must be named once.
 fn check_order<'p>(
     typed: &[String],
-    parameter: &'p ParameterDto,
-    heap: &HeapHandle,
+    parameter: &str,
+    options: &'p [OptionDto],
+    find: impl Fn(&str) -> Result<&'p OptionDto, LookupError>,
 ) -> Result<Vec<&'p OptionDto>, CliError> {
     let mut ordered: Vec<&OptionDto> = Vec::with_capacity(typed.len());
     for name in typed {
-        let option = find_option(name.trim(), parameter, heap)?;
+        let option = find(name.trim())?;
         if ordered.iter().any(|seen| seen.id == option.id) {
             return Err(UsageError::OrderRepeatsOption {
                 option: option.label.clone(),
@@ -246,20 +270,100 @@ fn check_order<'p>(
         }
         ordered.push(option);
     }
-    let missing: Vec<String> = parameter
-        .options
+    let missing: Vec<String> = options
         .iter()
         .filter(|option| !ordered.iter().any(|named| named.id == option.id))
         .map(|option| option.label.clone())
         .collect();
     if !missing.is_empty() {
         return Err(UsageError::OrderMissesOptions {
-            parameter: parameter.name.clone(),
+            parameter: parameter.to_owned(),
             missing,
         }
         .into());
     }
     Ok(ordered)
+}
+
+/// The edit of a team parameter: its name, then its option order, each its own write at the version the last one
+/// returned, as for a heap's. The rest of the flags can't go with `--team`, which clap checks.
+async fn edit_team_parameter(args: &EditArgs, team: &str, api: &TeamApi<'_>, out: &mut Output) -> Result<(), CliError> {
+    let list = api.get::<TeamParameterListDto>(&["parameters"]).await?;
+    let parameter = find_team_parameter(&args.parameter, &list.value, team)?;
+    let order = if args.order.is_empty() {
+        None
+    } else {
+        let ordered = check_order(&args.order, &parameter.name, &parameter.options, |typed| {
+            find_team_option(typed, parameter, team)
+        })?;
+        Some(arrangement(&ordered, None))
+    };
+    let details = args
+        .name
+        .as_ref()
+        .map(|name| TeamParameterPatchDto { name: name.clone() });
+    let id = parameter.id.to_string();
+    let mut latest: Option<Fetched<TeamParameterDto>> = None;
+    let mut saved = Vec::new();
+    let name_part = Part::Details {
+        name: true,
+        weight: false,
+    };
+    let left_after = |done: usize| -> Vec<Part> {
+        [details.as_ref().map(|_| name_part), order.as_ref().map(|_| Part::Order)]
+            .into_iter()
+            .flatten()
+            .skip(done)
+            .collect()
+    };
+    if let Some(body) = &details {
+        latest = Some(
+            api.patch::<TeamParameterDto>(&["parameters", &id], parameter.version, body)
+                .await?,
+        );
+        saved.push(name_part);
+    }
+    if let Some(body) = &order {
+        let version = latest.as_ref().map_or(parameter.version, |last| last.value.version);
+        match api
+            .patch::<TeamParameterDto>(&["parameters", &id, "options"], version, body)
+            .await
+        {
+            Ok(done) => latest = Some(done),
+            Err(err) => {
+                if out.mode() == Mode::Json {
+                    if let Some(last) = &latest {
+                        out.json(&last.body)?;
+                    }
+                } else {
+                    let current = latest.as_ref().map_or(&parameter.name, |last| &last.value.name);
+                    if let Some(note) = partial_note(current, &saved, &left_after(saved.len())) {
+                        out.note(&note)?;
+                    }
+                }
+                return Err(err.into());
+            }
+        }
+    }
+    let Some(edited) = latest else {
+        return Ok(());
+    };
+    match out.mode() {
+        Mode::Json => out.json(&edited.body)?,
+        Mode::Quiet => {}
+        Mode::Human if edited.value.version == parameter.version => {
+            out.line(&format!("No change to team parameter \"{}\".", edited.value.name))?;
+        }
+        Mode::Human if edited.value.name != parameter.name => out.line(&format!(
+            "Renamed team parameter \"{}\" to \"{}\" in every heap of {team}.",
+            parameter.name, edited.value.name
+        ))?,
+        Mode::Human => out.line(&format!(
+            "Updated team parameter \"{}\" in every heap of {team}.",
+            edited.value.name
+        ))?,
+    }
+    Ok(())
 }
 
 /// What to tell on stderr when a write failed after others were saved: what was saved, what wasn't, and the flags
@@ -294,6 +398,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::lookup::HeapHandle;
 
     fn handle() -> HeapHandle {
         HeapHandle {
@@ -311,6 +416,12 @@ mod tests {
         }))?)
     }
 
+    fn ordered<'p>(parameter: &'p ParameterDto, typed: &[String]) -> Result<Vec<&'p OptionDto>, CliError> {
+        check_order(typed, &parameter.name, &parameter.options, |name| {
+            find_option(name, parameter, &handle())
+        })
+    }
+
     fn typed(names: &[&str]) -> Vec<String> {
         names.iter().map(|name| (*name).to_owned()).collect()
     }
@@ -319,10 +430,9 @@ mod tests {
     fn an_order_naming_every_option_once_is_the_options_in_that_order() -> googletest::Result<()> {
         let parameter = area("Area", 1)?;
 
-        let ordered = check_order(
-            &typed(&["server", " Backend", &Uuid::from_u128(12).to_string()]),
+        let ordered = ordered(
             &parameter,
-            &handle(),
+            &typed(&["server", " Backend", &Uuid::from_u128(12).to_string()]),
         );
 
         let labels: Vec<&str> = ordered
@@ -335,7 +445,7 @@ mod tests {
     fn an_order_that_leaves_options_out_names_them() -> googletest::Result<()> {
         let parameter = area("Area", 1)?;
 
-        let ordered = check_order(&typed(&["Server"]), &parameter, &handle());
+        let ordered = ordered(&parameter, &typed(&["Server"]));
 
         verify_that!(
             ordered,
@@ -349,11 +459,7 @@ mod tests {
     fn an_order_that_names_an_option_twice_says_which() -> googletest::Result<()> {
         let parameter = area("Area", 1)?;
 
-        let ordered = check_order(
-            &typed(&["Backend", "BACKEND", "Frontend", "Server"]),
-            &parameter,
-            &handle(),
-        );
+        let ordered = ordered(&parameter, &typed(&["Backend", "BACKEND", "Frontend", "Server"]));
 
         verify_that!(ordered, err(displays_as(eq("--order names Backend twice"))))
     }
@@ -362,7 +468,7 @@ mod tests {
     fn an_order_that_names_an_unknown_option_is_a_lookup_error() -> googletest::Result<()> {
         let parameter = area("Area", 1)?;
 
-        let ordered = check_order(&typed(&["Backend", "Nope"]), &parameter, &handle());
+        let ordered = ordered(&parameter, &typed(&["Backend", "Nope"]));
 
         verify_that!(
             ordered,

@@ -3,6 +3,7 @@
 pub mod audit_log;
 pub mod email_change_links;
 pub mod email_confirmation_links;
+pub mod heap_parameters;
 pub mod heap_priorities;
 pub mod heaps;
 pub mod invite_links;

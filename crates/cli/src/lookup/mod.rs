@@ -4,7 +4,9 @@
 use api_types::common::{DueInputDto, ItemDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::me::MeDto;
-use api_types::parameters::{ArchivedOptionDto, OptionDto, ParameterDto, ParameterListDto};
+use api_types::parameters::{
+    ArchivedOptionDto, OptionDto, ParameterDto, ParameterListDto, TeamParameterDto, TeamParameterListDto,
+};
 use api_types::tags::{TagDto, TagListDto, TeamTagListDto};
 use api_types::views::{SavedViewDto, SavedViewListDto};
 use domain::step::StepNumber;
@@ -565,24 +567,77 @@ pub fn find_option<'p>(
     parameter: &'p ParameterDto,
     heap: &HeapHandle,
 ) -> Result<&'p OptionDto, LookupError> {
-    parameter
-        .options
-        .iter()
-        .find(|option| is_named(name, &option.label, option.id))
-        .ok_or_else(|| LookupError::UnknownOption {
-            name: name.to_owned(),
-            parameter: parameter.name.clone(),
-            heap: heap.to_string(),
-            known: parameter.options.iter().map(|o| o.label.clone()).collect(),
-        })
+    find_option_in(name, &parameter.name, &parameter.options, &heap.to_string())
 }
 
 /// The archived option of `parameter` that `name` names, by label ignoring case, or by ID. The first match wins.
 pub fn find_archived_option<'p>(name: &str, parameter: &'p ParameterDto) -> Option<&'p ArchivedOptionDto> {
-    parameter
-        .archived_options
+    find_archived_option_in(name, &parameter.archived_options)
+}
+
+/// The team parameter in use that `name` names, by name ignoring case, or by ID. The error calls the place
+/// `team <slug>`.
+pub fn find_team_parameter<'p>(
+    name: &str,
+    parameters: &'p TeamParameterListDto,
+    team: &str,
+) -> Result<&'p TeamParameterDto, LookupError> {
+    parameters
+        .parameters
+        .iter()
+        .find(|parameter| is_named(name, &parameter.name, parameter.id))
+        .ok_or_else(|| LookupError::UnknownParameter {
+            name: name.to_owned(),
+            heap: format!("team {team}"),
+            known: parameters.parameters.iter().map(|p| p.name.clone()).collect(),
+        })
+}
+
+/// The archived team parameter that `name` names, by name ignoring case, or by ID. The first match wins.
+pub fn find_archived_team_parameter<'p>(
+    name: &str,
+    parameters: &'p TeamParameterListDto,
+) -> Option<&'p TeamParameterDto> {
+    parameters
+        .archived
+        .iter()
+        .find(|parameter| is_named(name, &parameter.name, parameter.id))
+}
+
+/// The option in use of a team `parameter` that `name` names, by label ignoring case, or by ID.
+pub fn find_team_option<'p>(
+    name: &str,
+    parameter: &'p TeamParameterDto,
+    team: &str,
+) -> Result<&'p OptionDto, LookupError> {
+    find_option_in(name, &parameter.name, &parameter.options, &format!("team {team}"))
+}
+
+/// The archived option of a team `parameter` that `name` names, by label ignoring case, or by ID. The first match
+/// wins.
+pub fn find_archived_team_option<'p>(name: &str, parameter: &'p TeamParameterDto) -> Option<&'p ArchivedOptionDto> {
+    find_archived_option_in(name, &parameter.archived_options)
+}
+
+fn find_option_in<'p>(
+    name: &str,
+    parameter: &str,
+    options: &'p [OptionDto],
+    place: &str,
+) -> Result<&'p OptionDto, LookupError> {
+    options
         .iter()
         .find(|option| is_named(name, &option.label, option.id))
+        .ok_or_else(|| LookupError::UnknownOption {
+            name: name.to_owned(),
+            parameter: parameter.to_owned(),
+            heap: place.to_owned(),
+            known: options.iter().map(|o| o.label.clone()).collect(),
+        })
+}
+
+fn find_archived_option_in<'p>(name: &str, options: &'p [ArchivedOptionDto]) -> Option<&'p ArchivedOptionDto> {
+    options.iter().find(|option| is_named(name, &option.label, option.id))
 }
 
 fn is_named(typed: &str, name: &str, id: Uuid) -> bool {

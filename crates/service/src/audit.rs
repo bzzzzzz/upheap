@@ -13,6 +13,7 @@ use domain::tag::Tag;
 use domain::turn::{Goal, TakeBackWhy, Turn};
 use domain::{OptionId, ParameterId, TagId};
 use serde_json::{Map, Value, json};
+use store::parameters::HeapUse;
 
 /// The fields of a newly created item, for its `item_created` entry. The kind and the stage are left out while they
 /// are the defaults every new item starts with, so a new item's history doesn't grow two lines.
@@ -339,6 +340,18 @@ pub(crate) fn diff_parameters(before: &Parameter, after: &Parameter) -> Value {
     diff_fields(parameter_fields(before), parameter_fields(after))
 }
 
+/// Changed fields between a heap's use of a team parameter before and after: whether it uses it, and its weight. A
+/// first use starts from a stopped row (see `store::parameters::ensure_heap_use`), so there is always a before.
+pub(crate) fn diff_heap_use(before: &HeapUse, after: &HeapUse) -> Value {
+    let fields = |heap_use: &HeapUse| {
+        let mut fields = Map::new();
+        fields.insert(AuditField::Used.code().into(), json!(heap_use.stopped_at.is_none()));
+        fields.insert(AuditField::Weight.code().into(), json!(heap_use.weight.get()));
+        fields
+    };
+    diff_fields(fields(before), fields(after))
+}
+
 /// Changed weights and tag order between a heap and its new `policy` and `tag_order`, named like the heap's columns.
 pub(crate) fn diff_policies(before: &Heap, policy: &HeapPolicy, tag_order: &[TagId]) -> Value {
     diff_fields(
@@ -407,7 +420,10 @@ fn parameter_fields(parameter: &Parameter) -> Map<String, Value> {
     let tags: Vec<String> = parameter.tags.iter().map(ToString::to_string).collect();
     let mut fields = Map::new();
     fields.insert(AuditField::Name.code().into(), json!(parameter.name.as_str()));
-    fields.insert(AuditField::Weight.code().into(), json!(parameter.weight.get()));
+    // A team parameter has no weight of its own: each heap's is in its use (see `diff_heap_use`).
+    if !parameter.is_team_owned() {
+        fields.insert(AuditField::Weight.code().into(), json!(parameter.weight.get()));
+    }
     fields.insert(AuditField::Options.code().into(), json!(options));
     fields.insert(AuditField::ArchivedOptions.code().into(), json!(archived));
     fields.insert(AuditField::Tags.code().into(), json!(tags));

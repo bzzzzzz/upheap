@@ -571,7 +571,7 @@ mod tests {
     }
 
     fn area() -> Parameter {
-        use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, Weight};
+        use crate::parameter::{NewParameter, OptionLabel, ParameterName, ParameterOption, ParameterOwner, Weight};
         let option = |n: u128, label: &str| ParameterOption {
             id: OptionId::from_uuid(Uuid::from_u128(n)),
             label: OptionLabel::parse(label).expect("valid"),
@@ -584,7 +584,7 @@ mod tests {
         };
         Parameter::new(
             ParameterId::from_uuid(Uuid::from_u128(10)),
-            HeapId::from_uuid(Uuid::nil()),
+            ParameterOwner::Heap(HeapId::from_uuid(Uuid::nil())),
             fields,
             Timestamp::from_millis(0).expect("in range"),
         )

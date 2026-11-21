@@ -1316,6 +1316,26 @@ export interface paths {
         patch: operations["arrange_options"];
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/stop-using": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Makes the heap stop using a team parameter, once no open item of the heap has a value for it. Admins only. Its
+         *     weight is kept. Stopping one the heap doesn't use succeeds.
+         */
+        post: operations["stop_using_team_parameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/tags": {
         parameters: {
             query?: never;
@@ -1327,6 +1347,26 @@ export interface paths {
         /** Sets the tags the parameter is suggested for. Admins only; send the parameter's `version` in `If-Match`. */
         put: operations["link_tags"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Makes the heap use one of its team's parameters. Admins only. The first use gives it the default weight, and
+         *     using it again after stopping restores the weight it had. Using one that is used already succeeds.
+         */
+        post: operations["use_team_parameter"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1623,6 +1663,111 @@ export interface paths {
         head?: never;
         /** Makes a member an admin, or an admin a member. Admins only. */
         patch: operations["update_member"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/options/{option_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archives an option of a team's parameter. Open items with it, in every heap of the team, switch to the
+         *     replacement, and their versions go up; closed items keep it. Admins only. Archiving an archived option succeeds.
+         */
+        post: operations["archive_team_option"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/parameters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's parameters, by name. Any member may list them; the heaps of the team choose which to use. */
+        get: operations["list_team_parameters"];
+        put?: never;
+        /**
+         * Adds a parameter to the team, for its heaps to use. Admins only. The name must be free among the parameters in
+         *     use of the team and of all its heaps.
+         */
+        post: operations["create_team_parameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/parameters/{parameter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Renames a team's parameter, in every heap that uses it. Admins only; send the parameter's `version` in
+         *     `If-Match`.
+         */
+        patch: operations["update_team_parameter"];
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/parameters/{parameter_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archives a team's parameter, once no open item in any heap of the team has a value for it. Admins only.
+         *     Archiving an archived parameter succeeds.
+         */
+        post: operations["archive_team_parameter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team}/parameters/{parameter_id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adds an option to a team's parameter as its lowest priority. Admins only; send the parameter's `version` in
+         *     `If-Match`.
+         */
+        post: operations["add_team_option"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Puts a team parameter's options in use in a new order, highest priority first, and relabels them. Admins only;
+         *     send the parameter's `version` in `If-Match`.
+         */
+        patch: operations["arrange_team_options"];
         trace?: never;
     };
     "/api/v1/teams/{team}/tags": {
@@ -2394,6 +2539,12 @@ export interface components {
             description?: string | null;
             /** @description 1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case. */
             name: string;
+        };
+        CreateTeamParameterRequest: {
+            /** @description 1 to 50 characters, unique among the parameters in use of the team and of its heaps ignoring case. */
+            name: string;
+            /** @description Option labels, highest priority first: at most 50, unique ignoring case. */
+            options?: string[];
         };
         /** @description One day, or one week for `90`. */
         DataBucket: components["schemas"]["DataFigures"] & {
@@ -3513,10 +3664,15 @@ export interface components {
             archived_at?: number | null;
             /** @description Archived options, in the order they were archived. */
             archived_options: components["schemas"]["ArchivedOption"][];
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The heap the parameter is listed for: its owner for a heap parameter, and the heap that uses it for a team
+             *     parameter. A team parameter's owner is its team, named by its `team` kind.
+             */
             heap_id: string;
             /** Format: uuid */
             id: string;
+            kind: components["schemas"]["ParameterKind"];
             name: string;
             /** @description The options in use, highest priority first. */
             options: components["schemas"]["ParameterOption"][];
@@ -3529,7 +3685,8 @@ export interface components {
             version: number;
             /**
              * Format: int32
-             * @description Influence on the ranking next to the heap's other weights, 0 to 100.
+             * @description Influence on the ranking next to the heap's other weights, 0 to 100. For a team parameter, the heap's weight
+             *     for it.
              */
             weight: number;
         };
@@ -3537,20 +3694,30 @@ export interface components {
          * @description An action the caller can take on a parameter.
          * @enum {string}
          */
-        ParameterAction: "edit" | "archive" | "view_history";
+        ParameterAction: "edit" | "archive" | "stop_using" | "view_history";
+        /**
+         * @description Who owns a parameter.
+         * @enum {string}
+         */
+        ParameterKind: "heap" | "team";
         ParameterList: {
             allowed_actions: components["schemas"]["ParameterListAction"][];
-            /** @description Archived parameters, by name. Closed items may still show their values. */
+            /**
+             * @description Archived parameters, by name. Closed items may still show their values. A team parameter the heap stopped
+             *     using is here too.
+             */
             archived: components["schemas"]["Parameter"][];
             heap: components["schemas"]["HeapSummary"];
             /** @description The parameters in use, by name. */
             parameters: components["schemas"]["Parameter"][];
+            /** @description The team's other parameters in use, which the heap doesn't use, by name. */
+            team_available: components["schemas"]["TeamParameter"][];
         };
         /**
          * @description An action the caller can take on a heap's parameters.
          * @enum {string}
          */
-        ParameterListAction: "create";
+        ParameterListAction: "create" | "use_team_parameter";
         /** @description An option in use. */
         ParameterOption: {
             /** Format: uuid */
@@ -4381,6 +4548,45 @@ export interface components {
             /** @description The member's path is `/teams/{team}/members/{username}`. */
             username: string;
         };
+        /** @description A team's parameter, with the heaps that use it. */
+        TeamParameter: {
+            allowed_actions: components["schemas"]["ParameterAction"][];
+            /**
+             * Format: int64
+             * @description UTC milliseconds; `null` while the parameter is in use.
+             */
+            archived_at?: number | null;
+            /** @description Archived options, in the order they were archived. */
+            archived_options: components["schemas"]["ArchivedOption"][];
+            /** @description The heaps of the team that use the parameter now, by name. */
+            heaps: components["schemas"]["HeapSummary"][];
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description The options in use, highest priority first. */
+            options: components["schemas"]["ParameterOption"][];
+            /** @description Always empty for now. */
+            tag_ids: string[];
+            /** Format: uuid */
+            team_id: string;
+            /**
+             * Format: int32
+             * @description Send back in `If-Match` when editing.
+             */
+            version: number;
+        };
+        /** @description A team's parameters. */
+        TeamParameterList: {
+            allowed_actions: components["schemas"]["ParameterListAction"][];
+            /** @description Archived parameters, by name. */
+            archived: components["schemas"]["TeamParameter"][];
+            /** @description The parameters in use, by name. */
+            parameters: components["schemas"]["TeamParameter"][];
+        };
+        TeamParameterPatchRequest: {
+            /** @description 1 to 50 characters. */
+            name: string;
+        };
         /** @description A change to a team. Leave a field out to keep it. */
         TeamPatchRequest: {
             /** @description 1 to 100 characters. A new name is refused with `personal_team` on a personal team. */
@@ -4767,6 +4973,7 @@ export type CreateNamedRequest = components['schemas']['CreateNamedRequest'];
 export type CreateParameterRequest = components['schemas']['CreateParameterRequest'];
 export type CreateSavedViewRequest = components['schemas']['CreateSavedViewRequest'];
 export type CreateTagRequest = components['schemas']['CreateTagRequest'];
+export type CreateTeamParameterRequest = components['schemas']['CreateTeamParameterRequest'];
 export type DataBucket = components['schemas']['DataBucket'];
 export type DataClosed = components['schemas']['DataClosed'];
 export type DataDays = components['schemas']['DataDays'];
@@ -4852,6 +5059,7 @@ export type OptionArrangement = components['schemas']['OptionArrangement'];
 export type OriginInput = components['schemas']['OriginInput'];
 export type Parameter = components['schemas']['Parameter'];
 export type ParameterAction = components['schemas']['ParameterAction'];
+export type ParameterKind = components['schemas']['ParameterKind'];
 export type ParameterList = components['schemas']['ParameterList'];
 export type ParameterListAction = components['schemas']['ParameterListAction'];
 export type ParameterOption = components['schemas']['ParameterOption'];
@@ -4925,6 +5133,9 @@ export type Team = components['schemas']['Team'];
 export type TeamAction = components['schemas']['TeamAction'];
 export type TeamData = components['schemas']['TeamData'];
 export type TeamMember = components['schemas']['TeamMember'];
+export type TeamParameter = components['schemas']['TeamParameter'];
+export type TeamParameterList = components['schemas']['TeamParameterList'];
+export type TeamParameterPatchRequest = components['schemas']['TeamParameterPatchRequest'];
 export type TeamPatchRequest = components['schemas']['TeamPatchRequest'];
 export type TeamSummary = components['schemas']['TeamSummary'];
 export type TeamTagList = components['schemas']['TeamTagList'];
@@ -8940,6 +9151,63 @@ export interface operations {
             };
         };
     };
+    stop_using_team_parameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterList"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a parameter of the heap's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_in_use` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     link_tags: {
         parameters: {
             query?: never;
@@ -9012,6 +9280,63 @@ export interface operations {
             };
             /** @description `version_required` */
             428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    use_team_parameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParameterList"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not a parameter of the heap's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_archived` or `heap_archived` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10092,6 +10417,445 @@ export interface operations {
             };
             /** @description `last_admin` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archive_team_option: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArchiveOptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The option's parameter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `replacement_required` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_team_parameters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameterList"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_team_parameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamParameterRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_name_taken` or `option_label_taken` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid fields or `too_many_options` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_team_parameter: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamParameterPatchRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_name_taken`, `parameter_archived` or `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    archive_team_parameter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `parameter_in_use` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_team_option: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddOptionRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `option_label_taken` (`field` `label`), `parameter_archived` or `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description An invalid label or `too_many_options` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    arrange_team_options: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                parameter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArrangeOptionsRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamParameter"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `option_label_taken`, `parameter_archived` or `version_conflict` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description An invalid label, or `options_mismatch` when the list isn't every option in use exactly once */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
                 headers: {
                     [name: string]: unknown;
                 };

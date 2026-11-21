@@ -16,6 +16,7 @@ import { useParameters } from "../api/queries/parameters";
 import { heapTags, useTags } from "../api/queries/tags";
 import { compactButtonClass } from "../components/buttons";
 import { MenuEntry, MenuPopover } from "../components/Menu";
+import { TeamMark } from "../components/TeamMark";
 import { useFocusAfterRender } from "../components/useFocusAfterRender";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, clampWeight, inputClass, introClass, labelClass } from "./settingsForm";
@@ -53,6 +54,8 @@ type Factor = {
   /** `need`, `age`, `deadline`, `value`, `tags` or `parameter:{id}`: where its draft is kept. */
   key: string;
   name: string;
+  /** Set for a team's parameter, after its name. */
+  mark?: React.ReactNode;
   description: React.ReactNode;
   /** The weight as last saved. */
   saved: number;
@@ -130,10 +133,13 @@ function RankingForm({
   const custom: Factor[] = parameters.map((parameter) => ({
     key: `parameter:${parameter.id}`,
     name: parameter.name,
+    mark: parameter.kind === "team" ? <TeamMark of="parameter" /> : undefined,
     description:
       parameter.options.length > 0 ? <OptionLinks heapRef={heapRef} parameter={parameter} /> : "No options yet",
     saved: parameter.weight,
-    editable: canEdit && parameter.allowed_actions.includes("edit"),
+    // A team parameter's weight in this heap is the heap's, saved with its other weights, so the heap's own
+    // permission to change its weights decides; a heap parameter also needs its own `edit`.
+    editable: canEdit && (parameter.kind === "team" || parameter.allowed_actions.includes("edit")),
     parameter,
   }));
   const factors = [...builtIn, tagsFactor, ...custom];
@@ -405,7 +411,10 @@ function FactorRow({
   return (
     <li className="border-b border-sunken py-3.5 last:border-b-0">
       <div className="flex items-center gap-2">
-        <span className="font-semibold">{factor.name}</span>
+        <span className="font-semibold">
+          {factor.name}
+          {factor.mark}
+        </span>
         {value !== factor.saved && (
           <span className="rounded-full bg-accent-soft px-2 py-px text-xs text-accent-ink">was {factor.saved}</span>
         )}

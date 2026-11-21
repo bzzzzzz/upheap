@@ -107,6 +107,37 @@ impl TeamApi<'_> {
         self.client.get(&self.path(resource), NO_QUERY, self.token).await
     }
 
+    /// `POST` of `body` to `resource` under the team.
+    pub async fn post<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<T>, ClientError> {
+        self.client.post(&self.path(resource), body, self.token).await
+    }
+
+    /// `POST` of `body` to `resource` under the team, which is at `version`.
+    pub async fn post_at_version<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        version: u32,
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<T>, ClientError> {
+        self.client
+            .post_at_version(&self.path(resource), body, version, self.token)
+            .await
+    }
+
+    /// `PATCH` of `body` to `resource` under the team, which is at `version`.
+    pub async fn patch<T: DeserializeOwned>(
+        &self,
+        resource: &[&str],
+        version: u32,
+        body: &(impl Serialize + ?Sized),
+    ) -> Result<Fetched<T>, ClientError> {
+        self.client.patch(&self.path(resource), body, version, self.token).await
+    }
+
     /// `POST` of `body` to `resource` under the team, with the merge `confirm` token when there is one.
     pub async fn post_confirming<T: DeserializeOwned>(
         &self,
