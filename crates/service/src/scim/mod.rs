@@ -12,7 +12,8 @@
 //! only when every record is, else in the groups of the active ones. A linked person who is left inactive, or whose
 //! last record is deleted, also loses every session and token, and [`Services::open_session`] refuses an inactive
 //! person until the provider turns them back on. A sign-in of a known person locks their personal team before it
-//! opens the session, so it comes before such a write, which ends it, or after, and is refused. A write to users that
+//! opens the session, and approving a CLI sign-in and exchanging its code lock it before they store or use the
+//! code, so each comes before such a write, which ends it, or after, and is refused. A write to users that
 //! turns a linked person off or back on records it in their personal team, where their own account history reads it.
 //!
 //! Resources are JSON as in RFC 7643, built and read here; the HTTP side is in `api`.
@@ -690,7 +691,11 @@ impl Services {
     }
 
     /// The personal team of `user_id`, where their account entries go.
-    async fn personal_team(&self, db: &impl ConnectionTrait, user_id: UserId) -> Result<TeamId, ServiceError> {
+    pub(crate) async fn personal_team(
+        &self,
+        db: &impl ConnectionTrait,
+        user_id: UserId,
+    ) -> Result<TeamId, ServiceError> {
         let user = store::users::find_user(db, user_id)
             .await?
             .ok_or_else(|| StoreError::corrupt("users", &user_id.to_string(), "a linked identity has no user"))?;

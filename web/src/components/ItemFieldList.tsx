@@ -51,7 +51,12 @@ export function ItemFieldList({
   const due = item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : null;
 
   return (
-    <section aria-label="Fields" className="flex flex-col gap-3 border-t border-line pt-3">
+    <section
+      aria-label="Fields"
+      data-item-fields=""
+      tabIndex={-1}
+      className="flex flex-col gap-3 border-t border-line pt-3 outline-none"
+    >
       <dl className="grid grid-cols-3 gap-2">
         <Field
           layout="cell"

@@ -18,7 +18,7 @@ use api_types::oauth::{
 };
 use axum::extract::State;
 use axum::extract::rejection::FormRejection;
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Form, Json};
 use domain::oauth::{AuthorizationError, DeviceName};
@@ -28,7 +28,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::error::Problem;
-use crate::extract::{ApiJson, ApiQuery, SessionUser};
+use crate::extract::{ApiJson, ApiQuery, SessionUser, session_token};
 use crate::{ApiError, AppState};
 
 /// The consent page's endpoints, behind the CSRF check.
@@ -80,11 +80,14 @@ async fn check_authorization(
 async fn approve_authorization(
     State(state): State<AppState>,
     SessionUser(principal): SessionUser,
+    headers: HeaderMap,
     ApiJson(request): ApiJson<AuthorizationRequestDto>,
 ) -> Result<Json<ApprovalDto>, ApiError> {
+    // `SessionUser` found this cookie valid, so a missing one only means the session ended in between.
+    let session = session_token(&headers).ok_or(ServiceError::Unauthenticated)?;
     let approval = state
         .services
-        .approve_authorization(principal, request.as_params())
+        .approve_authorization(principal, &session, request.as_params())
         .await?;
     // The code is base64url, but the state is the client's own text, so both are encoded.
     let query = form_urlencoded::Serializer::new(String::new())

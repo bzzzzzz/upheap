@@ -144,9 +144,12 @@ shows it, the heap's views link to it with none marked active, the tabs show on 
 that is `/waiting`, `/agents` and `/all`; Teams and Account keep their shell without one. The heap kept is the one opened last that is still
 there and active, else the first active heap, else the first.
 
-On a wide screen the sidebar and the content are one centred block, at most the sidebar plus the content column
-wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The item pane widens
-the block when it opens.
+On a wide screen the sidebar and the content are one centred block, at most the sidebar, the content column and the
+item pane wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The block is
+that wide whether or not an item is open, so opening or closing one never moves the sidebar or the list: an item is
+opened many times a session. The content column (48rem) sits next to the sidebar, with the pane's room left empty on
+its right. The pane opens into that room; where the screen has too little of it, the list narrows from the right and
+its left edge stays.
 
 ### Heap settings
 
@@ -429,8 +432,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 1. The item route (`/teams/$team/heaps/$heap/items/$item`) shows the list with the item over it or beside it,
    instead of a separate page. Links and the back button keep working: going back closes the sheet.
 2. It opens to read, in this order: the title with the main state button and ⋯ beside it (point 6), a status line, Waits for
-   you when something does (point 12), the fields (point 16), the context (point 17), the comments (point 18), a task's Steps (point 11),
-   what it came from and became (point 19), Questions (points 13 and 14), Runs (point 20) and History, collapsed until it's clicked, on every item it opens. On a phone the
+   you when something does (point 12), with the open questions and their reply controls, the fields (point 16), the context (point 17), the comments (point 18), a task's Steps (point 11),
+   what it came from and became (point 19), Questions, the answered ones and Ask a question (points 13 and 14), Runs (point 20) and History, collapsed until it's clicked, on every item it opens. On a phone the
    main button and ⋯ sit in a bar at the bottom of the sheet instead, the main one wider. The **status line** is one
    quiet line under the title that may wrap: the kind and stage with their icons ("Task · With context"; the kind
    alone when the item is closed), a reminder's date ("Reminder · 12 March"), the state ("In progress" in the
@@ -526,16 +529,18 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     source, focused, the caret at the end; leaving the field saves a change and goes back to the rendered text once the save has landed;
     a failed save keeps the field and its draft, and Escape there does nothing, so a draft isn't lost to a stray key. An
     editor opening a step with no context gets the field at once. A refetch doesn't touch what is typed.
-12. **Waits for you**, while the item is open and has open questions, a stuck agent turn or a gone blocker, is the summary at the top of
-    the item, under the status line, a tinted, outlined block (the accent at a low fill, a 2 px accent border) like the
-    open-questions box in Questions, the same on
-    the pane, the tablet panel and the phone sheet. A gone blocker is its first row (see Waiting for me, 8), with
-    Unblock; a stuck turn comes next (see Waiting for me, 7), with Retry and Take back. When questions wait, one line says "1 question waits for you" or "N questions wait for you", with
-    **Answer ↓** on its right: it scrolls the first open question into view and focuses its first control. The reply
-    controls are not here but in Questions (point 13).
-13. **Questions** is a section under the Steps, shown when the item has any question, or is open and the person may ask one (see **Ask a question** below), under the heading "Questions".
-    The open questions come first, in the same tinted, outlined box, one row each in number order, separated by a thin
-    rule: a quiet line with the kind ("Question", "Request", "Question · pick any", "Review, round N", "Ready to close") and `· step "<title>"` when it
+12. **Waits for you**, while the item is open and has open questions, a stuck agent turn or a gone blocker, is what
+    the item waits on, at its top, under the status line: a tinted, outlined block (the accent at a low fill, a 2 px
+    accent border), the same on the pane, the tablet panel and the phone sheet. Most of the time an item is opened to
+    answer what waits on it, so it is answered here, with no scroll. A gone blocker is its first row (see Waiting for
+    me, 8), with Unblock; a stuck turn comes next (see Waiting for me, 7), with Retry and Take back. The open questions
+    follow (point 13), under one line that says "1 question waits for you" or "N questions wait for you", with
+    **Skip to details ↓** on its right whenever a question waits, also for one, and on a phone too (44 px; the
+    bottom bar keeps only the main button and ⋯). Skip scrolls the fields to the top of the pane or sheet and focuses
+    the first of them (the fields themselves when none can be edited); it folds nothing, so scrolling up brings the
+    questions back. Opening the item doesn't move focus into the block. The notes a reply can leave (someone else
+    replied first, the item was closed first) sit under the block.
+13. **Open questions** sit in Waits for you, one row each in number order, separated by a thin rule: a quiet line with the kind ("Question", "Request", "Question · pick any", "Review, round N", "Ready to close") and `· step "<title>"` when it
     names one, the short text in semibold, "Details ▸" when it has details (opening them in place), then the reply
     controls. A question without choices has an "Answer" field and Reply, off until the answer has text. With choices
     it has radios (one) or checkboxes (any), "Comment, optional" and Reply, off until something is picked. A request
@@ -543,12 +548,18 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     one row on a phone. A review and a done proposal are rows as in Waiting for me, 9 and 10: a review has its link
     and piece under the text and Approved and Changes asked; a done proposal has its summary line and Close as done
     and Not yet, and its toast has no Open, as the item is open already. On a phone Reply spans the width, and every control is 44 px. After a reply there is no toast (but see Close as done):
-    the row leaves the box and joins the fold (point 14), the focus goes to the next row's first control, else to the
-    item, and a polite live region says Replied to “<text>”. While it is sending, that row's buttons are off. If it
+    the row leaves the block and joins the fold (point 14), the focus goes to the next row's first control, else to the
+    item, and a polite live region says Replied to “<text>”; after the last one the count line and Skip go, and the
+    block with them unless a gone blocker or a stuck turn is in it. While it is sending, that row's buttons are off. If it
     fails the row stays with its picks and comment and the reason shows under it. If someone else replied first, the
-    row leaves and the section says "Someone else replied to “…” meanwhile." until the next reply. In an archived
-    heap a row shows its text and details with no controls. A closed item has no open rows: closing withdrew its open
-    questions, which read in the fold as "Withdrawn".
+    row leaves and "Someone else replied to “…” meanwhile." shows until the next reply. In an archived
+    heap a row shows its text and details with no controls, and Skip still shows. A closed item has no open rows:
+    closing withdrew its open questions, which read in the fold as "Withdrawn".
+    **Questions** is a section under the Steps, shown when the item has any question, or is open and the person may
+    ask one (see **Ask a question** below), under the heading "Questions". While questions are open it starts with a
+    quiet link, "N open, at the top ↑", which scrolls up to the first of them and focuses its first control (the
+    open questions themselves when it has none), for
+    someone who is at the bottom, after asking, say. The fold of point 14 comes next.
     **Ask a question** ends the section, after the fold, as a quiet text button with a plus, on an open item in an
     unarchived heap for a member (no button for a viewer, a closed item or an archived heap); with no questions the
     section is only its heading and the button, and on a phone the button spans the width. It opens a form in place,
@@ -561,11 +572,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     not dropped, **About a step** picks one, "No step" to begin with. Switching Kind keeps what was typed. **Ask** is
     off until the text, the details and the choices fit, and while sending; **Cancel** closes the form and drops the
     draft. On a phone Ask is over Cancel, each the full width. After asking nothing shows ahead of the server: the row
-    joins the box, Waits for you appears, the form closes, the focus returns to the button, and a polite live region
+    joins Waits for you at the top, "1 open, at the top ↑" appears, the form closes, the focus returns to the button, and a polite live region
     says Asked “<text>”. Escape closes the form while nothing is typed; with a draft it does nothing, and the item
     stays open. If it fails the form stays with its draft and the reason shows under it (an item closed meanwhile
     says "The item was closed meanwhile.").
-14. The fold under the open questions, **N answered**, is closed to begin with and lists the answered questions and the
+14. The fold in Questions, **N answered**, is closed to begin with and lists the answered questions and the
     withdrawn ones in number order: the kind line, the short text, Details ▸, then `→ <picked labels>` on its line, the comment below it as Markdown text (see Toolkit; with no picks, the comment alone); a review also shows its link and piece under the text, and "<who>, <when>" in quiet text, or a muted "Withdrawn". It reads "N closed" when none is answered
     and all are withdrawn. On an open item each answered question has **Change reply** under its reply (none for a
     viewer, in an archived heap or on a withdrawn question). It opens the reply controls of an open question, filled
@@ -731,7 +742,7 @@ its row, every item whose agent turn is stuck, and every blocked item whose bloc
 1. The heading is "Waiting for me · 5" (no count at zero) and under it a quiet line, "All heaps, most important
    first". The order is the server's: the item's score in its own heap, then heap name, position and question number.
    Rows are one column at the app's content width, separated by thin rules; no item pane opens beside the page.
-2. A row is the item's open-question row in Questions, the same component, with a head line of its own: the kind ("Request",
+2. A row is the item's open-question row in Waits for you, the same component, with a head line of its own: the kind ("Request",
    "Question", "Question · pick any", "Review, round N", "Ready to close"), the item's title as an accent, underlined link to the item in its heap, the heap's
    name, the team's name only when the person is in more than one team, and `step "<title>"` when the question names
    one. Then the short text, and the reply controls as in the item. A row whose question lost its `reply` action
