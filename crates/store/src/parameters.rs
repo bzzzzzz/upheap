@@ -1,7 +1,8 @@
 //! Custom parameters with their options and tag links. Parameters and options are archived, never deleted, and
 //! tag links are marked removed; there is no delete function, on purpose.
 //!
-//! A parameter is read and written whole: its row, its options and its tag links. Every function that returns a
+//! A parameter is read and written whole: its row, its options and its tag links. A team parameter read for a heap
+//! also carries the heap's own links (`heap_parameter_tags`), which are written separately ([`set_heap_links`]). Every function that returns a
 //! parameter returns all three.
 //!
 //! A parameter is owned by a heap or by a team: exactly one of `heap_id` and `team_id` is set, which reading a row
@@ -22,7 +23,9 @@ use sea_orm::{
 
 use crate::StoreError;
 use crate::codes::{IN_LIST_CHUNK, RowReader, id_to_db, version_to_db};
-use crate::entities::{heap_parameters, item_parameter_values, items, parameter_options, parameter_tags, parameters};
+use crate::entities::{
+    heap_parameter_tags, heap_parameters, item_parameter_values, items, parameter_options, parameter_tags, parameters,
+};
 
 const TABLE: &str = "parameters";
 const USES_TABLE: &str = "heap_parameters";
@@ -64,7 +67,7 @@ const fn child_lock(lock: Lock) -> Lock {
     }
 }
 
-/// Inserts a new parameter with its options and tag links. The caller has checked the tags belong to its owner.
+/// Inserts a new parameter with its options and tag links, ignoring `heap_tags`. The caller has checked the tags belong to its owner.
 /// A team parameter's own weight is stored as `0` and never read: each heap's weight is in its use row.
 pub async fn insert_parameter(db: &impl ConnectionTrait, parameter: &Parameter) -> Result<(), StoreError> {
     let id = id_to_db(parameter.id.as_uuid());
@@ -148,7 +151,8 @@ pub async fn list_parameters_locking(db: &impl ConnectionTrait, heap_id: HeapId)
 }
 
 /// Writes `parameter` with its options and tag links if the stored row still has version `expected`, and returns
-/// it with its new version. Tags it no longer has are marked removed at `now`. A team parameter's own weight is
+/// it with its new version. Tags it no longer has are marked removed at `now`. `heap_tags` is ignored: a heap's
+/// links are written by [`set_heap_links`]. A team parameter's own weight is
 /// written as `0`, never the heap's: the heap's is in its use row (see [`update_heap_use`]). The owner is written
 /// too, which is how a heap parameter becomes its team's (`Parameter::into_team`).
 ///
@@ -441,6 +445,38 @@ async fn sync_options(db: &impl ConnectionTrait, parameter: &Parameter) -> Resul
     Ok(())
 }
 
+/// What it takes to make a set of links exactly the wanted tags.
+struct LinkChanges<'a> {
+    /// Active links to mark removed.
+    remove: Vec<&'a str>,
+    /// Removed links to make active again.
+    restore: Vec<&'a str>,
+    /// Tags with no row yet.
+    add: Vec<&'a str>,
+}
+
+/// Compares the existing link rows, as `(tag_id, removed)`, with the wanted tags.
+fn plan_links<'a>(rows: &'a [(&'a str, bool)], wanted: &'a BTreeSet<String>) -> LinkChanges<'a> {
+    let known: HashMap<&str, bool> = rows.iter().copied().collect();
+    LinkChanges {
+        remove: rows
+            .iter()
+            .filter(|(tag, removed)| !removed && !wanted.contains(*tag))
+            .map(|(tag, _)| *tag)
+            .collect(),
+        restore: wanted
+            .iter()
+            .map(String::as_str)
+            .filter(|tag| known.get(tag) == Some(&true))
+            .collect(),
+        add: wanted
+            .iter()
+            .map(String::as_str)
+            .filter(|tag| !known.contains_key(tag))
+            .collect(),
+    }
+}
+
 /// Makes the parameter's active tag links exactly `tags`: adds the missing ones and marks the others removed.
 async fn sync_tags(
     db: &impl ConnectionTrait,
@@ -454,45 +490,94 @@ async fn sync_tags(
         .all(db)
         .await?;
     let wanted: BTreeSet<String> = tags.iter().map(|id| id_to_db(id.as_uuid())).collect();
-    let removed: Vec<&str> = rows
-        .iter()
-        .filter(|row| row.removed_at.is_none() && !wanted.contains(&row.tag_id))
-        .map(|row| row.tag_id.as_str())
-        .collect();
-    if !removed.is_empty() {
-        parameter_tags::Entity::update_many()
-            .col_expr(parameter_tags::Column::RemovedAt, now.as_millis().into())
-            .filter(parameter_tags::Column::ParameterId.eq(parameter.as_str()))
-            .filter(parameter_tags::Column::TagId.is_in(removed))
-            .exec(db)
-            .await?;
-    }
-    let known: HashMap<&str, bool> = rows
+    let existing: Vec<(&str, bool)> = rows
         .iter()
         .map(|row| (row.tag_id.as_str(), row.removed_at.is_some()))
         .collect();
-    for tag in &wanted {
-        match known.get(tag.as_str()) {
-            Some(false) => {}
-            Some(true) => {
-                parameter_tags::Entity::update_many()
-                    .col_expr(parameter_tags::Column::AddedAt, now.as_millis().into())
-                    .col_expr(parameter_tags::Column::RemovedAt, Option::<i64>::None.into())
-                    .filter(parameter_tags::Column::ParameterId.eq(parameter.as_str()))
-                    .filter(parameter_tags::Column::TagId.eq(tag.as_str()))
-                    .exec(db)
-                    .await?;
-            }
-            None => {
-                let row = parameter_tags::ActiveModel {
-                    parameter_id: Set(parameter.clone()),
-                    tag_id: Set(tag.clone()),
-                    added_at: Set(now.as_millis()),
-                    removed_at: Set(None),
-                };
-                parameter_tags::Entity::insert(row).exec_without_returning(db).await?;
-            }
-        }
+    let changes = plan_links(&existing, &wanted);
+    if !changes.remove.is_empty() {
+        parameter_tags::Entity::update_many()
+            .col_expr(parameter_tags::Column::RemovedAt, now.as_millis().into())
+            .filter(parameter_tags::Column::ParameterId.eq(parameter.as_str()))
+            .filter(parameter_tags::Column::TagId.is_in(changes.remove))
+            .exec(db)
+            .await?;
+    }
+    for tag in changes.restore {
+        parameter_tags::Entity::update_many()
+            .col_expr(parameter_tags::Column::AddedAt, now.as_millis().into())
+            .col_expr(parameter_tags::Column::RemovedAt, Option::<i64>::None.into())
+            .filter(parameter_tags::Column::ParameterId.eq(parameter.as_str()))
+            .filter(parameter_tags::Column::TagId.eq(tag))
+            .exec(db)
+            .await?;
+    }
+    for tag in changes.add {
+        let row = parameter_tags::ActiveModel {
+            parameter_id: Set(parameter.clone()),
+            tag_id: Set(tag.to_owned()),
+            added_at: Set(now.as_millis()),
+            removed_at: Set(None),
+        };
+        parameter_tags::Entity::insert(row).exec_without_returning(db).await?;
+    }
+    Ok(())
+}
+
+/// Makes the heap's active links of tags to the team parameter exactly `tags`, as [`sync_tags`] does for a
+/// parameter's own links. The caller has checked the tags are the heap's and the parameter is a team parameter the
+/// heap uses.
+pub async fn set_heap_links(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    parameter_id: ParameterId,
+    tags: &BTreeSet<TagId>,
+    now: Timestamp,
+) -> Result<(), StoreError> {
+    let heap = id_to_db(heap_id.as_uuid());
+    let parameter = id_to_db(parameter_id.as_uuid());
+    let rows = heap_parameter_tags::Entity::find()
+        .filter(heap_parameter_tags::Column::HeapId.eq(heap.as_str()))
+        .filter(heap_parameter_tags::Column::ParameterId.eq(parameter.as_str()))
+        .all(db)
+        .await?;
+    let wanted: BTreeSet<String> = tags.iter().map(|id| id_to_db(id.as_uuid())).collect();
+    let existing: Vec<(&str, bool)> = rows
+        .iter()
+        .map(|row| (row.tag_id.as_str(), row.removed_at.is_some()))
+        .collect();
+    let changes = plan_links(&existing, &wanted);
+    let of_parameter = |query: sea_orm::UpdateMany<heap_parameter_tags::Entity>| {
+        query
+            .filter(heap_parameter_tags::Column::HeapId.eq(heap.as_str()))
+            .filter(heap_parameter_tags::Column::ParameterId.eq(parameter.as_str()))
+    };
+    if !changes.remove.is_empty() {
+        of_parameter(heap_parameter_tags::Entity::update_many())
+            .col_expr(heap_parameter_tags::Column::RemovedAt, now.as_millis().into())
+            .filter(heap_parameter_tags::Column::TagId.is_in(changes.remove))
+            .exec(db)
+            .await?;
+    }
+    for tag in changes.restore {
+        of_parameter(heap_parameter_tags::Entity::update_many())
+            .col_expr(heap_parameter_tags::Column::AddedAt, now.as_millis().into())
+            .col_expr(heap_parameter_tags::Column::RemovedAt, Option::<i64>::None.into())
+            .filter(heap_parameter_tags::Column::TagId.eq(tag))
+            .exec(db)
+            .await?;
+    }
+    for tag in changes.add {
+        let row = heap_parameter_tags::ActiveModel {
+            heap_id: Set(heap.clone()),
+            parameter_id: Set(parameter.clone()),
+            tag_id: Set(tag.to_owned()),
+            added_at: Set(now.as_millis()),
+            removed_at: Set(None),
+        };
+        heap_parameter_tags::Entity::insert(row)
+            .exec_without_returning(db)
+            .await?;
     }
     Ok(())
 }
@@ -525,6 +610,14 @@ async fn load_heap(db: &impl ConnectionTrait, heap_id: HeapId, lock: Lock) -> Re
         )
         .all(db)
         .await?;
+        let heap_links = locked(
+            heap_parameter_tags::Entity::find()
+                .filter(heap_parameter_tags::Column::HeapId.eq(heap.as_str()))
+                .filter(heap_parameter_tags::Column::RemovedAt.is_null()),
+            lock,
+        )
+        .all(db)
+        .await?;
         for mut team_parameter in assemble(db, team_rows, child_lock(lock)).await? {
             let id = id_to_db(team_parameter.id.as_uuid());
             let heap_use = uses
@@ -533,6 +626,17 @@ async fn load_heap(db: &impl ConnectionTrait, heap_id: HeapId, lock: Lock) -> Re
                 .map(to_use)
                 .transpose()?
                 .ok_or_else(|| StoreError::corrupt(USES_TABLE, &id, "a use row of no parameter asked for"))?;
+            team_parameter.heap_tags = heap_links
+                .iter()
+                .filter(|link| link.parameter_id == id)
+                .map(|link| {
+                    let read = RowReader {
+                        table: "heap_parameter_tags",
+                        id: &link.heap_id,
+                    };
+                    read.uuid(&link.tag_id).map(TagId::from_uuid)
+                })
+                .collect::<Result<_, _>>()?;
             team_parameter.weight = heap_use.weight;
             team_parameter.archived_at = team_parameter.archived_at.or(heap_use.stopped_at);
             parameters.push(team_parameter);
@@ -636,6 +740,7 @@ fn to_parameter(
         options: in_use,
         archived_options: archived,
         tags,
+        heap_tags: BTreeSet::new(),
         created_at: read.timestamp(row.created_at)?,
         archived_at: read.optional_timestamp(row.archived_at)?,
         version: read.version(row.version)?,

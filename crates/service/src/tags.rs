@@ -359,10 +359,10 @@ impl Services {
     /// them, are read at the version they are written at.
     ///
     /// Each item that carries one of them, open or closed, gets the team tag in their place, and so do the parameters
-    /// linked to them, the saved views filtering by them and the heaps' tag orders (the team tag takes the highest
-    /// position among them). The heap tags are marked merged. The team tag's entry lists them; each item's entry says
-    /// its tag change, so the item's history shows who merged and when. Parameters, views and orders follow the merge
-    /// and get no entries.
+    /// linked to them (a heap's links to a team parameter too), the saved views filtering by them and the heaps' tag
+    /// orders (the team tag takes the highest position among them). The heap tags are marked merged. The team tag's
+    /// entry lists them; each item's entry says its tag change, so the item's history shows who merged and when.
+    /// Parameters, views and orders follow the merge and get no entries.
     ///
     /// Size assumption: a merge does a handful of queries per item it reaches while holding every heap lock of the
     /// team, so item writes in the team wait for it. That is fine for merges of up to a few hundred items; there is
@@ -435,6 +435,13 @@ impl Services {
         let reached: BTreeSet<HeapId> = reach.iter().map(|entry| entry.heap.id).collect();
         for heap in heaps.iter().filter(|heap| reached.contains(&heap.id)) {
             for parameter in store::parameters::list_parameters(txn, heap.id).await? {
+                if parameter.is_team_owned() {
+                    // Its `tags` are team links, which hold team tags only; the heap's own links follow the merge.
+                    if let Some(heap_tags) = replaced(&parameter.heap_tags) {
+                        store::parameters::set_heap_links(txn, heap.id, parameter.id, &heap_tags, now).await?;
+                    }
+                    continue;
+                }
                 let Some(tags) = replaced(&parameter.tags) else {
                     continue;
                 };

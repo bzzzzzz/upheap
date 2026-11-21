@@ -6140,6 +6140,116 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags": {
+      "put": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Links the heap's own tags (its own and its team's) to a team parameter the heap uses, so the parameter is\nsuggested for them in this heap only, besides the team's links. Admins only. Sets the heap's links to exactly the\ntags sent, so it takes no `If-Match`, as `use` and `stop-using` take none; repeating it succeeds.",
+        "operationId": "link_heap_tags",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterList"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a team parameter the heap uses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_archived` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`tag_not_in_heap` or `too_many_tags`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/parameters/{parameter_id}/options": {
       "post": {
         "tags": [
@@ -9118,6 +9228,125 @@
           },
           "422": {
             "description": "An invalid label, or `options_mismatch` when the list isn't every option in use exactly once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/teams/{team}/parameters/{parameter_id}/tags": {
+      "put": {
+        "tags": [
+          "parameters"
+        ],
+        "summary": "Sets the team's tags a team parameter is suggested for, in every heap that uses it. Admins only; send the\nparameter's `version` in `If-Match`.",
+        "operationId": "link_team_parameter_tags",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "parameter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamParameter"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`parameter_archived` or `version_conflict`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`tag_not_in_heap` or `too_many_tags`",
             "content": {
               "application/json": {
                 "schema": {
@@ -13552,7 +13781,7 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "Tags of the same heap, at most 50. Replaces the parameter's tags; `[]` unlinks them all."
+            "description": "At most 50. Replaces the links: a heap parameter's, with tags of the same heap; a team parameter's, with tags\nof the team; a heap's links to a team parameter, with tags of the heap (its own or its team's). `[]` unlinks\nthem all."
           }
         },
         "additionalProperties": false
@@ -14297,6 +14526,8 @@
           "options",
           "archived_options",
           "tag_ids",
+          "team_tag_ids",
+          "heap_tag_ids",
           "version",
           "allowed_actions"
         ],
@@ -14327,6 +14558,14 @@
             "format": "uuid",
             "description": "The heap the parameter is listed for: its owner for a heap parameter, and the heap that uses it for a team\nparameter. A team parameter's owner is its team, named by its `team` kind."
           },
+          "heap_tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "This heap's own links to a team parameter, which suggest it in this heap only. Empty for a heap parameter."
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -14350,7 +14589,15 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "The tags whose items the parameter is suggested for."
+            "description": "Every tag whose items the parameter is suggested for in this heap: for a team parameter, the team's links\nand the heap's own."
+          },
+          "team_tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "A team parameter's links to the team's tags, which suggest it in every heap that uses it. Empty for a heap\nparameter."
           },
           "version": {
             "type": "integer",
@@ -14373,6 +14620,7 @@
           "edit",
           "archive",
           "make_team",
+          "link_tags",
           "stop_using",
           "view_history"
         ]
@@ -16556,7 +16804,7 @@
               "type": "string",
               "format": "uuid"
             },
-            "description": "Always empty for now."
+            "description": "The team's tags the parameter is suggested for, in every heap that uses it."
           },
           "team_id": {
             "type": "string",

@@ -84,6 +84,8 @@ enum Target {
     ParameterToMakeTeam,
     /// A parameter of the shared team with two options, with its version for `If-Match`.
     TeamParameter,
+    /// A parameter of the shared team that the shared heap uses.
+    UsedTeamParameter,
     /// The first option of a new parameter of the shared team.
     TeamParameterOption,
     /// A session of its own, so signing out doesn't end the caller's shared session.
@@ -1178,6 +1180,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::PUT,
+            "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags",
+            configure,
+            Target::UsedTeamParameter,
+            RequestBody::LinkTags,
+            StatusCode::OK,
+        ),
+        row(
             Method::GET,
             "/teams/{team}/parameters",
             team(ViewTeam),
@@ -1207,6 +1217,14 @@ fn endpoints() -> Vec<Endpoint> {
             team(ConfigureHeap),
             Target::TeamParameter,
             RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::PUT,
+            "/teams/{team}/parameters/{parameter_id}/tags",
+            team(ConfigureHeap),
+            Target::TeamParameter,
+            RequestBody::LinkTags,
             StatusCode::OK,
         ),
         row(
@@ -2165,6 +2183,25 @@ impl World {
                 let id = parameter["id"].as_str().context("team parameter has no id")?;
                 path = path.replace("{parameter_id}", id);
                 if_match = Some(parameter["version"].to_string());
+            }
+            Target::UsedTeamParameter => {
+                parameter = self.create_team_parameter().await?;
+                let id = parameter["id"].as_str().context("team parameter has no id")?;
+                path = path.replace("{parameter_id}", id);
+                let used = self
+                    .app
+                    .send(
+                        Method::POST,
+                        &format!("{}/parameters/{id}/use", self.heap_path()),
+                        Some(&self.admin.session),
+                        None,
+                    )
+                    .await?;
+                anyhow::ensure!(
+                    used.status == StatusCode::OK,
+                    "use team parameter failed: {}",
+                    used.body
+                );
             }
             Target::TeamParameterOption => {
                 parameter = self.create_team_parameter().await?;

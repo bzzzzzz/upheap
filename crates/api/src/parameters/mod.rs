@@ -47,11 +47,13 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(add_option, arrange_options))
         .routes(routes!(archive_option))
         .routes(routes!(link_tags))
+        .routes(routes!(link_heap_tags))
         .routes(routes!(use_team_parameter))
         .routes(routes!(stop_using_team_parameter))
         .routes(routes!(list_team_parameters, create_team_parameter))
         .routes(routes!(update_team_parameter))
         .routes(routes!(archive_team_parameter))
+        .routes(routes!(link_team_parameter_tags))
         .routes(routes!(add_team_option, arrange_team_options))
         .routes(routes!(archive_team_option))
 }
@@ -97,6 +99,7 @@ pub(crate) fn to_parameter_merge_reach_dto(reach: &ParameterMergeReach) -> Param
 
 /// The parameter as `heap_id` lists it.
 pub(crate) fn to_parameter_dto(entry: ParameterEntry, heap_id: HeapId) -> ParameterDto {
+    let suggesting = entry.parameter.suggesting_tags();
     let Parameter {
         id,
         owner,
@@ -105,6 +108,7 @@ pub(crate) fn to_parameter_dto(entry: ParameterEntry, heap_id: HeapId) -> Parame
         options,
         archived_options,
         tags,
+        heap_tags,
         archived_at,
         version,
         ..
@@ -112,6 +116,12 @@ pub(crate) fn to_parameter_dto(entry: ParameterEntry, heap_id: HeapId) -> Parame
     let kind = match owner {
         ParameterOwner::Heap(_) => ParameterKindDto::Heap,
         ParameterOwner::Team(_) => ParameterKindDto::Team,
+    };
+    let uuids = |tags: &BTreeSet<TagId>| tags.iter().map(|t| *t.as_uuid()).collect::<Vec<_>>();
+    let team_tags = if kind == ParameterKindDto::Team {
+        uuids(&tags)
+    } else {
+        Vec::new()
     };
     ParameterDto {
         id: *id.as_uuid(),
@@ -121,7 +131,9 @@ pub(crate) fn to_parameter_dto(entry: ParameterEntry, heap_id: HeapId) -> Parame
         weight: weight.get(),
         options: to_option_dtos(options),
         archived_options: to_archived_option_dtos(archived_options),
-        tag_ids: tags.iter().map(|t| *t.as_uuid()).collect(),
+        tag_ids: uuids(&suggesting),
+        team_tag_ids: team_tags,
+        heap_tag_ids: uuids(&heap_tags),
         archived_at: archived_at.map(Timestamp::as_millis),
         version: version.get(),
         allowed_actions: entry.allowed_actions.into_iter().map(Into::into).collect(),
@@ -452,6 +464,37 @@ async fn make_team_parameter(
     Ok(Json(to_team_parameter_dto(entry)))
 }
 
+/// Links the heap's own tags (its own and its team's) to a team parameter the heap uses, so the parameter is
+/// suggested for them in this heap only, besides the team's links. Admins only. Sets the heap's links to exactly the
+/// tags sent, so it takes no `If-Match`, as `use` and `stop-using` take none; repeating it succeeds.
+#[utoipa::path(put, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/heap-tags", tag = "parameters", security(("session" = [])),
+    params(HeapParams, ("parameter_id" = Uuid, Path)), request_body = LinkTagsDto,
+    responses(
+        (status = 200, body = ParameterListDto),
+        (status = 403, body = Problem),
+        (status = 404, description = "Not a team parameter the heap uses", body = Problem),
+        (status = 409, description = "`parameter_archived` or `heap_archived`", body = Problem),
+        (status = 422, description = "`tag_not_in_heap` or `too_many_tags`", body = Problem),
+    ))]
+async fn link_heap_tags(
+    State(state): State<AppState>,
+    path: HeapPath,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+    ApiJson(body): ApiJson<LinkTagsDto>,
+) -> Result<Json<ParameterListDto>, ApiError> {
+    let tags = to_tag_set(&body.tag_ids).map_err(ServiceError::from)?;
+    let list = state
+        .services
+        .link_heap_tags(
+            path.principal,
+            path.heap.heap_id,
+            ParameterId::from_uuid(parameter_id),
+            tags,
+        )
+        .await?;
+    Ok(Json(to_parameter_list_dto(list)))
+}
+
 /// Makes the heap use one of its team's parameters. Admins only. The first use gives it the default weight, and
 /// using it again after stopping restores the weight it had. Using one that is used already succeeds.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/use", tag = "parameters", security(("session" = [])),
@@ -590,6 +633,39 @@ async fn archive_team_parameter(
     let entry = state
         .services
         .archive_team_parameter(path.principal, path.team_id, ParameterId::from_uuid(parameter_id))
+        .await?;
+    Ok(Json(to_team_parameter_dto(entry)))
+}
+
+/// Sets the team's tags a team parameter is suggested for, in every heap that uses it. Admins only; send the
+/// parameter's `version` in `If-Match`.
+#[utoipa::path(put, path = "/teams/{team}/parameters/{parameter_id}/tags", tag = "parameters", security(("session" = [])),
+    params(TeamParams, ("parameter_id" = Uuid, Path), IfMatchHeader), request_body = LinkTagsDto,
+    responses(
+        (status = 200, body = TeamParameterDto),
+        (status = 403, body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`parameter_archived` or `version_conflict`", body = Problem),
+        (status = 422, description = "`tag_not_in_heap` or `too_many_tags`", body = Problem),
+        (status = 428, description = "`version_required`", body = Problem),
+    ))]
+async fn link_team_parameter_tags(
+    State(state): State<AppState>,
+    path: TeamPath,
+    IfMatch(expected): IfMatch,
+    ApiPath(ParameterPathId { parameter_id }): ApiPath<ParameterPathId>,
+    ApiJson(body): ApiJson<LinkTagsDto>,
+) -> Result<Json<TeamParameterDto>, ApiError> {
+    let tags = to_tag_set(&body.tag_ids).map_err(ServiceError::from)?;
+    let entry = state
+        .services
+        .link_team_parameter_tags(
+            path.principal,
+            path.team_id,
+            ParameterId::from_uuid(parameter_id),
+            tags,
+            expected,
+        )
         .await?;
     Ok(Json(to_team_parameter_dto(entry)))
 }

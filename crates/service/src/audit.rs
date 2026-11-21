@@ -1,5 +1,7 @@
 //! Building audit entries and diffs.
 
+use std::collections::BTreeSet;
+
 use domain::audit::AuditField;
 use domain::comment::Comment;
 use domain::heap::{Heap, HeapPolicy};
@@ -350,6 +352,19 @@ pub(crate) fn diff_heap_use(before: &HeapUse, after: &HeapUse) -> Value {
         fields
     };
     diff_fields(fields(before), fields(after))
+}
+
+/// The change to a heap's links to a team parameter, under the tags field as a parameter's own links are.
+pub(crate) fn diff_heap_links(before: &BTreeSet<TagId>, after: &BTreeSet<TagId>) -> Value {
+    let tags = |tags: &BTreeSet<TagId>| {
+        let mut fields = Map::new();
+        fields.insert(
+            AuditField::Tags.code().into(),
+            json!(tags.iter().map(ToString::to_string).collect::<Vec<_>>()),
+        );
+        fields
+    };
+    diff_fields(tags(before), tags(after))
 }
 
 /// Changed weights and tag order between a heap and its new `policy` and `tag_order`, named like the heap's columns.
