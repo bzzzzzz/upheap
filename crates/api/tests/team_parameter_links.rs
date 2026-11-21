@@ -222,7 +222,8 @@ async fn team_links_take_only_the_teams_tags_at_the_current_version() -> Result<
     // Assert
     for refused in [&heap_tag_refused, &other_heap_tag_refused, &foreign_refused] {
         expect_that!(refused.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
-        expect_that!(refused.body["code"], eq(&json!("tag_not_in_heap")));
+        expect_that!(refused.body["code"], eq(&json!("tag_not_in_team")));
+        expect_that!(refused.body["field"], eq(&json!("tag_ids")));
     }
     expect_that!(linked.status, eq(StatusCode::OK));
     expect_that!(stale.status, eq(StatusCode::CONFLICT));
@@ -298,11 +299,17 @@ async fn a_heap_may_link_no_more_than_fifty_tags_once_the_change_is_done() -> Re
 
     // Act
     let over = w.link_heap(&w.a, &[&tags[50]]).await?;
+    let all: Vec<&str> = tags.iter().map(String::as_str).collect();
+    let over_in_request = w.link_heap(&w.a, &all).await?;
     let swap = w.change_heap(&w.a, &[&tags[50]], &[&tags[0]]).await?;
 
     // Assert
     expect_that!(over.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
     expect_that!(over.body["code"], eq(&json!("too_many_tags")));
+    expect_that!(over.body["field"], eq(&json!("link")));
+    expect_that!(over_in_request.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(over_in_request.body["code"], eq(&json!("too_many_tags")));
+    expect_that!(over_in_request.body["field"], eq(&json!("link")));
     expect_that!(swap.status, eq(StatusCode::OK));
     Ok(())
 }
@@ -376,6 +383,7 @@ async fn a_heap_links_only_what_it_may_and_only_a_team_parameter_it_uses() -> Re
     // Assert
     expect_that!(foreign_tag.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
     expect_that!(foreign_tag.body["code"], eq(&json!("tag_not_in_heap")));
+    expect_that!(foreign_tag.body["field"], eq(&json!("link")));
     expect_that!(heap_parameter.status, eq(StatusCode::NOT_FOUND));
     expect_that!(not_used.status, eq(StatusCode::NOT_FOUND));
     expect_that!(first.status, eq(StatusCode::OK));

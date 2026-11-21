@@ -381,6 +381,10 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("tag_ids"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "tag_not_in_heap", Category::Caller)
         },
+        ServiceError::TagNotInTeam { .. } => Classified {
+            field: Some("tag_ids"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "tag_not_in_team", Category::Caller)
+        },
         ServiceError::Team(TeamError::LastAdmin { .. }) => {
             simple(StatusCode::CONFLICT, "last_admin", Category::Conflict)
         }
