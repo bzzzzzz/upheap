@@ -3,7 +3,7 @@ import { ChevronRight, Ellipsis, History, Plus } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type Ref } from "react";
 import { Button, Menu, MenuTrigger } from "react-aria-components";
 
-import { ApiProblem, isNotFound } from "../api/client";
+import { isNotFound } from "../api/client";
 import type { Heap, Team, TeamMember, UserMatch } from "../api/schema";
 import { useOidcProvider } from "../api/queries/auth";
 import { useCreateHeap, useUpdateHeap } from "../api/queries/heaps";
@@ -28,8 +28,10 @@ import { InlineConfirm } from "../components/InlineConfirm";
 import { PHONE, useMedia } from "../components/media";
 import { MenuEntry, MenuPopover } from "../components/Menu";
 import { NameForm, type NameFormClasses } from "../components/NameForm";
+import { NewHeapLink } from "../components/NewHeapLink";
+import { useNameAndLinkFields } from "../components/useNameAndLinkFields";
 import { OperatorContact } from "../components/OperatorContact";
-import { ProblemText, problemMessage } from "../components/ProblemText";
+import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useConfirmation, useReturnFocus } from "../components/useConfirmation";
 import { useTeamName } from "../components/teamName";
@@ -220,20 +222,22 @@ function HeapsSection({ team, phone }: { team: Team; phone: boolean }) {
   );
 }
 
-/** A name for a new heap. The server makes its link name from the name. */
+/**
+ * Name and Link name for a new heap, as Create team has them. The server makes the link name from the name when it's
+ * left out, so the new link shows only once one is typed.
+ */
 function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
   const create = useCreateHeap(team);
-  const [name, setName] = useState("");
-  const { error } = create;
-  const nameError = error instanceof ApiProblem && error.field === "name";
+  const { formRef, field, name, slug, otherError } = useNameAndLinkFields(create);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    create.mutate({ name }, { onSuccess: onClose });
+    create.mutate({ name, ...(slug !== "" && { slug }) }, { onSuccess: onClose });
   };
 
   return (
     <form
+      ref={formRef}
       aria-label="New heap"
       onSubmit={submit}
       onKeyDown={(event) => {
@@ -245,22 +249,32 @@ function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
       noValidate
       className="flex flex-col gap-2.5 rounded-xl border border-line bg-surface p-3.5 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-accent-soft"
     >
-      <Field
-        label="New heap name"
-        name="name"
-        value={name}
-        error={nameError && error ? problemMessage(error) : undefined}
-        onChange={(value) => {
-          setName(value);
-          if (nameError) create.reset();
-        }}
-        autoFocus
-        autoComplete="off"
-        maxLength={100}
-      />
-      {error && !nameError && <ProblemText error={error} className="text-overdue-ink" />}
-      <div className="flex items-center justify-end gap-2.5">
-        <button type="button" onClick={onClose} className={`${compactButtonClass.quiet} max-sm:min-h-11`}>
+      <div className="flex flex-wrap gap-2.5">
+        <div className="min-w-0 flex-[1_1_200px]">
+          <Field label="New heap name" {...field("name")} autoFocus autoComplete="off" maxLength={100} />
+        </div>
+        <div className="min-w-0 flex-[1_1_160px]">
+          <Field
+            label="Link name"
+            {...field("slug")}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={39}
+          />
+        </div>
+      </div>
+      {otherError && <ProblemText error={otherError} className="text-overdue-ink" />}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="min-w-0 flex-1 text-xs break-words text-muted max-sm:basis-full max-sm:text-[13px]">
+          {slug !== "" && <NewHeapLink team={team} slug={slug} />}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className={`${compactButtonClass.quiet} max-sm:ml-auto max-sm:min-h-11`}
+        >
           Cancel
         </button>
         <button type="submit" disabled={create.isPending} className={`${compactButtonClass.primary} max-sm:min-h-11`}>

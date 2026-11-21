@@ -1,6 +1,6 @@
 import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
 import { Archive, Check, ChevronRight, Clock, Plus, Search, X } from "lucide-react";
-import { useCallback, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import {
   Autocomplete,
   Button,
@@ -14,14 +14,15 @@ import {
   Separator,
 } from "react-aria-components";
 
-import type { HeapRef } from "../api/client";
+import { ApiProblem, type HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useCreateHeap } from "../api/queries/heaps";
 import { useTeam } from "../api/queries/teams";
 import { readFoldedTeams, readRecentHeaps, writeFoldedTeams } from "./heapSwitcherStorage";
 import { PHONE, TOUCH, useMedia } from "./media";
+import { NewHeapLink } from "./NewHeapLink";
 import { PopoverSheet } from "./PopoverSheet";
-import { ProblemText } from "./ProblemText";
+import { ProblemText, problemMessage } from "./ProblemText";
 import { sheetRowClass } from "./Sheet";
 import { teamName } from "./teamName";
 
@@ -550,7 +551,10 @@ function NewHeapButton({ me, team, onClick }: { me: Me; team: SwitcherTeam; onCl
   );
 }
 
-/** The name field that "New heap" becomes, with `initialName` filled in and focused, the caret at its end. */
+/**
+ * The name and optional Link name fields that "New heap" becomes, with `initialName` filled in and focused, the caret at
+ * its end. A blank link name is made by the server from the name.
+ */
 function NewHeapForm({
   me,
   team,
@@ -567,6 +571,15 @@ function NewHeapForm({
   const create = useCreateHeap(team.slug);
   const navigate = useNavigate();
   const [name, setName] = useState(initialName);
+  const [slugDraft, setSlugDraft] = useState("");
+  const slug = slugDraft.trim();
+  const slugErrorId = useId();
+  const slugError = create.error instanceof ApiProblem && create.error.field === "slug" ? create.error : null;
+  const slugInput = useRef<HTMLInputElement>(null);
+  // After a failed submit about the link name, focus goes to it.
+  useEffect(() => {
+    if (slugError) slugInput.current?.focus();
+  }, [slugError]);
   const focusAtEnd = useCallback((input: HTMLInputElement | null) => {
     if (!input) return;
     input.focus();
@@ -577,7 +590,7 @@ function NewHeapForm({
     event.preventDefault();
     if (name.trim() === "") return;
     create.mutate(
-      { name: name.trim() },
+      { name: name.trim(), ...(slug !== "" && { slug }) },
       {
         onSuccess: (heap) => {
           onCreated();
@@ -598,6 +611,34 @@ function NewHeapForm({
         placeholder="Heap name"
         className="h-12 rounded-xl border border-line bg-surface px-3 text-base"
       />
+      <input
+        aria-label={`Link name of the new heap in ${teamName(team, me)}`}
+        ref={slugInput}
+        value={slugDraft}
+        onChange={(e) => {
+          setSlugDraft(e.target.value);
+          if (slugError) create.reset();
+        }}
+        aria-invalid={slugError ? true : undefined}
+        aria-describedby={slugError ? slugErrorId : undefined}
+        maxLength={39}
+        placeholder="Link name (optional)"
+        autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        className="h-12 rounded-xl border border-line bg-surface px-3 text-base aria-invalid:border-overdue-ink"
+      />
+      {slugError && (
+        <p id={slugErrorId} role="alert" className="text-xs font-medium text-overdue-ink">
+          {problemMessage(slugError)}
+        </p>
+      )}
+      {slug !== "" && (
+        <p className="text-xs break-words text-muted max-sm:text-[13px]">
+          <NewHeapLink team={team.slug} slug={slug} />
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} className={newHeapButtonClass}>
           Cancel
@@ -610,7 +651,7 @@ function NewHeapForm({
           Add heap
         </button>
       </div>
-      <ProblemText error={create.error} />
+      {!slugError && <ProblemText error={create.error} />}
     </form>
   );
 }
