@@ -481,6 +481,7 @@ export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef
         // The item changed meanwhile, so this button and its form unmount: say it in a toast. Focus goes to the item
         // for now, and on to the agent chip once the new turn renders, as after a send (`onSent`).
         if (error instanceof ApiProblem && error.code === "nothing_to_redo") {
+          setLine("");
           setOpen(false);
           setToast({ message: itemProblem(error), error: true, requestId: requestIdOf(error) });
           focusAfterRender(() => document.querySelector<HTMLElement>("[data-item-pane]"));

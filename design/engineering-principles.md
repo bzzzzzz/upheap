@@ -611,7 +611,8 @@ src/
    data, discarding typed text. Cancel on a form that edits in place (a context, a reply, a question being asked)
    is itself the choice to discard, so it drops the draft without asking; such a form guards its draft from a stray
    key and from refetches instead. Closing a dialog or a sheet that holds a draft, or leaving the page with one,
-   never drops it silently: it asks first, or saves the draft.
+   never drops it silently: it asks first, saves the draft, or keeps it for the next open. A short draft kept in
+   memory (a line in a popover form) may be lost to a reload or to opening another record.
 2. **Editing lives in the detail.** Rows are for reading, ordering and changing state; everything else is edited in
    the record's own view, where there is room, and each change is saved as it's made.
 3. **Every page that edits a list of things** uses one settings layout: a title, a one-line explanation, a way to

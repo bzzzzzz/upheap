@@ -497,6 +497,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
   // Split's dialog lives here, not in ItemActions, which is a different instance on each side of the phone width: a
   // draft in it survives a resize or a rotation. Closing gives focus to ⋯, or to the main button once ⋯ is gone.
   const [splitting, setSplitting] = useState(false);
+  // What was typed in Why it's blocked, kept here for the same reason; null while nothing is.
+  const [reasonDraft, setReasonDraft] = useState<string | null>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLButtonElement>(null);
   const closeSplit = () => {
@@ -515,6 +517,8 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       save={save}
       onState={changeState}
       onSplit={() => setSplitting(true)}
+      reasonDraft={reasonDraft}
+      onReasonDraft={setReasonDraft}
       moreRef={moreRef}
       mainRef={mainRef}
     />

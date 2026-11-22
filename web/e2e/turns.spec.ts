@@ -113,6 +113,10 @@ test("sending from the item with a line shows who has it, in the item and in the
     .click();
   await expect(chip(page)).toHaveCount(0);
   await expect(sendButton(page)).toBeVisible();
+  // Send cleared the form's draft.
+  await openSendForm(page);
+  await expect(sendForm(page).getByLabel("A line for the agent (optional)")).toHaveValue("");
+  await sendForm(page).getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(row(page, "Rotate the certs")).toBeVisible();
   await expect(heldRow(page, "Rotate the certs")).toHaveCount(0);
   // Undo is a take back, which the history keeps.

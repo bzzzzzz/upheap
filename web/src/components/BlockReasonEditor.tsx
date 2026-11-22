@@ -60,7 +60,10 @@ export function BlockReasonEditor({
         onChange={onDraftChange}
         readOnly={saving}
         autoFocus
-        onFocus={(event) => event.target.select()}
+        // The saved reason is selected, to be typed over; a kept draft isn't, so a stray key can't wipe it.
+        onFocus={(event) => {
+          if (draft === (reason ?? "")) event.target.select();
+        }}
         hint="What it waits for outside this heap."
         error={
           tooLong

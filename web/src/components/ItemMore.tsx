@@ -99,7 +99,9 @@ function actionsOf(item: Item, canMove: boolean) {
  * a stage saves at once and silently, like every change made in the item. Making a note a task asks first, since a
  * task can't go back, and focus comes back to whatever asked, whichever way the question is answered. Split… asks the
  * pane, through `onSplit`, to open the dialog that splits a note: the pane owns it, so a draft survives the bar and
- * the inline actions swapping at the phone width, and it gets the two buttons' refs to give focus back. Move to
+ * the inline actions swapping at the phone width, and it gets the two buttons' refs to give focus back. The pane
+ * holds the block reason's draft for the same reason (`reasonDraft`), kept across a close and cleared by a save or
+ * Cancel. Move to
  * another heap… opens a picker under ⋯ that confirms before it moves, and lands on the item in its new heap. A state
  * change goes through `onState`, which may ask whether to take the item back from its agent first.
  */
@@ -110,6 +112,8 @@ export function ItemActions({
   save,
   onState,
   onSplit,
+  reasonDraft,
+  onReasonDraft,
   moreRef,
   mainRef,
 }: {
@@ -119,6 +123,8 @@ export function ItemActions({
   save: (patch: ItemPatchRequest) => void;
   onState: (state: ItemState) => void;
   onSplit: () => void;
+  reasonDraft: string | null;
+  onReasonDraft: (draft: string | null) => void;
   moreRef: React.RefObject<HTMLButtonElement | null>;
   mainRef: React.RefObject<HTMLButtonElement | null>;
 }) {
@@ -128,8 +134,6 @@ export function ItemActions({
   const [changing, setChanging] = useState(false);
   const [moving, setMoving] = useState(false);
   const [editingReason, setEditingReason] = useState(false);
-  // What was typed in Why it's blocked, kept across a close and cleared by a save or Cancel; null while nothing is.
-  const [reasonDraft, setReasonDraft] = useState<string | null>(null);
   // Awaitable, and apart from `save`, so the editor says its own failure and the pane doesn't say it twice.
   const saveReason = useUpdateItem(heapRef);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
@@ -398,12 +402,12 @@ export function ItemActions({
         <BlockReasonEditor
           reason={item.blocked_reason ?? null}
           draft={reasonDraft ?? item.blocked_reason ?? ""}
-          onDraftChange={setReasonDraft}
+          onDraftChange={onReasonDraft}
           save={(blocked_reason) => saveReason.mutateAsync({ item, patch: { blocked_reason } })}
           saving={saveReason.isPending}
           error={saveReason.error}
           onDone={() => {
-            setReasonDraft(null);
+            onReasonDraft(null);
             closeEditingReason();
           }}
         />

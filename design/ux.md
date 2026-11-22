@@ -1351,8 +1351,8 @@ to an open History at once, and to a closed one by the time it is opened.
    drops the draft without asking; such a form guards its draft from a stray key and from refetches instead.
    Closing a dialog or a sheet that holds a draft, or leaving the page with one, never drops it silently: Add an
    item and Split… ask first, the item's context saves the draft, and a popover form (Changes asked, Send to an
-   agent, Why it's blocked) keeps it and shows it again when it reopens, until it is sent or cancelled. These
-   short drafts are the exception to leaving: a reload or opening another item drops them.
+   agent, Why it's blocked) keeps it and shows it again when it reopens, until it is sent or cancelled. A reload
+   or opening another item still drops these short drafts.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's main state button and ⋯ sit in a bar at its bottom; on a wide screen they sit beside the title.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:
