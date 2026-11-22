@@ -25,6 +25,7 @@ import { MenuEntry, MenuPopover } from "./Menu";
 import { useOverListLink } from "./overList";
 import { RequestId } from "./RequestId";
 import { Saving } from "./Saving";
+import { sectionHeadingClass } from "./sectionHeading";
 import { useDragToReorder, type GripProps } from "./useDragToReorder";
 
 /**
@@ -102,10 +103,8 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const progress = item.step_progress;
 
   return (
-    <section aria-label="Steps" className="flex flex-col gap-1.5">
-      <h3 className="text-xs font-medium text-ink-soft">
-        {progress ? `Steps ${progress.ticked}/${progress.total}` : "Steps"}
-      </h3>
+    <section aria-label="Steps" className="flex flex-col gap-1.5 border-t border-line pt-3">
+      <h3 className={sectionHeadingClass}>{progress ? `Steps ${progress.ticked}/${progress.total}` : "Steps"}</h3>
       {steps.length > 0 && (
         <ul ref={listRef} className={`relative flex flex-col ${drag.active ? "select-none" : ""}`}>
           {steps.map((step, index) => (

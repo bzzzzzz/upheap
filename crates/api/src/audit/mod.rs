@@ -40,7 +40,7 @@ fn to_audit_change_dto(change: AuditChange) -> AuditChangeDto {
     }
 }
 
-fn to_audit_entry_dto(view: AuditEntryView) -> AuditEntryDto {
+pub(crate) fn to_audit_entry_dto(view: AuditEntryView) -> AuditEntryDto {
     AuditEntryDto {
         id: view.id,
         created_at: view.created_at.as_millis(),

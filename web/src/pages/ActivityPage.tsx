@@ -1,7 +1,9 @@
 import { useHeap } from "../api/queries/heaps";
 import { useMe } from "../api/queries/me";
 import { useTeam } from "../api/queries/teams";
-import { AuditHistory } from "../components/AuditHistory";
+import { useAcrossAuditLog } from "../api/queries/audit";
+import { acrossSubtitle } from "../components/acrossHeaps";
+import { AuditEntryRow, AuditHistory, PagedHistory } from "../components/AuditHistory";
 import { teamName } from "../components/teamName";
 import { isNotFound, type HeapRef } from "../api/client";
 import { HeapNotFound, TeamNotFound } from "../components/NotFound";
@@ -38,7 +40,38 @@ export function TeamActivityPage({ team: slug }: { team: string }) {
   );
 }
 
-/** The title, intro and card both Activity pages share, in the design tokens (ux.md, Toolkit). */
+/**
+ * What happened in all the person's heaps, or in one team's, newest first (ux.md, All items): the heap's Activity
+ * page, each entry naming its heap.
+ */
+export function AllActivityPage({ team }: { team: string | undefined }) {
+  const { data: me } = useMe();
+  const history = useAcrossAuditLog(team);
+  if (history.isError && isNotFound(history.error)) return <TeamNotFound />;
+  // The team is named only where the entries are of several.
+  const several = team === undefined && (me?.teams.length ?? 0) > 1;
+  return (
+    <ActivityLayout title="Activity" subtitle={acrossSubtitle(me, team, "as far as you can see.")}>
+      <PagedHistory
+        history={history}
+        empty="No history you can see."
+        row={({ entry, heap }) => {
+          const ofTeam = me?.teams.find((t) => t.slug === heap.team_slug);
+          return (
+            <AuditEntryRow
+              key={entry.id}
+              entry={entry}
+              showEntity
+              place={several && me && ofTeam ? `${heap.name} · ${teamName(ofTeam, me)}` : heap.name}
+            />
+          );
+        }}
+      />
+    </ActivityLayout>
+  );
+}
+
+/** The title, intro and card the Activity pages share, in the design tokens (ux.md, Toolkit). */
 function ActivityLayout({
   title,
   subtitle,

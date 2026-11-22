@@ -13,6 +13,7 @@ import { RequestId } from "./RequestId";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
+import { sectionHeadingClass } from "./sectionHeading";
 
 /** A blank text is no text, as the save stores it. */
 const normal = (text: string) => (text.trim() === "" ? "" : text);
@@ -90,7 +91,7 @@ export function ItemContext({
       className="flex flex-col gap-2 border-t border-line pt-3 outline-none"
     >
       <div className="flex min-h-9 items-center justify-between gap-2 pointer-coarse:min-h-11">
-        <h3 className="text-xs font-semibold text-muted">Context</h3>
+        <h3 className={sectionHeadingClass}>Context</h3>
         {canEdit && !(editing && !phone) && (
           <button
             ref={editButton}

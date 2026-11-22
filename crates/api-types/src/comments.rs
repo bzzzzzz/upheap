@@ -5,6 +5,7 @@ use domain::ValidationError;
 use domain::comment::CommentBody;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::common::UserRefDto;
 
@@ -40,4 +41,11 @@ pub struct CommentDto {
     /// When it was added, ready to show in the request's timezone: the time ("14:02") for today, else the date
     /// ("yesterday", "3 Nov").
     pub created_label: String,
+    /// The run an agent wrote it in, one of the item's `runs`; `null` for a comment a person wrote themselves. An
+    /// agent's comment is the agent's, not the person's whose sign-in it used (`created_by`).
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub run_id: Option<Uuid>,
 }

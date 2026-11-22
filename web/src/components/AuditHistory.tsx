@@ -11,6 +11,7 @@ import { useMe } from "../api/queries/me";
 import { useOverListLink } from "./overList";
 import { TextDiff } from "./TextDiff";
 import { RequestId } from "./RequestId";
+import { sectionHeadingClass } from "./sectionHeading";
 
 /**
  * The history of `scope`, or of one entity in it, newest first, a page at a time. With `showEntity` each entry
@@ -83,7 +84,16 @@ export function PagedHistory<Entry>({
   );
 }
 
-function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: boolean }) {
+/** One entry. `place` names where it happened, for a history across heaps. */
+export function AuditEntryRow({
+  entry,
+  showEntity,
+  place,
+}: {
+  entry: AuditEntry;
+  showEntity: boolean;
+  place?: string;
+}) {
   const { data: me } = useMe();
   // The viewer's own changes read as theirs, as the phrase reads after any name: "You added item".
   const own = entry.actor.id === me?.user.id;
@@ -92,7 +102,17 @@ function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: b
     <li className="py-2 text-sm wrap-anywhere">
       <p>
         {entry.run ? (
-          <AgentMark run={entry.run} who={own ? "Your agent" : `${entry.actor.display_name}'s agent`} />
+          <AgentMark
+            runId={entry.run.id}
+            at={
+              entry.run.item && {
+                team: entry.run.item.heap.team_slug,
+                heap: entry.run.item.heap.slug,
+                item: entry.run.item.key,
+              }
+            }
+            who={own ? "Your agent" : `${entry.actor.display_name}'s agent`}
+          />
         ) : (
           <span className="font-medium">{actor}</span>
         )}{" "}
@@ -100,6 +120,7 @@ function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: b
         {showEntity && entry.names_entity && <span className="font-medium"> {entry.entity.label}</span>}
         <time dateTime={new Date(entry.created_at).toISOString()} className="ml-2 text-xs text-muted">
           {entry.created_label}
+          {place && ` · ${place}`}
         </time>
       </p>
       {entry.changes.length > 0 && (
@@ -117,9 +138,18 @@ function AuditEntryRow({ entry, showEntity }: { entry: AuditEntry; showEntity: b
 
 /**
  * An agent's change reads as the agent's, not the person's whose sign-in it used (ux.md, The item, point 21): a robot and
- * whose agent it is, linking to the run in its item when the caller may view that item.
+ * whose agent it is, linking to the run in its item, `at`, when the caller may view that item. An agent's comment is
+ * marked the same way (ux.md, The item, Comments).
  */
-function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: string }) {
+export function AgentMark({
+  runId,
+  at,
+  who,
+}: {
+  runId: string;
+  at: { team: string; heap: string; item: string } | null;
+  who: string;
+}) {
   const words = (
     <>
       <Bot aria-hidden="true" className="mr-1 inline size-3.5 align-text-bottom" />
@@ -128,20 +158,20 @@ function AgentMark({ run, who }: { run: NonNullable<AuditEntry["run"]>; who: str
   );
   const open = useParams({ strict: false });
   const overList = useOverListLink();
-  if (!run.item) {
+  if (!at) {
     return <span className="font-medium">{words}</span>;
   }
-  const { team_slug: team, slug: heap } = run.item.heap;
+  const { team, heap, item } = at;
   // The item is already open: the link goes in place of it, so Back and Close still lead where they did.
-  const itemOpen = open.team === team && open.heap === heap && open.item === run.item.key;
+  const itemOpen = open.team === team && open.heap === heap && open.item === item;
   return (
     <Link
       to="/teams/$team/heaps/$heap/items/$item"
-      params={{ team, heap, item: run.item.key }}
-      hash={`run-${run.id}`}
+      params={{ team, heap, item }}
+      hash={`run-${runId}`}
       search={true}
       replace={itemOpen}
-      {...overList({ team, heap }, run.item.key)}
+      {...overList({ team, heap }, item)}
       // A fresh value on each click makes each one a new location, which the item's Runs section acts on.
       state={(prev) => ({
         ...prev,
@@ -179,9 +209,12 @@ export function Disclosure({
   label,
   className,
   defaultOpen = false,
+  section = false,
   children,
 }: {
   label: string;
+  /** Whether it is a section of the item, whose label reads as the other sections' headings do. */
+  section?: boolean;
   /** Where it sits: its margins, or how much of a row it takes. */
   className: string;
   /** Whether it starts opened; a new `key` starts it again. */
@@ -195,7 +228,9 @@ export function Disclosure({
       onToggle={(event) => setOpen(event.currentTarget.open)}
       className={`group ${className}`}
     >
-      <summary className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-ink-soft select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
+      <summary
+        className={`inline-flex min-h-9 cursor-pointer list-none items-center gap-1 select-none hover:text-ink pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden ${section ? sectionHeadingClass : "text-[13px] font-medium text-ink-soft"}`}
+      >
         <ChevronRight
           aria-hidden="true"
           className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none"
@@ -214,17 +249,20 @@ export function HistoryDisclosure({
   label = "History",
   className = "mt-1",
   showEntity,
+  section,
 }: {
   scope: AuditScope;
   entityId?: string;
   label?: string;
   /** Each entry names the entity it is about, as in a team's history. */
   showEntity?: boolean;
+  /** As `Disclosure`'s. */
+  section?: boolean;
   /** Where it sits: its margins, or how much of a row it takes. */
   className?: string;
 }) {
   return (
-    <Disclosure label={label} className={className}>
+    <Disclosure label={label} className={className} section={section}>
       <AuditHistory scope={scope} entityId={entityId} showEntity={showEntity} />
     </Disclosure>
   );

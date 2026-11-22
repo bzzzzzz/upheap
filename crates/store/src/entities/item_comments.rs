@@ -11,6 +11,7 @@ pub struct Model {
     pub body: String,
     pub created_by: String,
     pub created_at: i64,
+    pub run_id: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

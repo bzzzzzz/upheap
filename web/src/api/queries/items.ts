@@ -5,7 +5,6 @@ import {
   apiKey,
   itemKey,
   invalidateHeap,
-  invalidateOpenCounts,
   replaceListedItem,
   dropWaitingRows,
   itemEditsScope,
@@ -49,7 +48,6 @@ export function useCreateItem() {
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
     // Not returned: the mutation is done once the server has the item, and the lists catch up after.
     onSettled: (_item, _error, { heap }) => {
-      invalidateOpenCounts(queryClient);
       void invalidateHeap(queryClient, heap);
     },
   });
@@ -88,10 +86,7 @@ export function useUpdateItem(heap: HeapRef) {
       patchAtNewestVersion(queryClient, heap, item, patch),
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     // Always re-render from the server, also after a conflict, so the row shows the latest version.
-    onSettled: (_saved, _error, { patch }) => {
-      if (patch.state !== undefined) invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
   });
 }
 
@@ -134,10 +129,7 @@ export function useChangeStates(heap: HeapRef) {
       }
       return { changed, refused };
     },
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
   });
 }
 
@@ -168,10 +160,7 @@ export function useUnblock(heap: HeapRef) {
     onError: (_error, item) => {
       void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
     },
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
   });
 }
 
@@ -184,9 +173,20 @@ export function useReopenItem(heap: HeapRef) {
           params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${item.version}"` } },
         }),
       ),
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
+  });
+}
+
+/** Reopens a closed item of any heap, for the closed list across heaps: each call names the item's heap. */
+export function useReopenAcrossHeaps() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ heap, item }: { heap: HeapRef; item: Item }) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/reopen", {
+          params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${item.version}"` } },
+        }),
+      ),
+    onSettled: (_saved, _error, { heap }) => invalidateHeap(queryClient, heap),
   });
 }

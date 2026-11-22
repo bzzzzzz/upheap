@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, unwrap, type HeapRef } from "../client";
 import type { Item, SendToAgentRequest } from "../schema";
-import { rankedKey, itemKey, waitingKey, acrossHeapsKey, replaceListedItem, dropStuckRow } from "./keys";
+import { rankedKey, itemKey, acrossHeapsKey, invalidateCounts, replaceListedItem, dropStuckRow } from "./keys";
 
 /**
  * Sends the item to an agent. The answer is the whole item, with its turn, and replaces the cached one and the lists'
@@ -32,7 +32,7 @@ export function useSendToAgent(heap: HeapRef) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void invalidateCounts(queryClient);
     },
   });
 }
@@ -58,7 +58,7 @@ export function useTakeBack(heap: HeapRef) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void invalidateCounts(queryClient);
     },
   });
 }
@@ -88,7 +88,7 @@ export function useRetryTurn(heap: HeapRef) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void invalidateCounts(queryClient);
     },
   });
 }
@@ -121,7 +121,7 @@ export function useRedoTurn(heap: HeapRef) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void invalidateCounts(queryClient);
     },
   });
 }

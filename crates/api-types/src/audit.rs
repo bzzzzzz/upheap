@@ -7,6 +7,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::common::UserRefDto;
+use crate::waiting::ItemHeapDto;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
@@ -309,4 +310,39 @@ pub struct AuditLogDto {
     pub entries: Vec<AuditEntryDto>,
     /// Pass as `cursor` for the next page; `null` on the last page.
     pub next_cursor: Option<String>,
+}
+
+/// Which part of the history across heaps to read (`GET /me/audit`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct AcrossHeapsAuditQuery {
+    /// Only the heaps of this team, by its slug. A team you aren't in is `not_found`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
+    /// `next_cursor` from the previous page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// Page size, 1 to 200. Defaults to 50.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u64>,
+}
+
+/// A page of what happened in all the caller's heaps.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AcrossHeapsAudit)]
+pub struct AcrossHeapsAuditDto {
+    /// Newest first.
+    pub entries: Vec<AcrossHeapsAuditEntryDto>,
+    /// Pass as `cursor` for the next page; `null` on the last page.
+    pub next_cursor: Option<String>,
+}
+
+/// An entry of the history across heaps.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AcrossHeapsAuditEntry)]
+pub struct AcrossHeapsAuditEntryDto {
+    /// The heap the entry was made in, and its team.
+    pub heap: ItemHeapDto,
+    /// The entry as its heap's history gives it.
+    pub entry: AuditEntryDto,
 }

@@ -373,6 +373,27 @@ export interface paths {
         patch: operations["update_me"];
         trace?: never;
     };
+    "/api/v1/me/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What happened in every active heap the signed-in user can view, newest first: in each heap what its own history
+         *     shows them, changes to items, tags and saved views for every member, and to the heap and its parameters for
+         *     admins of its team too. With `team`, only that team's heaps. Read-only, for any member.
+         */
+        get: operations["get_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/decisions": {
         parameters: {
             query?: never;
@@ -467,6 +488,26 @@ export interface paths {
          *     pinned first; `count` is the true total. Read-only, for any member.
          */
         get: operations["get_items"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/items/closed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The closed items of every active heap the signed-in user can view, in one list, most recently closed first, each
+         *     as its own heap's closed list gives it. With `team`, only that team's heaps. Read-only, for any member.
+         */
+        get: operations["get_closed_items"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2394,6 +2435,34 @@ export interface components {
          * @enum {string}
          */
         AccountKind: "local" | "provider";
+        /** @description A page of what happened in all the caller's heaps. */
+        AcrossHeapsAudit: {
+            /** @description Newest first. */
+            entries: components["schemas"]["AcrossHeapsAuditEntry"][];
+            /** @description Pass as `cursor` for the next page; `null` on the last page. */
+            next_cursor?: string | null;
+        };
+        /** @description An entry of the history across heaps. */
+        AcrossHeapsAuditEntry: {
+            /** @description The entry as its heap's history gives it. */
+            entry: components["schemas"]["AuditEntry"];
+            /** @description The heap the entry was made in, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+        };
+        /** @description A page of the closed items of all the caller's heaps. */
+        AcrossHeapsClosed: {
+            /** @description Most recently closed first. */
+            items: components["schemas"]["AcrossHeapsClosedItem"][];
+            /** @description Pass as `cursor` for the next page; `null` on the last page. */
+            next_cursor?: string | null;
+        };
+        /** @description A closed item of the list across heaps. */
+        AcrossHeapsClosedItem: {
+            /** @description The heap the item is in, and its team. */
+            heap: components["schemas"]["ItemHeap"];
+            /** @description The item as its own heap's closed list gives it. */
+            item: components["schemas"]["Item"];
+        };
         /** @description A row of the list across heaps. */
         AcrossHeapsItem: {
             /**
@@ -2767,6 +2836,12 @@ export interface components {
              *     named by its item's key and this number, as `k3x9a.c3`.
              */
             number: number;
+            /**
+             * Format: uuid
+             * @description The run an agent wrote it in, one of the item's `runs`; `null` for a comment a person wrote themselves. An
+             *     agent's comment is the agent's, not the person's whose sign-in it used (`created_by`).
+             */
+            run_id: string | null;
         };
         /** @description What changing the address of an unconfirmed account answers. */
         ConfirmationAddress: {
@@ -5439,6 +5514,10 @@ export type AccountEvent = components['schemas']['AccountEvent'];
 export type AccountEventKind = components['schemas']['AccountEventKind'];
 export type AccountHistory = components['schemas']['AccountHistory'];
 export type AccountKind = components['schemas']['AccountKind'];
+export type AcrossHeapsAudit = components['schemas']['AcrossHeapsAudit'];
+export type AcrossHeapsAuditEntry = components['schemas']['AcrossHeapsAuditEntry'];
+export type AcrossHeapsClosed = components['schemas']['AcrossHeapsClosed'];
+export type AcrossHeapsClosedItem = components['schemas']['AcrossHeapsClosedItem'];
 export type AcrossHeapsItem = components['schemas']['AcrossHeapsItem'];
 export type AcrossHeapsList = components['schemas']['AcrossHeapsList'];
 export type AddCommentRequest = components['schemas']['AddCommentRequest'];
@@ -6506,6 +6585,62 @@ export interface operations {
             };
         };
     };
+    get_audit: {
+        parameters: {
+            query?: {
+                /** @description Only the heaps of this team, by its slug. A team you aren't in is `not_found`. */
+                team?: string;
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcrossHeapsAudit"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_decisions: {
         parameters: {
             query?: never;
@@ -6734,6 +6869,62 @@ export interface operations {
             };
             /** @description `tag_not_in_team` (`field` `tag`) or `option_not_in_team` (`param`) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_closed_items: {
+        parameters: {
+            query?: {
+                /** @description Only the heaps of this team, by its slug. A team you aren't in is `not_found`. */
+                team?: string;
+                /** @description `next_cursor` from the previous page. */
+                cursor?: string;
+                /** @description Page size, 1 to 200. Defaults to 50. */
+                limit?: number;
+            };
+            header?: {
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcrossHeapsClosed"];
+                };
+            };
+            /** @description `invalid_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthenticated` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found` */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

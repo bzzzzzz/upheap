@@ -226,6 +226,7 @@ pub(crate) fn to_comment_dto(view: CommentView, as_of: Timestamp, tz: &TimeZone)
         created_by: view.created_by.as_ref().map(UserRefDto::from),
         created_at: comment.created_at.as_millis(),
         created_label: describe_since(comment.created_at, as_of, tz),
+        run_id: comment.run_id.map(|id| *id.as_uuid()),
     }
 }
 

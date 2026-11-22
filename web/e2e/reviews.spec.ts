@@ -163,6 +163,10 @@ test("a done proposal summarises steps and reviews, and Close as done shows a to
   await ask(page, task, { kind: "done_proposal", text: "Nothing is left" });
 
   await openWaiting(page, 1);
+  // Only the sidebar shows the heap's open count, which the reply that closes the task takes the task out of.
+  const wide = (page.viewportSize()?.width ?? 0) >= 1024;
+  const open = page.getByRole("navigation", { name: "Heap views" }).getByRole("link", { name: "Open", exact: true });
+  if (wide) await expect(open).toHaveText(/^Open\s*1$/);
   const proposal = rows(page).first();
   await expect(proposal).toContainText("Ready to close · Paint the fence");
   await expect(proposal).toContainText("Steps 2/2 · review approved");
@@ -172,6 +176,7 @@ test("a done proposal summarises steps and reviews, and Close as done shows a to
   await expect(rows(page)).toHaveCount(0);
   const toast = page.getByRole("status").filter({ hasText: "“Paint the fence” is done." });
   await expect(toast).toBeVisible();
+  if (wide) await expect(open).toHaveText(/^Open\s*0$/);
   await toast.getByRole("button", { name: "Open", exact: true }).click();
   await expect(itemPane(page).getByRole("button", { name: "Reopen" })).toBeVisible();
   const fetched = await (await page.request.get(task.item)).json();

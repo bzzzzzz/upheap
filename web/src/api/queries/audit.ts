@@ -29,6 +29,21 @@ export function useAuditLog(scope: AuditScope, entityId?: string) {
 }
 
 /**
+ * What happened in all the person's heaps, or in `team`'s, newest first, a page at a time, each entry with its heap.
+ * One of `historyKeys`.
+ */
+export function useAcrossAuditLog(team: string | undefined) {
+  const query = team === undefined ? {} : { team };
+  return useInfiniteQuery({
+    queryKey: apiKey("/api/v1/me/audit", { query }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) =>
+      unwrap(await api.GET("/api/v1/me/audit", { params: { query: { ...query, cursor: pageParam } } })),
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
+  });
+}
+
+/**
  * The signed-in user's account history (password events and their heap priority changes), newest first, a page at a
  * time. It is one of `historyKeys`, which `main.tsx` refreshes after any mutation, a password change included. It loads once mounted, which the History
  * disclosure does only when it is opened.

@@ -101,11 +101,11 @@ rest of the line shows as written.
 
 Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
-| Width                | Navigation                                                                                                                                                                                                                                               | List                                                     | Item                                                  |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                                                      | Full width, compact rows                                 | Bottom sheet over the list                            |
-| Tablet, 640–1023 px  | An 80 px rail: Waiting, Agents, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                                              | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me, Agents and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
+| Width                | Navigation                                                                                                                                                                                                                             | List                                                     | Item                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                                    | Full width, compact rows                                 | Bottom sheet over the list                            |
+| Tablet, 640–1023 px  | An 80 px rail: Waiting, the heap button, then the views as icons with labels, and Agents, the heap's team, Teams and Account at the bottom                                                                                             | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me with its count, and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, and Agents, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
 **More** on a phone holds Closed, Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Email, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
@@ -127,27 +127,34 @@ icon, "Waiting for me" in the sidebar with its count on the right, "Waiting" in 
 as a small badge on the icon. There is no count at zero, and the entry stays. The count is the number of open
 questions across the person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the
 list is, so a question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and
-after a reply or an item's change.
+after every change the person makes to an item, a question, a step or an agent's turn. The heaps' open counts and
+the Agents page's Your decision are fetched again with it, all three after each such change, since one change can move
+any of them: a reply can close its item, and sending an item on takes it off Your decision.
 
-**Agents** sits under Waiting for me, in the same block: a bot icon, "Agents" with the number of rows under Your
-decision (Agents) shown as Waiting for me's count is: on the right in the sidebar, as a badge on the icon in the rail
-and the tabs, none at zero. It is fetched with the page and again every 30 seconds, on focus and after a change of an
-item, as that count is.
+**Agents** is the first entry of the block at the bottom of the sidebar and the rail, above the heap's team: a bot
+icon and "Agents", with no count. What agents finished is there to look through when the person wants to, not
+something that waits as a question does, so nothing in the navigation counts it; the page's Your decision heading
+does.
 
-**All items** sits under Agents, in the same bordered block of the sidebar and the rail: a layers icon, "All
-items" in the sidebar with the person's open items on the right, "All" in the rail with no count. The count is the sum
-of the open counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when
-those do. On a phone the heap switcher's sheet starts with an "All heaps" row, the same count at its right, marked
-current on `/all` with no team, where no heap's row is; the tablet's and wide screen's popovers don't have it, as they have the entry. While
-the person is on `/all` with a team chosen (All items §7), that count, the sidebar's and the phone row's, is the sum
-over that team's active heaps only; the sidebar link still goes to `/all` with no team. A person in more than one team
-also finds, at the top of each team's section in the switcher, on every width, a row "All <team> items" with that team's
-open count, which opens `/all?team=<slug>` and is marked current there; it isn't among search results. The tabs and the top
-bar are as on Waiting for me.
+**All items** is reached from the heap switcher, on every width: nothing in the sidebar, the rail or the tabs leads
+to it. The switcher starts with an "All heaps" row with the person's open items at its right: the sum of the open
+counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when those do. A
+person in more than one team also finds, at the right of each team's line, "All items · 16" with that team's open
+count, which opens `/all?team=<slug>` (All items §7) and which a screen reader hears as "All <team> items, 16 open";
+neither is among search results. On `/all` and
+its Closed and Activity pages the row opened is marked current, where no heap's row is, and the heap button reads as
+that row does, "All heaps" or "All <team> items", on the sidebar and the phone's top bar; the rail's button shows the
+layers icon in place of a heap's initial. No heap is the current one there, so the views are the pages across heaps
+(All items §8): Open with the count the row shows, Closed and Activity in the sidebar and the rail, with no Data or
+Settings; on a phone the Open tab and More's Closed and Activity are those pages, More has no Settings or Data, and
+the + still adds to the heap opened last. The heaps' open counts, on Open and in the heap switcher, are fetched with the page and
+again every 30 seconds while the tab is visible, on focus and after a change as Waiting for me's count is, so an item
+someone else adds or closes reaches them about when it reaches the list.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
-that is `/waiting`, `/agents` and `/all`; Teams, a team's page and its activity, and Account keep their shell without
+that is `/waiting`, `/agents` and `/all` with its Closed and Activity, which keep it for Add only (All items, above);
+Teams, a team's page and its activity, and Account keep their shell without
 one. The heap kept is the one opened last that is still there and active, else the first active heap, else the first.
 On a phone those pages have no tabs, so the top bar starts with Back: it goes to the page before, or, when the tab
 opened on the page from a link, to the heap kept.
@@ -292,6 +299,8 @@ the keyboard covers, from the visual viewport. The heap switcher and More open a
 tabs.
 
 Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
+In the heap switcher the check comes before the current row's name, as part of it, so the other names keep one left
+edge and the counts sit at the panel's right edge.
 The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". Each unarchived heap's
 row has its open count on the right, the number its Open view shows, which a screen reader hears as ", 2 open" in the
 row's name, as on the All rows; archived heaps and Recent have none. From 8 unarchived heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
@@ -304,7 +313,7 @@ it. "New heap" turns into the name and an optional Link name, with the same new 
 form ([Teams and Team](#teams-and-team)); Add heap opens the new heap. On a tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts
 with the search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each
 team's name, and Recent's title, sits on a band a shade off the panel, with space above it, and a team's fold header
-stays in view while its heaps scroll.
+stays in view while its heaps scroll, with the team's "All items" link at its right, folded or not.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 
@@ -710,9 +719,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     can't be edited any more; your text wasn't saved." and a Close button.
 
 18. **Comments n**, under the context at every width and always open (not a disclosure, not a sheet row), before
-    the Steps, lists the item's comments oldest first with a thin rule between them. Each is a quiet
-    line, "<name> · <time>" (the time today, else the date as the server words it), and the text under it rendered
-    as Markdown text (see Toolkit); a comment is never edited or deleted, so a row has no controls. The heading is
+    the Steps, lists the item's comments oldest first, each in its own bordered card on a sunken fill, so where one
+    ends and the next starts shows at a glance. Each is a line, the name in bold then " · <time>" (the time today,
+    else the date as the server words it), and the text under it rendered as Markdown text (see Toolkit). A comment
+    an agent wrote in a run reads as the agent's, as its entry in the history does (point 21): the card is tinted
+    with the agents' colour, and in place of the name are a robot and "Your agent" or "<name>'s agent", a link to
+    the run in Runs; a comment is never edited or deleted, so a row has no controls. The heading is
     "Comments 3", or just "Comments" when there are none. Under the list, where the server offers `comment` (also on
     a closed item), is the field "Add a comment" that grows with its text, and a Comment button, off until the field
     has text and while it is sending; on a phone the button spans the width and is 44 px, on wider screens it is at
@@ -952,8 +964,18 @@ position numbers or reminders to come, and a tag or parameter filter only with a
    in use ("<name> (any)"), with the "(archived, ignored)" rows for chosen options of archived ones, all as a heap
    list shows them; their chips and the count in Filters work as there. Choosing another team or All teams drops
    them. A heap that doesn't use a parameter chosen has no rows.
-8. A team the person isn't in (never joined, left, or no such team) is the page's error with "You're not in this team."
-   in place of the server's message, with no controls and no fallback to all teams.
+8. Closed and Activity go with the list, at `/all/closed` and `/all/activity`, for every heap or, with
+   `?team=<slug>`, one team's, reached from the views while on any of the three (Layout, All items). **Closed** is a
+   heap's Closed page (Closed) over the same heaps, most recently closed first across them: each row ends with its
+   heap's name, and its team's after " · " when the person is in more than one and none is chosen. Reopen reopens the
+   item in its own heap, and an item opens over its own heap's list, as from that heap's Closed. **Activity** is a
+   heap's Activity page over the same heaps, newest first across them, each entry showing what that heap's own
+   Activity shows the person, by their role in its team, with the heap named after the time the same way. The line
+   under either heading names whose heaps they are, as the list's does. Neither has filters. Archived heaps have
+   their closed items and activity on their own pages only.
+9. A team the person isn't in (never joined, left, or no such team) is the page's error with "You're not in this team."
+   in place of the server's message, with no controls and no fallback to all teams; Closed and Activity show the
+   team's not-found page.
 
 ## Closed
 

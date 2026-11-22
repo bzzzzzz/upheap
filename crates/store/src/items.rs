@@ -395,8 +395,23 @@ pub async fn list_closed_items(
     after: Option<ClosedCursor>,
     limit: u64,
 ) -> Result<Vec<Item>, StoreError> {
+    list_closed_items_of_heaps(db, &[heap_id], after, limit).await
+}
+
+/// Up to `limit` closed items of `heap_ids` together, most recently closed first, starting after `after`.
+///
+/// `heap_ids` go in one `IN` list, as [`search_items`] puts them.
+pub async fn list_closed_items_of_heaps(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+    after: Option<ClosedCursor>,
+    limit: u64,
+) -> Result<Vec<Item>, StoreError> {
+    if heap_ids.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut query = items::Entity::find()
-        .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .filter(items::Column::HeapId.is_in(heap_ids.iter().map(|id| id_to_db(id.as_uuid()))))
         .filter(items::Column::ClosedAt.is_not_null());
     if let Some(cursor) = after {
         let closed_at = cursor.closed_at.as_millis();
