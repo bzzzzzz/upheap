@@ -6,7 +6,7 @@ import { apiKey, heapPath } from "./keys";
 export type AuditScope = { heap: HeapRef } | { team: string };
 
 /**
- * A page-by-page history, newest first. Every write is audited, so `main.tsx` invalidates these after any mutation.
+ * A page-by-page history, newest first. Every write is audited, so `main.tsx` invalidates these after any mutation (`historyKeys`).
  */
 export function useAuditLog(scope: AuditScope, entityId?: string) {
   const query = { entity_id: entityId };
@@ -30,7 +30,7 @@ export function useAuditLog(scope: AuditScope, entityId?: string) {
 
 /**
  * The signed-in user's account history (password events and their heap priority changes), newest first, a page at a
- * time. `main.tsx` refreshes it after any mutation, a password change included. It loads once mounted, which the History
+ * time. It is one of `historyKeys`, which `main.tsx` refreshes after any mutation, a password change included. It loads once mounted, which the History
  * disclosure does only when it is opened.
  */
 export function useAccountHistory() {

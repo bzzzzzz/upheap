@@ -2,7 +2,7 @@ import { hashKey, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
 import type { Item, ItemToStepRequest } from "../schema";
 import {
-  apiKey,
+  everyItemKey,
   rankedKey,
   closedKey,
   itemKey,
@@ -64,7 +64,7 @@ export function useMoveItem(heap: HeapRef) {
       }
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
       void queryClient.invalidateQueries({
-        queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}"),
+        queryKey: everyItemKey,
         predicate: (query) => saved === undefined || query.queryHash !== gone,
       });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
@@ -101,7 +101,7 @@ export function useMoveItems(heap: HeapRef) {
         void queryClient.invalidateQueries({ queryKey });
       }
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}") });
+      void queryClient.invalidateQueries({ queryKey: everyItemKey });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
       void queryClient.invalidateQueries({ queryKey: decisionsKey });
     },

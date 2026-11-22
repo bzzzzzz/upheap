@@ -26,7 +26,8 @@ export type ApiKeyParams<P extends keyof paths> = {
  * The query key of a path and the parameters it was read with. A path that isn't in `paths`, or a parameter it doesn't
  * have, fails the type check. Without `params` the key is `[path]` and not `[path, undefined]`, which would match no
  * query with params; TanStack matches the object part of a key partially, so fewer parameters cover every query that
- * has them.
+ * has them. That is what `Partial` path parameters are for: a hook's own key names every one, through a wrapper here
+ * or `heapPath`.
  */
 export function apiKey<P extends keyof paths>(path: P, params?: ApiKeyParams<P>) {
   return params === undefined ? ([path] as const) : ([path, params] as const);
@@ -71,9 +72,23 @@ export const decisionsKey = apiKey("/api/v1/me/decisions");
 /** Every view of the list across heaps, by prefix. */
 export const acrossHeapsKey = apiKey("/api/v1/me/items");
 export const meKey = apiKey("/api/v1/me");
+/** Every cached item, in every heap. */
+export const everyItemKey = apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}");
 
 /**
- * The team's own queries: its record, tags, parameters, invite links and data. With no `team`, every team's.
+ * Every history: a heap's, a team's, the account's and an account's as an operator reads it. Every write is audited, so
+ * `main.tsx` refreshes them all after any mutation. A new history hook's path goes here too.
+ */
+export const historyKeys = [
+  apiKey("/api/v1/teams/{team}/heaps/{heap}/audit"),
+  apiKey("/api/v1/teams/{team}/audit"),
+  apiKey("/api/v1/me/history"),
+  apiKey("/api/v1/operator/accounts/{user_id}/history"),
+];
+
+/**
+ * The team's own queries: its record, tags, parameters, invite links and data. With no `team`, every team's. A new
+ * hook that reads a team's own path goes here too, or changing or leaving the team leaves it stale.
  */
 export function teamKeys(team?: string) {
   const params = team === undefined ? undefined : { path: { team } };
@@ -86,7 +101,10 @@ export function teamKeys(team?: string) {
   ];
 }
 
-/** The heap's record and its ranking previews. With no `heap`, those of every heap of the team. */
+/**
+ * The heap's record and its ranking previews: what shows its name, archive state and weights. With no `heap`, those of
+ * every heap of the team. A new query that shows those goes here too.
+ */
 export function heapRecordKeys(heap: { team: string; heap?: string }) {
   const path = heap.heap === undefined ? { team: heap.team } : { team: heap.team, heap: heap.heap };
   return [
@@ -108,7 +126,7 @@ export function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
-    queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}") }),
+    queryClient.invalidateQueries({ queryKey: everyItemKey }),
     // An item's state or order changes what waits for the person, and in what order.
     queryClient.invalidateQueries({ queryKey: waitingKey }),
     // Starting, closing or sending on an item takes it off Your decision.
@@ -139,7 +157,7 @@ export function invalidateTeamTags(queryClient: QueryClient, team: string, renam
           queryClient.invalidateQueries({
             queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/closed", { path: { team } }),
           }),
-          queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}") }),
+          queryClient.invalidateQueries({ queryKey: everyItemKey }),
           queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
           queryClient.invalidateQueries({ queryKey: waitingKey }),
         ]
@@ -164,7 +182,7 @@ export function invalidateTeamParameters(queryClient: QueryClient, team: string,
           queryClient.invalidateQueries({
             queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/closed", { path: { team } }),
           }),
-          queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}") }),
+          queryClient.invalidateQueries({ queryKey: everyItemKey }),
           queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
           queryClient.invalidateQueries({ queryKey: waitingKey }),
         ]

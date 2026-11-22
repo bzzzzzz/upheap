@@ -17,8 +17,8 @@ export function useOperatorAccounts() {
 }
 
 /**
- * The history of one account as an operator reads it, a page at a time. `main.tsx`
- * refreshes it after any mutation, an action on the account included. It loads once mounted.
+ * The history of one account as an operator reads it, a page at a time. It is one of `historyKeys`, which `main.tsx`
+ * refreshes after any mutation, an action on the account included. It loads once mounted.
  */
 export function useOperatorAccountHistory(account: OperatorAccount) {
   return useInfiniteQuery({
