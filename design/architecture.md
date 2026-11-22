@@ -164,8 +164,10 @@ null`; raising it means paging them. Moving an item keeps its comments, which ha
   all the way is `done`; the turn carries it as `going_to`, for the row's badge. The ranked list
   filters by both, so it reads turns and open questions for every non-closed item, not only the listed ones, before
   it filters (still none in an archived heap). Saved views don't store these filters.
-  `heaps.agents_prepare` makes `create_item` open a turn of one state on every new item, whoever added it. Neither
-  changes ranking. The agent queue (`work next`, `work queue`, `work claim`, `work run`) reads the heaps it is given and every
+  `heaps.agents_prepare` makes `create_item` open a turn of one state on every new item, whoever added it, unless the
+  request sends the item itself (`send`): then `create_item` opens that turn instead, in the item's transaction, so
+  an item is never added but unsent and never gets two turns. Neither changes ranking. The agent queue (`work next`,
+  `work queue`, `work claim`, `work run`) reads the heaps it is given and every
   active heap made from an item in one of them, and from an item in those in turn (`resolve_queue_heaps`), so a made
   heap's items are given with the heap that held their note; the limit on how many heaps a request names counts only
   the named ones.

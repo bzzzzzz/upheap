@@ -564,10 +564,12 @@ change it makes carries the run it was made in.
 
 **Opening a turn**
 
-1. The person's go-ahead opens a turn on an open note or task, with a reach of one state or all the way.
+1. The person's go-ahead opens a turn on an open note or task, with a reach of one state or all the way. It can
+   also come with the add, in one step, with a target.
 2. In a heap with prepare on, a note or task the person adds gets a turn of one state at once: a task goes to
-   defined, never to done. Items an agent makes, reminders, and items that were there before prepare was turned on
-   get none.
+   defined, never to done. A target chosen at add replaces that turn ("Don't send" keeps it). Items an agent makes,
+   reminders, and items that were there before prepare was turned on get none, and an item added inside a run is
+   never sent at add.
 3. Prepare never opens a second turn on the same item.
 4. No turn opens on a closed item, a reminder before its date, or an item in an archived heap.
 
@@ -1209,6 +1211,7 @@ Each is exit 3 with the server's message and code, and a hint saying what to do 
   A reminder added in a run                   "Add it as a task or a note; leave the date in its context."
   An item added in a run with no context      "Add it again with --context-file - and say what it is and why
                                               it came up."
+  An item sent to an agent as a run adds it   "Add it again without --send; the person sends it on."
   A need above the note's                     names the highest it may give
   Closing a task, in a run                    "Propose closing: upheap question propose-done k3x9a ..."
   A proposal without what Review §2 asks      names everything missing: open steps, an open question or

@@ -4398,7 +4398,7 @@
             }
           },
           "403": {
-            "description": "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`",
+            "description": "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_add_sent` (a `send`), `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4418,7 +4418,7 @@
             }
           },
           "409": {
-            "description": "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)",
+            "description": "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4428,7 +4428,7 @@
             }
           },
           "422": {
-            "description": "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`)",
+            "description": "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`), or `field_not_allowed` (`goal`, a goal in `send` the new item can't be sent to)",
             "content": {
               "application/json": {
                 "schema": {
@@ -12912,6 +12912,17 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "send": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SendToAgentRequest",
+                "description": "Sends the new item to an agent in the same request, as `POST …/items/{item}/turn` would right after: the same body. The\nturn opens with the item, and the heap's prepare turn doesn't open: an item never gets two. Not for a reminder,\nand not from inside a run."
+              }
+            ]
           },
           "tag_ids": {
             "type": [

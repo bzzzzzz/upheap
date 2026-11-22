@@ -65,6 +65,48 @@ async fn item_add_creates_the_item_and_says_where_it_landed() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn item_add_with_send_opens_a_turn_and_prints_it() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, _) = ada_with_items(&server).await?;
+    let cli = cli_in_heap(&server, &ada).await?;
+
+    // Act
+    let added = cli
+        .run(&[
+            "item",
+            "add",
+            "Rotate certs",
+            "--send",
+            "--all-the-way",
+            "--line",
+            "Use the new CA.",
+        ])
+        .await;
+    let refused = cli.run(&["item", "add", "Alone", "--all-the-way"]).await;
+    let reminder = cli
+        .run(&["item", "add", "Renew", "--reminder", "2027-03-12", "--send"])
+        .await;
+
+    // Assert
+    expect_that!(added.exited(0), eq(true));
+    expect_that!(
+        added.stdout,
+        ends_with(" Turn: to defined, all the way. \"Use the new CA.\".\n")
+    );
+    let new_key = added_key(&added.stdout).context("a key in the output")?;
+    let item = server.read_item(&ada, HEAP, new_key).await?;
+    expect_that!(item["turn"]["reach"], eq("all_the_way"));
+    expect_that!(item["turn"]["line"], eq("Use the new CA."));
+    expect_that!(item["turn"]["source"], eq("go_ahead"));
+    expect_that!(refused.exited(0), eq(false));
+    expect_that!(reminder.exited(0), eq(false));
+    expect_that!(item_count(&server, &ada).await?, eq(4));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn item_add_without_a_need_asks_for_nice_to_have() -> Result<()> {
     let server = TestServer::start().await?;
     let (ada, _) = ada_with_items(&server).await?;

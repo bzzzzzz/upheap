@@ -261,6 +261,27 @@ async fn a_run_is_refused_an_item_with_no_context_or_a_blank_one_or_a_reminder()
 
 #[gtest]
 #[tokio::test]
+async fn a_run_is_refused_an_item_it_would_send_and_adds_nothing() -> Result<()> {
+    // Arrange
+    let s = scene().await?;
+    let list = format!("{}/items", s.app.heap_url(&s.heap).await?);
+    let before = s.app.send(Method::GET, &list, Some(&s.session), None).await?;
+
+    // Act
+    let sent = s
+        .add(json!({ "title": "Sent", "description": "Context", "send": { "reach": "one" } }))
+        .await?;
+    let after = s.app.send(Method::GET, &list, Some(&s.session), None).await?;
+
+    // Assert
+    expect_that!(sent.status, eq(StatusCode::FORBIDDEN));
+    expect_that!(code(&sent), some(eq("run_add_sent")));
+    expect_that!(after.body, eq(&before.body));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_run_that_is_over_or_not_the_callers_adds_nothing() -> Result<()> {
     // Arrange
     let s = scene().await?;

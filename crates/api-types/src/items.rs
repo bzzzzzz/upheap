@@ -20,7 +20,7 @@ use crate::common::{
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, RemindersModeDto, SortDto, StateModeDto};
 use crate::problem::Problem;
-use crate::turns::{AgentStateDto, GoalDto};
+use crate::turns::{AgentStateDto, GoalDto, SendToAgentDto};
 use crate::waiting::ItemHeapDto;
 
 /// The list view. Every parameter is optional; leaving them all out gives the default view: in-progress items
@@ -476,6 +476,11 @@ pub struct CreateItemDto {
     /// The item the new one starts blocked by: a non-closed item of the same heap. The new item is created blocked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_by: Option<Uuid>,
+    /// Sends the new item to an agent in the same request, as `POST …/items/{item}/turn` would right after: the same body. The
+    /// turn opens with the item, and the heap's prepare turn doesn't open: an item never gets two. Not for a reminder,
+    /// and not from inside a run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send: Option<SendToAgentDto>,
 }
 
 /// The item a new item is made from, and whose age it takes.
@@ -712,6 +717,7 @@ mod tests {
             parameter_values: None,
             origin: None,
             blocked_by: None,
+            send: None,
         };
 
         // Act

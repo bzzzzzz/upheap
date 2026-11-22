@@ -1,22 +1,33 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Check, ChevronDown, Plus, X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Dialog, Modal, ModalOverlay, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
 import { requestIdOf, type HeapRef } from "../api/client";
-import type { DueInput, Item, ItemTag, Me, Need, Parameter, Size } from "../api/schema";
+import type { DueInput, Goal, Item, ItemTag, Me, Need, Parameter, Size } from "../api/schema";
+import { useHeap } from "../api/queries/heaps";
 import { useCreateItem } from "../api/queries/items";
 import { useRefetchRankedList } from "../api/queries/lists";
 import { useMe } from "../api/queries/me";
 import { useParameters } from "../api/queries/parameters";
 import { heapTags, useTags } from "../api/queries/tags";
 import { useAddAnother } from "./addAnother";
-import { ChoiceButtons, choiceButtonClass } from "./ChoiceButtons";
+import { ChoiceButtons, FieldFrame, FieldLabel, choiceButtonClass } from "./ChoiceButtons";
 import { DateField } from "./DateField";
 import { DuePicker } from "./DuePicker";
 import { RequestId } from "./RequestId";
 import { itemProblem } from "./itemProblems";
-import { SIZE_LABELS, SIZES } from "./labels";
+import { fieldClass } from "./ItemTurn";
+import { GOAL_LABELS, SIZE_LABELS, SIZES } from "./labels";
 import { itemAddress, listQueryFor, matchesSearch, placeOf, splitList, type ListSearch } from "./listView";
 import { PHONE, useMedia } from "./media";
 import { Kbd, MAC, WIDE_HINT } from "./Kbd";
@@ -35,6 +46,20 @@ import { useToast, useToastCount } from "./UndoToast";
 export const OVERLAY = "[role=dialog], [role=alertdialog]";
 
 const SIZE_OPTIONS = SIZES.map((size) => ({ id: size, label: SIZE_LABELS[size] }));
+
+/** Whether a new note goes to an agent as it's added, and how far (ux.md, Adding an item §6). */
+type AgentChoice = "none" | "with_context" | "defined" | "all_the_way";
+
+/** The choices, with the name the wide row's buttons give each and the name the phone's sheet does. */
+const AGENT_CHOICES: readonly { id: AgentChoice; label: string; sheetLabel: string }[] = [
+  { id: "none", label: "Don't send", sheetLabel: "Don't send" },
+  { id: "with_context", label: "With context", sheetLabel: "To with context" },
+  { id: "defined", label: "Defined", sheetLabel: "To defined" },
+  { id: "all_the_way", label: "All the way", sheetLabel: "All the way" },
+];
+
+/** The longest line the server takes for an agent. */
+const MAX_AGENT_LINE = 2000;
 
 /**
  * The way in to adding an item (ux.md, Adding an item): the Add item button beside the heap name, or `N`, opens
@@ -118,6 +143,10 @@ type Draft = {
   tags: ItemTag[];
   /** Option ID by parameter ID. */
   values: Record<string, string | null>;
+  /** Whether the note is sent to an agent as it's added, and how far. Never sent for a reminder. */
+  agent: AgentChoice;
+  /** What to tell the agent with it; only with an agent picked. */
+  agentLine: string;
 };
 
 const EMPTY: Draft = {
@@ -131,6 +160,8 @@ const EMPTY: Draft = {
   date: null,
   tags: [],
   values: {},
+  agent: "none",
+  agentLine: "",
 };
 
 /** An item just added, for saying where it landed. `place` is its place in the list on screen, if it shows there. */
@@ -142,26 +173,28 @@ type Added = {
   place: { position: number; section: string | undefined } | undefined;
   /** The date a reminder to come joins the list, as people say it; it has no place until then. */
   joins: string | undefined;
+  /** Where the agent it was sent to is going, when it was sent with the add. */
+  sentTo: Goal | undefined;
 };
 
 /**
  * "Added “Title” at #4 in Up next.", or where it went when the list on screen doesn't show it. A reminder to come says
  * when it joins the list instead.
  */
-const addedMessage = ({ title, heapName, place, joins }: Added) =>
-  joins
-    ? `Added. It joins the list on ${joins}.`
-    : place
-      ? `Added “${title}” at #${place.position}${place.section ? ` in ${place.section}` : ""}.`
-      : `Added “${title}” to ${heapName}.`;
+const addedMessage = ({ title, heapName, place, joins, sentTo }: Added) => {
+  if (joins) return `Added. It joins the list on ${joins}.`;
+  const sent = sentTo ? `, sent to an agent going to: ${GOAL_LABELS[sentTo]}` : "";
+  return place
+    ? `Added “${title}” at #${place.position}${place.section ? ` in ${place.section}` : ""}${sent}.`
+    : `Added “${title}” to ${heapName}${sent}.`;
+};
 
 /** The same, short enough for the corner of a phone's sheet. */
-const addedNote = ({ title, heapName, place, joins }: Added) =>
-  joins
-    ? `“${title}” joins the list on ${joins}`
-    : place
-      ? `“${title}” added at #${place.position}`
-      : `“${title}” added to ${heapName}`;
+const addedNote = ({ title, heapName, place, joins, sentTo }: Added) => {
+  if (joins) return `“${title}” joins the list on ${joins}`;
+  const sent = sentTo ? " · sent" : "";
+  return place ? `“${title}” added at #${place.position}${sent}` : `“${title}” added to ${heapName}${sent}`;
+};
 
 const sameHeap = (a: HeapRef, b: HeapRef) => a.team === b.team && a.heap === b.heap;
 
@@ -171,6 +204,8 @@ type SentAdd = {
   heapName: string;
   onScreen: boolean;
   addAnother: boolean;
+  /** Whether it was sent to an agent with the add, rather than left to the heap's prepare turn. */
+  sending: boolean;
   edits: Partial<Draft>;
   title: string;
   number: number;
@@ -240,6 +275,7 @@ export function AddItemDialog({
   const onScreen = sameHeap(target, heapRef);
   const create = useCreateItem();
   const parameters = useParameters(target);
+  const targetHeap = useHeap(target);
   const prefill = usePrefill(heapRef, view);
   const [addAnother, setAddAnother] = useAddAnother();
   // What the user has set, over the view's prefill, which belongs to the heap on screen.
@@ -259,6 +295,7 @@ export function AddItemDialog({
   // parameter its value, so it's in sight.
   const [moreFields, setMoreFields] = useState<boolean | null>(null);
   const moreId = useId();
+  const agentLabelId = useId();
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     currentEdits.current = edits;
@@ -279,6 +316,9 @@ export function AddItemDialog({
   };
 
   const reminder = draft.kind === "reminder";
+  // A reminder is never sent: its choice stays in the draft, hidden, for when it is a note again.
+  const sending = !reminder && draft.agent !== "none";
+  const prepares = targetHeap.data?.agents_prepare === true && draft.agent === "none";
   const canAdd =
     draft.title.trim() !== "" && draft.need !== null && (!reminder || draft.date !== null) && !create.isPending;
   const unsaved = draft.title.trim() !== "" && edits !== sent;
@@ -342,6 +382,8 @@ export function AddItemDialog({
       impact: draft.impact,
       due: draft.due,
       date: draft.date,
+      agent: draft.agent,
+      agentLine: draft.agentLine,
     });
     setTarget(next);
   };
@@ -355,6 +397,7 @@ export function AddItemDialog({
       heapName,
       onScreen,
       addAnother,
+      sending,
       edits,
       title: draft.title,
       number: ++latest.current,
@@ -377,6 +420,13 @@ export function AddItemDialog({
           ...(reminder && draft.date !== null
             ? { kind: "reminder" as const, due: { date: draft.date, firm: true } }
             : { due: draft.due }),
+          ...(sending && {
+            send: {
+              reach: draft.agent === "all_the_way" ? ("all_the_way" as const) : ("one" as const),
+              goal: draft.agent === "defined" ? ("defined" as const) : undefined,
+              line: draft.agentLine.trim() === "" ? null : draft.agentLine.trim(),
+            },
+          }),
           tag_ids: draft.tags.map((tag) => tag.id),
           parameter_values: Object.fromEntries(
             suggested.flatMap((parameter) => {
@@ -431,6 +481,8 @@ export function AddItemDialog({
       heapName: add.heapName,
       place: shown && { position: shown.entry.position, section: shown.section },
       joins,
+      // Only a send the person chose: the heap's prepare turn was already said in the dialog.
+      sentTo: add.sending ? item.turn?.going_to : undefined,
     };
     if (!add.addAnother || !open.current) {
       // Not over a toast about something done since, such as a row marked done.
@@ -560,6 +612,20 @@ export function AddItemDialog({
     </>
   );
 
+  const prepareNote = prepares && (
+    <p className="text-xs text-muted">This heap's agents still take it one step, to with context.</p>
+  );
+  const agentLine = (
+    <label className="flex flex-col gap-1.5 text-[13px] text-ink-soft">
+      A line for the agent (optional)
+      <textarea
+        value={draft.agentLine}
+        onChange={(e) => set("agentLine", e.target.value)}
+        maxLength={MAX_AGENT_LINE}
+        className={fieldClass}
+      />
+    </label>
+  );
   const buttonClass = "h-11 rounded-xl px-4 text-sm font-medium";
   const discardRow = (
     <div role="alert" className="flex flex-wrap items-center gap-2">
@@ -609,7 +675,7 @@ export function AddItemDialog({
       className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:not-aria-busy:opacity-40"
     >
       <Saving pending={create.isPending} />
-      Add
+      {sending ? "Add and send" : "Add"}
       <Kbd onInk className={`${WIDE_HINT} items-center`}>
         {submitKeys}
       </Kbd>
@@ -652,7 +718,13 @@ export function AddItemDialog({
                   {reminder ? (
                     <DateField value={draft.date} onChange={(date) => set("date", date)} />
                   ) : (
-                    <DuePicker key={round} layout="chips" value={draft.due} onChange={(due) => set("due", due)} />
+                    <>
+                      <DuePicker key={round} layout="chips" value={draft.due} onChange={(due) => set("due", due)} />
+                      <div className="flex flex-col gap-1.5">
+                        <AgentChip draft={draft} set={set} line={agentLine} />
+                        {prepareNote}
+                      </div>
+                    </>
                   )}
                   {showMore && (
                     <div id={moreId} className="flex flex-col gap-3">
@@ -747,6 +819,30 @@ export function AddItemDialog({
                       onChange={(tags) => set("tags", tags)}
                     />
                     {parameterPickers("grid")}
+                    {!reminder && (
+                      <FieldFrame layout="grid" label={<FieldLabel id={agentLabelId}>Agent</FieldLabel>}>
+                        <ToggleButtonGroup
+                          aria-labelledby={agentLabelId}
+                          selectionMode="single"
+                          disallowEmptySelection
+                          selectedKeys={[draft.agent]}
+                          onSelectionChange={(keys) => {
+                            const [picked] = [...keys];
+                            const choice = AGENT_CHOICES.find((c) => c.id === picked);
+                            if (choice) set("agent", choice.id);
+                          }}
+                          className="flex flex-wrap gap-1"
+                        >
+                          {AGENT_CHOICES.map((choice) => (
+                            <ToggleButton key={choice.id} id={choice.id} className={`${choiceButtonClass} rounded-lg`}>
+                              {choice.label}
+                            </ToggleButton>
+                          ))}
+                        </ToggleButtonGroup>
+                        {sending && agentLine}
+                        {prepareNote}
+                      </FieldFrame>
+                    )}
                   </div>
                   {error}
                 </div>
@@ -994,6 +1090,64 @@ function SizeChip({
             </SheetChoice>
           ))}
         </ToggleButtonGroup>
+      </Sheet>
+    </>
+  );
+}
+
+/**
+ * The phone's Agent choice as a chip in a row of its own, "Agent: Don't send ▾" (ux.md, Adding an item §6). It opens a
+ * sheet of the choices, and the line for the agent once one is picked; Done or a tap outside closes it and keeps them.
+ */
+function AgentChip({
+  draft,
+  set,
+  line,
+}: {
+  draft: Draft;
+  set: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
+  line: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const picked = AGENT_CHOICES.find((choice) => choice.id === draft.agent);
+  return (
+    <>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+        className={`${chipClass(draft.agent !== "none")} w-fit`}
+      >
+        Agent: {picked?.sheetLabel}
+        <ChevronDown aria-hidden="true" className="size-3.5" />
+      </button>
+      <Sheet title="Agent" isOpen={open} onClose={() => setOpen(false)}>
+        <ToggleButtonGroup
+          aria-label="Agent"
+          selectionMode="single"
+          disallowEmptySelection
+          orientation="vertical"
+          selectedKeys={[draft.agent]}
+          onSelectionChange={(keys) => {
+            const choice = AGENT_CHOICES.find((c) => c.id === [...keys][0]);
+            if (choice) set("agent", choice.id);
+          }}
+          className="flex flex-col pb-1"
+        >
+          {AGENT_CHOICES.map((choice) => (
+            <SheetChoice key={choice.id} id={choice.id}>
+              {choice.sheetLabel}
+            </SheetChoice>
+          ))}
+        </ToggleButtonGroup>
+        {draft.agent !== "none" && line}
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="mt-2 h-11 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas"
+        >
+          Done
+        </button>
       </Sheet>
     </>
   );

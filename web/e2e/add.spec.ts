@@ -477,3 +477,52 @@ test("on a phone, Add is a sheet of one-tap chips, with More fields", async ({ p
   await expect(row(page, "Call the plumber")).toContainText("next week");
   await expect(row(page, "Call the plumber")).toContainText("home");
 });
+
+test("Add can send the note to an agent, and Add another goes back to Don't send", async ({ page }) => {
+  test.skip(isPhone(page), "A phone has the Agent chip, in the next test.");
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await dialog.getByLabel("Add another").check();
+  await fillIn(page, "Rotate certs");
+  const agent = dialog.getByRole("radiogroup", { name: "Agent" });
+  await expect(agent.getByRole("radio", { name: "Don't send" })).toBeChecked();
+  await expect(dialog.getByRole("button", { name: "Add", exact: true })).toBeVisible();
+
+  // A target brings up the line, and Add becomes Add and send.
+  await agent.getByRole("radio", { name: "Defined", exact: true }).click();
+  await dialog.getByLabel("A line for the agent (optional)").fill("Use the new CA.");
+  await dialog.getByRole("button", { name: "Add and send" }).click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Added “Rotate certs” at #1, sent to an agent going to: defined.",
+  );
+
+  // The next item starts from Don't send, with no line to show.
+  await expect(agent.getByRole("radio", { name: "Don't send" })).toBeChecked();
+  await expect(dialog.getByLabel("A line for the agent (optional)")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Add", exact: true })).toBeVisible();
+
+  // A reminder has no Agent row, and a note shows the choice again as it was.
+  await agent.getByRole("radio", { name: "All the way" }).click();
+  await dialog.getByRole("radio", { name: "Reminder" }).click();
+  await expect(dialog.getByRole("radiogroup", { name: "Agent" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Add and send" })).toHaveCount(0);
+  await dialog.getByRole("radio", { name: "Note" }).click();
+  await expect(agent.getByRole("radio", { name: "All the way" })).toBeChecked();
+});
+
+test("on a phone, the Agent chip opens a sheet and names the target", async ({ page }) => {
+  test.skip(!isPhone(page), "Only a phone has the chip.");
+  await openAdd(page);
+  const dialog = addDialog(page);
+  await fillIn(page, "Rotate certs");
+  await dialog.getByRole("button", { name: "Agent: Don't send" }).click();
+  const sheet = page.getByRole("dialog", { name: "Agent", exact: true });
+  await sheet.getByRole("radio", { name: "To with context" }).click();
+  await sheet.getByLabel("A line for the agent (optional)").fill("Use the new CA.");
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Agent: To with context" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Add and send" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "sent to an agent going to: with context" })).toBeVisible();
+});
