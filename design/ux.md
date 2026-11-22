@@ -171,8 +171,8 @@ line saying what a context holds when there is none. Anyone who can open Setting
 turns the card into a form: an editor (see Toolkit) that grows with its text, Save and Cancel. A failed save keeps the form and
 the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
 saved a different context meanwhile, it shows rendered above the kept draft under "Saved meanwhile", and Save again replaces
-it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and
-Cancel give focus back to Edit.
+it; when only the heap's other settings changed, the message says so and Save again saves the draft. Cancel drops
+the draft without asking. Save and Cancel give focus back to Edit.
 
 The **Agents** card, on General under Details, has a switch, "Agents prepare new notes", with the line "Each note added here is
 sent to an agent to fill in its context, or to make it a defined task when it's small and clear, then comes back
@@ -639,8 +639,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     titled "Changes asked": "An agent brought this to: <stage>.", a required "What's wrong" field, **Send back**, off
     until the field has text, and Cancel, sharing a row on a phone. Send back closes the form, shows the toast "Sent
     back to the agent.", and gives focus to the agent chip, which the new turn brings; Cancel returns focus to the
-    button and drops the draft. A failed send keeps the form and its text and says why under the buttons; if someone
-    sent the item on first, the form closes and a toast says "The agent's work changed meanwhile: there's nothing to
+    button and drops the draft, without asking, and so does closing the popover or the sheet. A failed send keeps
+    the form and its text and says why under the buttons; if someone sent the item on first, the form closes and a toast says "The agent's work changed meanwhile: there's nothing to
     send back.", the focus goes to the agent chip, and the Changes asked… chip is gone. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
@@ -667,8 +667,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Escape does nothing, so a long draft is never lost to a stray key or closes the item. Save closes the form once
     the save has landed, the text is read-only while it is in flight, and a failed save keeps the draft and says why.
     When someone else saved a different context meanwhile, it shows above the draft under "Saved meanwhile", Save
-    reads Save again and replaces it, and Cancel keeps theirs; until Save again, nothing else saves over theirs (Done
-    doesn't go on, and leaving doesn't save the draft). Dismissing the phone's sheet (✕ or a tap outside)
+    reads Save again and replaces it, and Cancel keeps theirs; Cancel always drops the draft, without asking.
+    Until Save again, nothing else saves over theirs (Done doesn't go on, and leaving doesn't save the draft). Dismissing the phone's sheet (✕ or a tap outside)
     with a changed draft saves it like Save, and stays open if that doesn't land; an unchanged draft just closes. Done
     and Won't do from the pane save a changed draft first, and don't go on if it can't be saved. Leaving the item with
     a changed draft, by closing it or walking on, saves it when nothing else changed meanwhile, and otherwise doesn't
@@ -1344,7 +1344,12 @@ to an open History at once, and to a closed one by the time it is opened.
 1. **Confirmations.** A reversible change acts at once and offers Undo in a toast: state changes, archiving a heap,
    a view or a parameter. A change that can't be undone, or that affects other people, asks first, inline or in a
    dialog on a wide screen and in a sheet on a phone, and names the object: removing a member, giving up your own
-   admin role, revoking an invite link, and discarding a typed title.
+   admin role, revoking an invite link, and discarding a typed title. Cancel on a form that edits in place (Ask a
+   question, Change reply, Changes asked, an item's or a heap's context) is itself the choice to discard, so it
+   drops the draft without asking; such a form guards its draft from a stray key and from refetches instead.
+   Closing a dialog or a sheet that holds a draft, or leaving the page with one, never drops it silently: Add an
+   item and Split… ask first, and the item's context saves the draft. Changes asked breaks this for now:
+   closing its popover or sheet drops the draft too.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's main state button and ⋯ sit in a bar at its bottom; on a wide screen they sit beside the title.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:
