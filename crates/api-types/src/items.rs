@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use domain::item::{Age, BlockReason, Description, Due, ItemPatch, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
 use domain::list_view::ListView;
+use domain::ranking::PlaceSide;
 use domain::tag::parse_tag_set;
 use domain::turn::{AgentState, Goal};
 use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
@@ -752,6 +753,38 @@ mod tests {
 pub struct ItemMoveDto {
     /// The heap to move the item to: a heap of any team the caller may edit items in.
     pub heap_id: Uuid,
+}
+
+/// Where to place an item in its heap's list.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ItemPlaceRequest)]
+pub struct ItemPlaceDto {
+    /// The item to place it next to: another item of the same heap that ranks (open, in progress or blocked, and not
+    /// a reminder to come).
+    pub anchor: Uuid,
+    pub side: PlaceSideDto,
+    /// The `as_of` of the list the person is looking at, so the item lands where it was dropped there. Ignored when
+    /// it's in the future or too old, and then the current time is used. Omit to place it in the order of now.
+    pub as_of: Option<i64>,
+}
+
+/// Which side of the anchor to place an item on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = PlaceSide)]
+pub enum PlaceSideDto {
+    Above,
+    Below,
+}
+
+impl From<PlaceSideDto> for PlaceSide {
+    fn from(side: PlaceSideDto) -> Self {
+        match side {
+            PlaceSideDto::Above => Self::Above,
+            PlaceSideDto::Below => Self::Below,
+        }
+    }
 }
 
 /// An item to move, with the version the caller last read.

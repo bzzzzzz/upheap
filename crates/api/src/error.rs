@@ -18,6 +18,7 @@ use domain::oauth::AuthorizationError;
 use domain::parameter::ParameterError;
 use domain::password_reset::ResetLinkError;
 use domain::question::QuestionError;
+use domain::ranking::PlaceError;
 use domain::run::{RunError, RunForbidden};
 use domain::step::StepError;
 use domain::team::TeamError;
@@ -377,6 +378,11 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("blocked_by_item_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "blocking_cycle", Category::Caller)
         },
+        ServiceError::Place(PlaceError::AnchorNotRanked) => Classified {
+            field: Some("anchor"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "anchor_not_ranked", Category::Caller)
+        },
+        ServiceError::Place(PlaceError::OutOfRange) => unexpected(),
         ServiceError::MoveTargetNotFound { .. } => Classified {
             field: Some("heap_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "heap_not_in_team", Category::Caller)

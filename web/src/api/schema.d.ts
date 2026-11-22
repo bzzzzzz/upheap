@@ -1191,6 +1191,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Places an item right above or below another item of its heap in the ranked list, without changing any of its
+         *     fields, and answers with the item. Send the item's `version` in `If-Match`. The item gets a multiplier on its own
+         *     score, worked out so it lands between the anchor and the item next to it when the heap is ranked at `as_of`; the
+         *     multiplier is never shown, only which way the item is placed (`placement`). It stays until the item is placed
+         *     again, which replaces it, or reset (`DELETE`); field edits keep it, and moving the item to another heap drops it.
+         *     A blocker never ranks below what it blocks, so a blocker placed below what it blocks stops just above it. The
+         *     anchor must be another item of the heap that ranks: open, in progress or blocked, and not a reminder to come. The
+         *     item may be a reminder to come; its place applies when it arrives.
+         */
+        post: operations["place_item"];
+        /**
+         * Takes an item's place by hand away, so it ranks by its fields again, and answers with the item. Send the item's
+         *     `version` in `If-Match`. An item that isn't placed is answered unchanged after the version check, and nothing is
+         *     recorded.
+         */
+        delete: operations["reset_placement"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions": {
         parameters: {
             query?: never;
@@ -2530,7 +2561,7 @@ export interface components {
          *     admins see everything.
          * @enum {string}
          */
-        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "saved_view_unarchived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "parameter_merged" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed" | "email_confirmed" | "operator_granted" | "operator_removed";
+        AuditAction: "user_registered" | "user_updated" | "team_created" | "team_updated" | "member_added" | "member_role_changed" | "member_removed" | "member_left" | "member_joined" | "group_member_added" | "group_member_removed" | "heap_created" | "heap_updated" | "heap_context_updated" | "heap_archived" | "heap_unarchived" | "heap_priority_changed" | "item_created" | "item_updated" | "item_moved" | "item_placed" | "step_added" | "step_updated" | "question_asked" | "question_answered" | "reply_changed" | "question_withdrawn" | "comment_added" | "turn_opened" | "turn_taken_back" | "turn_reached" | "turn_handed_back" | "turn_watching" | "turn_retried" | "turn_redone" | "tag_created" | "tag_updated" | "tag_merged" | "saved_view_created" | "saved_view_updated" | "saved_view_archived" | "saved_view_unarchived" | "parameter_created" | "parameter_updated" | "parameter_archived" | "parameter_merged" | "option_archived" | "invite_link_created" | "invite_link_revoked" | "password_changed" | "password_reset_link_made" | "password_reset" | "account_deactivated" | "account_reactivated" | "email_change_asked" | "email_changed" | "email_confirmed" | "operator_granted" | "operator_removed";
         /** @description One changed field, ready to show. */
         AuditChange: {
             after?: string | null;
@@ -2974,7 +3005,7 @@ export interface components {
             email: string;
         };
         /** @enum {string} */
-        Factor: "need" | "age" | "deadline" | "value" | "parameter" | "tags" | "blocks";
+        Factor: "need" | "age" | "deadline" | "value" | "parameter" | "tags" | "blocks" | "placement";
         /** @description Ends a run that has not ended, and records what it cost. */
         FinishRequest: {
             /**
@@ -3407,6 +3438,7 @@ export interface components {
              *     by parameter name.
              */
             parameters: components["schemas"]["ItemParameter"][];
+            placement: null | components["schemas"]["Placement"];
             /**
              * @description The item's questions and requests in number order, answered ones included. `null` in the ranked list and the
              *     closed list: read the item for its questions.
@@ -3558,6 +3590,22 @@ export interface components {
             /** @description Replaces the item's tags. Tags of the same heap, at most 50. Send `[]` to clear them; `null` is refused. */
             tag_ids?: string[];
             title?: string | null;
+        };
+        /** @description Where to place an item in its heap's list. */
+        ItemPlaceRequest: {
+            /**
+             * Format: uuid
+             * @description The item to place it next to: another item of the same heap that ranks (open, in progress or blocked, and not
+             *     a reminder to come).
+             */
+            anchor: string;
+            /**
+             * Format: int64
+             * @description The `as_of` of the list the person is looking at, so the item lands where it was dropped there. Ignored when
+             *     it's in the future or too old, and then the current time is used. Omit to place it in the order of now.
+             */
+            as_of?: number | null;
+            side: components["schemas"]["PlaceSide"];
         };
         /** @description Another item, named where this one refers to it. */
         ItemRef: {
@@ -4249,6 +4297,16 @@ export interface components {
             /** @description What to call it, to tell it from the others: at most 64 characters, trimmed, without control characters. */
             name: string;
         };
+        /**
+         * @description Which side of the anchor to place an item on.
+         * @enum {string}
+         */
+        PlaceSide: "above" | "below";
+        /**
+         * @description Which way a placed item sits against where its fields would put it.
+         * @enum {string}
+         */
+        Placement: "up" | "down";
         /** @description An error response body (RFC 9457 problem details). */
         Problem: {
             /** @description Stable machine-readable error code, for example `version_conflict`. */
@@ -5472,6 +5530,7 @@ export type ItemOption = components['schemas']['ItemOption'];
 export type ItemOrigin = components['schemas']['ItemOrigin'];
 export type ItemParameter = components['schemas']['ItemParameter'];
 export type ItemPatchRequest = components['schemas']['ItemPatchRequest'];
+export type ItemPlaceRequest = components['schemas']['ItemPlaceRequest'];
 export type ItemRef = components['schemas']['ItemRef'];
 export type ItemRun = components['schemas']['ItemRun'];
 export type ItemState = components['schemas']['ItemState'];
@@ -5535,6 +5594,8 @@ export type PersonalTokenExpiry = components['schemas']['PersonalTokenExpiry'];
 export type PersonalTokenList = components['schemas']['PersonalTokenList'];
 export type PersonalTokenMade = components['schemas']['PersonalTokenMade'];
 export type PersonalTokenMake = components['schemas']['PersonalTokenMake'];
+export type PlaceSide = components['schemas']['PlaceSide'];
+export type Placement = components['schemas']['Placement'];
 export type Problem = components['schemas']['Problem'];
 export type Question = components['schemas']['Question'];
 export type QuestionAction = components['schemas']['QuestionAction'];
@@ -8801,6 +8862,178 @@ export interface operations {
             };
             /** @description `heap_not_in_team`: the heap doesn't exist or isn't in a team you're in */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    place_item: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ItemPlaceRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description A body that isn't an `anchor` and a `side` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description From inside a run: `run_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `item_closed` or `heap_archived` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `anchor_not_ranked`: the anchor is missing, the item itself, in another heap, closed or a reminder to come */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_required` */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reset_placement: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The `version` of what is being edited, for example `"3"`. */
+                "If-Match": string;
+                /** @description The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC. */
+                "Time-Zone"?: string | null;
+            };
+            path: {
+                /**
+                 * @description The team's slug.
+                 * @example my-team
+                 */
+                team: string;
+                /**
+                 * @description The heap's slug, unique within the team.
+                 * @example backlog
+                 */
+                heap: string;
+                /**
+                 * @description The item's key, unique within the heap.
+                 * @example k3x9a
+                 */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            /** @description From inside a run: `run_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `version_conflict`, `item_closed` or `heap_archived` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

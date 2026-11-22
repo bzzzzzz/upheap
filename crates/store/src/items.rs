@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::handle::ItemKey;
 use domain::item::{
-    BlockReason, Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title,
+    BlockReason, Description, Due, Item, ItemState, ItemSummary, Kind, Need, Placement, Size, Stage, StateKind, Title,
 };
 use domain::{HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::{BinOper, Condition, Expr, ExprTrait, Func, Order};
@@ -745,6 +745,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         due_at: Set(item.due.map(|d| d.at.as_millis())),
         due_firm: Set(item.due.map(|d| d.firm)),
         arrives_at: Set(item.arrives_at.map(Timestamp::as_millis)),
+        placement: Set(item.placement.map(Placement::get)),
         created_at: Set(item.created_at.as_millis()),
         created_by: Set(item.created_by.map(|id| id_to_db(id.as_uuid()))),
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
@@ -802,6 +803,10 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
     if item_kind == Kind::Reminder && (arrives_at.is_none() || due.is_none()) {
         return Err(read.corrupt("a reminder needs a due and an arrival".to_owned()));
     }
+    let placement = row
+        .placement
+        .map(|raw| Placement::new(raw).ok_or_else(|| read.corrupt(format!("invalid placement {raw}"))))
+        .transpose()?;
     let size = |raw: Option<String>| {
         raw.map(|r| Size::from_code(&r).ok_or_else(|| read.corrupt(format!("unknown size {r:?}"))))
             .transpose()
@@ -840,6 +845,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
             .map(|raw| read.uuid(raw).map(RunId::from_uuid))
             .transpose()?,
         made_in_split: row.made_in_split,
+        placement,
         version: read.version(row.version)?,
     })
 }
