@@ -1,7 +1,7 @@
 //! Placing an item by hand in its heap's list, and undoing it (`domain::ranking`, Placement).
 
 use domain::audit::AuditAction;
-use domain::item::{Item, ItemError};
+use domain::item::{Item, ItemError, StateKind};
 use domain::permission::Permission;
 use domain::ranking::{CURRENT_FORMULA, ItemForRanking, PlaceSide, placement_for};
 use domain::run::{RunError, RunForbidden};
@@ -10,7 +10,7 @@ use store::{StoreError, TransactionTrait};
 
 use crate::access::{authorize_heap_write, find_item_locking_in};
 use crate::audit::diff_placed;
-use crate::items::{ItemChildren, ItemView, build_item_view, load_open_items, ordered_tags};
+use crate::items::{ItemChildren, ItemView, build_item_view, ordered_tags};
 use crate::{Principal, ServiceError, Services};
 
 impl Services {
@@ -19,7 +19,9 @@ impl Services {
     /// anchor and the item next to it, and keeps it until it is placed again or reset. The heap is ranked once, at
     /// `requested_as_of` as a list's is, with the item's own placement left out.
     ///
-    /// Fails with [`PlaceError::AnchorNotRanked`](domain::ranking::PlaceError::AnchorNotRanked) when the anchor
+    /// Fails with [`PlaceError::ItemNotRanked`](domain::ranking::PlaceError::ItemNotRanked) when the item doesn't
+    /// rank (a reminder to come), and with
+    /// [`PlaceError::AnchorNotRanked`](domain::ranking::PlaceError::AnchorNotRanked) when the anchor
     /// isn't an item of the heap that ranks (a missing item, the item itself, another heap's, a closed one and a
     /// reminder to come alike), and with [`ItemError::Closed`] for a closed item. A run may not place items.
     pub async fn place_item(
@@ -44,7 +46,13 @@ impl Services {
 
         let now = self.now();
         let as_of = self.effective_as_of(requested_as_of, now);
-        let (ranked, _, parameters) = load_open_items(&txn, access.heap.id, now).await?;
+        // Locking reads after the heap lock, so concurrent placements work from each other's rows even on MySQL.
+        let ranked: Vec<Item> = store::items::list_items_in_states_locking(&txn, access.heap.id, &StateKind::OPEN)
+            .await?
+            .into_iter()
+            .filter(|open| !open.is_to_come(now))
+            .collect();
+        let parameters = store::parameters::list_parameters_locking(&txn, access.heap.id).await?;
         let tags = store::tags::list_tags(&txn, access.heap.id).await?;
         let inputs: Vec<ItemForRanking<'_>> = ranked.iter().map(ItemForRanking::from).collect();
         let placement = placement_for(

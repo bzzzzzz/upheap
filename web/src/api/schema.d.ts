@@ -1208,7 +1208,7 @@ export interface paths {
          *     again, which replaces it, or reset (`DELETE`); field edits keep it, and moving the item to another heap drops it.
          *     A blocker never ranks below what it blocks, so a blocker placed below what it blocks stops just above it. The
          *     anchor must be another item of the heap that ranks: open, in progress or blocked, and not a reminder to come. The
-         *     item may be a reminder to come; its place applies when it arrives.
+         *     item must rank too: a reminder to come can't be placed.
          */
         post: operations["place_item"];
         /**
@@ -8948,7 +8948,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `version_conflict`, `item_closed` or `heap_archived` */
+            /** @description `version_conflict`, `item_closed`, `item_not_ranked` (a reminder to come) or `heap_archived` */
             409: {
                 headers: {
                     [name: string]: unknown;

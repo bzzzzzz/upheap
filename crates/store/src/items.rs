@@ -314,11 +314,32 @@ pub async fn list_items_in_states(
     heap_id: HeapId,
     states: &[StateKind],
 ) -> Result<Vec<Item>, StoreError> {
-    let mut items = items::Entity::find()
+    read_items_in_states(db, heap_id, states, false).await
+}
+
+/// [`list_items_in_states`] with the item rows read with locking reads (`FOR SHARE` on MySQL and Postgres) like
+/// [`find_item_locking`], so a write that works from the whole heap calls it after [`crate::heaps::lock_heap`] and
+/// sees what committed while it waited, even on MySQL (REPEATABLE READ).
+pub async fn list_items_in_states_locking(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    states: &[StateKind],
+) -> Result<Vec<Item>, StoreError> {
+    read_items_in_states(db, heap_id, states, true).await
+}
+
+async fn read_items_in_states(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    states: &[StateKind],
+    lock: bool,
+) -> Result<Vec<Item>, StoreError> {
+    let query = items::Entity::find()
         .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
         .filter(items::Column::State.is_in(states.iter().map(|s| s.code())))
         .order_by_asc(items::Column::CreatedAt)
-        .order_by_asc(items::Column::Id)
+        .order_by_asc(items::Column::Id);
+    let mut items = shared_if(query, lock)
         .all(db)
         .await?
         .into_iter()

@@ -355,6 +355,44 @@ async fn an_anchor_in_another_heap_is_refused_like_a_missing_one() -> Result<()>
 
 #[gtest]
 #[tokio::test]
+async fn a_reminder_to_come_cannot_be_placed() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let reminder = w
+        .app
+        .create_item(
+            &w.session,
+            &w.heap,
+            json!({ "title": "later", "kind": "reminder", "due": { "date": "2027-01-05", "firm": false } }),
+        )
+        .await?;
+    anyhow::ensure!(
+        reminder.status == StatusCode::CREATED,
+        "create failed: {}",
+        reminder.body
+    );
+    let url = w.app.item_url(id(&reminder.body)).await?;
+
+    // Act
+    let refused = w
+        .app
+        .send_with(
+            Method::POST,
+            &format!("{url}/place"),
+            Some(&w.session),
+            Some(json!({ "anchor": id(&w.items[0]), "side": "above" })),
+            &[CSRF, ("if-match", &reminder.body["version"].to_string())],
+        )
+        .await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::CONFLICT));
+    expect_that!(refused.body["code"], eq(&json!("item_not_ranked")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn placing_at_an_earlier_as_of_lands_next_to_the_anchor_in_the_list_of_that_time() -> Result<()> {
     // Arrange: a list read at the start, then an hour passes.
     let w = world().await?;

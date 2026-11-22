@@ -33,14 +33,14 @@ critical. Then the fields lie to the next reader.
 
 - **API:** `POST /items/{item}/place` with `anchor`, `side` (above or below) and an optional `as_of`; `DELETE
   /items/{item}/place` resets. The anchor must be an item that ranks (open, in progress or blocked, not a reminder to
-  come) in the same heap, and is refused otherwise, as is the item itself. The API doesn't know the client's list
+  come) in the same heap, and is refused otherwise, as is the item itself. A reminder to come can't be placed. The API doesn't know the client's list
   view, so the web offers drag only in the priority list's ranked group. Runs can't place. The item's response says
   whether it is placed and in which direction; the number is never shown, as scores aren't.
 - **Contributors:** a placed item's first contributor is **Moved up** or **Moved down** (against where its fields
   would put it).
 - **History:** each placement and reset is an audit entry: "Ana moved it up in the list", "Ana reset its place".
 - **CLI:** `upheap item place <ITEM> --above|--below <ITEM>` and `upheap item place <ITEM> --reset`, ranked at the
-  current time, printing where it landed. `item move` already means moving to another heap.
+  current time, printing only which way it moved. `item move` already means moving to another heap.
 - **Web, wide screens:** a drag handle at the row's end on hover or focus; a line shows where it will land. Alt+↑ and
   Alt+↓ move the focused row one place.
 - **Web, phone:** long press lifts the row, then drag up or down. A quick left or right swipe stays as it is.

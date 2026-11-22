@@ -4953,7 +4953,7 @@
         "tags": [
           "items"
         ],
-        "summary": "Places an item right above or below another item of its heap in the ranked list, without changing any of its\nfields, and answers with the item. Send the item's `version` in `If-Match`. The item gets a multiplier on its own\nscore, worked out so it lands between the anchor and the item next to it when the heap is ranked at `as_of`; the\nmultiplier is never shown, only which way the item is placed (`placement`). It stays until the item is placed\nagain, which replaces it, or reset (`DELETE`); field edits keep it, and moving the item to another heap drops it.\nA blocker never ranks below what it blocks, so a blocker placed below what it blocks stops just above it. The\nanchor must be another item of the heap that ranks: open, in progress or blocked, and not a reminder to come. The\nitem may be a reminder to come; its place applies when it arrives.",
+        "summary": "Places an item right above or below another item of its heap in the ranked list, without changing any of its\nfields, and answers with the item. Send the item's `version` in `If-Match`. The item gets a multiplier on its own\nscore, worked out so it lands between the anchor and the item next to it when the heap is ranked at `as_of`; the\nmultiplier is never shown, only which way the item is placed (`placement`). It stays until the item is placed\nagain, which replaces it, or reset (`DELETE`); field edits keep it, and moving the item to another heap drops it.\nA blocker never ranks below what it blocks, so a blocker placed below what it blocks stops just above it. The\nanchor must be another item of the heap that ranks: open, in progress or blocked, and not a reminder to come. The\nitem must rank too: a reminder to come can't be placed.",
         "operationId": "place_item",
         "parameters": [
           {
@@ -5060,7 +5060,7 @@
             }
           },
           "409": {
-            "description": "`version_conflict`, `item_closed` or `heap_archived`",
+            "description": "`version_conflict`, `item_closed`, `item_not_ranked` (a reminder to come) or `heap_archived`",
             "content": {
               "application/json": {
                 "schema": {

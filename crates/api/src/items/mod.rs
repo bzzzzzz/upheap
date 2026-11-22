@@ -310,14 +310,14 @@ async fn move_item(
 /// again, which replaces it, or reset (`DELETE`); field edits keep it, and moving the item to another heap drops it.
 /// A blocker never ranks below what it blocks, so a blocker placed below what it blocks stops just above it. The
 /// anchor must be another item of the heap that ranks: open, in progress or blocked, and not a reminder to come. The
-/// item may be a reminder to come; its place applies when it arrives.
+/// item must rank too: a reminder to come can't be placed.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/place", tag = "items", security(("session" = [])),
     params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemPlaceDto,
     responses(
         (status = 200, body = ItemDto),
         (status = 403, description = "From inside a run: `run_forbidden`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`version_conflict`, `item_closed` or `heap_archived`", body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed`, `item_not_ranked` (a reminder to come) or `heap_archived`", body = Problem),
         (status = 400, description = "A body that isn't an `anchor` and a `side`", body = Problem),
         (status = 422, description = "`anchor_not_ranked`: the anchor is missing, the item itself, in another heap, closed or a reminder to come", body = Problem),
         (status = 428, description = "`version_required`", body = Problem),

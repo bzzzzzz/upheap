@@ -86,11 +86,12 @@ pub async fn run(args: PlaceArgs, app: &App, out: &mut Output) -> Result<(), Cli
         Mode::Json => out.json(&placed.body)?,
         Mode::Quiet => out.line(&placed.value.key)?,
         Mode::Human => {
-            let way = match placed.value.placement {
-                Some(PlacementDto::Down) => "down",
-                _ => "up",
-            };
-            out.line(&format!("{} moved {way} in the list.", placed.value.key))?;
+            let key = &placed.value.key;
+            match placed.value.placement {
+                Some(PlacementDto::Up) => out.line(&format!("{key} moved up in the list."))?,
+                Some(PlacementDto::Down) => out.line(&format!("{key} moved down in the list."))?,
+                _ => out.line(&format!("{key} was placed in the list."))?,
+            }
         }
     }
     Ok(())
