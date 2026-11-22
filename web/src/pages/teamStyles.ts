@@ -8,6 +8,6 @@ export const moreButtonClass =
   "flex size-[30px] shrink-0 items-center justify-center rounded-[7px] text-ink-soft outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent focus-visible:outline-2 focus-visible:outline-accent pointer-coarse:size-11 max-sm:size-11 max-sm:rounded-xl";
 /** Make admin, Make member and Copy: bordered and small (WideTeam). */
 export const roleButtonClass =
-  "shrink-0 rounded-[7px] border border-line bg-surface px-2.5 py-[5px] text-xs text-ink-soft hover:bg-sunken hover:text-ink disabled:opacity-40 pointer-coarse:min-h-11";
+  "inline-flex shrink-0 items-center gap-1.5 rounded-[7px] border border-line bg-surface px-2.5 py-[5px] text-xs text-ink-soft hover:bg-sunken hover:text-ink disabled:not-aria-busy:opacity-40 pointer-coarse:min-h-11";
 export const dangerTextButtonClass =
   "shrink-0 rounded-[7px] px-2.5 py-[5px] text-xs text-overdue-ink hover:bg-overdue-soft disabled:opacity-40 pointer-coarse:min-h-11";

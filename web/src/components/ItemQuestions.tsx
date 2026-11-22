@@ -18,6 +18,7 @@ import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useUserNameAtStart } from "./userName";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
 
 export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 const detailsButtonClass = `-ml-1 flex min-h-9 items-center gap-1 self-start rounded-lg px-1 text-sm text-ink-soft hover:text-ink ${focusClass} pointer-coarse:min-h-11`;
@@ -485,7 +486,7 @@ export function QuestionRow({
         <ReplyControls
           describedBy={textId(item.id, question)}
           question={question}
-          pending={reply.isPending}
+          pending={reply.isPending ? reply.variables.reply : null}
           onSend={send}
         />
       )}
@@ -511,7 +512,8 @@ function ReplyControls({
 }: {
   describedBy: string;
   question: Question;
-  pending: boolean;
+  /** The reply that is being sent, which its button shows saving. */
+  pending: QuestionReplyRequest | null;
   /** The reply being changed, which fills the controls; none for an open question. */
   initial?: Question["reply"];
   onSend: (reply: QuestionReplyRequest) => void;
@@ -539,10 +541,11 @@ function ReplyControls({
             <Button
               key={label}
               aria-describedby={describedBy}
-              isDisabled={pending}
+              isPending={pending !== null}
               onPress={() => onSend({ picked: [index], comment: note })}
               className={`${index === 0 ? compactButtonClass.primary : compactButtonClass.bordered} ${focusClass}`}
             >
+              <Saving pending={pending?.picked?.[0] === index} />
               {label}
             </Button>
           ))}
@@ -566,10 +569,12 @@ function ReplyControls({
         </TextField>
         <Button
           aria-describedby={describedBy}
-          isDisabled={pending || trimmed === ""}
+          isPending={pending !== null}
+          isDisabled={trimmed === ""}
           onPress={() => onSend({ picked: [], comment })}
           className={`${compactButtonClass.primary} ${focusClass} self-start max-sm:w-full`}
         >
+          <Saving pending={pending !== null} />
           Reply
         </Button>
       </div>
@@ -624,10 +629,12 @@ function ReplyControls({
       {commentField("Comment, optional")}
       <Button
         aria-describedby={describedBy}
-        isDisabled={pending || picked.length === 0}
+        isPending={pending !== null}
+        isDisabled={picked.length === 0}
         onPress={() => onSend({ picked: picked.map(Number).sort((a, b) => a - b), comment: note })}
         className={`${compactButtonClass.primary} ${focusClass} self-start max-sm:w-full`}
       >
+        <Saving pending={pending !== null} />
         Reply
       </Button>
     </div>
@@ -739,7 +746,7 @@ function AnsweredRow({
           <ReplyControls
             describedBy={textId(item.id, question)}
             question={question}
-            pending={reply.isPending}
+            pending={reply.isPending ? reply.variables.reply : null}
             initial={question.reply}
             onSend={send}
           />

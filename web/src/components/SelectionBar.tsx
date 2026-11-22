@@ -22,6 +22,7 @@ import { buttonClass, compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { MoveToHeap } from "./MoveToHeap";
 import { PopoverSheet } from "./PopoverSheet";
+import { Saving } from "./Saving";
 import { useToast } from "./UndoToast";
 
 /**
@@ -131,7 +132,8 @@ export function SelectionBars({
       onClick={(event) => bulk.begin(action, event.currentTarget)}
       className={className}
     >
-      {Icon && <Icon aria-hidden="true" className="size-5" />}
+      {Icon && bulk.running !== action && <Icon aria-hidden="true" className="size-5" />}
+      <Saving pending={bulk.running === action} className={Icon ? "size-5 items-center justify-center" : ""} />
       {shortLabel ?? label}
     </button>
   );

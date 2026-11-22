@@ -24,6 +24,7 @@ import { NeedPicker } from "./NeedPicker";
 import { ParameterPicker } from "./ParameterPicker";
 import { PopoverSheet } from "./PopoverSheet";
 import { formatDate, isToCome } from "./reminders";
+import { Saving } from "./Saving";
 import { Sheet, SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
 import { tagChipColor } from "./tagColor";
@@ -602,10 +603,12 @@ export function AddItemDialog({
     <button
       type="submit"
       disabled={!canAdd}
+      aria-busy={create.isPending || undefined}
       title={submitKeys}
       aria-keyshortcuts={MAC ? "Meta+Enter" : "Control+Enter"}
-      className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:opacity-40"
+      className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:not-aria-busy:opacity-40"
     >
+      <Saving pending={create.isPending} />
       Add
       <Kbd className={`${WIDE_HINT} items-center border-canvas/30 bg-transparent text-canvas/70`}>{submitKeys}</Kbd>
     </button>

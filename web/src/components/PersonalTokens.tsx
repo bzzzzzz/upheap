@@ -10,6 +10,7 @@ import { compactButtonClass } from "./buttons";
 import { useCopyText } from "./copyLink";
 import { ProblemText } from "./ProblemText";
 import { useReturnFocus } from "./useConfirmation";
+import { Saving } from "./Saving";
 
 const code = (text: string) => <code className="font-mono text-[0.92em]">{text}</code>;
 
@@ -119,7 +120,15 @@ function TokenRow({
           >
             Cancel
           </button>
-          <button type="button" autoFocus onClick={onConfirm} disabled={pending} className={compactButtonClass.danger}>
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            disabled={pending}
+            aria-busy={pending || undefined}
+            className={compactButtonClass.danger}
+          >
+            <Saving pending={pending} />
             Revoke
           </button>
         </div>
@@ -268,7 +277,13 @@ function MakeForm({
         </select>
       </label>
       <div className="flex items-center gap-2">
-        <button type="submit" disabled={pending || name.trim() === ""} className={compactButtonClass.primary}>
+        <button
+          type="submit"
+          disabled={pending || name.trim() === ""}
+          aria-busy={pending || undefined}
+          className={compactButtonClass.primary}
+        >
+          <Saving pending={pending} />
           Make token
         </button>
         <button type="button" onClick={onCancel} className={compactButtonClass.quiet}>

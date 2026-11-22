@@ -12,6 +12,7 @@ import { Markdown } from "./Markdown";
 import type { MarkdownEditorHandle } from "./MarkdownEditor";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
 
 /**
  * An item's comments (ux.md, The item §18): the thread under the context, oldest first, at every width and always
@@ -102,9 +103,11 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
           )}
           <Button
             type="submit"
-            isDisabled={draft.trim() === "" || add.isPending}
+            isPending={add.isPending}
+            isDisabled={draft.trim() === ""}
             className={`${compactButtonClass.primary} ${focusClass} max-sm:min-h-11 max-sm:w-full sm:self-end`}
           >
+            <Saving pending={add.isPending} />
             Comment
           </Button>
         </form>

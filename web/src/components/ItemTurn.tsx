@@ -12,6 +12,7 @@ import { itemProblem } from "./itemProblems";
 import { GOAL_LABELS, STAGE_LABELS } from "./labels";
 import { PHONE, useMedia } from "./media";
 import { PopoverSheet } from "./PopoverSheet";
+import { Saving } from "./Saving";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useConfirmation } from "./useConfirmation";
@@ -141,9 +142,11 @@ export function AgentChip({ heapRef, item, onTakenBack }: { heapRef: HeapRef; it
               type="button"
               autoFocus
               disabled={takeBack.isPending}
+              aria-busy={takeBack.isPending || undefined}
               onClick={() => void takeBackNow()}
-              className="min-h-13 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:opacity-40"
+              className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:not-aria-busy:opacity-40"
             >
+              <Saving pending={takeBack.isPending} />
               Take back
             </button>
             <button
@@ -433,7 +436,8 @@ function SendForm({
         <TextArea rows={3} className={fieldClass} />
       </TextField>
       <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
-        <Button type="submit" isDisabled={pending} className={`${compactButtonClass.primary} ${focusClass}`}>
+        <Button type="submit" isPending={pending} className={`${compactButtonClass.primary} ${focusClass}`}>
+          <Saving pending={pending} />
           Send
         </Button>
         <Button onPress={onCancel} className={`${compactButtonClass.quiet} ${focusClass}`}>
@@ -566,9 +570,11 @@ function ChangesAskedForm({
       <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
         <Button
           type="submit"
-          isDisabled={pending || line.trim() === ""}
+          isPending={pending}
+          isDisabled={line.trim() === ""}
           className={`${compactButtonClass.primary} ${focusClass}`}
         >
+          <Saving pending={pending} />
           Send back
         </Button>
         <Button onPress={onCancel} className={`${compactButtonClass.quiet} ${focusClass}`}>

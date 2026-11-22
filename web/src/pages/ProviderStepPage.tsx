@@ -8,6 +8,7 @@ import { problemMessage } from "../components/ProblemText";
 import { AuthCard, authButtonClass, REGISTER_NOTE, USERNAME_HINT } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
 /**
  * The step after a first sign-in through the provider (ux.md, Sign in and create account): who the provider vouched
@@ -138,7 +139,13 @@ function UsernameForm({
           <RequestId error={error} />
         </>
       )}
-      <button type="submit" disabled={register.isPending} className={authButtonClass}>
+      <button
+        type="submit"
+        disabled={register.isPending}
+        aria-busy={register.isPending || undefined}
+        className={authButtonClass}
+      >
+        <Saving pending={register.isPending} />
         Create account
       </button>
       <button

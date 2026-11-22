@@ -8,6 +8,7 @@ import { compactButtonClass } from "./buttons";
 import { PasswordInput } from "./PasswordCard";
 import { problemMessage, ProblemText } from "./ProblemText";
 import { useReturnFocus } from "./useConfirmation";
+import { Saving } from "./Saving";
 
 /** The input a problem is about, when it is about one. */
 function inputOf(error: Error | null): "email" | "password" | null {
@@ -146,7 +147,13 @@ export function EmailCard({ email, inputClass }: { email: string; inputClass: st
           />
           {failed === null && <ProblemText error={request.error} className="text-overdue-ink" />}
           <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" disabled={request.isPending} className={compactButtonClass.primary}>
+            <button
+              type="submit"
+              disabled={request.isPending}
+              aria-busy={request.isPending || undefined}
+              className={compactButtonClass.primary}
+            >
+              <Saving pending={request.isPending} />
               Send link
             </button>
             <button type="button" disabled={request.isPending} onClick={close} className={compactButtonClass.quiet}>

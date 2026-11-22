@@ -18,6 +18,7 @@ import { RequestId } from "../components/RequestId";
 import { problemMessage } from "../components/ProblemText";
 import { carriedBy, madeTeamTag, MergeConfirm } from "./MergeConfirm";
 import { cardClass, cardTitleClass, inputClass } from "./settingsForm";
+import { Saving } from "../components/Saving";
 
 const chipShape =
   "inline-flex h-6 max-w-full shrink-0 items-center truncate rounded-full border px-[9px] text-[13px] font-medium max-sm:h-[26px] max-sm:px-2.5 max-sm:text-sm";
@@ -95,7 +96,13 @@ export function NewTagForm({ settings }: { settings: TagSettings }) {
             className={`${inputClass} font-normal`}
           />
         </label>
-        <button type="submit" disabled={create.isPending || name.trim() === ""} className={compactButtonClass.primary}>
+        <button
+          type="submit"
+          disabled={create.isPending || name.trim() === ""}
+          aria-busy={create.isPending || undefined}
+          className={compactButtonClass.primary}
+        >
+          <Saving pending={create.isPending} />
           Add tag
         </button>
         {!reach && <TagProblem error={create.error} typed={name} settings={settings} />}
@@ -311,8 +318,10 @@ function TagForm({ tag, settings, onClose }: { tag: Tag; settings: TagSettings; 
           <button
             type="submit"
             disabled={update.isPending || name.trim() === ""}
+            aria-busy={update.isPending || undefined}
             className={`${compactButtonClass.primary} max-sm:flex-1`}
           >
+            <Saving pending={update.isPending} />
             Save
           </button>
           <button type="button" onClick={onClose} className={compactButtonClass.quiet}>
