@@ -82,7 +82,7 @@ async fn a_script_that_plays_the_agent_takes_a_note_to_with_context() -> Result<
     );
     expect_that!(finished.exited(0), eq(true));
     expect_that!(finished.stdout, eq("Run ended: reached. ($0.12)\n"));
-    expect_that!(shown.stdout, contains_substring("with context"));
+    expect_that!(shown.stdout, contains_substring("With context"));
     expect_that!(shown.stdout, not(contains_substring("with an agent")));
     expect_that!(shown.stdout, not(contains_substring("Turn:")));
     expect_that!(item["stage"], eq("with_context"));

@@ -2,7 +2,7 @@
 //! and the words and cells that show an item.
 
 use api_types::common::DueInputDto;
-use api_types::common::{ItemDto, KindDto, SizeDto, StateDto};
+use api_types::common::{ItemDto, SizeDto};
 use api_types::due_choices::DueChoicesDto;
 use api_types::items::ItemToStepDto;
 use api_types::parameters::ParameterListDto;
@@ -405,41 +405,14 @@ pub(super) fn heap_label(heap: &ItemHeapDto) -> String {
     format!("{}/{}", heap.team_slug, heap.slug)
 }
 
-pub(super) fn state_text(state: StateDto) -> &'static str {
-    match state {
-        StateDto::Open => "open",
-        StateDto::InProgress => "in progress",
-        StateDto::Blocked => "blocked",
-        StateDto::Done => "done",
-        StateDto::WontDo => "won't do",
-        StateDto::Became => "became",
-        StateDto::Unknown => "unknown",
-    }
-}
-
-/// ` · with an agent` when an agent has the item, to follow its state as in `open · with an agent`; empty otherwise.
+/// ` · with an agent` when an agent has the item, to follow its state as in `Open · with an agent`; empty otherwise.
 pub(super) fn with_agent_text(item: &ItemDto) -> &'static str {
     if item.with_agent { " · with an agent" } else { "" }
 }
 
-pub(super) fn kind_text(kind: KindDto) -> &'static str {
-    match kind {
-        KindDto::Note => "note",
-        KindDto::Task => "task",
-        KindDto::Reminder => "reminder",
-        KindDto::Unknown => "unknown",
-    }
-}
-
-/// Effort and impact as `s/m`, with `-` for one that's unset.
+/// Effort and impact as `S/M`, with `-` for one that's unset.
 pub(super) fn sizes_text(effort: Option<SizeDto>, impact: Option<SizeDto>) -> String {
-    let size = |size: Option<SizeDto>| match size {
-        Some(SizeDto::S) => "s",
-        Some(SizeDto::M) => "m",
-        Some(SizeDto::L) => "l",
-        Some(SizeDto::Xl) => "xl",
-        None => "-",
-    };
+    let size = |size: Option<SizeDto>| size.map_or("-", SizeDto::label);
     format!("{}/{}", size(effort), size(impact))
 }
 

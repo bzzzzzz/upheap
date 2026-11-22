@@ -55,7 +55,7 @@ async fn repeating_a_verb_writes_nothing_and_says_it_is_already_so() -> Result<(
     let quiet = cli.run(&["item", "done", key, "-q"]).await;
 
     // Assert
-    expect_that!(again.stdout, eq(&format!("{key} is already done.\n")));
+    expect_that!(again.stdout, eq(&format!("{key} is already Done.\n")));
     expect_that!(again.exited(0), eq(true));
     let read: Value = serde_json::from_str(&as_json.stdout)?;
     expect_that!(read["state"], eq("done"));
@@ -137,8 +137,8 @@ async fn blocking_names_the_blocker_and_changes_it_on_request() -> Result<()> {
     );
     expect_that!(blocked_by_b["state"], eq("blocked"));
     expect_that!(blocked_by_b["blocked_by"]["key"], eq(b));
-    expect_that!(again.stdout, eq(&format!("{a} is already blocked.\n")));
-    expect_that!(same_blocker.stdout, eq(&format!("{a} is already blocked.\n")));
+    expect_that!(again.stdout, eq(&format!("{a} is already Blocked.\n")));
+    expect_that!(same_blocker.stdout, eq(&format!("{a} is already Blocked.\n")));
     expect_that!(other.exited(0), eq(true));
     expect_that!(blocked_by_c["blocked_by"]["key"], eq(c));
     Ok(())
@@ -174,7 +174,7 @@ async fn blocking_with_a_reason_says_it_and_repeating_it_writes_nothing() -> Res
         ))
     );
     expect_that!(stored["blocked_reason"], eq("the vendor's quote"));
-    expect_that!(same.stdout, eq(&format!("{a} is already blocked.\n")));
+    expect_that!(same.stdout, eq(&format!("{a} is already Blocked.\n")));
     expect_that!(
         both.stdout,
         eq(&format!(
@@ -182,7 +182,7 @@ async fn blocking_with_a_reason_says_it_and_repeating_it_writes_nothing() -> Res
         ))
     );
     expect_that!(stored_both["blocked_reason"], eq("new quote"));
-    expect_that!(by_only.stdout, eq(&format!("{a} is already blocked.\n")));
+    expect_that!(by_only.stdout, eq(&format!("{a} is already Blocked.\n")));
     expect_that!(blank.exited(0), eq(false));
     expect_that!(reopened.exited(0), eq(true));
     expect_that!(open["blocked_reason"], eq(&Value::Null));

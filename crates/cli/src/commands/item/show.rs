@@ -2,14 +2,13 @@
 
 use api_types::audit::{AuditLogDto, AuditQueryDto};
 use api_types::common::{
-    BlockerGoneHowDto, ItemDto, MadeItemDto, MadeStepDto, NeedDto, QuestionDto, QuestionKindDto, QuestionStateDto,
-    StageDto, StepStateDto,
+    BlockerGoneHowDto, ItemDto, MadeItemDto, MadeStepDto, QuestionDto, QuestionKindDto, QuestionStateDto, StepStateDto,
 };
 use api_types::turns::{GoalDto, ReachDto, TurnDto, TurnSourceDto};
 use api_types::work::ItemRunDto;
 use clap::Args;
 
-use super::common::{kind_text, locate_item, state_text, with_agent_text};
+use super::common::{locate_item, with_agent_text};
 use crate::commands::comment::comment_lines;
 use crate::commands::heap_api::{HeapApi, indented_context};
 use crate::commands::work::end_word;
@@ -153,7 +152,7 @@ fn render_runs(item: &ItemDto, out: &mut Output) -> std::io::Result<()> {
             vec![
                 Cell::new(run.started_label.clone()),
                 Cell::new(run_duration(run)),
-                Cell::new(format!("{} → {}", stage_text(run.from_stage), goal_text(run.goal))),
+                Cell::new(format!("{} → {}", run.from_stage.label(), run.goal.label())),
                 Cell::new(end_word(run.end).unwrap_or(if run.end.is_none() { "running" } else { "unknown" })),
                 Cell::new(run.cost_usd.map(|cost| format!("${cost:.2}")).unwrap_or_default()),
             ]
@@ -185,14 +184,14 @@ fn run_duration(run: &ItemRunDto) -> String {
     }
 }
 
-/// An item a note became as one phrase: `n8c2d "Rotate staging" (task, open)`.
+/// An item a note became as one phrase: `n8c2d "Rotate staging" (Task, Open)`.
 fn made_item_text(item: &MadeItemDto) -> String {
     format!(
         "{} \"{}\" ({}, {})",
         item.key,
         item.title,
-        kind_text(item.kind),
-        state_text(item.state)
+        item.kind.label(),
+        item.state.label()
     )
 }
 
@@ -374,23 +373,23 @@ fn question_state_text(question: &QuestionDto) -> &'static str {
 
 /// The item's labelled fields, as rows of label and value. Unset sizes, due time, tags and the rest are left out.
 fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
-    let mut rows = vec![vec![Cell::new("Kind"), Cell::new(kind_text(item.kind))]];
+    let mut rows = vec![vec![Cell::new("Kind"), Cell::new(item.kind.label())]];
     if let Some(stage) = item.stage {
-        rows.push(vec![Cell::new("Stage"), Cell::new(stage_text(stage))]);
+        rows.push(vec![Cell::new("Stage"), Cell::new(stage.label())]);
     }
     if let Some(due) = item.due.as_ref().filter(|_| super::add::is_to_come(item, now)) {
         rows.push(vec![Cell::new("Joins list"), Cell::new(due.date.clone())]);
     }
     rows.push(vec![
         Cell::new("State"),
-        Cell::new(format!("{}{}", state_text(item.state), with_agent_text(item))),
+        Cell::new(format!("{}{}", item.state.label(), with_agent_text(item))),
     ]);
-    rows.push(vec![Cell::new("Need"), Cell::new(need_text(item.need))]);
+    rows.push(vec![Cell::new("Need"), Cell::new(item.need.label())]);
     if let Some(effort) = item.effort {
-        rows.push(vec![Cell::new("Effort"), Cell::new(size_text(effort))]);
+        rows.push(vec![Cell::new("Effort"), Cell::new(effort.label())]);
     }
     if let Some(impact) = item.impact {
-        rows.push(vec![Cell::new("Impact"), Cell::new(size_text(impact))]);
+        rows.push(vec![Cell::new("Impact"), Cell::new(impact.label())]);
     }
     if let Some(due) = &item.due {
         let label = if due.firm {
@@ -418,7 +417,7 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
                 "{}  {} ({}{moved})",
                 blocker.key,
                 blocker.title,
-                state_text(blocker.state)
+                blocker.state.label()
             )),
         ]);
     } else if item
@@ -462,7 +461,7 @@ fn fields(item: &ItemDto, now: jiff::Timestamp) -> Vec<Vec<Cell>> {
     rows
 }
 
-/// Where the item came from, when it has an origin or an agent run added it. `From: k3x9a "Rotate the certs" (task,
+/// Where the item came from, when it has an origin or an agent run added it. `From: k3x9a "Rotate the certs" (Task,
 /// acme/ops), added by an agent run`; `From: an agent run` when the origin isn't one the caller can see.
 fn from_text(item: &ItemDto) -> Option<String> {
     match (&item.origin, item.added_in_run) {
@@ -472,7 +471,7 @@ fn from_text(item: &ItemDto) -> Option<String> {
                 "From: {} \"{}\" ({}, {}/{})",
                 origin.key,
                 origin.title.replace('\n', " "),
-                kind_text(origin.kind),
+                origin.kind.label(),
                 heap.team_slug,
                 heap.slug
             );
@@ -523,34 +522,6 @@ fn with_author(label: &str, by: Option<&api_types::common::UserRefDto>) -> Strin
     match by {
         Some(user) => format!("{label} by {}", user.display_name),
         None => label.to_owned(),
-    }
-}
-
-fn stage_text(stage: StageDto) -> &'static str {
-    match stage {
-        StageDto::AsWritten => "as written",
-        StageDto::WithContext => "with context",
-        StageDto::Defined => "defined",
-        StageDto::Unknown => "unknown",
-    }
-}
-
-fn need_text(need: NeedDto) -> &'static str {
-    match need {
-        NeedDto::Idea => "idea",
-        NeedDto::NiceToHave => "nice to have",
-        NeedDto::Expected => "expected",
-        NeedDto::Critical => "critical",
-    }
-}
-
-fn size_text(size: api_types::common::SizeDto) -> &'static str {
-    use api_types::common::SizeDto;
-    match size {
-        SizeDto::S => "s",
-        SizeDto::M => "m",
-        SizeDto::L => "l",
-        SizeDto::Xl => "xl",
     }
 }
 

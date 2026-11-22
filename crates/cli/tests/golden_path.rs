@@ -421,9 +421,9 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
     expect_that!(
         note_runs,
         elements_are![
-            matches_regex(run_line("with context → defined", "reached", "0.33")),
-            matches_regex(run_line("as written → with context", "reached", "0.22")),
-            matches_regex(run_line("as written → with context", "asked", "0.11")),
+            matches_regex(run_line("With context → Defined", "reached", "0.33")),
+            matches_regex(run_line("As written → With context", "reached", "0.22")),
+            matches_regex(run_line("As written → With context", "asked", "0.11")),
         ]
     );
     let (header, build_runs) = runs_of(&cli, &build).await;
@@ -431,10 +431,10 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
     expect_that!(
         build_runs,
         elements_are![
-            matches_regex(run_line("defined → done", "asked", "0.88")),
-            matches_regex(run_line("defined → done", "asked", "0.77")),
-            matches_regex(run_line("defined → done", "asked", "0.66")),
-            matches_regex(run_line("defined → done", "asked", "0.55")),
+            matches_regex(run_line("Defined → Done", "asked", "0.88")),
+            matches_regex(run_line("Defined → Done", "asked", "0.77")),
+            matches_regex(run_line("Defined → Done", "asked", "0.66")),
+            matches_regex(run_line("Defined → Done", "asked", "0.55")),
         ]
     );
     let (header, announce_runs) = runs_of(&cli, &announce).await;
@@ -442,8 +442,8 @@ async fn the_golden_path_from_an_empty_heap_to_the_second_task_done() -> Result<
     expect_that!(
         announce_runs,
         elements_are![
-            matches_regex(run_line("defined → done", "asked", "1.11")),
-            matches_regex(run_line("defined → done", "asked", "0.99")),
+            matches_regex(run_line("Defined → Done", "asked", "1.11")),
+            matches_regex(run_line("Defined → Done", "asked", "0.99")),
         ]
     );
     // Each run started a minute after the one before it (see `run_once`), so the times, newest first from the last

@@ -57,6 +57,18 @@ impl From<SizeDto> for Size {
     }
 }
 
+impl SizeDto {
+    /// The value as people read it: the domain's label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::S => Size::S.label(),
+            Self::M => Size::M.label(),
+            Self::L => Size::L.label(),
+            Self::Xl => Size::Xl.label(),
+        }
+    }
+}
+
 /// How much an item is needed: what happens if it never gets done, from least to most.
 ///
 /// - `idea`: kept so it isn't forgotten; nothing is lost if it never happens.
@@ -91,6 +103,18 @@ impl From<NeedDto> for Need {
             NeedDto::NiceToHave => Self::NiceToHave,
             NeedDto::Expected => Self::Expected,
             NeedDto::Critical => Self::Critical,
+        }
+    }
+}
+
+impl NeedDto {
+    /// The value as people read it: the domain's label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Idea => Need::Idea.label(),
+            Self::NiceToHave => Need::NiceToHave.label(),
+            Self::Expected => Need::Expected.label(),
+            Self::Critical => Need::Critical.label(),
         }
     }
 }
@@ -136,6 +160,18 @@ impl TryFrom<KindDto> for Kind {
     }
 }
 
+impl KindDto {
+    /// The value as people read it: the domain's label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Note => Kind::Note.label(),
+            Self::Task => Kind::Task.label(),
+            Self::Reminder => Kind::Reminder.label(),
+            Self::Unknown => "Unknown",
+        }
+    }
+}
+
 /// How far an item has been prepared, from least to most. Set by hand.
 ///
 /// - `as_written`: just as it was put down.
@@ -174,6 +210,18 @@ impl TryFrom<StageDto> for Stage {
             StageDto::WithContext => Ok(Self::WithContext),
             StageDto::Defined => Ok(Self::Defined),
             StageDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::Stage }),
+        }
+    }
+}
+
+impl StageDto {
+    /// The value as people read it: the domain's label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::AsWritten => Stage::AsWritten.label(),
+            Self::WithContext => Stage::WithContext.label(),
+            Self::Defined => Stage::Defined.label(),
+            Self::Unknown => "Unknown",
         }
     }
 }
@@ -223,6 +271,21 @@ impl TryFrom<StateDto> for StateKind {
             StateDto::WontDo => Ok(Self::WontDo),
             StateDto::Became => Ok(Self::Became),
             StateDto::Unknown => Err(ValidationError::ValueUnknown { field: Field::State }),
+        }
+    }
+}
+
+impl StateDto {
+    /// The value as people read it: the domain's label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Open => StateKind::Open.label(),
+            Self::InProgress => StateKind::InProgress.label(),
+            Self::Blocked => StateKind::Blocked.label(),
+            Self::Done => StateKind::Done.label(),
+            Self::WontDo => StateKind::WontDo.label(),
+            Self::Became => StateKind::Became.label(),
+            Self::Unknown => "Unknown",
         }
     }
 }
@@ -1219,6 +1282,13 @@ mod tests {
     use crate::audit::{AuditActionDto, AuditLogDto};
     use crate::me::{MeActionDto, MeDto};
     use crate::turns::{GoalDto, ReachDto, TurnSourceDto};
+
+    #[gtest]
+    fn a_value_reads_as_the_domains_label() {
+        expect_that!(NeedDto::NiceToHave.label(), eq("Nice to have"));
+        expect_that!(SizeDto::Xl.label(), eq("XL"));
+        expect_that!(StateDto::Unknown.label(), eq("Unknown"));
+    }
 
     /// A ranked item as a later server might send it: an action and a factor this client has never heard of.
     fn question_from_a_later_server() -> serde_json::Value {

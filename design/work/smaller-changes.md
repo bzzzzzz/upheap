@@ -10,9 +10,10 @@ truth.
 
 ## Pieces
 
-No refactor changes behaviour: `openapi.json`, the stored codes and every test's expectations stay as they are. Once
-they're built, this doc goes: the macro is explained in its module doc, and What stays moves to architecture.md if it's
-still worth saying.
+No refactor changes behaviour: `openapi.json`, the stored codes and every test's expectations stay as they are.
+Sharing the CLI's wording is the one exception: its text output now prints the domain's labels; `--json`,
+`openapi.json` and the stored codes don't change. Once they're built, this doc goes: the macro is explained in its
+module doc, and What stays moves to architecture.md if it's still worth saying.
 
 ## Design
 
@@ -47,9 +48,9 @@ listed as strings from 28 to 45, and the enums of `api-types` from 30 to 38.
    in `service::audit_log`, in the CLI's `item show` and in the web app's `labels.ts`, with an icon in
    `kindIcons.tsx`. Every one of them fails the build when it's missed, except `ALL`: a variant left out of it
    compiles, and `from_code` then answers `None` for a code that is stored.
-2. **A value's name has four homes:** `domain` (`Need::label`), `service::audit_log` (the `describe_` functions),
-   the CLI (`kind_text` and its siblings, in lowercase) and the web app (`labels.ts`). Nothing ties their wording
-   together.
+2. **A value's name has three homes:** `domain` (`Need::label`), `service::audit_log` (the `describe_` functions)
+   and the web app (`labels.ts`). The CLI prints the domain's label through the API's enum types. Nothing ties the
+   wording of the other two to the domain's.
 3. **Audit fields are strings on both sides.** `service::audit` writes `"kind"`, and `service::audit_log` matches
    on `"kind"` in `FIELD_ORDER`, `describe_field` and `describe_value`. A field missing from any of the three still
    compiles and still shows, in the wrong place or as a raw code. An audit action is exhaustively matched, so
@@ -64,7 +65,7 @@ Hand-written files outside tests, docs and generated ones.
 
 | Change | Today | After |
 | --- | --- | --- |
-| A new value of an item enum | 6 files, 10 places, one unchecked (`ALL`) | 5 files, 8 places, all checked: `domain` (the entry, the label), `api-types` (the variant, `From`, `TryFrom`), the CLI, the web app's label and icon |
+| A new value of an item enum | 6 files, 10 places, one unchecked (`ALL`) | 4 files, 8 places, all checked: `domain` (the entry, the label), `api-types` (the variant, `From`, `TryFrom`, `label`), the web app's label and icon |
 | A new audited field, its audit part | 2 files, 4 places, none checked | 3 files, 4 places, all checked: the declaration, the write, the label, how its value reads |
 | A new audit action | 4 files, 8 places, one unchecked (`ALL`) | 4 files, 6 places, all checked |
 | A new response type the web app uses | an alias in `client.ts`, shared by every feature | nothing |
@@ -105,8 +106,6 @@ Looked at and left, because the edit is the check or the rule.
    tabs, the heap switcher. Only 2 of the last 19 touch it.
 7. **The CLI's command list in `crates/cli/src/lib.rs`.** A command is named three times in one file, each an
    exhaustive `match`.
-8. **The CLI's own wording.** `item show` prints `nice to have` where the web app prints `Nice to have`. Sharing
-   the label would change the CLI's output, which is a product change and not a refactor.
 
 ### Testing
 
