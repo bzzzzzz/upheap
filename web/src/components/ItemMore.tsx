@@ -223,9 +223,11 @@ export function ItemActions({
       ref={mainRef}
       type="button"
       aria-haspopup={actions.main.state === undefined ? "dialog" : undefined}
-      disabled={changingState}
+      // Not `disabled`: a disabled button can't hold focus, and focus stays here, or comes here once ⋯ goes.
+      aria-disabled={changingState || undefined}
       aria-busy={changingState || undefined}
       onClick={() => {
+        if (changingState) return;
         if (actions.main?.state !== undefined) {
           onState(actions.main.state);
         } else {

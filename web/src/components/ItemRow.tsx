@@ -600,8 +600,9 @@ function StartButton({ item, busy, onPress }: { item: Item; busy: boolean; onPre
   return (
     <button
       type="button"
-      onClick={onPress}
-      disabled={busy}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
       aria-busy={busy || undefined}
       aria-label={`Start ${item.title}`}
       title="Start"
@@ -633,8 +634,9 @@ function UnblockButton({ item, busy, onPress }: { item: Item; busy: boolean; onP
   return (
     <button
       type="button"
-      onClick={onPress}
-      disabled={busy}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
       aria-busy={busy || undefined}
       aria-label={`Unblock ${item.title}`}
       title={item.blocked_reason ? `Unblock. Blocked: ${item.blocked_reason}` : "Unblock"}
@@ -670,8 +672,9 @@ function PauseButton({ item, busy, onPress }: { item: Item; busy: boolean; onPre
   return (
     <button
       type="button"
-      onClick={onPress}
-      disabled={busy}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
       aria-busy={busy || undefined}
       aria-label={`Pause ${item.title}`}
       title="Back to open"
