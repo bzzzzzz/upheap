@@ -115,6 +115,10 @@ The sidebar and the rail list the heap's views (Open, Closed, Activity, Data, Se
 the team in the URL (a link to its page, shown on the heap's pages and the team's own), Teams and Account. The heap's title names its team too ("Product ·
 Acme"), on the phone's top bar as well, except for a heap in the personal team.
 
+**Find** on a phone is a search icon at the end of the top bar, before Select, named "Find in all heaps", on every page
+with the top bar: one tap opens it (Keyboard, point 5). The list's own field below says "Search this list", so the
+search that covers every heap and the one that filters the list on screen don't read as the same thing.
+
 A phone's tabs have room for four: Waiting sits left of the + and Agents right of it, and Closed, Settings, Activity
 and Data go into More with the account pages. More shows as active on the pages it holds, Closed among them.
 
@@ -1386,7 +1390,10 @@ The wide screen shows its keys, and `?` lists them all:
    selecting in select mode. It ends with `?`, All keys.
 4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Keys are ignored in a field. Open and
    Closed have no keys: they are one click away in the sidebar.
-5. `⌘K` (`Ctrl K` off a Mac) anywhere, or Find at the top of the sidebar, opens Find. It finds items by title or
-   key in every heap, goes to a heap, and adds "Add “text” as a new item" to the heap on screen. ↑ ↓ and Enter
-   open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy link, as the item allows), and
-   Shift+Tab goes back.
+5. `⌘K` (`Ctrl K` off a Mac) anywhere, Find at the top of the sidebar, or the search icon in a phone's top bar, opens
+   Find. It finds items by title or key in every heap, goes to a heap, and adds "Add “text” as a new item" to the heap
+   on screen. ↑ ↓ and Enter open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy link, as the
+   item allows), and Shift+Tab goes back. Open, it is a history entry, so Back closes it; going to an item or a heap
+   takes its place, so Back from there returns to where it was opened. On a phone it opens at the top, full width,
+   and ends above the on-screen keyboard, with the results scrolling; ✕ in the field clears it, or closes Find once
+   it's empty, and a tap outside closes it too.

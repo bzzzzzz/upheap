@@ -159,3 +159,53 @@ test("the sidebar's Find button opens it", async ({ page }) => {
   await page.getByRole("button", { name: "Find", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Find", exact: true })).toBeVisible();
 });
+
+test("on a phone the top bar's icon opens it, and a tap on a result opens the item", async ({ page, heapPath }) => {
+  test.skip(!isPhone(page), "Only a phone has the top bar");
+  await addItem(page, "Fix the gate");
+  await page.getByRole("button", { name: "Find in all heaps" }).tap();
+  const palette = page.getByRole("dialog", { name: "Find", exact: true });
+  await expect(palette.getByRole("searchbox", { name: "Find" })).toBeFocused();
+  // Above the on-screen keyboard, as the sheets are: the shell keeps its height in `--keyboard-inset`.
+  await page.evaluate(() => document.documentElement.style.setProperty("--keyboard-inset", "300px"));
+  const above = (page.viewportSize()?.height ?? 0) - 300;
+  await expect
+    .poll(async () => {
+      const box = await palette.boundingBox();
+      return box ? Math.round(box.y + box.height) : Infinity;
+    })
+    .toBeLessThanOrEqual(above);
+  await palette.getByRole("searchbox").fill("gate");
+  await palette.getByRole("menuitem", { name: /Fix the gate/ }).tap();
+  await expect(page).toHaveURL(/\/items\/[^/]+$/);
+  await expect(palette).toHaveCount(0);
+  // The item took Find's place, so Back goes to the list, not to Find.
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
+  await expect(palette).toHaveCount(0);
+});
+
+test("on a phone ✕ closes it once the field is empty", async ({ page, heapPath }) => {
+  test.skip(!isPhone(page), "Only a phone has the top bar");
+  await page.getByRole("button", { name: "Find in all heaps" }).tap();
+  const palette = page.getByRole("dialog", { name: "Find", exact: true });
+  await palette.getByRole("searchbox").fill("gate");
+  await palette.getByRole("button", { name: "Clear" }).tap();
+  await expect(palette.getByRole("searchbox")).toHaveValue("");
+  await palette.getByRole("button", { name: "Close" }).tap();
+  await expect(palette).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
+});
+
+test("Back closes it and stays on the page", async ({ page, heapPath }) => {
+  const palette = await openFind(page);
+  await page.goBack();
+  await expect(palette).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
+  // Escape goes back once only, and the page stays.
+  await openFind(page);
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
+  await expect(page.getByRole("heading", { level: 1 })).toBeAttached();
+});
