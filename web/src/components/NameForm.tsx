@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ProblemText } from "./ProblemText";
+import { Saving } from "./Saving";
 
 export type NameFormClasses = { input: string; save: string; cancel: string; problem?: string };
 
@@ -90,7 +91,13 @@ export function NameForm({
       />
       {(changed || onCancel) && (
         <>
-          <button type="submit" disabled={pending || !changed || name.trim() === ""} className={classes.save}>
+          <button
+            type="submit"
+            disabled={pending || !changed || name.trim() === ""}
+            aria-busy={pending || undefined}
+            className={classes.save}
+          >
+            <Saving pending={pending} />
             Save
           </button>
           <button

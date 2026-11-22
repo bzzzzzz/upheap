@@ -9,6 +9,7 @@ import { becameWords, CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/la
 import { useUserName } from "../components/userName";
 import { HeapNotFound } from "../components/NotFound";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
 /** A run of items next to each other with the same `closed_group`, as the server groups them. */
 interface ClosedSection {
@@ -73,7 +74,7 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
           key={`${index}-${section.group}`}
           section={section}
           heapRef={heapRef}
-          reopening={reopen.isPending}
+          reopening={reopen.isPending ? reopen.variables.id : null}
           onReopen={(item) => reopen.mutate(item)}
         />
       ))}
@@ -109,7 +110,8 @@ function ClosedGroupSection({
 }: {
   section: ClosedSection;
   heapRef: HeapRef;
-  reopening: boolean;
+  /** The id of the item being reopened, which every Reopen waits for. */
+  reopening: string | null;
   onReopen: (item: Item) => void;
 }) {
   const headingId = useId();
@@ -139,7 +141,8 @@ function ClosedRow({
 }: {
   item: Item;
   heapRef: HeapRef;
-  reopening: boolean;
+  /** The id of the item being reopened, which every Reopen waits for. */
+  reopening: string | null;
   onReopen: (item: Item) => void;
 }) {
   const by = useUserName(item.closed_by);
@@ -165,10 +168,12 @@ function ClosedRow({
       {item.allowed_actions.includes("reopen") && (
         <button
           type="button"
-          disabled={reopening}
+          disabled={reopening !== null}
+          aria-busy={reopening === item.id || undefined}
           onClick={() => onReopen(item)}
-          className="shrink-0 rounded-[7px] border border-line px-3 py-[5px] text-[13px] text-ink hover:bg-sunken disabled:opacity-60 max-sm:min-h-11 max-sm:rounded-xl"
+          className="inline-flex shrink-0 items-center gap-2 rounded-[7px] border border-line px-3 py-[5px] text-[13px] text-ink hover:bg-sunken disabled:not-aria-busy:opacity-60 max-sm:min-h-11 max-sm:rounded-xl"
         >
+          <Saving pending={reopening === item.id} />
           Reopen
         </button>
       )}

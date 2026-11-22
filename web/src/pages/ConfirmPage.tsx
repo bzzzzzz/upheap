@@ -6,6 +6,7 @@ import { problemMessage } from "../components/ProblemText";
 import { RequestId } from "../components/RequestId";
 import { AuthCard, authButtonClass } from "./AuthPage";
 import { Heading, Notice, useMoveFocus } from "./authStates";
+import { Saving } from "../components/Saving";
 
 /** The line the app shows once the user lands (`NoticeLine`). */
 const CONFIRMED_NOTICE = "Address confirmed. You're signed in.";
@@ -56,6 +57,7 @@ export function ConfirmPage({ token }: { token: string }) {
         <button
           type="button"
           disabled={busy}
+          aria-busy={busy || undefined}
           onClick={() =>
             confirm.mutate(undefined, {
               onSuccess: () => void router.navigate({ to: "/", replace: true, state: { notice: CONFIRMED_NOTICE } }),
@@ -63,6 +65,7 @@ export function ConfirmPage({ token }: { token: string }) {
           }
           className={authButtonClass}
         >
+          <Saving pending={busy} />
           Confirm and sign in
         </button>
       </div>

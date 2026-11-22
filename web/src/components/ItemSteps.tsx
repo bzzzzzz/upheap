@@ -25,6 +25,7 @@ import { Markdown } from "./Markdown";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { useOverListLink } from "./overList";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
 
 /**
  * A task's steps (ux.md, The item point 11): a checklist, inline at every width, each step saving as it's changed. An
@@ -38,6 +39,9 @@ import { RequestId } from "./RequestId";
 export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const add = useAddStep(heapRef, item.key);
   const update = useUpdateStep(heapRef, item.key);
+  // The write that is on its way, which is the latest one: a step shows it saving when the write is a tick, a drop, or
+  // a new title or context of its own.
+  const writing = update.isPending ? update.variables : undefined;
   // Which steps show their context: local to this view, closed to begin with.
   const [shown, setShown] = useState<ReadonlySet<number>>(new Set());
   const canAdd = item.allowed_actions.includes("add_step");
@@ -117,6 +121,7 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
               onMove={(delta) => moveTo(step.number, index + delta)}
               grip={drag.gripProps(step.number)}
               lift={drag.lifted === step.number ? drag.dy : null}
+              saving={writing?.step.number === step.number ? writing.patch : null}
               contextShown={shown.has(step.number)}
               onToggleContext={() => toggleContext(step.number)}
               onSave={(patch) =>
@@ -142,6 +147,7 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
       </span>
       {canAdd && (
         <AddStep
+          saving={add.isPending}
           onAdd={(title) =>
             add.mutateAsync({ title }).then(
               () => true,
@@ -332,6 +338,7 @@ function StepRow({
   onMove,
   grip,
   lift,
+  saving,
   contextShown,
   onToggleContext,
   onSave,
@@ -345,6 +352,8 @@ function StepRow({
   grip: GripProps;
   /** How far the step is dragged, while it is. */
   lift: number | null;
+  /** The change to the step that is being saved, if any. */
+  saving: StepPatch | null;
   contextShown: boolean;
   onToggleContext: () => void;
   /** Resolves to whether the save landed; a failure is shown by the list. */
@@ -408,27 +417,32 @@ function StepRow({
         )}
         {dropped ? (
           <span className={`${slotClass} text-muted`}>
-            <Minus aria-hidden="true" className="size-4" />
+            {saving?.state !== undefined ? <Saving pending /> : <Minus aria-hidden="true" className="size-4" />}
             <span className="sr-only">Dropped</span>
           </span>
         ) : (
           <Checkbox
             isSelected={step.state === "ticked"}
             isDisabled={!canEdit}
+            isReadOnly={saving?.state !== undefined}
             onChange={(ticked) => onSave({ state: ticked ? "ticked" : "open" })}
             aria-label={step.title}
             className={`${slotClass} group outline-none`}
           >
-            {({ isSelected }) => (
-              <span
-                aria-hidden="true"
-                className={`flex size-5 items-center justify-center rounded-md border group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-accent ${
-                  isSelected ? "border-done bg-done text-surface" : "border-line-strong bg-surface"
-                } ${canEdit ? "" : "opacity-60"}`}
-              >
-                {isSelected && <Check className="size-3.5" strokeWidth={3} />}
-              </span>
-            )}
+            {({ isSelected }) =>
+              saving?.state !== undefined ? (
+                <Saving pending />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className={`flex size-5 items-center justify-center rounded-md border group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-accent ${
+                    isSelected ? "border-done bg-done text-surface" : "border-line-strong bg-surface"
+                  } ${canEdit ? "" : "opacity-60"}`}
+                >
+                  {isSelected && <Check className="size-3.5" strokeWidth={3} />}
+                </span>
+              )
+            }
           </Checkbox>
         )}
         <div className="flex min-h-9 min-w-0 flex-1 items-center pointer-coarse:min-h-11">
@@ -465,6 +479,7 @@ function StepRow({
               {step.title}
             </span>
           )}
+          <Saving pending={saving?.title !== undefined} />
         </div>
         {hasDisclosure && (
           <Button
@@ -512,6 +527,7 @@ function StepRow({
       </div>
       {contextShown && (
         <div className={`pr-1 pb-2 ${canEdit ? "pl-18 pointer-coarse:pl-22" : "pl-9 pointer-coarse:pl-11"}`}>
+          <Saving pending={saving?.context !== undefined} className="mb-1" />
           {canEdit && (editingContext || !step.context) ? (
             <LazyMarkdownEditor
               aria-label="Step context"
@@ -592,7 +608,7 @@ function StepRow({
  * first is saved; a refused add puts its title back when the field is still empty, so it loses nothing (it shows again
  * when the field is opened again, if the field was closed meanwhile).
  */
-function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
+function AddStep({ saving, onAdd }: { saving: boolean; onAdd: (title: string) => Promise<boolean> }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -617,7 +633,7 @@ function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
         }}
         className="-ml-1 flex min-h-9 items-center gap-2 self-start rounded-lg px-1 text-sm text-ink-soft outline-none hover:text-ink data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:min-h-11"
       >
-        <Plus aria-hidden="true" className="size-4" />
+        {saving ? <Saving pending /> : <Plus aria-hidden="true" className="size-4" />}
         Add a step
       </Button>
     );
@@ -634,33 +650,36 @@ function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
   };
 
   return (
-    <input
-      // The person asked for the field, and expects to type in it.
-      autoFocus
-      aria-label="New step"
-      value={draft}
-      maxLength={300}
-      placeholder="What needs doing?"
-      onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
+    <div className="flex items-center gap-2">
+      <input
+        // The person asked for the field, and expects to type in it.
+        autoFocus
+        aria-label="New step"
+        value={draft}
+        maxLength={300}
+        placeholder="What needs doing?"
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            takeDraft();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelled.current = true;
+            returnFocus.current = true;
+            setDraft("");
+            setAdding(false);
+          }
+        }}
+        onBlur={() => {
+          if (cancelled.current) return;
           takeDraft();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          cancelled.current = true;
-          returnFocus.current = true;
-          setDraft("");
           setAdding(false);
-        }
-      }}
-      onBlur={() => {
-        if (cancelled.current) return;
-        takeDraft();
-        setAdding(false);
-      }}
-      className="min-h-9 w-full rounded-lg border border-line bg-surface px-2 text-base outline-none focus:border-accent pointer-coarse:min-h-11"
-    />
+        }}
+        className="min-h-9 w-full rounded-lg border border-line bg-surface px-2 text-base outline-none focus:border-accent pointer-coarse:min-h-11"
+      />
+      <Saving pending={saving} />
+    </div>
   );
 }

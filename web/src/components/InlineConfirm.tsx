@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from "react";
 
 import { compactButtonClass } from "./buttons";
 import { ProblemText } from "./ProblemText";
+import { Saving } from "./Saving";
 
 /**
  * The inline confirm of a wide screen (ux.md, Rules §1), for removing someone, giving up your admin role or revoking an
@@ -55,9 +56,11 @@ export function InlineConfirm({
         <button
           type="button"
           disabled={pending}
+          aria-busy={pending || undefined}
           onClick={onConfirm}
           className={`${compactButtonClass.danger} py-1.5 text-[13px]`}
         >
+          <Saving pending={pending} />
           {confirmLabel}
         </button>
       </div>

@@ -28,6 +28,7 @@ import { PHONE, useMedia } from "./media";
 import { NeedPicker } from "./NeedPicker";
 import { problemMessage } from "./ProblemText";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
 import { inputClass } from "../pages/settingsForm";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useToast } from "./UndoToast";
@@ -259,15 +260,13 @@ function SplitNote({
   };
 
   const count = rows.length;
-  const mainLabel = busy
-    ? "Making…"
-    : anyMade
-      ? "Make the rest"
-      : outcome === "step"
-        ? "Make it a step"
-        : outcome === "tasks"
-          ? `Make ${count} ${count === 1 ? "task" : "tasks"}`
-          : `Make the heap and ${count} ${count === 1 ? "item" : "items"}`;
+  const mainLabel = anyMade
+    ? "Make the rest"
+    : outcome === "step"
+      ? "Make it a step"
+      : outcome === "tasks"
+        ? `Make ${count} ${count === 1 ? "task" : "tasks"}`
+        : `Make the heap and ${count} ${count === 1 ? "item" : "items"}`;
 
   const rowList = (withKind: boolean) => (
     <div className="flex flex-col gap-3">
@@ -449,8 +448,10 @@ function SplitNote({
         <button
           type="submit"
           disabled={!canMake}
+          aria-busy={busy || undefined}
           className={`${compactButtonClass.primary} ${phone ? "h-13 flex-1 rounded-[14px]" : ""}`}
         >
+          <Saving pending={busy} />
           {mainLabel}
         </button>
       </>

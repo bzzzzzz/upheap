@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type Se
 import { ApiProblem, requestIdOf } from "../api/client";
 import type { Item } from "../api/schema";
 import { compactButtonClass } from "./buttons";
+import { Saving } from "./Saving";
 import { useRegisterDraft, type FlushDraft } from "./contextDraft";
 import { itemProblem } from "./itemProblems";
 import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
@@ -318,7 +319,14 @@ function ContextForm({
         className="min-h-40 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
       />
       <div className="flex gap-2 max-sm:[&>button]:flex-1">
-        <button type="button" disabled={pending} onClick={saveAndClose} className={compactButtonClass.primary}>
+        <button
+          type="button"
+          disabled={pending}
+          aria-busy={pending || undefined}
+          onClick={saveAndClose}
+          className={compactButtonClass.primary}
+        >
+          <Saving pending={pending} />
           {conflict ? "Save again" : "Save"}
         </button>
         <button type="button" onClick={discard} className={compactButtonClass.quiet}>

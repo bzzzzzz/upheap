@@ -26,6 +26,7 @@ import { PopoverSheet } from "./PopoverSheet";
 import { ProblemText, problemMessage } from "./ProblemText";
 import { sheetRowClass } from "./Sheet";
 import { teamName } from "./teamName";
+import { Saving } from "./Saving";
 
 type SwitcherTeam = Me["teams"][number];
 type Entry = { team: SwitcherTeam; heap: SwitcherTeam["heaps"][number] };
@@ -540,7 +541,7 @@ function HeapItem({
 }
 
 const newHeapButtonClass =
-  "flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-[15px] hover:border-muted disabled:opacity-50";
+  "flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-[15px] hover:border-muted disabled:not-aria-busy:opacity-50";
 
 /** "New heap in <team>", for those the team lets create heaps. */
 function NewHeapButton({ me, team, onClick }: { me: Me; team: SwitcherTeam; onClick: () => void }) {
@@ -651,8 +652,10 @@ function NewHeapForm({
         <button
           type="submit"
           disabled={create.isPending || name.trim() === ""}
+          aria-busy={create.isPending || undefined}
           className={`${newHeapButtonClass} border-ink bg-ink font-medium text-canvas`}
         >
+          <Saving pending={create.isPending} />
           Add heap
         </button>
       </div>

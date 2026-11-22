@@ -49,6 +49,7 @@ import {
 } from "./settingsForm";
 import { RequestId } from "../components/RequestId";
 import { keptValues, ParameterMergeConfirm, parameterMergeReachOf } from "./ParameterMergeConfirm";
+import { Saving } from "../components/Saving";
 
 const problemClass = "text-overdue-ink";
 
@@ -215,8 +216,10 @@ export function NewParameterForm({ scope, onClose }: { scope: ParameterScope; on
           <button
             type="submit"
             disabled={create.isPending || name.trim() === ""}
+            aria-busy={create.isPending || undefined}
             className={`${compactButtonClass.primary} max-sm:flex-1`}
           >
+            <Saving pending={create.isPending} />
             Add parameter
           </button>
           <button type="button" onClick={onClose} className={compactButtonClass.quiet}>
@@ -444,10 +447,12 @@ function StopUsing({ parameter, heapRef }: { parameter: CardParameter; heapRef: 
       <button
         type="button"
         disabled={stop.isPending}
+        aria-busy={stop.isPending || undefined}
         onClick={() => stop.mutate(parameter.id)}
         aria-label={`Stop using ${parameter.name}`}
         className={compactButtonClass.quiet}
       >
+        <Saving pending={stop.isPending} />
         Stop using
       </button>
       <ProblemText error={stop.error} className={`${problemClass} text-right`} />
@@ -496,7 +501,13 @@ function WeightForm({
       </label>
       {weight !== parameter.weight && (
         <>
-          <button type="submit" disabled={pending} className={compactButtonClass.primary}>
+          <button
+            type="submit"
+            disabled={pending}
+            aria-busy={pending || undefined}
+            className={compactButtonClass.primary}
+          >
+            <Saving pending={pending} />
             Save
           </button>
           <button
@@ -591,9 +602,11 @@ function OptionsEditor({
           <button
             type="button"
             disabled={change.isPending || options.some((o) => o.label.trim() === "")}
+            aria-busy={change.isPending || undefined}
             onClick={() => change.mutate({ parameter, change: { kind: "arrange_options", options } })}
             className={`${compactButtonClass.primary} max-sm:flex-1`}
           >
+            <Saving pending={change.isPending} />
             Save options
           </button>
           <button type="button" onClick={() => setOptions(parameter.options)} className={compactButtonClass.quiet}>
@@ -614,8 +627,10 @@ function OptionsEditor({
           <button
             type="submit"
             disabled={change.isPending || newLabel.trim() === ""}
+            aria-busy={change.isPending || undefined}
             className={compactButtonClass.bordered}
           >
+            <Saving pending={change.isPending} />
             Add option
           </button>
         </form>
@@ -698,9 +713,11 @@ function OptionRow({
           <button
             type="button"
             disabled={archive.isPending || replacement === ""}
+            aria-busy={archive.isPending || undefined}
             onClick={() => archive.mutate({ optionId: option.id, replacementId: replacement }, { onError: cancel })}
             className={`${compactButtonClass.danger} max-sm:flex-1`}
           >
+            <Saving pending={archive.isPending} />
             Archive
           </button>
           <button type="button" onClick={cancel} className={compactButtonClass.quiet}>
@@ -974,9 +991,11 @@ function ArchiveParameter({ parameter, scope }: { parameter: CardParameter; scop
             type="button"
             autoFocus
             disabled={archive.isPending}
+            aria-busy={archive.isPending || undefined}
             onClick={() => archive.mutate(parameter, { onError: cancel })}
             className={compactButtonClass.danger}
           >
+            <Saving pending={archive.isPending} />
             Archive
           </button>
           <button type="button" onClick={cancel} className={compactButtonClass.quiet}>
@@ -1068,10 +1087,12 @@ function AvailableParameter({
         <button
           type="button"
           disabled={use.isPending}
+          aria-busy={use.isPending || undefined}
           onClick={() => use.mutate(parameter.id)}
           aria-label={`Use ${parameter.name}`}
           className={compactButtonClass.bordered}
         >
+          <Saving pending={use.isPending} />
           Use
         </button>
       )}

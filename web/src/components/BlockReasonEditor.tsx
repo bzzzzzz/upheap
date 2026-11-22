@@ -1,4 +1,5 @@
 import { compactButtonClass } from "./buttons";
+import { Saving } from "./Saving";
 import { Field } from "./Field";
 import { itemProblem } from "./itemProblems";
 import { RequestId } from "./RequestId";
@@ -93,8 +94,14 @@ export function BlockReasonEditor({
         <button type="button" disabled={saving} onClick={onDone} className={compactButtonClass.quiet}>
           Cancel
         </button>
-        <button type="submit" disabled={unchanged || tooLong || saving} className={compactButtonClass.primary}>
-          {saving ? "Saving…" : "Save"}
+        <button
+          type="submit"
+          disabled={unchanged || tooLong || saving}
+          aria-busy={saving || undefined}
+          className={compactButtonClass.primary}
+        >
+          <Saving pending={saving} />
+          Save
         </button>
       </div>
     </form>

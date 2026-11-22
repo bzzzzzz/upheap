@@ -12,6 +12,7 @@ import { RequestId } from "../components/RequestId";
 import { leaveAfterSignOut } from "../signOutRedirect";
 import { AuthCard, AuthPage, authButtonClass, type RegisterRequest } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
+import { Saving } from "../components/Saving";
 
 type Land = (team: Team, line: string) => void;
 
@@ -185,6 +186,7 @@ function Confirm({
         type="button"
         // Stays disabled once joined, until the landing replaces the page.
         disabled={join.isPending || join.isSuccess}
+        aria-busy={join.isPending || join.isSuccess || undefined}
         onClick={() =>
           join.mutate(undefined, {
             onSuccess: ({ team: joined, created }) =>
@@ -193,13 +195,15 @@ function Confirm({
         }
         className={authButtonClass}
       >
-        {join.isPending || join.isSuccess ? "Joining…" : `Join ${team}`}
+        <Saving pending={join.isPending || join.isSuccess} />
+        {`Join ${team}`}
       </button>
       <p className="text-center text-sm text-ink-soft">
         Not you?{" "}
         <button
           type="button"
           disabled={signOut.isPending}
+          aria-busy={signOut.isPending || undefined}
           // Signing out drops the whole cache under this page's live queries, so the page is loaded afresh, as the
           // consent page does (`AuthorizeRoute`).
           onClick={() =>
@@ -209,8 +213,9 @@ function Confirm({
                 leaveAfterSignOut(signedOut, `/invite/${token}`, () => window.location.replace(window.location.href)),
             })
           }
-          className="font-semibold text-accent-ink underline disabled:opacity-40 pointer-coarse:min-h-11"
+          className="inline-flex items-center gap-2 font-semibold text-accent-ink underline disabled:not-aria-busy:opacity-40 pointer-coarse:min-h-11"
         >
+          <Saving pending={signOut.isPending} />
           Sign out
         </button>
       </p>

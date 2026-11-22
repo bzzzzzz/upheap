@@ -22,6 +22,7 @@ import { useFocusAfterRender } from "../components/useFocusAfterRender";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, clampWeight, inputClass, introClass, labelClass } from "./settingsForm";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
 /** What "Reset all to 10" sets: the weight new heaps and parameters start with. */
 const DEFAULT_WEIGHT = 10;
@@ -296,8 +297,10 @@ function RankingForm({
                   <button
                     type="submit"
                     disabled={update.isPending}
+                    aria-busy={update.isPending || undefined}
                     className={`${compactButtonClass.primary} max-sm:order-3 max-sm:min-h-11`}
                   >
+                    <Saving pending={update.isPending} />
                     Save weights
                   </button>
                   <button

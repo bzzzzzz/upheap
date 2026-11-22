@@ -42,6 +42,7 @@ import { NewTagForm, TagRow, tagCardClass, type TagSettings } from "./TagSetting
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass, sectionTitleClass } from "./teamStyles";
 import { TeamNotFound } from "../components/NotFound";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
 /** Name and link name forms in the design tokens, as on Account. */
 const nameFormClasses: NameFormClasses = {
@@ -277,7 +278,13 @@ function NewHeapForm({ team, onClose }: { team: string; onClose: () => void }) {
         >
           Cancel
         </button>
-        <button type="submit" disabled={create.isPending} className={`${compactButtonClass.primary} max-sm:min-h-11`}>
+        <button
+          type="submit"
+          disabled={create.isPending}
+          aria-busy={create.isPending || undefined}
+          className={`${compactButtonClass.primary} max-sm:min-h-11`}
+        >
+          <Saving pending={create.isPending} />
           Add heap
         </button>
       </div>
@@ -792,6 +799,7 @@ function MemberRow({
             type="button"
             ref={roleChange === "member" && you ? demoteRef : undefined}
             disabled={setRole.isPending}
+            aria-busy={setRole.isPending || undefined}
             aria-expanded={roleChange === "member" && you ? asking === "demote" : undefined}
             onClick={() =>
               roleChange === "member" && you
@@ -800,6 +808,7 @@ function MemberRow({
             }
             className={roleButtonClass}
           >
+            <Saving pending={setRole.isPending} />
             {roleChange === "admin" ? "Make admin" : "Make member"}
           </button>
         )}
@@ -911,13 +920,15 @@ function PhoneMemberRow({
               type="button"
               autoFocus
               disabled={confirming === "remove" ? removing.isPending : setRole.isPending}
+              aria-busy={(confirming === "remove" ? removing.isPending : setRole.isPending) || undefined}
               onClick={() =>
                 confirming === "remove"
                   ? onRemove(close)
                   : setRole.mutate({ username: member.username, role: "member" }, { onSuccess: close })
               }
-              className="min-h-13 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:opacity-40"
+              className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:not-aria-busy:opacity-40"
             >
+              <Saving pending={confirming === "remove" ? removing.isPending : setRole.isPending} />
               {confirming === "remove" ? "Remove" : "Give up admin"}
             </button>
             <button
@@ -946,6 +957,7 @@ function PhoneMemberRow({
                 type="button"
                 ref={asksFirst ? demoteRow : undefined}
                 disabled={setRole.isPending}
+                aria-busy={setRole.isPending || undefined}
                 onClick={() =>
                   asksFirst
                     ? setAsked("demote")
@@ -953,6 +965,7 @@ function PhoneMemberRow({
                 }
                 className={sheetRowClass}
               >
+                <Saving pending={setRole.isPending} />
                 {roleChange === "admin" ? "Make admin" : asksFirst ? "Make member…" : "Make member"}
               </button>
             )}
@@ -1119,6 +1132,7 @@ function AddMember({ team, phone }: { team: Team; phone: boolean }) {
                     </span>
                   )
                 )}
+                <Saving pending={add.isPending && add.variables === user.id} />
               </li>
             );
           })}
@@ -1173,9 +1187,11 @@ function LeaveTeam({ team }: { team: Team }) {
           type="button"
           autoFocus
           disabled={leave.isPending}
+          aria-busy={leave.isPending || undefined}
           onClick={() => leave.mutate()}
           className={`${compactButtonClass.danger} py-1.5 text-[13px] max-sm:min-h-11`}
         >
+          <Saving pending={leave.isPending} />
           Leave
         </button>
       </div>

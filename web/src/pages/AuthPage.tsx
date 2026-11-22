@@ -11,6 +11,7 @@ import { OperatorContact } from "../components/OperatorContact";
 import { ACCOUNT_DEACTIVATED, problemMessage } from "../components/ProblemText";
 import { RequestId } from "../components/RequestId";
 import { CheckMail, type CheckMailCause } from "./CheckMail";
+import { Saving } from "../components/Saving";
 
 export type Mode = "sign_in" | "register";
 /** The form's inputs, named as the API names them, so a problem's `field` says which one it's about. */
@@ -331,7 +332,7 @@ export function AuthCard({ children }: { children: ReactNode }) {
 
 /** The card's main button: 52 px on a phone, 44 px beyond. A link styled as one adds `flex items-center justify-center`. */
 export const authButtonClass =
-  "h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
+  "flex h-[52px] w-full items-center justify-center gap-2 rounded-[14px] bg-ink text-base font-semibold text-surface disabled:not-aria-busy:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
 
 /**
  * Sign in through the provider. A plain link: the browser leaves for the provider and comes back to the callback,
@@ -515,7 +516,13 @@ function AuthForm({
             <RequestId error={error} />
           </>
         )}
-        <button type="submit" disabled={mutation.isPending || waitLeft !== undefined} className={authButtonClass}>
+        <button
+          type="submit"
+          disabled={mutation.isPending || waitLeft !== undefined}
+          aria-busy={mutation.isPending || undefined}
+          className={authButtonClass}
+        >
+          <Saving pending={mutation.isPending} />
           {mode === "sign_in" ? "Sign in" : (submitLabel ?? "Create account")}
         </button>
         {note && <p className="text-center text-xs text-muted">{note}</p>}
@@ -629,8 +636,10 @@ function ForgotPassword({
             type="submit"
             form={RESET_FORM_ID}
             disabled={request.isPending}
-            className="h-11 self-start rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink disabled:opacity-40 pointer-coarse:min-h-11"
+            aria-busy={request.isPending || undefined}
+            className="inline-flex h-11 items-center gap-2 self-start rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink disabled:not-aria-busy:opacity-40 pointer-coarse:min-h-11"
           >
+            <Saving pending={request.isPending} />
             Send me a link
           </button>
           {error && !emailProblem && (

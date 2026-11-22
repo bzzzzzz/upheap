@@ -54,6 +54,7 @@ import { Sheet, sheetRowClass } from "../components/Sheet";
 import { teamName, titleTeam } from "../components/teamName";
 import { ToastProvider, useToast } from "../components/UndoToast";
 import { useSelectMode } from "../components/useSelectMode";
+import { Saving } from "../components/Saving";
 
 export function AppLayout() {
   const { data: me } = useMe();
@@ -684,9 +685,11 @@ function ArchivedNotice({ heapRef }: { heapRef: HeapRef }) {
         <button
           type="button"
           disabled={setArchived.isPending}
+          aria-busy={setArchived.isPending || undefined}
           onClick={() => setArchived.mutate({ heap, archived: false })}
-          className="font-medium underline disabled:opacity-50"
+          className="inline-flex items-center gap-2 font-medium underline disabled:not-aria-busy:opacity-50"
         >
+          <Saving pending={setArchived.isPending} />
           Unarchive
         </button>
       )}
