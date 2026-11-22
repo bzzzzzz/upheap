@@ -1,7 +1,8 @@
 //! A value's label has one home, its `label` fn here in `domain`: no other crate writes it again as a literal.
 //!
-//! The labelled enums are listed by hand: a new `label` fn gets its enum added to `labels`. Test code is skipped, since
-//! a test may assert on a label, and so are `//` comments.
+//! It covers `Need` and `Size`, listed by hand in `labels`. The other labelled enums are left out: some of their words
+//! ("Blocked", "Closed", "Question") are written elsewhere for other facts. Test code is skipped, since a test may
+//! assert on a label, and so are `//` comments.
 
 use std::fs;
 use std::io;
@@ -46,7 +47,7 @@ fn no_other_crate_writes_a_domain_label_as_a_literal() -> io::Result<()> {
     Ok(())
 }
 
-/// The `.rs` files under `dir`, leaving out `tests` directories and `tests.rs` files.
+/// The `.rs` files under `dir`, leaving out `tests.rs` files.
 fn collect_sources(dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
     if !dir.is_dir() {
         return Ok(());
@@ -55,9 +56,7 @@ fn collect_sources(dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
         let path = entry?.path();
         let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
         if path.is_dir() {
-            if name != "tests" {
-                collect_sources(&path, files)?;
-            }
+            collect_sources(&path, files)?;
         } else if name.ends_with(".rs") && name != "tests.rs" {
             files.push(path);
         }
@@ -67,14 +66,14 @@ fn collect_sources(dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
 
 /// The lines of `source` that aren't test code or a `//` comment, with their 1-based numbers.
 ///
-/// The item after `#[cfg(test)]` is skipped: one line when it ends with `;`, otherwise up to the `}` at its own
-/// indentation, which rustfmt (a required check) guarantees.
+/// The item after `#[cfg(test)]` or `#[cfg(all(test, …))]` is skipped: one line when it ends with `;`, otherwise up to
+/// the `}` at its own indentation. That fits the `mod tests` layout every crate uses, not every item rustfmt allows.
 fn lines_outside_tests(source: &str) -> Vec<(usize, &str)> {
     let mut kept = Vec::new();
     let mut lines = source.lines().enumerate();
     while let Some((index, line)) = lines.next() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with("#[cfg(test)]") {
+        if trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[cfg(all(test,") {
             let indent = &line[..line.len() - trimmed.len()];
             let Some((_, item)) = lines.next() else { break };
             if !item.trim_end().ends_with(';') {
