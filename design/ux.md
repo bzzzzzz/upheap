@@ -139,8 +139,9 @@ does.
 **All items** is reached from the heap switcher, on every width: nothing in the sidebar, the rail or the tabs leads
 to it. The switcher starts with an "All heaps" row with the person's open items at its right: the sum of the open
 counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when those do. A
-person in more than one team also finds, at the top of each team's section, a row "All <team> items" with that
-team's open count, which opens `/all?team=<slug>` (All items §7); neither row is among search results. On `/all` and
+person in more than one team also finds, at the right of each team's line, "All items · 16" with that team's open
+count, which opens `/all?team=<slug>` (All items §7) and which a screen reader hears as "All <team> items, 16 open";
+neither is among search results. On `/all` and
 its Closed and Activity pages the row opened is marked current, where no heap's row is, and the heap button reads as
 that row does, "All heaps" or "All <team> items", on the sidebar and the phone's top bar; the rail's button shows the
 layers icon in place of a heap's initial. No heap is the current one there, so the views are the pages across heaps
@@ -298,6 +299,8 @@ the keyboard covers, from the visual viewport. The heap switcher and More open a
 tabs.
 
 Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
+In the heap switcher the check comes before the current row's name, as part of it, so the other names keep one left
+edge and the counts sit at the panel's right edge.
 The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". Each unarchived heap's
 row has its open count on the right, the number its Open view shows, which a screen reader hears as ", 2 open" in the
 row's name, as on the All rows; archived heaps and Recent have none. From 8 unarchived heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
@@ -310,7 +313,7 @@ it. "New heap" turns into the name and an optional Link name, with the same new 
 form ([Teams and Team](#teams-and-team)); Add heap opens the new heap. On a tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts
 with the search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each
 team's name, and Recent's title, sits on a band a shade off the panel, with space above it, and a team's fold header
-stays in view while its heaps scroll.
+stays in view while its heaps scroll, with the team's "All items" link at its right, folded or not.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 

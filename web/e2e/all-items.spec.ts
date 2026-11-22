@@ -245,6 +245,8 @@ test("the heap switcher's All <team> items row opens the team's list", async ({ 
   await expect(row(page, "Rotate the certs")).toBeVisible();
 
   await page.getByRole("button", { name: /^Switch heap/ }).click();
+  // On the team's line it reads short; the team's name is for a screen reader.
+  await expect(page.getByRole("menuitem", { name: /^All Acme items/ })).toContainText("items · ");
   await page.getByRole("menuitem", { name: /^All Acme items/ }).click();
 
   await expect(page).toHaveURL(/\/all\?team=/);

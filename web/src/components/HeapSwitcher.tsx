@@ -208,7 +208,8 @@ function SwitcherBody({
     const isFolded = canFold && folded.has(team.id);
     const showArchived = revealed.has(team.id);
     const label = teamName(team, me);
-    const indent = canFold ? indentClass : "";
+    // Under the team's line, which is two cells wide, every row spans both.
+    const indent = `${canFold ? indentClass : ""} ${several ? "col-span-2" : ""}`;
     const heapItem = (heap: Entry["heap"]) => (
       <HeapItem
         key={heap.id}
@@ -219,42 +220,46 @@ function SwitcherBody({
         onOpen={close}
       />
     );
+    const allCurrent = onAll && allTeam === team.slug;
     return (
-      <MenuSection key={team.id} aria-label={label} className={sectionClass}>
+      <MenuSection key={team.id} aria-label={label} className={several ? teamSectionClass : sectionClass}>
         {canFold ? (
           <MenuItem
             id={`fold:${team.id}`}
             textValue={label}
             aria-expanded={!isFolded}
             onAction={() => toggleFold(team.id)}
-            className={`${rowClass} sticky top-0 z-10 mb-1 bg-sunken text-xs font-semibold tracking-wide text-ink-soft uppercase hover:text-ink data-[focused]:text-ink max-sm:min-h-11 sm:min-h-8 sm:gap-1.5 sm:text-[11px]`}
+            className={`${rowClass} ${teamLineClass} bg-sunken text-xs font-semibold tracking-wide text-ink-soft uppercase hover:text-ink data-[focused]:text-ink max-sm:min-h-11 sm:min-h-8 sm:gap-1.5 sm:rounded-r-none sm:text-[11px]`}
           >
             <ChevronRight
               aria-hidden="true"
               strokeWidth={2.5}
-              className={`size-3.5 shrink-0 max-sm:order-last motion-safe:transition-transform ${isFolded ? "" : "rotate-90"}`}
+              className={`size-3.5 shrink-0 motion-safe:transition-transform ${isFolded ? "" : "rotate-90"}`}
             />
             <span className="min-w-0 flex-1 truncate">{label}</span>
           </MenuItem>
         ) : (
-          several && <SectionTitle>{label}</SectionTitle>
+          several && (
+            <Header className="mb-1 flex min-w-0 items-center px-3 text-xs font-semibold tracking-wide text-ink-soft uppercase sm:min-h-8 sm:rounded-l-lg sm:bg-sunken sm:px-2.5 sm:text-[11px]">
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+            </Header>
+          )
         )}
-        {!isFolded && several && (
+        {several && (
           <MenuItem
             id={`all:${team.id}`}
             textValue={`All ${label} items`}
             href={{ to: "/all", search: { team: team.slug } }}
             onAction={close}
-            className={`${rowClass} ${indent} ${onAll && allTeam === team.slug ? currentRowClass : ""}`}
+            className={`${canFold ? `${teamLineClass} bg-sunken` : "mb-1 sm:bg-sunken"} flex shrink-0 cursor-pointer items-center rounded-r-lg px-3 text-[13px] whitespace-nowrap text-ink-soft outline-none hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[focused]:text-ink data-[focused]:underline max-sm:min-h-11 max-sm:rounded-l-lg sm:min-h-8 sm:px-2.5 sm:text-xs ${allCurrent ? "font-semibold text-ink" : ""}`}
           >
-            <span className="min-w-0 flex-1 truncate">
-              All {label} items
-              <span className="sr-only">, {openItemCount(me, team.slug)} open</span>
-              {onAll && allTeam === team.slug && <span className="sr-only">, current</span>}
-            </span>
-            <OpenCount count={openItemCount(me, team.slug)} />
-            <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
-              {onAll && allTeam === team.slug && <Check className="size-4" strokeWidth={3} />}
+            <span>
+              <CurrentCheck current={allCurrent} />
+              All <span className="sr-only">{label} </span>items<span aria-hidden="true"> · </span>
+              <span className="sr-only">, </span>
+              {openItemCount(me, team.slug)}
+              <span className="sr-only"> open</span>
+              {allCurrent && <span className="sr-only">, current</span>}
             </span>
           </MenuItem>
         )}
@@ -312,14 +317,12 @@ function SwitcherBody({
               className={`${rowClass} ${onAllHeaps ? currentRowClass : ""}`}
             >
               <span className="min-w-0 flex-1 truncate">
+                <CurrentCheck current={onAllHeaps} />
                 All heaps
                 <span className="sr-only">, {openItemCount(me)} open</span>
                 {onAllHeaps && <span className="sr-only">, current</span>}
               </span>
               <OpenCount count={openItemCount(me)} />
-              <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
-                {onAllHeaps && <Check className="size-4" strokeWidth={3} />}
-              </span>
             </MenuItem>
           </MenuSection>
           {long && recent.length > 0 && (
@@ -434,6 +437,25 @@ function SwitcherBody({
 
 /** A section of the list, set apart from the one above; its title is a band a shade off the panel. */
 const sectionClass = "flex flex-col not-first:mt-3";
+/**
+ * A team's section, for someone in several teams: its first line is the team's name and, at the right, the link to
+ * all of the team's items; the heaps under it span both cells.
+ */
+const teamSectionClass = "grid grid-cols-[minmax(0,1fr)_auto] not-first:mt-3";
+/** Both cells of a team's line that folds: they stay in view while its heaps scroll. */
+const teamLineClass = "sticky top-0 z-10 mb-1";
+
+/**
+ * The check on the current row, before its name and part of it, so the other rows' names keep one left edge and the
+ * counts keep the right one.
+ */
+function CurrentCheck({ current }: { current: boolean }) {
+  return (
+    current && (
+      <Check aria-hidden="true" className="mr-1.5 inline size-4 align-[-0.15em] text-accent-ink" strokeWidth={3} />
+    )
+  );
+}
 
 export function SectionTitle({ children }: { children: ReactNode }) {
   return (
@@ -516,6 +538,7 @@ function HeapItem({
         <>
           {recent && <Clock aria-hidden="true" className="size-3.5 shrink-0 text-muted max-sm:hidden" />}
           <span className="min-w-0 flex-1 truncate">
+            <CurrentCheck current={current} />
             {query === undefined ? heap.name : <Highlighted text={heap.name} query={query} />}
             {heap.archived &&
               (query === undefined ? (
@@ -530,11 +553,8 @@ function HeapItem({
             {current && <span className="sr-only">, current</span>}
           </span>
           {teamLabel && <span className="shrink-0 text-[13px] font-normal text-muted sm:text-xs">{teamLabel}</span>}
-          {count && <OpenCount count={heap.open_count} />}
           {enterHint && isFocused && <Kbd>↵</Kbd>}
-          <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink sm:w-4">
-            {current && <Check className="size-4" strokeWidth={3} />}
-          </span>
+          {count && <OpenCount count={heap.open_count} />}
         </>
       )}
     </MenuItem>
