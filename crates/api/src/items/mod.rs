@@ -411,7 +411,7 @@ async fn note_to_step(
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 
-fn parse_cursor(raw: &str) -> Result<ClosedCursor, ApiError> {
+pub(crate) fn parse_cursor(raw: &str) -> Result<ClosedCursor, ApiError> {
     let invalid = || ApiError::BadRequest {
         code: "invalid_cursor",
         detail: "cursor is not one this server issued".to_owned(),

@@ -2,7 +2,7 @@
 //! version. Comments are never deleted.
 
 use domain::comment::{Comment, CommentBody, CommentNumber};
-use domain::{CommentId, ItemId, UserId};
+use domain::{CommentId, ItemId, RunId, UserId};
 use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
 
 use crate::StoreError;
@@ -51,6 +51,7 @@ fn to_row(comment: &Comment) -> Result<item_comments::ActiveModel, StoreError> {
         body: Set(comment.body.as_str().to_owned()),
         created_by: Set(id_to_db(comment.created_by.as_uuid())),
         created_at: Set(comment.created_at.as_millis()),
+        run_id: Set(comment.run_id.map(|id| id_to_db(id.as_uuid()))),
     })
 }
 
@@ -70,5 +71,10 @@ fn to_comment(row: item_comments::Model) -> Result<Comment, StoreError> {
         body: CommentBody::from_stored(row.body),
         created_by: UserId::from_uuid(read.uuid(&row.created_by)?),
         created_at: read.timestamp(row.created_at)?,
+        run_id: row
+            .run_id
+            .as_deref()
+            .map(|raw| read.uuid(raw).map(RunId::from_uuid))
+            .transpose()?,
     })
 }

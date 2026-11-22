@@ -6,7 +6,7 @@
 
 use crate::text::{Context, parse_required};
 use crate::validation::Field;
-use crate::{CommentId, ItemId, Timestamp, UserId, ValidationError};
+use crate::{CommentId, ItemId, RunId, Timestamp, UserId, ValidationError};
 
 /// The most comments one item has.
 ///
@@ -79,6 +79,8 @@ pub struct Comment {
     pub body: CommentBody,
     pub created_by: UserId,
     pub created_at: Timestamp,
+    /// The run an agent wrote it in. `None` for a comment a person wrote themselves.
+    pub run_id: Option<RunId>,
 }
 
 impl Comment {
@@ -98,7 +100,14 @@ impl Comment {
             body,
             created_by,
             created_at: now,
+            run_id: None,
         }
+    }
+
+    /// The comment as written in `run`, the run of the request that adds it, if any.
+    #[must_use]
+    pub fn written_in(self, run: Option<RunId>) -> Self {
+        Self { run_id: run, ..self }
     }
 }
 

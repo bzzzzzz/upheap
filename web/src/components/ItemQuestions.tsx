@@ -19,6 +19,7 @@ import { useFocusAfterRender } from "./useFocusAfterRender";
 import { useUserNameAtStart } from "./userName";
 import { RequestId } from "./RequestId";
 import { Saving } from "./Saving";
+import { sectionHeadingClass } from "./sectionHeading";
 
 export const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 const detailsButtonClass = `-ml-1 flex min-h-9 items-center gap-1 self-start rounded-lg px-1 text-sm text-ink-soft hover:text-ink ${focusClass} pointer-coarse:min-h-11`;
@@ -301,7 +302,7 @@ export function WaitsForYou({ heapRef, item, waits }: { heapRef: HeapRef; item: 
           aria-label="Waits for you"
           className="flex flex-col gap-1.5 rounded-xl border-2 border-accent bg-accent/10 p-3"
         >
-          <h3 className="text-xs font-medium text-accent-ink">Waits for you</h3>
+          <h3 className="text-sm font-semibold text-accent-ink">Waits for you</h3>
           <div className="flex flex-col divide-y divide-accent/30">
             {blocker && (
               <ul className="py-3 first:pt-0 last:pb-0">
@@ -404,7 +405,7 @@ export function ItemQuestions({ heapRef, item, waits }: { heapRef: HeapRef; item
   if ((item.questions ?? []).length === 0 && !canAsk && !asking) return null;
   return (
     <section aria-label="Questions" className="flex flex-col gap-2 border-t border-line pt-3">
-      <h3 className="text-xs font-semibold text-muted">Questions</h3>
+      <h3 className={sectionHeadingClass}>Questions</h3>
       {first && (
         <Button
           onPress={() => {

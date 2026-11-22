@@ -6,11 +6,10 @@ import {
   rankedKey,
   closedKey,
   itemKey,
-  waitingKey,
-  decisionsKey,
   acrossHeapsKey,
+  acrossClosedKey,
   invalidateHeap,
-  invalidateOpenCounts,
+  invalidateCounts,
   itemEditsScope,
 } from "./keys";
 
@@ -28,10 +27,7 @@ export function useBecame(heap: HeapRef) {
         }),
       ),
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
   });
 }
 
@@ -57,18 +53,17 @@ export function useMoveItem(heap: HeapRef) {
     },
     onSuccess: (saved, { to }) => queryClient.setQueryData(itemKey(to, saved.key), saved),
     onSettled: (saved, _error, { item, to }) => {
-      invalidateOpenCounts(queryClient);
       const gone = hashKey(itemKey(heap, item.key));
       for (const queryKey of [rankedKey(heap), rankedKey(to), closedKey(heap), closedKey(to)]) {
         void queryClient.invalidateQueries({ queryKey });
       }
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
+      void queryClient.invalidateQueries({ queryKey: acrossClosedKey });
       void queryClient.invalidateQueries({
         queryKey: everyItemKey,
         predicate: (query) => saved === undefined || query.queryHash !== gone,
       });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
-      void queryClient.invalidateQueries({ queryKey: decisionsKey });
+      void invalidateCounts(queryClient);
     },
   });
 }
@@ -96,14 +91,13 @@ export function useMoveItems(heap: HeapRef) {
         }),
       ),
     onSettled: (_response, _error, { to }) => {
-      invalidateOpenCounts(queryClient);
       for (const queryKey of [rankedKey(heap), rankedKey(to), closedKey(heap), closedKey(to)]) {
         void queryClient.invalidateQueries({ queryKey });
       }
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
+      void queryClient.invalidateQueries({ queryKey: acrossClosedKey });
       void queryClient.invalidateQueries({ queryKey: everyItemKey });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
-      void queryClient.invalidateQueries({ queryKey: decisionsKey });
+      void invalidateCounts(queryClient);
     },
   });
 }
@@ -124,9 +118,6 @@ export function useNoteToStep(heap: HeapRef) {
         }),
       ),
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
   });
 }

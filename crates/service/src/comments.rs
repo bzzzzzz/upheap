@@ -78,7 +78,8 @@ impl Services {
             body,
             principal.user_id,
             now,
-        );
+        )
+        .written_in(principal.run);
         store::comments::insert_comment(txn, &comment).await?;
         let entry = self.item_audit_entry(
             heap,

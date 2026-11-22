@@ -8,10 +8,31 @@ const headers = { "x-csrf-protection": "1" };
 
 type Need = "idea" | "expected" | "critical";
 
-/** Adds an item to the heap at `heapPath` through the API. */
+/** Adds an item to the heap at `heapPath` through the API, and returns it. */
 async function seed(page: Page, heapPath: string, title: string, need: Need = "expected") {
   const created = await page.request.post(`/api/v1${heapPath}/items`, { headers, data: { title, need } });
   expect(created.status()).toBe(201);
+  return (await created.json()) as { key: string; version: number };
+}
+
+/** Adds an item to the heap at `heapPath` and closes it as done, through the API. */
+async function seedClosed(page: Page, heapPath: string, title: string) {
+  const item = await seed(page, heapPath, title);
+  const closed = await page.request.patch(`/api/v1${heapPath}/items/${item.key}`, {
+    headers: { ...headers, "If-Match": `"${item.version}"` },
+    data: { state: "done" },
+  });
+  expect(closed.status()).toBe(200);
+}
+
+/** Goes to Closed or Activity from the views on screen: the sidebar's or the rail's, or the phone's More. */
+async function openView(page: Page, name: "Closed" | "Activity") {
+  if (isPhone(page)) {
+    await page.getByRole("navigation", { name: "Heap views" }).getByRole("button", { name: "More" }).click();
+    await page.getByRole("navigation", { name: "More" }).getByRole("link", { name, exact: true }).click();
+  } else {
+    await page.getByRole("navigation", { name: "Heap views" }).getByRole("link", { name, exact: true }).click();
+  }
 }
 
 /** Makes a team "Acme" with a heap "Launch" and returns the heap's path. */
@@ -229,6 +250,7 @@ test("the heap switcher's All <team> items row opens the team's list", async ({ 
   await expect(page).toHaveURL(/\/all\?team=/);
   await expect(row(page, "Rotate the certs")).toHaveCount(0);
   await expect(row(page, "Plan the launch")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch heap: All Acme items", exact: true })).toBeVisible();
 });
 
 test("a team the person is not in says so", async ({ page, heapPath }) => {
@@ -257,33 +279,95 @@ test("Done on a row leaves the list and offers to undo", async ({ page, heapPath
   await expect(row(page, "Plan the launch")).toBeVisible();
 });
 
-test("the navigation leads to All items", async ({ page, heapPath }) => {
+test("the heap switcher leads to All items and its button names it there", async ({ page, heapPath }) => {
   await seed(page, heapPath, "Rotate the certs");
   await seed(page, heapPath, "Water the plants");
   await page.reload();
+  const shell = page.getByRole("complementary", { name: "Heaps and views" });
+  await expect(shell.getByRole("link", { name: /^All/ })).toHaveCount(0);
 
-  if (isPhone(page)) {
-    await page.getByRole("button", { name: /^Switch heap/ }).click();
-    const entry = page.getByRole("menuitem", { name: /^All heaps/ });
-    await expect(entry).toContainText("2");
-    await entry.click();
-  } else {
-    const wide = (page.viewportSize()?.width ?? 0) >= 1024;
-    const entry = page.getByRole("complementary", { name: "Heaps and views" }).getByRole("link", {
-      name: wide ? "All items" : "All",
-      exact: true,
-    });
-    // Only the sidebar shows the count.
-    if (wide) await expect(entry).toContainText("2");
-    await entry.click();
-    await expect(entry).toHaveAttribute("data-status", "active");
-  }
+  await page.getByRole("button", { name: /^Switch heap/ }).click();
+  const entry = page.getByRole("menuitem", { name: /^All heaps/ });
+  await expect(entry).toContainText("2");
+  await entry.click();
+
   await expect(page).toHaveURL(/\/all$/);
   await expect(page.getByRole("heading", { name: "All items · 2", level: 1 })).toBeVisible();
-  // The heap's views stay: the shell keeps the heap opened last.
-  await expect(
-    page.getByRole("navigation", { name: "Heap views" }).getByRole("link", { name: "Open", exact: true }),
-  ).toBeVisible();
+  // The button reads as the row chosen, and the row is the current one.
+  const button = page.getByRole("button", { name: "Switch heap: All heaps", exact: true });
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect(page.getByRole("menuitem", { name: /^All heaps\s*, 2 open\s*, current$/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  // No heap is the current one: the views are the pages across heaps, with none of a heap's own.
+  const views = page.getByRole("navigation", { name: "Heap views" });
+  await expect(views.getByRole("link", { name: "Open", exact: true })).toHaveAttribute("data-status", "active");
+  await expect(views.getByRole("link", { name: "Open", exact: true })).toHaveAttribute("href", /\/all$/);
+  await expect(views.getByRole("link", { name: "Settings", exact: true })).toHaveCount(0);
+});
+
+test("Closed and Activity from All heaps cover every heap, each row with its heap", async ({ page, heapPath }) => {
+  const launch = await makeLaunchHeap(page);
+  const personal = await heapName(page, heapPath);
+  await seedClosed(page, heapPath, "Rotate the certs");
+  await seedClosed(page, launch, "Plan the launch");
+  await seed(page, launch, "Still open");
+  await page.goto("/all");
+  await expect(row(page, "Still open")).toBeVisible();
+
+  await openView(page, "Closed");
+  await expect(page).toHaveURL(/\/all\/closed$/);
+  await expect(page.getByRole("heading", { name: "Closed", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Switch heap: All heaps", exact: true })).toBeVisible();
+  const closedRow = (title: string) => page.getByRole("listitem").filter({ hasText: title });
+  // Most recently closed first, each with its heap, and the team's name where the person is in two.
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveText([/Plan the launch/, /Rotate the certs/]);
+  await expect(closedRow("Plan the launch")).toContainText("Launch · Acme");
+  await expect(closedRow("Rotate the certs")).toContainText(personal);
+
+  // Reopen works in the item's own heap, and the item leaves the list.
+  await closedRow("Plan the launch").getByRole("button", { name: "Reopen" }).click();
+  await expect(closedRow("Plan the launch")).toHaveCount(0);
+  await expect(closedRow("Rotate the certs")).toBeVisible();
+
+  await openView(page, "Activity");
+  await expect(page).toHaveURL(/\/all\/activity$/);
+  await expect(page.getByRole("heading", { name: "Activity", level: 1 })).toBeVisible();
+  const entries = page.getByRole("main").getByRole("listitem");
+  // Newest first: the reopening, in its heap.
+  await expect(entries.first()).toContainText("Plan the launch");
+  await expect(entries.first()).toContainText("Launch · Acme");
+  await expect(entries.filter({ hasText: "Rotate the certs" }).first()).toContainText(personal);
+});
+
+test("Closed and Activity from a team's items cover that team's heaps only", async ({ page, heapPath }) => {
+  const launch = await makeLaunchHeap(page);
+  const team = launch.split("/")[2];
+  await seedClosed(page, heapPath, "Rotate the certs");
+  await seedClosed(page, launch, "Plan the launch");
+  await page.goto(`/all?team=${team}`);
+  await expect(page.getByRole("button", { name: "Switch heap: All Acme items", exact: true })).toBeVisible();
+
+  await openView(page, "Closed");
+  await expect(page).toHaveURL(new RegExp(`/all/closed\\?team=${team}$`));
+  await expect(page.getByRole("button", { name: "Switch heap: All Acme items", exact: true })).toBeVisible();
+  // The heap alone names the row: the team is the one chosen.
+  await expect(page.getByRole("main").getByRole("listitem")).toHaveText([/Plan the launch.*· Launch(?! · Acme)/]);
+  await expect(page.getByText("Acme's heaps, newest first.")).toBeVisible({ visible: !isPhone(page) });
+
+  await openView(page, "Activity");
+  await expect(page).toHaveURL(new RegExp(`/all/activity\\?team=${team}$`));
+  const entries = page.getByRole("main").getByRole("listitem");
+  await expect(entries.filter({ hasText: "Plan the launch" }).first()).toBeVisible();
+  await expect(entries.filter({ hasText: "Rotate the certs" })).toHaveCount(0);
+  await expect(page.getByText("Acme's heaps, as far as you can see.")).toBeVisible();
+});
+
+test("a team the person is not in has no closed items or activity", async ({ page }) => {
+  await page.goto("/all/closed?team=nobody-here");
+  await expect(page.getByRole("heading", { name: "This team isn't here" })).toBeVisible();
+  await page.goto("/all/activity?team=nobody-here");
+  await expect(page.getByRole("heading", { name: "This team isn't here" })).toBeVisible();
 });
 
 test("with nothing open there is a line saying so", async ({ page }) => {

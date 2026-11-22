@@ -1,4 +1,4 @@
-import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Archive, Check, ChevronRight, Clock, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import {
@@ -18,6 +18,7 @@ import { ApiProblem, type HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useCreateHeap } from "../api/queries/heaps";
 import { useTeam } from "../api/queries/teams";
+import { acrossTeam, useAcrossHeaps } from "./acrossHeaps";
 import { readFoldedTeams, readRecentHeaps, writeFoldedTeams } from "./heapSwitcherStorage";
 import { Kbd } from "./Kbd";
 import { PHONE, TOUCH, useMedia } from "./media";
@@ -63,8 +64,8 @@ const chipClass =
 /**
  * Every heap, by team, with a check on the one on screen (ux.md, Phone details): a popover beside the rail on a
  * tablet or under the sidebar's heap button on a wide screen, a sheet on a phone. With many heaps it adds search,
- * Recent and folding teams. On a phone it starts with All heaps, the list across them, which a wider screen reaches
- * from the sidebar. It ends with a new heap in the heap's own team, where the user may create one.
+ * Recent and folding teams. It starts with All heaps, the list across them, which nothing else in the navigation
+ * leads to. It ends with a new heap in the heap's own team, where the user may create one.
  */
 export function HeapSwitcher({
   me,
@@ -143,15 +144,18 @@ function SwitcherBody({
   const phone = useMedia(PHONE);
   const coarse = useMedia(TOUCH);
   const entries: Entry[] = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
-  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
-  const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
-  // On All items the kept heap is only where Add goes; only the All heaps row, or its team's, is the current one.
+  const across = useAcrossHeaps();
+  const onAll = across !== undefined;
+  const allTeam = across?.team;
+  // On the pages across heaps the kept heap is only where Add goes; only the All heaps row, or its team's, is the
+  // current one.
   const current = onAll
     ? undefined
     : entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
   const long = entries.filter((e) => !e.heap.archived).length >= LONG_LIST;
   const several = me.teams.length > 1;
-  const onAllHeaps = onAll && allTeam === undefined;
+  // A team in the address that isn't one of several the person is in has no row of its own.
+  const onAllHeaps = onAll && acrossTeam(me, allTeam) === undefined;
 
   const [text, setText] = useState("");
   const [folded, setFolded] = useState(readFoldedTeams);
@@ -231,10 +235,9 @@ function SwitcherBody({
               className={`size-3.5 shrink-0 max-sm:order-last motion-safe:transition-transform ${isFolded ? "" : "rotate-90"}`}
             />
             <span className="min-w-0 flex-1 truncate">{label}</span>
-            <span className="shrink-0 font-normal">{unarchived.length}</span>
           </MenuItem>
         ) : (
-          several && <SectionTitle count={unarchived.length}>{label}</SectionTitle>
+          several && <SectionTitle>{label}</SectionTitle>
         )}
         {!isFolded && several && (
           <MenuItem
@@ -300,27 +303,25 @@ function SwitcherBody({
         </>
       ) : (
         <>
-          {phone && (
-            <MenuSection aria-label="All heaps" className={sectionClass}>
-              <MenuItem
-                id="all"
-                textValue="All heaps"
-                href={{ to: "/all" }}
-                onAction={close}
-                className={`${rowClass} ${onAllHeaps ? currentRowClass : ""}`}
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  All heaps
-                  <span className="sr-only">, {openItemCount(me, allTeam)} open</span>
-                  {onAllHeaps && <span className="sr-only">, current</span>}
-                </span>
-                <OpenCount count={openItemCount(me, allTeam)} />
-                <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
-                  {onAllHeaps && <Check className="size-4" strokeWidth={3} />}
-                </span>
-              </MenuItem>
-            </MenuSection>
-          )}
+          <MenuSection aria-label="All heaps" className={sectionClass}>
+            <MenuItem
+              id="all"
+              textValue="All heaps"
+              href={{ to: "/all" }}
+              onAction={close}
+              className={`${rowClass} ${onAllHeaps ? currentRowClass : ""}`}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                All heaps
+                <span className="sr-only">, {openItemCount(me)} open</span>
+                {onAllHeaps && <span className="sr-only">, current</span>}
+              </span>
+              <OpenCount count={openItemCount(me)} />
+              <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
+                {onAllHeaps && <Check className="size-4" strokeWidth={3} />}
+              </span>
+            </MenuItem>
+          </MenuSection>
           {long && recent.length > 0 && (
             <MenuSection
               aria-label="Recent"
@@ -381,7 +382,8 @@ function SwitcherBody({
       {createIn && draft !== null ? (
         <NewHeapForm me={me} team={createIn} initialName={draft} onCancel={() => setDraft(null)} onCreated={close} />
       ) : (
-        <div className="flex items-center gap-3">
+        // A long team name leaves no room for the key hints beside the button: they go under it, whole.
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {/* While searching with a keyboard, the results' own row makes the heap, and the footer says what matched. */}
           {searching && hint ? (
             <p className="min-w-0 truncate text-[11px] text-muted">Archived heaps match too, listed last</p>
@@ -433,11 +435,10 @@ function SwitcherBody({
 /** A section of the list, set apart from the one above; its title is a band a shade off the panel. */
 const sectionClass = "flex flex-col not-first:mt-3";
 
-export function SectionTitle({ children, count }: { children: ReactNode; count?: number }) {
+export function SectionTitle({ children }: { children: ReactNode }) {
   return (
     <Header className="flex items-center px-3 text-xs font-semibold tracking-wide text-ink-soft uppercase max-sm:shrink-0 max-sm:pt-2.5 max-sm:pb-0.5 sm:mb-1 sm:min-h-8 sm:rounded-lg sm:bg-sunken sm:px-2.5 sm:text-[11px]">
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {count !== undefined && <span className="shrink-0 font-normal">{count}</span>}
     </Header>
   );
 }
@@ -549,7 +550,7 @@ function NewHeapButton({ me, team, onClick }: { me: Me; team: SwitcherTeam; onCl
     <button
       type="button"
       onClick={onClick}
-      className={`${newHeapButtonClass} min-w-0 sm:min-h-[34px] sm:flex-none sm:rounded-lg sm:px-2.5 sm:text-[13px] sm:font-medium sm:pointer-coarse:min-h-11`}
+      className={`${newHeapButtonClass} max-w-full min-w-0 sm:min-h-[34px] sm:flex-none sm:rounded-lg sm:px-2.5 sm:text-[13px] sm:font-medium sm:pointer-coarse:min-h-11`}
     >
       <Plus aria-hidden="true" className="size-4 shrink-0 sm:size-3.5" strokeWidth={2.5} />
       <span className="truncate">New heap in {teamName(team, me)}</span>

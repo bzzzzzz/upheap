@@ -589,7 +589,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       {/* History starts collapsed and loads once opened; each item opens with it collapsed again. Who added the
           item stays in view, on the same line as History's toggle. */}
       <section aria-label="History" className="relative border-t border-line pt-3">
-        <HistoryDisclosure scope={{ heap: heapRef }} entityId={item.id} className="" />
+        <HistoryDisclosure scope={{ heap: heapRef }} entityId={item.id} className="" section />
         <div className="absolute top-3 right-0 flex h-9 items-center pointer-coarse:h-11">
           <AddedBy item={item} />
         </div>

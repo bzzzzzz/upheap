@@ -182,6 +182,35 @@ test("the heap switcher starts a new heap in the heap's team", async ({ page }) 
   await expect(page.getByRole("button", { name: "Switch heap: Garden" })).toBeVisible();
 });
 
+test("the key hints stay whole under the New heap button when the team's name is long", async ({ page }) => {
+  await createTeam(page, "The Department of Long Names");
+  await page.getByRole("button", { name: "+ New heap" }).click();
+  await page.getByLabel("New heap name").fill("Launch");
+  await page.getByRole("button", { name: "Add heap" }).click();
+  await page
+    .getByRole("region", { name: "Heaps" })
+    .getByRole("link", { name: /Launch/ })
+    .click();
+  await expect(page).toHaveURL(/\/heaps\/launch$/);
+  const heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("button", { name: /^New heap in / })).toBeVisible();
+  // The hints are for a keyboard: a phone, or a finger on a tablet, has none.
+  test.skip(isNarrow(page) || (await isCoarse(page)), "no key hints without a keyboard");
+
+  const hints = heaps.getByText("↑↓ move · ↵ open · esc");
+  await expect(hints).toBeVisible();
+  await expect
+    .poll(async () => {
+      const panel = await heaps.boundingBox();
+      const box = await hints.boundingBox();
+      if (!panel || !box) return false;
+      return (
+        Math.round(box.x) >= Math.round(panel.x) && Math.round(box.x + box.width) <= Math.round(panel.x + panel.width)
+      );
+    })
+    .toBe(true);
+});
+
 test("a heap made from the switcher takes the link name given", async ({ page }) => {
   const heaps = await openSwitcher(page);
   await heaps.getByRole("button", { name: /^New heap in / }).click();

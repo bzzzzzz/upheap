@@ -658,6 +658,25 @@ impl Services {
             })
             .flatten();
 
+        let items = self
+            .closed_item_views(principal, &access.heap, access.membership.role, items)
+            .await?;
+        Ok(ClosedPage {
+            heap: access.heap,
+            items,
+            next,
+        })
+    }
+
+    /// Closed items of `heap`, as its Closed list shows them to someone with `role` there, in the order given.
+    pub(crate) async fn closed_item_views(
+        &self,
+        principal: Principal,
+        heap: &Heap,
+        role: Role,
+        items: Vec<Item>,
+    ) -> Result<Vec<ItemView>, ServiceError> {
+        let heap_id = heap.id;
         let heap_tags = store::tags::list_tags(&self.db, heap_id).await?;
         let parameters = store::parameters::list_parameters(&self.db, heap_id).await?;
         let users = load_item_users(&self.db, &items).await?;
@@ -679,12 +698,11 @@ impl Services {
         .await?;
         let mut step_progress = store::steps::count_step_progress(&self.db, &item_ids).await?;
         let now = self.now();
-        let role = access.membership.role;
         let items = items
             .into_iter()
             .map(|item| {
                 // Closed items have no open turn: closing ends it.
-                let allowance = item_allowance(&item, &access.heap, role, false, false, None, now);
+                let allowance = item_allowance(&item, heap, role, false, false, None, now);
                 let step_progress = step_progress.remove(&item.id);
                 let tags = select_tags(&heap_tags, &item.tags);
                 let values = describe_values(&item, &parameters);
@@ -721,11 +739,7 @@ impl Services {
                 }
             })
             .collect();
-        Ok(ClosedPage {
-            heap: access.heap,
-            items,
-            next,
-        })
+        Ok(items)
     }
 
     /// Adds an item to the heap: open, or blocked when `fields.blocked_by` names the item it waits for. Every tag must

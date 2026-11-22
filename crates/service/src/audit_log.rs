@@ -9,12 +9,13 @@ use std::collections::{BTreeSet, HashMap};
 
 use domain::audit::{AuditAction, AuditField, EntityType};
 use domain::due::{describe_due_date, describe_time};
+use domain::heap::Heap;
 use domain::item::{Due, Kind, Need, Size, Stage, StateKind};
 use domain::permission::{Permission, visible_audit_actions};
 use domain::question::QuestionKind;
 use domain::step::StepState;
 use domain::tag::TagColor;
-use domain::team::Role;
+use domain::team::{Role, Team};
 use domain::text_diff::{WordDiff, diff_words};
 use domain::turn::{Goal, Reach, TakeBackWhy, TurnSource};
 use domain::{HeapId, ItemId, RunId, SavedViewId, TeamId, Timestamp, UserId};
@@ -38,6 +39,22 @@ pub struct AuditPage {
     pub entries: Vec<AuditEntryView>,
     /// Where the next page starts; `None` on the last page.
     pub next: Option<AuditCursor>,
+}
+
+/// A page of what happened across heaps, newest first.
+#[derive(Debug)]
+pub struct AcrossHeapsAuditPage {
+    pub rows: Vec<AcrossHeapsAuditRow>,
+    /// Where the next page starts; `None` on the last page.
+    pub next: Option<AuditCursor>,
+}
+
+/// An entry of the history across heaps, with the heap it was made in.
+#[derive(Debug)]
+pub struct AcrossHeapsAuditRow {
+    pub heap: Heap,
+    pub team: Team,
+    pub entry: AuditEntryView,
 }
 
 /// An audit entry with what is needed to show it.
@@ -140,6 +157,24 @@ impl Services {
         };
         let (entries, next) = self.read_page(scope, &actions, request).await?;
 
+        let mut names = Names::default();
+        self.insert_heap_entry_names(&mut names, &entries, Some((heap_id, access.heap.team_id)))
+            .await?;
+        self.insert_saved_view_names(&mut names, &entries, heap_id).await?;
+        self.insert_user_names(&mut names, &entries).await?;
+        let runs = self.find_audit_runs(principal.user_id, &entries).await?;
+        Ok(present_page(entries, next, &names, &runs, tz))
+    }
+
+    /// Adds what entries made in heaps name: the heaps, their tags, parameters and options, and the items. `home` is
+    /// the heap the history is read for, and its team, whose names are added whatever the entries are; its items are
+    /// looked for first.
+    async fn insert_heap_entry_names(
+        &self,
+        names: &mut Names,
+        entries: &[AuditEntry],
+        home: Option<(HeapId, TeamId)>,
+    ) -> Result<(), ServiceError> {
         // An item's history follows it between heaps and teams, and so can a blocker, so what the entries name may be
         // in any heap of any team they come from: the heaps' names, their tags, parameters and options, and the items.
         // Size assumption: a team holds a handful of heaps, each with tens of tags and parameters, so all of them are
@@ -148,23 +183,22 @@ impl Services {
         let entry_teams: Vec<TeamId> = entries
             .iter()
             .map(|entry| entry.team_id)
-            .chain([access.heap.team_id])
+            .chain(home.map(|(_, team)| team))
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
-        let mut names = Names::default();
-        let mut team_heaps = vec![heap_id];
+        let mut team_heaps: Vec<HeapId> = home.iter().map(|(heap, _)| *heap).collect();
         for heap in store::heaps::list_heaps_for_teams(&self.db, &entry_teams).await? {
             names.insert(*heap.id.as_uuid(), heap.name.as_str());
-            if heap.id != heap_id {
+            if home.is_none_or(|(home, _)| heap.id != home) {
                 team_heaps.push(heap.id);
             }
         }
         for heap in &team_heaps {
-            self.insert_heap_vocabulary(&mut names, *heap).await?;
+            self.insert_heap_vocabulary(names, *heap).await?;
         }
         // The items the entries name, looked for in this heap and then in the others until all are found.
-        let mut missing: Vec<ItemId> = collect_referenced_items(&entries)
+        let mut missing: Vec<ItemId> = collect_referenced_items(entries)
             .into_iter()
             .map(ItemId::from_uuid)
             .collect();
@@ -188,15 +222,99 @@ impl Services {
             }
             missing.retain(|item| names.get(*item.as_uuid()).is_none());
         }
-        let views: Vec<SavedViewId> = collect_entity_ids(&entries, EntityType::SavedView)
+        Ok(())
+    }
+
+    /// Adds the names of the saved views of `heap_id` that entries are about.
+    async fn insert_saved_view_names(
+        &self,
+        names: &mut Names,
+        entries: &[AuditEntry],
+        heap_id: HeapId,
+    ) -> Result<(), ServiceError> {
+        let views: Vec<SavedViewId> = collect_entity_ids(entries, EntityType::SavedView)
             .map(SavedViewId::from_uuid)
             .collect();
         for view in store::saved_views::list_saved_views_by_ids(&self.db, heap_id, &views).await? {
             names.insert(*view.id.as_uuid(), view.name.as_str());
         }
+        Ok(())
+    }
+
+    /// What happened in the active heaps the caller may view, of all their teams or of `team` alone, newest first:
+    /// in each heap what [`Self::list_heap_audit`] shows them there, by their role in its team. Each entry comes
+    /// with its heap and team. `request.entity_id` is not read: one entity's history is its heap's to give. The
+    /// caller must be in `team`: resolve it with [`resolve_team`](Self::resolve_team) first.
+    ///
+    /// Size assumption: as for a heap's history, the names of every heap of the teams on the page are loaded on
+    /// each read, here over all the caller's teams.
+    pub async fn list_audit_across_heaps(
+        &self,
+        principal: Principal,
+        team: Option<TeamId>,
+        request: AuditRequest,
+        tz: &TimeZone,
+    ) -> Result<AcrossHeapsAuditPage, ServiceError> {
+        let mut viewable = self.list_viewable_heaps(principal).await?;
+        if let Some(team) = team {
+            viewable.retain(|viewable| viewable.team.id == team);
+        }
+        let mut groups: Vec<(TeamId, Vec<HeapId>, Vec<AuditAction>)> = Vec::new();
+        for heap in &viewable {
+            match groups.iter_mut().find(|(team, ..)| *team == heap.team.id) {
+                Some((_, heaps, _)) => heaps.push(heap.heap.id),
+                None => groups.push((heap.team.id, vec![heap.heap.id], visible_audit_actions(heap.role))),
+            }
+        }
+        let mut any: Vec<AuditAction> = groups
+            .iter()
+            .flat_map(|(.., actions)| actions.iter().copied())
+            .collect();
+        any.sort_by_key(|action| *action as usize);
+        any.dedup();
+        let groups: Vec<(Vec<HeapId>, Vec<AuditAction>)> =
+            groups.into_iter().map(|(_, heaps, actions)| (heaps, actions)).collect();
+        let request = AuditRequest {
+            entity_id: None,
+            ..request
+        };
+        let (entries, next) = self.read_page(AuditScope::Heaps(&groups), &any, request).await?;
+
+        let mut names = Names::default();
+        self.insert_heap_entry_names(&mut names, &entries, None).await?;
+        let heaps: BTreeSet<HeapId> = entries
+            .iter()
+            .filter(|entry| entry.entity_type == EntityType::SavedView)
+            .filter_map(|entry| entry.heap_id)
+            .collect();
+        for heap in heaps {
+            self.insert_saved_view_names(&mut names, &entries, heap).await?;
+        }
         self.insert_user_names(&mut names, &entries).await?;
         let runs = self.find_audit_runs(principal.user_id, &entries).await?;
-        Ok(present_page(entries, next, &names, &runs, tz))
+        // The scope reads entries of these heaps only, so each has its heap among them.
+        let places: Vec<Option<(Heap, Team)>> = entries
+            .iter()
+            .map(|entry| {
+                viewable
+                    .iter()
+                    .find(|viewable| Some(viewable.heap.id) == entry.heap_id)
+                    .map(|viewable| (viewable.heap.clone(), viewable.team.clone()))
+            })
+            .collect();
+        let page = present_page(entries, next, &names, &runs, tz);
+        Ok(AcrossHeapsAuditPage {
+            rows: page
+                .entries
+                .into_iter()
+                .zip(places)
+                .filter_map(|(entry, place)| {
+                    let (heap, team) = place?;
+                    Some(AcrossHeapsAuditRow { heap, team, entry })
+                })
+                .collect(),
+            next: page.next,
+        })
     }
 
     /// The runs `entries` were made in, with the item each worked on where `viewer` may view its heap.

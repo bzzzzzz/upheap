@@ -4,6 +4,8 @@ import { Button } from "react-aria-components";
 import type { HeapRef } from "../api/client";
 import type { Item } from "../api/schema";
 import { useAddComment } from "../api/queries/comments";
+import { useMe } from "../api/queries/me";
+import { AgentMark } from "./AuditHistory";
 import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { focusClass } from "./ItemQuestions";
@@ -13,6 +15,7 @@ import type { MarkdownEditorHandle } from "./MarkdownEditor";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 import { RequestId } from "./RequestId";
 import { Saving } from "./Saving";
+import { sectionHeadingClass } from "./sectionHeading";
 
 /**
  * An item's comments (ux.md, The item §18): the thread under the context, oldest first, at every width and always
@@ -27,6 +30,7 @@ import { Saving } from "./Saving";
  */
 export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const add = useAddComment(heapRef, item.key);
+  const { data: me } = useMe();
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState("");
   const fieldRef = useRef<MarkdownEditorHandle>(null);
@@ -54,20 +58,37 @@ export function ItemComments({ heapRef, item }: { heapRef: HeapRef; item: Item }
   };
 
   return (
-    <section aria-label="Comments" className="flex flex-col gap-2">
-      <h3 className="text-xs font-medium text-ink-soft">
-        {comments.length > 0 ? `Comments ${comments.length}` : "Comments"}
-      </h3>
+    <section aria-label="Comments" className="flex flex-col gap-2 border-t border-line pt-3">
+      <h3 className={sectionHeadingClass}>{comments.length > 0 ? `Comments ${comments.length}` : "Comments"}</h3>
       {comments.length > 0 && (
-        <ul className="flex flex-col divide-y divide-line">
-          {comments.map((comment) => (
-            <li key={comment.number} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0">
-              <p className="text-xs text-ink-soft">
-                {comment.created_by?.display_name ?? "Someone"} · {comment.created_label}
-              </p>
-              <Markdown text={comment.body} />
-            </li>
-          ))}
+        <ul className="flex flex-col gap-2">
+          {comments.map((comment) => {
+            const name = comment.created_by?.display_name ?? "Someone";
+            const own = comment.created_by != null && comment.created_by.id === me?.user.id;
+            return (
+              // Each comment is its own card, so where one ends and the next starts shows without reading. An agent's
+              // is tinted with the agents' colour and names the agent, as its entry in the history does, with a link
+              // to the run when the item lists it.
+              <li
+                key={comment.number}
+                className={`flex flex-col gap-1 rounded-lg border px-3 py-2 ${comment.run_id ? "border-agent/30 bg-agent-soft/50" : "border-line bg-sunken"}`}
+              >
+                <p className="text-xs text-muted">
+                  {comment.run_id ? (
+                    <AgentMark
+                      runId={comment.run_id}
+                      at={item.runs?.some((run) => run.id === comment.run_id) ? { ...heapRef, item: item.key } : null}
+                      who={own ? "Your agent" : `${name}'s agent`}
+                    />
+                  ) : (
+                    <span className="font-semibold text-ink">{name}</span>
+                  )}{" "}
+                  · {comment.created_label}
+                </p>
+                <Markdown text={comment.body} />
+              </li>
+            );
+          })}
         </ul>
       )}
       <span role="status" className="sr-only">

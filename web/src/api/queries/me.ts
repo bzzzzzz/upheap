@@ -61,8 +61,8 @@ export function useWaiting() {
 }
 
 /**
- * What agents finished that waits for the person across their heaps (ux.md, Agents): its count is in the navigation,
- * so it's fetched for every page, once signed in, and again every 30 s like Waiting for me's.
+ * What agents finished that waits for the person across their heaps (ux.md, Agents), for the Agents page: fetched
+ * again every 30 s like Waiting for me, so what an agent finishes reaches the page left open.
  */
 export function useDecisions() {
   return useQuery({

@@ -36,7 +36,7 @@ impl HeapApi<'_> {
 }
 
 /// The comments of `item` as lines, oldest first: a head line `c3  Ada, 14:02` with the author and the server's
-/// time label, then the body's lines indented four spaces. Empty when it has none, or when `item` is a list row,
+/// time label (`c3  Ada's agent, 14:02` for one an agent wrote in a run), then the body's lines indented four spaces. Empty when it has none, or when `item` is a list row,
 /// which doesn't carry them. `comment list` and `item show` print these.
 ///
 /// A line break in a body stays one; a tab becomes four spaces, as the output would otherwise show it as U+FFFD. The
@@ -49,7 +49,12 @@ pub(crate) fn comment_lines(item: &ItemDto) -> Vec<String> {
             .created_by
             .as_ref()
             .map_or("Someone", |user| user.display_name.as_str());
-        lines.push(format!("c{}  {author}, {}", comment.number, comment.created_label));
+        // An agent's comment is the agent's, as the web app names it.
+        let agent = if comment.run_id.is_some() { "'s agent" } else { "" };
+        lines.push(format!(
+            "c{}  {author}{agent}, {}",
+            comment.number, comment.created_label
+        ));
         for line in comment.body.lines() {
             lines.push(if line.trim().is_empty() {
                 String::new()

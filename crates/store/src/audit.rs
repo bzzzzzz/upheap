@@ -101,6 +101,11 @@ pub enum AuditScope<'a> {
         entity_id: Uuid,
         teams: &'a [(TeamId, Vec<AuditAction>)],
     },
+    /// Everything recorded about several heaps and what is in them, as [`AuditScope::Heap`] reads one. The heaps come
+    /// in groups, a team's each, with the actions to read for that group. The query's own `actions` still apply to
+    /// every group. A group's heaps go in one `IN` list, which holds while a person views far fewer heaps than a
+    /// backend's bound-parameter limit.
+    Heaps(&'a [(Vec<HeapId>, Vec<AuditAction>)]),
 }
 
 /// Position after which a page of audit entries starts: the last entry of the previous page.
@@ -128,7 +133,8 @@ pub async fn list_audit_entries(
     db: &impl ConnectionTrait,
     query: AuditQuery<'_>,
 ) -> Result<Vec<AuditEntry>, StoreError> {
-    if query.actions.is_empty() {
+    // `Condition::any()` of nothing matches every row.
+    if query.actions.is_empty() || matches!(query.scope, AuditScope::Heaps(groups) if groups.is_empty()) {
         return Ok(Vec::new());
     }
     let mut select = audit_log::Entity::find()
@@ -142,6 +148,13 @@ pub async fn list_audit_entries(
                     .add(audit_log::Column::HeapId.is_null())
                     .add(audit_log::Column::EntityType.eq(EntityType::Heap.code())),
             ),
+        AuditScope::Heaps(groups) => select.filter(groups.iter().fold(Condition::any(), |any, (heaps, actions)| {
+            any.add(
+                Condition::all()
+                    .add(audit_log::Column::HeapId.is_in(heaps.iter().map(|heap| id_to_db(heap.as_uuid()))))
+                    .add(audit_log::Column::Action.is_in(actions.iter().map(|action| action.code()))),
+            )
+        })),
         AuditScope::Entity { entity_id, teams } => select
             .filter(audit_log::Column::HeapId.is_not_null())
             .filter(audit_log::Column::EntityId.eq(id_to_db(&entity_id)))

@@ -9,7 +9,7 @@ use domain::list_view::ListView;
 use domain::team::Team;
 use domain::{HeapId, ParameterId, TeamId, Timestamp};
 
-use crate::items::{RankedEntry, RankedList};
+use crate::items::{ClosedCursor, ItemView, MAX_CLOSED_PAGE, RankedEntry, RankedList};
 use crate::{Principal, ServiceError, Services};
 
 /// Most rows [`Services::list_ranked_across_heaps`] returns, in all groups together. A person has tens to a few
@@ -49,6 +49,22 @@ pub struct AcrossHeapsList {
     pub in_progress_count: u32,
 }
 
+/// A closed item of the list across heaps, with the heap it is in.
+#[derive(Debug)]
+pub struct AcrossHeapsClosedRow {
+    pub heap: Heap,
+    pub team: Team,
+    pub item: ItemView,
+}
+
+/// A page of the closed items of all the caller's heaps, most recently closed first.
+#[derive(Debug)]
+pub struct AcrossHeapsClosedPage {
+    pub rows: Vec<AcrossHeapsClosedRow>,
+    /// Where the next page starts, or `None` on the last page.
+    pub next: Option<ClosedCursor>,
+}
+
 /// An entry on its way to the merged list: the place of its heap in the store's heap order, and the heap.
 struct Candidate {
     heap_index: usize,
@@ -64,6 +80,63 @@ impl Candidate {
 }
 
 impl Services {
+    /// The closed items of the active heaps of the caller's teams where their role may view the heap, most recently
+    /// closed first, each as its own heap's Closed list shows it ([`list_closed`](Self::list_closed)). With `team`,
+    /// only that team's heaps; the caller must be in it: resolve it with [`resolve_team`](Self::resolve_team) first.
+    pub async fn list_closed_across_heaps(
+        &self,
+        principal: Principal,
+        team: Option<TeamId>,
+        after: Option<ClosedCursor>,
+        limit: u64,
+    ) -> Result<AcrossHeapsClosedPage, ServiceError> {
+        let mut viewable = self.list_viewable_heaps(principal).await?;
+        if let Some(team) = team {
+            viewable.retain(|viewable| viewable.team.id == team);
+        }
+        let heap_ids: Vec<_> = viewable.iter().map(|viewable| viewable.heap.id).collect();
+        let limit = limit.clamp(1, MAX_CLOSED_PAGE);
+        // One extra row tells whether another page follows.
+        let mut items = store::items::list_closed_items_of_heaps(&self.db, &heap_ids, after, limit + 1).await?;
+        let has_more = items.len() as u64 > limit;
+        items.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+        let next = items.last().filter(|_| has_more).and_then(|last| {
+            last.state
+                .closed_at()
+                .map(|closed_at| ClosedCursor { closed_at, id: last.id })
+        });
+
+        // Each heap builds its own rows, with its tags, parameters and the caller's role there; then the rows go
+        // back in the order they were read in.
+        let order: Vec<_> = items.iter().map(|item| item.id).collect();
+        let mut rows = HashMap::new();
+        for viewable in &viewable {
+            let (of_heap, rest): (Vec<_>, Vec<_>) =
+                items.into_iter().partition(|item| item.heap_id == viewable.heap.id);
+            items = rest;
+            if of_heap.is_empty() {
+                continue;
+            }
+            for view in self
+                .closed_item_views(principal, &viewable.heap, viewable.role, of_heap)
+                .await?
+            {
+                rows.insert(
+                    view.item.id,
+                    AcrossHeapsClosedRow {
+                        heap: viewable.heap.clone(),
+                        team: viewable.team.clone(),
+                        item: view,
+                    },
+                );
+            }
+        }
+        Ok(AcrossHeapsClosedPage {
+            rows: order.into_iter().filter_map(|id| rows.remove(&id)).collect(),
+            next,
+        })
+    }
+
     /// The non-closed items of the active heaps of the caller's teams where their role may view the heap, ranked at
     /// one time and shown as `view` says. Each heap is ranked and grouped as its own list does
     /// ([`list_ranked`](Self::list_ranked)); then each group is merged across heaps, ordered by the item's score in

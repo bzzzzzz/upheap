@@ -51,8 +51,8 @@ async function seedReached(
   await reach(page, run, result, links);
 }
 
-/** The navigation entry: "Agents", then the Your decision count. */
-const entry = (page: Page) => page.getByRole("link", { name: /^Agents( \d+)?$/ });
+/** The navigation entry, which counts nothing. */
+const entry = (page: Page) => page.getByRole("link", { name: "Agents", exact: true });
 
 async function openAgents(page: Page) {
   await page.reload();
@@ -67,7 +67,6 @@ test("with nothing finished, the page says how to start an agent and has no Your
   await expect(page.getByText("Start one in a terminal:")).toBeVisible();
   await expect(page.getByText("upheap work run", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Your decision/ })).toHaveCount(0);
-  await expect(entry(page)).toHaveAccessibleName("Agents");
 });
 
 test("an item an agent reached is under Your decision and in the history, with its result and pull request", async ({
@@ -81,9 +80,9 @@ test("an item an agent reached is under Your decision and in the history, with i
 
   await openAgents(page);
 
-  // Your decision: the count on the heading and the entry, the item, where it is and when it arrived.
+  // Your decision: the count on the heading and not on the entry, the item, where it is and when it arrived.
   await expect(page.getByRole("button", { name: "Your decision · 1" })).toBeVisible();
-  await expect(entry(page)).toHaveAccessibleName(/ 1$/);
+  await expect(entry(page)).toHaveText("Agents");
   const decision = page.getByRole("region", { name: "Your decision" }).getByRole("listitem");
   await expect(decision).toHaveCount(1);
   await expect(decision).toContainText("Rotate the certs");
