@@ -439,6 +439,13 @@ mod tests {
     use super::*;
 
     #[gtest]
+    fn sizes_read_as_their_labels_with_a_dash_for_one_unset() {
+        expect_that!(sizes_text(Some(SizeDto::S), Some(SizeDto::Xl)), eq("S/XL"));
+        expect_that!(sizes_text(None, Some(SizeDto::L)), eq("-/L"));
+        expect_that!(sizes_text(None, None), eq("-/-"));
+    }
+
+    #[gtest]
     fn a_heap_flag_is_the_items_heap_when_it_names_it() {
         let heap = HeapHandle {
             team: "ada".to_owned(),

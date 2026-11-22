@@ -54,7 +54,7 @@ coded_enum! {
 }
 
 impl Need {
-    /// The step's name as people read it, in contributors and audit entries.
+    /// The step's name as people read it.
     pub const fn label(self) -> &'static str {
         match self {
             Self::Idea => "Idea",
@@ -78,7 +78,7 @@ coded_enum! {
 }
 
 impl Kind {
-    /// The kind as people read it, in audit entries.
+    /// The kind as people read it.
     pub const fn label(self) -> &'static str {
         match self {
             Self::Note => "Note",
@@ -110,7 +110,7 @@ coded_enum! {
 }
 
 impl Stage {
-    /// The stage as people read it, in audit entries.
+    /// The stage as people read it.
     pub const fn label(self) -> &'static str {
         match self {
             Self::AsWritten => "As written",
@@ -197,7 +197,7 @@ impl StateKind {
         matches!(self, Self::Done | Self::WontDo | Self::Became)
     }
 
-    /// The state as people read it, in audit entries.
+    /// The state as people read it.
     pub const fn label(self) -> &'static str {
         match self {
             Self::Open => "Open",

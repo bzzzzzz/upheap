@@ -4,9 +4,9 @@ A feature pull request touches 30 to 50 files, and the larger ones lately 50 to 
 doing its job: a feature crosses `domain`, `store`, `service`, `api-types`, `api`, `cli` and `web`, with tests and
 docs at each. Part of it is not: a few facts are written down in several places, and some of those places the
 compiler doesn't check, so a forgotten one still builds and shows up wrong. This track removes the unchecked
-repeats, and the checked ones where removing them is cheap. It changes no behaviour and serves no product.md
-section; it serves General §2 of the [engineering principles](../engineering-principles.md#general), one source of
-truth.
+repeats, and the checked ones where removing them is cheap. It changes no behaviour, with one exception under
+Pieces, and serves no product.md section; it serves General §2 of the
+[engineering principles](../engineering-principles.md#general), one source of truth.
 
 ## Pieces
 
@@ -45,8 +45,8 @@ listed as strings from 28 to 45, and the enums of `api-types` from 30 to 38.
 
 1. **An enum value is declared up to ten times.** A new `Stage` takes three places in `domain::item` (the variant,
    `ALL`, `code`), three in `api_types::common` (the variant, `From`, `TryFrom`), and its name as people read it
-   in `service::audit_log`, in the CLI's `item show` and in the web app's `labels.ts`, with an icon in
-   `kindIcons.tsx`. Every one of them fails the build when it's missed, except `ALL`: a variant left out of it
+   in `service::audit_log`, in the `label` forwarder in `api_types::common` and in the web app's `labels.ts`, with
+   an icon in `kindIcons.tsx`. Every one of them fails the build when it's missed, except `ALL`: a variant left out of it
    compiles, and `from_code` then answers `None` for a code that is stored.
 2. **A value's name has three homes:** `domain` (`Need::label`), `service::audit_log` (the `describe_` functions)
    and the web app (`labels.ts`). The CLI prints the domain's label through the API's enum types. Nothing ties the
