@@ -392,6 +392,50 @@ async fn views_parameters_and_tag_orders_follow_the_merge() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn an_archived_view_follows_the_merge_too() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let billing = w.heap_tag(&w.a, "billing").await?;
+    let heap_url = w.app.heap_url(&w.a).await?;
+    let view = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{heap_url}/views"),
+            Some(&w.session),
+            Some(json!({ "name": "Money", "view": { "tag": [billing] } })),
+        )
+        .await?;
+    let archived = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{heap_url}/views/{}/archive", id(&view.body)),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Act
+    let refused = w.make_team_tag(json!({ "name": "billing" }), None).await?;
+    let token = refused.body["merge_reach"]["token"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let made = w.make_team_tag(json!({ "name": "billing" }), Some(&token)).await?;
+    let stored = w.app.stored_view(id(&view.body)).await?;
+
+    // Assert
+    expect_that!(archived.status, eq(StatusCode::OK));
+    expect_that!(made.status, eq(StatusCode::CREATED));
+    expect_that!(stored.archived_at.is_some(), eq(true));
+    let tags: Vec<String> = stored.list_view.filter.tags.iter().map(ToString::to_string).collect();
+    expect_that!(tags, elements_are![eq(id(&made.body))]);
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn a_heaps_link_to_a_team_parameter_follows_the_merge_in_that_heap_only() -> Result<()> {
     // Arrange
     let w = world().await?;

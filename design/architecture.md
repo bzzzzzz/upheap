@@ -597,8 +597,8 @@ a fixed time.
     write again with `confirm_reach=<token>`. If the reach changed in between, the token no longer matches and the
     write is refused again with the new reach, so what happens is what the person was shown. Nothing is stored
     between the two requests. A merged heap tag's items, parameter links (a heap's links to team parameters too),
-    saved views and tag-order places all move to the team tag in that one transaction ([Data model](#data-model), a
-    merged heap tag).
+    saved views (archived ones too, so none comes back naming a merged-away tag) and tag-order places all move to the
+    team tag in that one transaction ([Data model](#data-model), a merged heap tag).
 
     **Making a heap parameter a team parameter** works the same way, with `parameter_merge_unconfirmed` and its reach
     (`domain::parameter::reach_text`): the parameter it starts from, then each same-named heap parameter it takes in,

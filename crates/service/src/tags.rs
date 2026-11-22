@@ -453,7 +453,7 @@ impl Services {
                     .await?
                     .ok_or_else(|| locked_row_changed("parameters", &parameter.id.to_string()))?;
             }
-            for mut view in store::saved_views::list_saved_views(txn, heap.id).await? {
+            for mut view in store::saved_views::list_all_saved_views(txn, heap.id).await? {
                 let Some(tags) = replaced(&view.list_view.filter.tags) else {
                     continue;
                 };
