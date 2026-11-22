@@ -263,3 +263,6 @@ export function removeUserQueries(queryClient: QueryClient, keep?: (queryKey: re
 
 /** The scope that makes edits of items run one at a time. */
 export const itemEditsScope = { id: "item-edits" } as const;
+
+/** The key of `useUpdateItem`'s mutations in `heap`, so `useSavingFields` finds those pending, whichever component pressed. */
+export const itemEditKey = (heap: HeapRef) => ["item-edit", heapPath(heap)] as const;

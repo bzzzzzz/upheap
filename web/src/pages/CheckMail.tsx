@@ -9,6 +9,7 @@ import { RequestId } from "../components/RequestId";
 import { useReturnFocus } from "../components/useConfirmation";
 import { inputClass } from "./settingsForm";
 import { Heading, type MoveFocus } from "./authStates";
+import { Saving } from "../components/Saving";
 
 /** The card replaces the forms, so its heading takes focus as it mounts. */
 const MOVE_FOCUS: MoveFocus = { current: true };
@@ -82,9 +83,11 @@ export function CheckMail({
       <button
         type="button"
         disabled={signIn.isPending}
+        aria-busy={signIn.isPending || undefined}
         onClick={() => signIn.mutate({ login, password }, { onSuccess: onSignedIn })}
-        className="h-11 self-start rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink disabled:opacity-40 pointer-coarse:min-h-11"
+        className="inline-flex h-11 items-center gap-2 self-start rounded-[10px] border border-line-strong bg-surface px-4 text-sm font-semibold text-ink disabled:not-aria-busy:opacity-40 pointer-coarse:min-h-11"
       >
+        <Saving pending={signIn.isPending} />
         Send it again
       </button>
       {/* Shown again, and so announced again, for each send: the mutation leaves its error while it is pending. */}
@@ -152,7 +155,13 @@ export function CheckMail({
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" disabled={change.isPending} className={compactButtonClass.primary}>
+            <button
+              type="submit"
+              disabled={change.isPending}
+              aria-busy={change.isPending || undefined}
+              className={compactButtonClass.primary}
+            >
+              <Saving pending={change.isPending} />
               Send a link there
             </button>
             <button type="button" onClick={close} className={compactButtonClass.quiet}>

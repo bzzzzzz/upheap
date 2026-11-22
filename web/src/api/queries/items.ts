@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
 import type { CreateItemRequest, Item, ItemPatchRequest, ItemState } from "../schema";
 import {
@@ -9,6 +9,7 @@ import {
   replaceListedItem,
   dropWaitingRows,
   itemEditsScope,
+  itemEditKey,
 } from "./keys";
 
 /**
@@ -81,6 +82,7 @@ async function patchAtNewestVersion(
 export function useUpdateItem(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: itemEditKey(heap),
     scope: itemEditsScope,
     mutationFn: ({ item, patch }: { item: Item; patch: ItemPatchRequest }) =>
       patchAtNewestVersion(queryClient, heap, item, patch),
@@ -91,6 +93,21 @@ export function useUpdateItem(heap: HeapRef) {
       return invalidateHeap(queryClient, heap);
     },
   });
+}
+
+/**
+ * The fields of the item `itemKey` that a pending `useUpdateItem` is saving, whichever component pressed. One mutation
+ * instance tracks only its latest call and several saves can be pending at once, so a row or a field asks here.
+ */
+export function useSavingFields(heap: HeapRef, itemKey: string): ReadonlySet<keyof ItemPatchRequest> {
+  const saving = useMutationState({
+    filters: { mutationKey: itemEditKey(heap), status: "pending" },
+    select: (mutation) => {
+      const { item, patch } = mutation.state.variables as { item: Item; patch: ItemPatchRequest };
+      return item.key === itemKey ? (Object.keys(patch) as (keyof ItemPatchRequest)[]) : [];
+    },
+  });
+  return new Set(saving.flat());
 }
 
 /**

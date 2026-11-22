@@ -27,6 +27,7 @@ import { useToast } from "../components/UndoToast";
 import { plural } from "../components/words";
 import { Avatar } from "./TeamPage";
 import { cardClass, moreButtonClass, roleButtonClass } from "./teamStyles";
+import { Saving } from "../components/Saving";
 
 /** How many matches the list shows, and how many Load more adds. */
 const PAGE_SIZE = 50;
@@ -344,9 +345,11 @@ function AccountRow({ account, you, phone }: { account: OperatorAccount; you: bo
                 type="button"
                 autoFocus
                 disabled={deactivate.isPending}
+                aria-busy={deactivate.isPending || undefined}
                 onClick={() => deactivate.mutate(account, { onSuccess: closePanel })}
-                className="min-h-13 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:opacity-40"
+                className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:not-aria-busy:opacity-40"
               >
+                <Saving pending={deactivate.isPending} />
                 Deactivate
               </button>
               <button

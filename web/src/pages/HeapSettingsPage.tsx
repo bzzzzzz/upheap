@@ -16,6 +16,7 @@ import { NewHeapLink } from "../components/NewHeapLink";
 import { ProblemText } from "../components/ProblemText";
 import { cardClass, cardTitleClass, nameFormClasses } from "./settingsForm";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
 // A tab is a link, so each one has its own address and Back steps between them. The active one is underlined in the
 // accent, as the router marks it.
@@ -177,9 +178,11 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
             <button
               type="button"
               disabled={setArchived.isPending}
+              aria-busy={setArchived.isPending || undefined}
               onClick={() => (archived ? unarchive(data) : archive(data))}
               className={`${archived ? compactButtonClass.bordered : compactButtonClass.borderedDanger} max-sm:w-full`}
             >
+              <Saving pending={setArchived.isPending} />
               {archived ? "Unarchive heap" : "Archive heap"}
             </button>
             <ProblemText error={setArchived.error} className="text-overdue-ink" />
@@ -219,6 +222,7 @@ function AgentsCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: 
             <span className="size-5 rounded-full bg-surface shadow-sm transition-transform group-data-[selected]:translate-x-4 motion-reduce:transition-none" />
           </span>
           Agents prepare new notes
+          <Saving pending={update.isPending} />
         </Switch>
       ) : (
         <p className="mt-3 text-sm font-medium">Agents prepare new notes: {on ? "on" : "off"}</p>
@@ -268,8 +272,9 @@ function PriorityCard({ team, heap, canSet }: { team: string; heap: Heap; canSet
               key={value}
               id={String(value)}
               aria-describedby={hintId}
-              className={`${choiceButtonClass} rounded-lg sm:w-10`}
+              className={`${choiceButtonClass} gap-1.5 rounded-lg sm:w-10`}
             >
+              <Saving pending={setPriority.isPending && priority === value} />
               {value}
             </ToggleButton>
           ))}
@@ -397,7 +402,13 @@ function HeapContextCard({ team, heap, canEdit }: { team: string; heap: Heap; ca
             autoFocus
             className="min-h-48 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
           />
-          <button type="submit" disabled={update.isPending} className={`${compactButtonClass.primary} max-sm:flex-1`}>
+          <button
+            type="submit"
+            disabled={update.isPending}
+            aria-busy={update.isPending || undefined}
+            className={`${compactButtonClass.primary} max-sm:flex-1`}
+          >
+            <Saving pending={update.isPending} />
             Save
           </button>
           <button type="button" onClick={close} className={`${compactButtonClass.quiet} max-sm:flex-1`}>

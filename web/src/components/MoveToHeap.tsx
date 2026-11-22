@@ -5,6 +5,7 @@ import { Autocomplete, Menu, MenuItem, MenuSection } from "react-aria-components
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { compactButtonClass } from "./buttons";
+import { Saving } from "./Saving";
 import { FindField } from "./FindField";
 import { currentRowClass, LONG_LIST, rowClass, SectionTitle } from "./HeapSwitcher";
 import { itemProblem } from "./itemProblems";
@@ -118,6 +119,7 @@ export function MoveToHeap({
             type="button"
             autoFocus
             disabled={pending}
+            aria-busy={pending || undefined}
             onClick={() =>
               onMove(
                 { team: picked.team.slug, heap: picked.heap.slug, id: picked.heap.id },
@@ -126,7 +128,8 @@ export function MoveToHeap({
             }
             className={compactButtonClass.primary}
           >
-            {pending ? "Moving…" : count === undefined ? "Move" : `Move ${count}`}
+            <Saving pending={pending} />
+            {count === undefined ? "Move" : `Move ${count}`}
           </button>
         </div>
       </div>

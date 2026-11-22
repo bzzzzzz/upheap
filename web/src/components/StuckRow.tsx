@@ -11,6 +11,7 @@ import { InlineConfirm } from "./InlineConfirm";
 import { itemProblem } from "./itemProblems";
 import { useConfirmation } from "./useConfirmation";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
 
 const focusClass = "outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent";
 
@@ -71,7 +72,7 @@ export function StuckRow({
           <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
             {canRetry && (
               <Button
-                isDisabled={retry.isPending}
+                isPending={retry.isPending}
                 onPress={() => {
                   takeBack.reset();
                   retry.reset();
@@ -80,6 +81,7 @@ export function StuckRow({
                 aria-label={`Retry ${item.title}`}
                 className={`${compactButtonClass.primary} ${focusClass}`}
               >
+                <Saving pending={retry.isPending} />
                 Retry
               </Button>
             )}

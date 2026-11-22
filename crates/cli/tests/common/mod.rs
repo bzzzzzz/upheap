@@ -684,6 +684,8 @@ pub struct TestKeychain {
     refusing: Mutex<Option<Vec<StoredTokens>>>,
     /// How many times the tokens were read.
     loads: AtomicUsize,
+    /// When set, the next read finds no entry, once.
+    missing_once: std::sync::atomic::AtomicBool,
 }
 
 impl TestKeychain {
@@ -697,6 +699,12 @@ impl TestKeychain {
         self.tokens.delete(server)?;
         self.unreadable().insert(server.to_owned());
         Ok(())
+    }
+
+    /// Makes the next read find no entry, once, as a read does that lands while another `upheap` is replacing the
+    /// entry: the macOS keychain's is removed and then written again.
+    pub fn miss_next_load(&self) {
+        self.missing_once.store(true, Ordering::SeqCst);
     }
 
     /// Makes every save fail from now on.
@@ -723,6 +731,9 @@ impl TestKeychain {
 impl TokenStore for TestKeychain {
     fn load(&self, server: &str) -> Result<Option<StoredTokens>, TokenStoreError> {
         self.loads.fetch_add(1, Ordering::SeqCst);
+        if self.missing_once.swap(false, Ordering::SeqCst) {
+            return Ok(None);
+        }
         if self.unreadable().contains(server) {
             return Err(TokenStoreError::Corrupt {
                 server: server.to_owned(),

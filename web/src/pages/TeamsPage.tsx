@@ -11,6 +11,7 @@ import { useReturnFocus } from "../components/useConfirmation";
 import { teamName } from "../components/teamName";
 import { useNameAndLinkFields } from "../components/useNameAndLinkFields";
 import { plural } from "../components/words";
+import { Saving } from "../components/Saving";
 
 /** The caller's teams, and Create team, which opens a form for a new one (S-teams, WideTeams). */
 export function TeamsPage() {
@@ -151,7 +152,13 @@ function CreateTeamForm({ onClose }: { onClose: () => void }) {
         >
           Cancel
         </button>
-        <button type="submit" disabled={create.isPending} className={`${compactButtonClass.primary} max-sm:min-h-11`}>
+        <button
+          type="submit"
+          disabled={create.isPending}
+          aria-busy={create.isPending || undefined}
+          className={`${compactButtonClass.primary} max-sm:min-h-11`}
+        >
+          <Saving pending={create.isPending} />
           Create
         </button>
       </div>

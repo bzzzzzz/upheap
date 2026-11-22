@@ -210,8 +210,8 @@ what it would merge, and the app asks first, in a dialog on a wide screen and a 
 "Make “billing” a team tag?" or "Rename “old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
 "archived" and, for Make a team tag, "this heap" marked. Under the rows a total says "{n items} in {m heaps} will
 carry the team tag.", then the description the team tag will have, and the quiet line "The items keep their history.
-This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button reads
-"Making…" or "Renaming…" and nothing can be pressed or dismissed. If the list changed while it was open, the server
+This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button shows
+the saving ring (Rules §6) and nothing can be pressed or dismissed. If the list changed while it was open, the server
 refuses the button's write with the new list: the dialog stays, shows "This changed while it was open. Check the list
 again; the button confirms this one.", marks rows "new" and counts "was {n}", names what left the list, and the button
 confirms the new list. Another failure shows above the buttons, with its request ID, and the dialog stays; a rename
@@ -237,7 +237,7 @@ When one of its options matches an option the team parameter has archived, the r
 open items get the option in use that Silver was replaced by, while closed ones keep Silver. A row whose parameter
 is linked to tags says "links billing, urgent": its heap keeps those links to the team parameter. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
 whose options were in another order." and the quiet line "The items keep their history. This can't be undone."; the
-buttons are Cancel and Make team parameter ("Making…"). Success closes it with a toast, "“Customer tier” is a team
+buttons are Cancel and Make team parameter. Success closes it with a toast, "“Customer tier” is a team
 parameter now: 3 items in 2 heaps keep their values.".
 
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
@@ -1064,7 +1064,7 @@ link, so its hint says so. A problem about an input shows under it, with focus o
 many attempts, registration closed) shows above the button. A taken email offers **Sign in instead**, which switches
 to Sign in with the address carried over and focus on Password. Under Sign in's password, a small **Forgot your
 password?** button (`aria-expanded`) opens a disclosure and closes it again. When the server has mail set up, it holds
-an **Email** field (empty, no focus move on open) and a **Send me a link** button, disabled while the request is
+an **Email** field (empty, no focus move on open) and a **Send me a link** button, which shows the saving ring and ignores presses while the request is
 pending. Enter in the field sends the reset and never the sign-in. After the server accepts it, a line under the
 button says "If an account uses that address, a link is on its way. It works for an hour." and stays until the next
 send; the field and button stay, so the user can send again. An address problem shows under the field; any other
@@ -1073,7 +1073,7 @@ doesn't know yet, the disclosure shows one line, "Whoever runs this Upheap serve
 form. Create account has none. The invite page's Sign in side has it too.
 
 With mail set up, Create account doesn't sign in. The card shows **Check your mail** in place of the forms, focus on its
-heading: "We sent a link to a@x.dev. It works for a day.", a **Send it again** button (disabled while it is pending),
+heading: "We sent a link to a@x.dev. It works for a day.", a **Send it again** button (saving ring, no presses while it is pending),
 and "Wrong address? **Change it**" (below). Signing in with the
 right password for an account that hasn't confirmed its address shows the same card as **Confirm your address**: "We
 mailed you a new link. It works for a day." with Send it again and the same Wrong address line. Send it again signs in again
@@ -1084,7 +1084,7 @@ a sign-in would. Too many tries, or anything else, is the server's message in pl
 account and Sign in sides do the same.
 
 **Change it** replaces the Wrong address line with a small form under the buttons, for either way the card came up: a
-"Right address" email input, focused, with **Send a link there** (disabled while it is pending) and **Cancel**. Escape
+"Right address" email input, focused, with **Send a link there** (saving ring, no presses while it is pending) and **Cancel**. Escape
 and Cancel close the form and put focus back on Change it; Enter sends. It posts the login and password the form held
 with the address, and the server sets the address of the still unconfirmed account and mails the link there. On
 success the form closes, the card's text names the new address ("We sent a link to b@x.dev. It works for a day."),
@@ -1192,7 +1192,7 @@ the state, and the page only shows it:
   characters."), **Set password and sign in**, and under it "This signs you out everywhere else."
 
 The states that can't be used end in an **Open Upheap** button, which leads to sign-in when signed out. A failed read
-says why, with Try again. Enter submits, and the button is disabled while it is pending and until the landing. A
+says why, with Try again. Enter submits, and the button shows the saving ring and ignores presses while it is pending and until the landing. A
 problem about the password shows under the input, marked invalid and focused, with what was typed kept: "Enter a new
 password.", "Use at least 10 characters." and "That password is too long." The link stays working after them. A `404`
 or `409` means the link changed meanwhile (another tab used it, it ended), so the page reads it again and becomes the
@@ -1208,7 +1208,7 @@ the toast "Password changed. You're signed in.", shown once like the invite page
 `/change-email/{token}` is where an email change link leads, outside the app's shell in the Reset page's card, the same
 way at every width, and needs no sign-in: holding the link is the permission. Nothing is read when it opens, so a mail
 scanner that fetches the link changes nothing: the page asks "Use the address this link was mailed to for your Upheap
-account?" and has one button, **Use this address**, disabled while it is pending. What the server answers is the state:
+account?" and has one button, **Use this address**, which ignores presses and shows the saving ring while it is pending. What the server answers is the state:
 
 - **Changed:** "Your address is now sam@example.com." and **Go to your account**, which leads to `/account` and so to
   sign-in when signed out. A signed-in tab reads `me` again for the new address.
@@ -1227,7 +1227,7 @@ Anything else is the server's message above the button. When the page changes st
 `/confirm/{token}` is where an email confirmation link leads, outside the app's shell in the Change-email page's card,
 the same way at every width, and needs no sign-in: holding the link is the permission. Nothing is sent when it opens, so
 a mail scanner that fetches the link confirms nothing: the page asks "Confirm your address and sign in?" and has one
-button, **Confirm and sign in**, disabled while it is pending and until the landing. What the server answers is the
+button, **Confirm and sign in**, which ignores presses and shows the saving ring while it is pending and until the landing. What the server answers is the
 state:
 
 - **Confirmed:** the browser is signed in as the link's user, whoever it was signed in as. It lands on `/`, which goes
@@ -1372,6 +1372,13 @@ to an open History at once, and to a closed one by the time it is opened.
 4. **After the session expires, signing in returns the user to the page they were on.**
 5. **Editing lives in the item.** Rows are for reading, ordering and changing state; everything else is edited in
    the item ([decisions.md](decisions.md#23-editing-lives-in-the-item-rows-only-change-state)).
+6. **Saving.** The app is never optimistic, so between a press and the server's answer a small ring turns inside the
+   control that was pressed, or, when the control goes away on press, on the field or row it changed: a field shows
+   the ring before its old value, a list row in its state slot. It shows 150 ms after the press, so a quick answer
+   shows no flicker, and stays until the answer and the refetch it starts have landed; then the new state replaces
+   it. The control ignores presses meanwhile and isn't faded, as a control disabled for another reason is; its label
+   doesn't change. On a failure the ring goes, the old value stays and the error shows where it always did. With
+   reduced motion the ring pulses instead of turning.
 
 ## Testing
 
@@ -1386,9 +1393,9 @@ The wide screen shows its keys, and `?` lists them all:
    the search box, `S` `B` `X` at the end of the focused row, `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog,
    `⌘K` (`Ctrl K`) on Find in the sidebar.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
-3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
-   `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and closing with one open;
-   selecting in select mode. It ends with `?`, All keys.
+3. A hint bar at the bottom of the window, under the heap's list however short it is, has the keys for what's on
+   screen: moving and opening, `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and
+   closing with one open; selecting in select mode. It ends with `?`, All keys.
 4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Keys are ignored in a field. Open and
    Closed have no keys: they are one click away in the sidebar.
 5. `⌘K` (`Ctrl K` off a Mac) anywhere, Find at the top of the sidebar, or the search icon in a phone's top bar, opens

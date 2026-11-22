@@ -54,6 +54,7 @@ import { Sheet, sheetRowClass } from "../components/Sheet";
 import { teamName, titleTeam } from "../components/teamName";
 import { ToastProvider, useToast } from "../components/UndoToast";
 import { useSelectMode } from "../components/useSelectMode";
+import { Saving } from "../components/Saving";
 
 export function AppLayout() {
   const { data: me } = useMe();
@@ -139,10 +140,12 @@ export function AppLayout() {
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[92rem]">
             {me && <Sidebar me={me} heapRef={shellHeap} onFind={openFind} />}
-            <div className="min-w-0 flex-1 bg-canvas">
+            {/* A page with the hint bar (`data-hint-bar`, wide screens with a mouse) fills the column's height, so the
+                bar ends at the window's bottom however short the page is; the page keeps its own room at the bottom. */}
+            <div className="min-w-0 flex-1 bg-canvas lg:pointer-fine:has-[[data-hint-bar]]:flex lg:pointer-fine:has-[[data-hint-bar]]:flex-col">
               {me && <PhoneTopBar me={me} heapRef={shellHeap} onFind={openFind} />}
               {/* On a phone, room at the bottom for the tabs. */}
-              <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:max-w-none lg:has-[[data-item-pane]]:pr-0">
+              <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:max-w-none lg:has-[[data-item-pane]]:pr-0 lg:pointer-fine:has-[[data-hint-bar]]:flex lg:pointer-fine:has-[[data-hint-bar]]:flex-1 lg:pointer-fine:has-[[data-hint-bar]]:flex-col lg:pointer-fine:has-[[data-hint-bar]]:pb-0">
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
                 <Outlet />
               </div>
@@ -682,9 +685,11 @@ function ArchivedNotice({ heapRef }: { heapRef: HeapRef }) {
         <button
           type="button"
           disabled={setArchived.isPending}
+          aria-busy={setArchived.isPending || undefined}
           onClick={() => setArchived.mutate({ heap, archived: false })}
-          className="font-medium underline disabled:opacity-50"
+          className="inline-flex items-center gap-2 font-medium underline disabled:not-aria-busy:opacity-50"
         >
+          <Saving pending={setArchived.isPending} />
           Unarchive
         </button>
       )}

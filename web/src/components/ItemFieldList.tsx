@@ -4,6 +4,7 @@ import { ToggleButtonGroup } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemTag, Need, RankedItem, Size } from "../api/schema";
+import { useSavingFields } from "../api/queries/items";
 import { useParameters } from "../api/queries/parameters";
 import { ChoiceButtons } from "./ChoiceButtons";
 import { DateField } from "./DateField";
@@ -15,6 +16,7 @@ import { ParameterPicker } from "./ParameterPicker";
 import { TeamMark } from "./TeamMark";
 import { PopoverSheet } from "./PopoverSheet";
 import { formatDate } from "./reminders";
+import { Saving } from "./Saving";
 import { SheetChoice } from "./Sheet";
 import { TagPicker } from "./TagPicker";
 import { tagChipColor } from "./tagColor";
@@ -47,6 +49,8 @@ export function ItemFieldList({
   save: (patch: ItemPatchRequest) => void;
 }) {
   const parameters = useParameters(heapRef);
+  // A field whose save is on its way shows the ring before the value it has, until the new one replaces it.
+  const saving = useSavingFields(heapRef, item.key);
   const reminder = item.kind === "reminder";
   const heldBack = new Set(entry?.held_back_by.map((held) => held.gap));
   const due = item.due ? (item.due.overdue ? `Overdue · ${item.due.label}` : item.due.label) : null;
@@ -62,6 +66,7 @@ export function ItemFieldList({
         <Field
           layout="cell"
           label="Need"
+          saving={saving.has("need")}
           value={NEED_LABELS[item.need]}
           editable={canEdit}
           wide={(close) => (
@@ -91,6 +96,7 @@ export function ItemFieldList({
               key={name}
               layout="cell"
               label={label}
+              saving={saving.has(name)}
               value={current && SIZE_LABELS[current]}
               empty={`Set ${name}`}
               unset="Not set"
@@ -125,6 +131,7 @@ export function ItemFieldList({
         <Field
           layout="row"
           label={reminder ? "Date" : "Due"}
+          saving={saving.has("due")}
           value={reminder ? (item.due ? formatDate(item.due.date) : null) : due}
           valueClass={item.due?.overdue ? "text-overdue-ink" : undefined}
           empty="Set due"
@@ -171,6 +178,7 @@ export function ItemFieldList({
         <Field
           layout="row"
           label="Tags"
+          saving={saving.has("tag_ids")}
           value={item.tags.length > 0 ? item.tags.map((tag) => tag.name).join(", ") : null}
           display={
             <span className="flex flex-wrap gap-1">
@@ -209,6 +217,7 @@ export function ItemFieldList({
               key={current.parameter_id}
               layout="row"
               label={label}
+              saving={saving.has("parameter_values")}
               mark={team ? <TeamMark of="parameter" /> : undefined}
               tone="param"
               value={current.option ? `${current.option.label}${archivedOption ? " (archived)" : ""}` : null}
@@ -278,6 +287,7 @@ function AddedRow({ item }: { item: Item }) {
 function Field({
   layout,
   label,
+  saving,
   mark,
   tone = "ink",
   title,
@@ -294,6 +304,8 @@ function Field({
 }: {
   layout: "cell" | "row";
   label: string;
+  /** A save of the field is pending: the ring shows before its value. */
+  saving: boolean;
   /** After the label, such as the mark of a team's parameter. */
   mark?: ReactNode;
   tone?: "ink" | "param";
@@ -325,8 +337,11 @@ function Field({
   };
 
   const valueSpan = (
-    <span className={value === null ? "text-muted" : (valueClass ?? "text-ink")}>
-      {value === null ? shown : (display ?? value)}
+    <span className="inline-flex items-center gap-1.5">
+      <Saving pending={saving} />
+      <span className={value === null ? "text-muted" : (valueClass ?? "text-ink")}>
+        {value === null ? shown : (display ?? value)}
+      </span>
     </span>
   );
   const content = !editable ? (

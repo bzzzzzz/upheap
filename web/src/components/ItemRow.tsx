@@ -4,6 +4,7 @@ import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import type { HeapRef } from "../api/client";
+import { useSavingFields } from "../api/queries/items";
 import type { Item, ItemState, RankedItem, RankedList, Turn } from "../api/schema";
 import { useSendWithUndo } from "./ItemTurn";
 import { Kbd } from "./Kbd";
@@ -12,6 +13,7 @@ import { GOAL_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { TOUCH, useMedia } from "./media";
 import { ParameterChips } from "./ParameterPicker";
 import { formatDate } from "./reminders";
+import { Saving } from "./Saving";
 import { TagChips } from "./TagChips";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
@@ -109,6 +111,8 @@ export function ItemRow({
   const canChangeState = item.allowed_actions.includes("change_state");
   const canSend = !item.turn && item.allowed_actions.includes("send_to_agent");
   const { sendWithUndo, pending: sending } = useSendWithUndo(heapRef);
+  // Whoever pressed (a button, a key, a swipe, Undo), a pending state change of this item shows in its state slot.
+  const changingState = useSavingFields(heapRef, item.key).has("state");
   const focusAfterRender = useFocusAfterRender();
   // One step at once, with no line. The robot turns into a mark once the list shows the turn, so the focus goes to the
   // row's link. Undo moves nothing.
@@ -234,11 +238,11 @@ export function ItemRow({
             ) : (
               canChangeState &&
               (item.state === "open" ? (
-                <StartButton item={item} onPress={onStart} />
+                <StartButton item={item} busy={changingState} onPress={onStart} />
               ) : item.state === "blocked" ? (
-                <UnblockButton item={item} onPress={onOpen} />
+                <UnblockButton item={item} busy={changingState} onPress={onOpen} />
               ) : (
-                item.state === "in_progress" && <PauseButton item={item} onPress={onOpen} />
+                item.state === "in_progress" && <PauseButton item={item} busy={changingState} onPress={onOpen} />
               ))
             )}
           </span>
@@ -250,7 +254,7 @@ export function ItemRow({
               (item.turn ? (
                 <RobotMark item={item} turn={item.turn} link={link} itemOpen={itemOpen} />
               ) : (
-                canSend && <RobotButton item={item} disabled={sending} onPress={onSend} />
+                canSend && <RobotButton item={item} sending={sending} onPress={onSend} />
               ))}
           </span>
         </span>
@@ -592,16 +596,20 @@ const DONE_QUIET = "text-muted group-hover/row:text-done group-focus-within/row:
 const ROBOT_QUIET = "text-muted group-hover/row:text-ink group-focus-within/row:text-ink pointer-coarse:text-ink";
 
 /** The way to start an open item: a circle with a play mark. */
-function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
+function StartButton({ item, busy, onPress }: { item: Item; busy: boolean; onPress: () => void }) {
   return (
     <button
       type="button"
-      onClick={onPress}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
       aria-label={`Start ${item.title}`}
       title="Start"
       className={`${BUTTON} text-ink hover:text-accent`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+      <Saving pending={busy} />
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={busy ? "hidden" : "size-[22px]"}>
         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
         <path
           d="M10 8.5v7l5.5-3.5z"
@@ -620,18 +628,22 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
  * uses, the row's one sign that it waits on something. Its tooltip carries the reason in words, when there is one. It
  * is drawn open while the row is hovered or focused, and always with a finger.
  */
-function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
+function UnblockButton({ item, busy, onPress }: { item: Item; busy: boolean; onPress: () => void }) {
   const opens = "hidden group-hover/row:inline group-focus-within/row:inline pointer-coarse:inline";
   const closes = "group-hover/row:hidden group-focus-within/row:hidden pointer-coarse:hidden";
   return (
     <button
       type="button"
-      onClick={onPress}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
       aria-label={`Unblock ${item.title}`}
       title={item.blocked_reason ? `Unblock. Blocked: ${item.blocked_reason}` : "Unblock"}
       className={`${BUTTON} text-overdue-ink`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+      <Saving pending={busy} />
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={busy ? "hidden" : "size-[22px]"}>
         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
         <rect x="8.5" y="11.5" width="7" height="5" rx="1" fill="currentColor" />
         <path
@@ -656,16 +668,20 @@ function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
 }
 
 /** The way to put an in-progress item back to open: an accent circle, lightly filled, with two pause bars. */
-function PauseButton({ item, onPress }: { item: Item; onPress: () => void }) {
+function PauseButton({ item, busy, onPress }: { item: Item; busy: boolean; onPress: () => void }) {
   return (
     <button
       type="button"
-      onClick={onPress}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
       aria-label={`Pause ${item.title}`}
       title="Back to open"
       className={`${BUTTON} text-accent`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+      <Saving pending={busy} />
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={busy ? "hidden" : "size-[22px]"}>
         <circle cx="12" cy="12" r="9" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="2" />
         <path d="M10 9v6M14 9v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
@@ -699,17 +715,19 @@ function DoneButton({ item, onPress }: { item: Item; onPress: () => void }) {
 }
 
 /** The way to send an item to an agent, one step at once. Quiet until the row is hovered or focused, with a mouse. */
-function RobotButton({ item, disabled, onPress }: { item: Item; disabled: boolean; onPress: () => void }) {
+function RobotButton({ item, sending, onPress }: { item: Item; sending: boolean; onPress: () => void }) {
   return (
     <button
       type="button"
       onClick={onPress}
-      disabled={disabled}
+      disabled={sending}
+      aria-busy={sending || undefined}
       aria-label={`Send ${item.title} to an agent`}
       title="Send to an agent"
-      className={`${BUTTON} ${ROBOT_QUIET} hover:bg-sunken disabled:opacity-40`}
+      className={`${BUTTON} ${ROBOT_QUIET} hover:bg-sunken`}
     >
-      <Bot aria-hidden="true" className="size-5" />
+      <Saving pending={sending} />
+      {!sending && <Bot aria-hidden="true" className="size-5" />}
     </button>
   );
 }

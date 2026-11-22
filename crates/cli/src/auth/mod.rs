@@ -5,6 +5,10 @@
 //! under an exclusive lock on a file in the config directory, after reading the tokens again: a second `upheap`
 //! running at the same time waits, then finds the tokens the first one saved instead of spending the old refresh
 //! token a second time.
+//!
+//! Whatever replaces the stored tokens holds that lock, and a read that finds none takes it and reads again before
+//! it says there's no sign-in: replacing a keychain entry isn't one step, so a read without the lock can find
+//! nothing where a sign-in is being saved.
 
 pub mod login;
 pub mod loopback;
@@ -63,8 +67,12 @@ pub async fn access_token(
     let not_signed_in = || AuthError::NotSignedIn {
         server: server.to_owned(),
     };
-    let stored = load_tokens(store, server).await?.ok_or_else(not_signed_in)?;
-    if stored.has_fresh_access(now) {
+    // Read without the lock, so commands with a fresh token never wait for each other. No entry here doesn't mean no
+    // sign-in: a save can remove the entry and then write it again (the macOS keychain's does), and this read may
+    // have landed in between. Every save holds the lock, so only the read under it can say there's no sign-in.
+    if let Some(stored) = load_tokens(store, server).await?
+        && stored.has_fresh_access(now)
+    {
         return Ok(stored.access_token);
     }
     let _lock = lock_tokens(lock_dir).await?;

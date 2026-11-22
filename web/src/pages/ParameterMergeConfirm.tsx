@@ -115,7 +115,7 @@ export function ParameterMergeConfirm({
       title={`Make “${name}” a team parameter?`}
       body={body}
       bodyId={bodyId}
-      actLabel={pending ? "Making…" : "Make team parameter"}
+      actLabel="Make team parameter"
       pending={pending}
       onConfirm={flow.confirm}
       onCancel={flow.cancel}

@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { isNotFound, type HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemState, RankedItem } from "../api/schema";
-import { useItem, useUpdateItem } from "../api/queries/items";
+import { useItem, useSavingFields, useUpdateItem } from "../api/queries/items";
 import { useMe } from "../api/queries/me";
 import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
@@ -29,6 +29,7 @@ import { isClosed } from "./labels";
 import { itemAddress } from "./listView";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { useOverListLink } from "./overList";
+import { Saving } from "./Saving";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
@@ -433,6 +434,7 @@ function useDragToClose(onClose: () => void) {
 function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; entry: RankedItem | undefined }) {
   const phone = useMedia(PHONE);
   const update = useUpdateItem(heapRef);
+  const savingTitle = useSavingFields(heapRef, item.key).has("title");
   const waits = useItemWaits(item);
   const focusAfterRender = useFocusAfterRender();
 
@@ -550,6 +552,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
             }}
             className="field-sizing-content -mx-1.5 min-w-0 flex-1 resize-none rounded-lg bg-transparent px-1.5 py-0.5 text-lg leading-snug font-semibold outline-none enabled:hover:bg-sunken disabled:opacity-100"
           />
+          <Saving pending={savingTitle} className="mt-2" />
           {!phone && actions("inline")}
         </div>
         {!phone && confirmAsking}
@@ -651,9 +654,11 @@ function TakeBackAndChange({
           type="button"
           autoFocus
           disabled={pending}
+          aria-busy={pending || undefined}
           onClick={onConfirm}
-          className="min-h-13 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:opacity-40"
+          className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:not-aria-busy:opacity-40"
         >
+          <Saving pending={pending} />
           {confirmLabel}
         </button>
         <button

@@ -12,6 +12,7 @@ import { ProblemText } from "../components/ProblemText";
 import { Sheet, sheetRowClass } from "../components/Sheet";
 import { useReturnFocus } from "../components/useConfirmation";
 import { cardClass, dangerTextButtonClass, moreButtonClass, roleButtonClass } from "./teamStyles";
+import { Saving } from "../components/Saving";
 
 /** "Revoke Ana Ruiz's link that ends 16 Nov? It stops working at once. …": names the link, as ux.md Rules §1 asks. */
 const revokeQuestion = (link: InviteLink, you: boolean) =>
@@ -46,12 +47,13 @@ export function InviteLinkButton({ making, phone }: { making: MakeInviteLink; ph
     <button
       type="button"
       disabled={making.isPending}
+      aria-busy={making.isPending || undefined}
       onClick={making.make}
       className={`${compactButtonClass.bordered} shrink-0 gap-1.5 py-[9px] text-[13px] ${
         phone ? "min-h-11 w-full" : "ml-auto"
       }`}
     >
-      <LinkIcon aria-hidden="true" className="size-3.5" />
+      {making.isPending ? <Saving pending /> : <LinkIcon aria-hidden="true" className="size-3.5" />}
       Invite link
     </button>
   );
@@ -404,9 +406,11 @@ function PhoneLinkRow({
               type="button"
               autoFocus
               disabled={revoke.isPending}
+              aria-busy={revoke.isPending || undefined}
               onClick={() => revoke.mutate(link.id, { onSuccess: onRevoked })}
-              className="min-h-13 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:opacity-40"
+              className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-overdue-ink text-[15px] font-semibold text-surface disabled:not-aria-busy:opacity-40"
             >
+              <Saving pending={revoke.isPending} />
               Revoke
             </button>
             <button

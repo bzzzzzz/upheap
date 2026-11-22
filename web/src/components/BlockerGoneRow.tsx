@@ -9,6 +9,7 @@ import { compactButtonClass } from "./buttons";
 import { itemProblem } from "./itemProblems";
 import { useOverListLink } from "./overList";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
 
 /** A gone blocker as a row shows it: no `item` when it moved to another team, which is never named. */
 export type GoneBlocker = Omit<WaitingBlocker, "item"> & { item: WaitingBlocker["item"] | null };
@@ -100,7 +101,7 @@ export function BlockerGoneRow({
         <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
           {canUnblock && (
             <Button
-              isDisabled={unblock.isPending}
+              isPending={unblock.isPending}
               onPress={() => {
                 unblock.reset();
                 void unblockNow();
@@ -108,6 +109,7 @@ export function BlockerGoneRow({
               aria-label={`Unblock ${item.title}`}
               className={`${compactButtonClass.primary} ${focusClass}`}
             >
+              <Saving pending={unblock.isPending} />
               Unblock
             </Button>
           )}
