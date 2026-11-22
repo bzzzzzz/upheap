@@ -24,6 +24,7 @@ pub mod items;
 pub mod list_view;
 pub mod me;
 pub mod oauth;
+pub mod operator;
 pub mod parameters;
 pub mod problem;
 pub mod questions;

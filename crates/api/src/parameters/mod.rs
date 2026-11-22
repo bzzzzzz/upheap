@@ -91,6 +91,7 @@ pub(crate) fn to_parameter_merge_reach_dto(reach: &ParameterMergeReach) -> Param
                         to: switch.to.as_str().to_owned(),
                     })
                     .collect(),
+                linked_tags: entry.linked_tags.clone(),
                 starting: entry.starting,
             })
             .collect(),
@@ -434,16 +435,16 @@ async fn link_tags(
 /// only. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a
 /// `parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team
 /// parameter at the weight it had, and each item's value moves to the option with the same label; for an open item
-/// whose option the team parameter has archived, that is the option in use it was replaced by (`switched`). A
-/// parameter linked to tags can't be merged: `parameter_merge_linked` names them. Repeating the write on a team
-/// parameter the heap uses succeeds and changes nothing.
+/// whose option the team parameter has archived, that is the option in use it was replaced by (`switched`). The tags
+/// a parameter is linked to become its heap's links to the team parameter, for that heap only (`linked_tags`).
+/// Repeating the write on a team parameter the heap uses succeeds and changes nothing.
 #[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/parameters/{parameter_id}/team", tag = "parameters", security(("session" = [])),
     params(HeapParams, ("parameter_id" = Uuid, Path), ConfirmReachQuery),
     responses(
         (status = 200, description = "The team parameter, with the heaps that use it", body = TeamParameterDto),
         (status = 403, body = Problem),
         (status = 404, description = "Not a parameter of the heap", body = Problem),
-        (status = 409, description = "`parameter_merge_unconfirmed`, `parameter_merge_linked`, `parameter_archived` or `heap_archived`", body = Problem),
+        (status = 409, description = "`parameter_merge_unconfirmed`, `parameter_archived` or `heap_archived`", body = Problem),
         (status = 422, description = "`too_many_options`", body = Problem),
     ))]
 async fn make_team_parameter(

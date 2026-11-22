@@ -27,6 +27,7 @@ import { HeapNotFound, NotFound } from "./components/NotFound";
 import { RequestId } from "./components/RequestId";
 import { AllItemsPage } from "./pages/AllItemsPage";
 import { AccountPage } from "./pages/AccountPage";
+import { AccountsPage } from "./pages/AccountsPage";
 import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthorizePage } from "./pages/AuthorizePage";
@@ -609,6 +610,9 @@ const allRoute = createRoute({
 
 const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/account", component: AccountPage });
 
+/** Every account on the server, for operators (ux.md, Accounts). Anyone else sees the not-found page. */
+const accountsRoute = createRoute({ getParentRoute: () => appRoute, path: "/accounts", component: AccountsPage });
+
 /** Any address nothing else answers. Under the app, so it signs in first and shows inside the shell. */
 const notFoundRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -654,6 +658,7 @@ const routeTree = rootRoute.addChildren([
     agentsRoute,
     allRoute,
     accountRoute,
+    accountsRoute,
     notFoundRoute,
   ]),
 ]);

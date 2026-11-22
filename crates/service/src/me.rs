@@ -20,6 +20,8 @@ pub struct MeView {
     /// Whether the user may change their email address: they have a password to show, and the server has mail to
     /// send the link with.
     pub can_change_email: bool,
+    /// Whether the user is an operator.
+    pub operator: bool,
     pub teams: Vec<TeamView>,
 }
 
@@ -83,6 +85,7 @@ impl Services {
             user,
             has_password,
             can_change_email: has_password && self.has_mail(),
+            operator: store::users::is_operator(&self.db, principal.user_id).await?,
             teams,
         })
     }

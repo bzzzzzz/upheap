@@ -8,9 +8,17 @@ const GROUPS: { title: string; keys: { keys: string[]; does: string }[] }[] = [
   {
     title: "Anywhere",
     keys: [
+      { keys: ["⌘K", "Ctrl K"], does: "Find an item, or go to a heap" },
       { keys: ["?"], does: "Show these keys" },
       { keys: ["G O"], does: "Go to the heap's Open list" },
       { keys: ["G C"], does: "Go to the heap's Closed items" },
+    ],
+  },
+  {
+    title: "Find",
+    keys: [
+      { keys: ["⇥"], does: "The item's actions" },
+      { keys: ["⇧⇥"], does: "Back to the results" },
     ],
   },
   {

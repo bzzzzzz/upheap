@@ -115,3 +115,23 @@ pub async fn find_identity_subject(
         .await?;
     Ok(row.map(|row| row.subject))
 }
+
+/// The users with an identity at `provider`, each with their subject there.
+pub async fn list_identity_subjects(
+    db: &impl ConnectionTrait,
+    provider: &str,
+) -> Result<std::collections::HashMap<UserId, String>, StoreError> {
+    let rows = user_identities::Entity::find()
+        .filter(user_identities::Column::Provider.eq(provider))
+        .all(db)
+        .await?;
+    rows.into_iter()
+        .map(|row| {
+            let read = RowReader {
+                table: "user_identities",
+                id: &row.subject,
+            };
+            Ok((UserId::from_uuid(read.uuid(&row.user_id)?), row.subject))
+        })
+        .collect()
+}

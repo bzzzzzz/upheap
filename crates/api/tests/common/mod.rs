@@ -119,6 +119,7 @@ fn test_settings(allow_registration: bool) -> Settings {
         group_teams: GroupTeams::default(),
         scim: None,
         operator_contact: None,
+        base_url: "https://upheap.example".to_owned(),
     }
 }
 
@@ -787,6 +788,14 @@ impl TestApp {
             .await?
             .context("no item row")?;
         Ok(row.try_get("", "arrives_at")?)
+    }
+
+    /// Ties the user `user_id` to `subject` at the provider `issuer`, as a provider sign-in does.
+    pub async fn link_identity(&self, user_id: &str, issuer: &str, subject: &str) -> Result<()> {
+        let user_id = domain::UserId::from_uuid(user_id.parse()?);
+        let now = Timestamp::from_millis(START).context("start in range")?;
+        store::identities::insert_identity(&self.db, user_id, issuer, subject, now).await?;
+        Ok(())
     }
 
     /// A new password reset link for the account `login` names, as the operator's command makes it, and returns its

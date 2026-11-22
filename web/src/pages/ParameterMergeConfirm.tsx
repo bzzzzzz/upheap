@@ -82,6 +82,7 @@ export function ParameterMergeConfirm({
                 {entry.switched.length > 0 && (
                   <span>moves {listOf(entry.switched.map((switched) => `${switched.from} → ${switched.to}`))}</span>
                 )}
+                {entry.linked_tags.length > 0 && <span>links {listOf(entry.linked_tags)}</span>}
               </span>
               <span className="flex gap-1.5 max-sm:order-1 sm:ml-auto">
                 {entry.archived && <span className={badgeClass}>archived</span>}

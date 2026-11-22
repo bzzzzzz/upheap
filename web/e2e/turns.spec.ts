@@ -16,24 +16,12 @@ import {
   openMore,
   PASSWORD,
   row,
+  seed,
   test,
   uniqueUser,
 } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };
-
-/** Adds a note through the API and returns its key and its address in the API. */
-async function seed(page: Page, heapPath: string, title: string, sendToAgent = false) {
-  const created = await page.request.post(`/api/v1${heapPath}/items`, { headers, data: { title, need: "expected" } });
-  expect(created.status()).toBe(201);
-  const { key, id } = await created.json();
-  const item = `/api/v1${heapPath}/items/${key}`;
-  if (sendToAgent) {
-    const sent = await page.request.post(`${item}/turn`, { headers, data: { reach: "one", line: "Use the new CA." } });
-    expect(sent.status()).toBe(201);
-  }
-  return { key, id, item };
-}
 
 /** Opens the item with `key` by its address, and waits for it to show. */
 async function open(page: Page, heapPath: string, key: string, title: string) {

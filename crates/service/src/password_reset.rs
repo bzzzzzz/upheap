@@ -48,7 +48,8 @@ impl Services {
         self.ensure_password_sign_in()?;
         let login = Login::parse(login.trim()).ok_or(ServiceError::NotFound)?;
         let user = self.find_user_by_login(&login).await?.ok_or(ServiceError::NotFound)?;
-        self.make_reset_link(user, "operator").await
+        let actor = user.id;
+        self.make_reset_link(user, "operator", actor).await
     }
 
     /// Asks for a reset link by mail, with the email address of the account. Answers the same whether an account
@@ -80,14 +81,21 @@ impl Services {
         let Some(user) = store::users::find_user_by_email(&self.db, &email).await? else {
             return Ok(());
         };
-        let made = self.make_reset_link(user, "mail").await?;
+        let actor = user.id;
+        let made = self.make_reset_link(user, "mail", actor).await?;
         self.send_later(mail, reset_mail(&made.user, mail, &made.token), made.user.id, "reset");
         Ok(())
     }
 
     /// Makes a reset link for `user` that works for an hour, cancels their earlier working one, and records who
-    /// made it (`made_by`, `"operator"` or `"mail"`), in one transaction.
-    async fn make_reset_link(&self, user: User, made_by: &'static str) -> Result<ResetLinkMade, ServiceError> {
+    /// made it (`made_by`, `"operator"` or `"mail"`), in one transaction. `actor` is the entry's actor: the user when
+    /// no account made the link.
+    pub(crate) async fn make_reset_link(
+        &self,
+        user: User,
+        made_by: &'static str,
+        actor: UserId,
+    ) -> Result<ResetLinkMade, ServiceError> {
         let personal_team = self.load_personal_team(&self.db, &user).await?;
         let now = self.now();
         let expires_at = ResetLink::end_from(now).ok_or(ValidationError::TimestampOutOfRange)?;
@@ -105,7 +113,7 @@ impl Services {
         store::password_resets::insert_reset_link(&txn, &sha256_hex(token.expose()), &link).await?;
         let entry = self.team_audit_entry(
             Principal {
-                user_id: user.id,
+                user_id: actor,
                 run: None,
             },
             personal_team,

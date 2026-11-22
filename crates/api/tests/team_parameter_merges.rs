@@ -455,66 +455,79 @@ async fn a_stale_token_is_refused_with_the_new_reach() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
-async fn a_parameter_linked_to_tags_stops_the_merge_and_changes_nothing() -> Result<()> {
+async fn tag_links_carry_over_as_each_heaps_own_links_and_suggest_only_there() -> Result<()> {
     // Arrange
     let w = world().await?;
     let tier_a = w.heap_parameter(&w.a, "Customer tier", &["Gold"], 10).await?;
     let tier_b = w.heap_parameter(&w.b, "customer tier", &["Gold"], 10).await?;
-    let item = w.item_with(&w.b, "One", &tier_b, "Gold").await?;
-    let billing = w.app.new_tag_id(&w.session, &w.b, "billing").await?;
-    let vip = w.app.new_tag_id(&w.session, &w.b, "vip").await?;
-    let linked = w
+    let local = w.app.new_tag_id(&w.session, &w.a, "vip").await?;
+    let team_tag = w
         .app
-        .send_with(
-            Method::PUT,
-            &format!("{}/parameters/{}/tags", w.app.heap_url(&w.b).await?, id(&tier_b)),
+        .send(
+            Method::POST,
+            &format!("{}/tags", w.team_path),
             Some(&w.session),
-            Some(json!({ "tag_ids": [vip, billing] })),
-            &[common::CSRF, ("if-match", &tier_b["version"].to_string())],
+            Some(json!({ "name": "billing" })),
         )
         .await?;
-    anyhow::ensure!(linked.status == StatusCode::OK, "link failed: {}", linked.body);
+    anyhow::ensure!(
+        team_tag.status == StatusCode::CREATED,
+        "team tag failed: {}",
+        team_tag.body
+    );
+    let billing = id(&team_tag.body).to_owned();
+    for (heap, parameter, tag) in [(&w.a, &tier_a, &local), (&w.b, &tier_b, &billing)] {
+        let linked = w
+            .app
+            .send_with(
+                Method::PUT,
+                &format!("{}/parameters/{}/tags", w.app.heap_url(heap).await?, id(parameter)),
+                Some(&w.session),
+                Some(json!({ "tag_ids": [tag] })),
+                &[common::CSRF, ("if-match", &parameter["version"].to_string())],
+            )
+            .await?;
+        anyhow::ensure!(linked.status == StatusCode::OK, "link failed: {}", linked.body);
+    }
 
     // Act
     let refused = w.make_team(&w.a, &tier_a, None).await?;
-    let list = w.heap_parameters(&w.b).await?;
-    let item = w.read_item(&item).await?;
+    let made = w.make_team(&w.a, &tier_a, Some(&token(&refused))).await?;
+    let used = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/parameters/{}/use", w.app.heap_url(&w.c).await?, id(&tier_a)),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+    let (in_a, in_b, in_c) = (
+        w.listed(&w.a, id(&tier_a)).await?,
+        w.listed(&w.b, id(&tier_a)).await?,
+        w.listed(&w.c, id(&tier_a)).await?,
+    );
+    let team = w.get(&format!("{}/parameters", w.team_path)).await?.body["parameters"][0].clone();
 
     // Assert
     expect_that!(refused.status, eq(StatusCode::CONFLICT));
-    expect_that!(refused.body["code"], eq(&json!("parameter_merge_linked")));
     expect_that!(
-        refused.body["title"],
-        eq(&json!(
-            "Unlink the tags first: team parameters can't be linked to tags yet. B's \u{201c}customer tier\u{201d}: billing, vip."
-        ))
+        refused.body["parameter_merge_reach"]["entries"][0]["linked_tags"],
+        eq(&json!(["vip"]))
     );
-    expect_that!(refused.body["parameter_merge_reach"], eq(&Value::Null));
-    expect_that!(list["parameters"][0]["kind"], eq(&json!("heap")));
     expect_that!(
-        values(&item),
-        elements_are![eq(&("customer tier".to_owned(), "Gold".to_owned()))]
+        refused.body["parameter_merge_reach"]["entries"][1]["linked_tags"],
+        eq(&json!(["billing"]))
     );
-
-    // Linked on the parameter it starts from too, and named first.
-    let linked_a = w
-        .app
-        .send_with(
-            Method::PUT,
-            &format!("{}/parameters/{}/tags", w.app.heap_url(&w.a).await?, id(&tier_a)),
-            Some(&w.session),
-            Some(json!({ "tag_ids": [w.app.new_tag_id(&w.session, &w.a, "ops").await?] })),
-            &[common::CSRF, ("if-match", &tier_a["version"].to_string())],
-        )
-        .await?;
-    anyhow::ensure!(linked_a.status == StatusCode::OK, "link failed: {}", linked_a.body);
-    let refused_both = w.make_team(&w.a, &tier_a, None).await?;
-    expect_that!(
-        refused_both.body["title"],
-        eq(&json!(
-            "Unlink the tags first: team parameters can't be linked to tags yet. Shared's \u{201c}Customer tier\u{201d}: ops; B's \u{201c}customer tier\u{201d}: billing, vip."
-        ))
-    );
+    expect_that!(made.status, eq(StatusCode::OK));
+    expect_that!(used.status, eq(StatusCode::OK));
+    expect_that!(team["tag_ids"], eq(&json!([])));
+    // A suggests it for its own tag, B for the team tag only B linked; C, which uses it too, for neither.
+    expect_that!(in_a["tag_ids"], eq(&json!([local])));
+    expect_that!(in_a["heap_tag_ids"], eq(&json!([local])));
+    expect_that!(in_b["tag_ids"], eq(&json!([billing])));
+    expect_that!(in_b["heap_tag_ids"], eq(&json!([billing])));
+    expect_that!(in_c["tag_ids"], eq(&json!([])));
     Ok(())
 }
 

@@ -331,6 +331,39 @@ server, so run it once the server of the same version has started. Exit codes: `
 such team, no such user or not a member (the message says which), `5` the database can't be reached, `1` anything
 else, a database a version behind included.
 
+### Operators and accounts
+
+An operator of the server has the **Accounts** page in the web app: every account with its state and last sign-in, and
+for a local account Deactivate, Reactivate and Make reset link, and each account's History. Only the server's shell
+makes an operator, so nobody can grant the role from the web:
+
+```sh
+upheap-server user make-operator sam          # a username or an email address
+upheap-server user remove-operator sam
+docker compose exec upheap upheap-server user make-operator sam
+```
+
+They print `@sam is now an operator.` or `@sam is no longer an operator.`, or say it was so already and change nothing.
+Taking the role away takes effect on the person's next request. The same commands list and turn accounts off and on,
+which the page does too:
+
+```sh
+upheap-server user list                       # one tab-separated line for each account, with a header
+upheap-server user deactivate sam             # a local account only
+upheap-server user reactivate sam
+```
+
+`user list` prints the username, name, email, `local` or `provider`, `confirmed` or `unconfirmed`, `active` or
+`deactivated`, `operator` for an operator, and the last sign-in in UTC or `never`. `user deactivate` ends every sign-in
+of the account (web sessions, command-line sign-ins and personal tokens), keeps its items, teams and memberships, and
+prints `Deactivated @sam. 3 sign-ins ended.`; the person then can't sign in until `user reactivate`, which restores
+nothing that ended. An account that signs in through the provider is managed by the provider, so both refuse it. Every
+change is in the account's history. The commands take the same environment variables as the server (at least
+`DATABASE_URL`), run no migrations and start no server, so run them once the server of the same version has started.
+Exit codes: `0` done, or already so, `2` wrong arguments, `3` no such user, `4` the account signs in through the
+provider (`deactivate` and `reactivate`), `5` the database can't be reached, `1` anything else, a database a version
+behind included.
+
 ## The CLI
 
 `upheap` talks to a running server over its API.

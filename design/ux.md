@@ -118,12 +118,12 @@ Acme"), on the phone's top bar as well, except for a heap in the personal team.
 A phone's tabs have room for four: Waiting sits left of the + and Agents right of it, and Closed, Settings, Activity
 and Data go into More with the account pages. More shows as active on the pages it holds, Closed among them.
 
-**Waiting for me** is the first entry of the sidebar and the rail, above the heap switcher: an inbox icon, "Waiting for
-me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count as a small badge on
-the icon. There is no count at zero, and the entry stays. The count is the number of open questions across the
-person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the list is, so a
-question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and after a reply
-or an item's change.
+**Waiting for me** comes right after Find at the top of the sidebar and the rail, above the heap switcher: an inbox
+icon, "Waiting for me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count
+as a small badge on the icon. There is no count at zero, and the entry stays. The count is the number of open
+questions across the person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the
+list is, so a question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and
+after a reply or an item's change.
 
 **Agents** sits under Waiting for me, in the same block: a bot icon, "Agents" with the number of rows under Your
 decision (Agents) shown as Waiting for me's count is: on the right in the sidebar, as a badge on the icon in the rail
@@ -171,8 +171,8 @@ line saying what a context holds when there is none. Anyone who can open Setting
 turns the card into a form: an editor (see Toolkit) that grows with its text, Save and Cancel. A failed save keeps the form and
 the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
 saved a different context meanwhile, it shows rendered above the kept draft under "Saved meanwhile", and Save again replaces
-it; when only the heap's other settings changed, the message says so and Save again saves the draft. Save and
-Cancel give focus back to Edit.
+it; when only the heap's other settings changed, the message says so and Save again saves the draft. Cancel drops
+the draft without asking. Save and Cancel give focus back to Edit.
 
 The **Agents** card, on General under Details, has a switch, "Agents prepare new notes", with the line "Each note added here is
 sent to an agent to fill in its context, or to make it a defined task when it's small and clear, then comes back
@@ -230,11 +230,11 @@ line. It differs in what it lists: it is headed "Make “Customer tier” a team
 starting one first, marked "this heap", then the same-named ones, "archived" where their heap is) shows the heap, the
 parameter as that heap wrote it, its item count and, when it brings options the team parameter lacks, "adds Platinum".
 When one of its options matches an option the team parameter has archived, the row says "moves Silver → Gold": its
-open items get the option in use that Silver was replaced by, while closed ones keep Silver. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
+open items get the option in use that Silver was replaced by, while closed ones keep Silver. A row whose parameter
+is linked to tags says "links billing, urgent": its heap keeps those links to the team parameter. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
 whose options were in another order." and the quiet line "The items keep their history. This can't be undone."; the
 buttons are Cancel and Make team parameter ("Making…"). Success closes it with a toast, "“Customer tier” is a team
-parameter now: 3 items in 2 heaps keep their values.". A parameter linked to tags is refused with no dialog: the server's
-message ("Unlink the tags first: …") shows under the card's heading, as a failed archive does.
+parameter now: 3 items in 2 heaps keep their values.".
 
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
 parameter" to a screen reader), its weight read as "Weight {n}", its options read-only, the team's tags that suggest
@@ -644,8 +644,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     titled "Changes asked": "An agent brought this to: <stage>.", a required "What's wrong" field, **Send back**, off
     until the field has text, and Cancel, sharing a row on a phone. Send back closes the form, shows the toast "Sent
     back to the agent.", and gives focus to the agent chip, which the new turn brings; Cancel returns focus to the
-    button and drops the draft. A failed send keeps the form and its text and says why under the buttons; if someone
-    sent the item on first, the form closes and a toast says "The agent's work changed meanwhile: there's nothing to
+    button and drops the draft, without asking, and so does closing the popover or the sheet. A failed send keeps
+    the form and its text and says why under the buttons; if someone sent the item on first, the form closes and a toast says "The agent's work changed meanwhile: there's nothing to
     send back.", the focus goes to the agent chip, and the Changes asked… chip is gone. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
     columns, each a small label over its value; Due (a reminder's Date), Tags and each parameter follow, one row
@@ -672,8 +672,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Escape does nothing, so a long draft is never lost to a stray key or closes the item. Save closes the form once
     the save has landed, the text is read-only while it is in flight, and a failed save keeps the draft and says why.
     When someone else saved a different context meanwhile, it shows above the draft under "Saved meanwhile", Save
-    reads Save again and replaces it, and Cancel keeps theirs; until Save again, nothing else saves over theirs (Done
-    doesn't go on, and leaving doesn't save the draft). Dismissing the phone's sheet (✕ or a tap outside)
+    reads Save again and replaces it, and Cancel keeps theirs; Cancel always drops the draft, without asking.
+    Until Save again, nothing else saves over theirs (Done doesn't go on, and leaving doesn't save the draft). Dismissing the phone's sheet (✕ or a tap outside)
     with a changed draft saves it like Save, and stays open if that doesn't land; an unchanged draft just closes. Done
     and Won't do from the pane save a changed draft first, and don't go on if it can't be saved. Leaving the item with
     a changed draft, by closing it or walking on, saves it when nothing else changed meanwhile, and otherwise doesn't
@@ -1000,6 +1000,55 @@ it, when it ended or who revoked it and when, and how many joined; on a phone th
 The team's Activity, shown to admins like other membership lines, says "Ana made an invite link", "Ben revoked Ana's
 invite link" and "Sam joined through Ana's invite link". It marks an agent's change like the heap's Activity does.
 
+## Accounts
+
+Accounts is the page of an operator of the server, the person the server's `user make-operator` command made one. It
+lists every account, so on a server without mail they can make a reset link for someone who forgot their password,
+and turn a local account off and on. Anyone else sees no entry and gets the not-found page at `/accounts`, since the
+server answers `404` to everything on it.
+
+**Where it sits.** An entry with a shield icon, shown only to an operator: in the sidebar and the tablet's rail above
+Teams and Account, and on a phone as a row in More above Teams. Like Teams and Account, the page keeps the shell
+without a heap.
+
+**The page** follows the settings layout ([Rules](#rules) §3): the title "Accounts" and one line, "Every account on
+this server.", a search field and a filter (All accounts, Active, Deactivated, Unconfirmed, Operators) as a select, then
+the rows. The server sends the whole list, ordered by name, and the page searches (name, username and email, ignoring
+case, as it is typed) and filters it in the browser, since a server has tens to a few hundred accounts. It shows the
+first 50 matches, and **Load more** adds 50. No match says "No accounts match."; loading and errors read as on the other
+settings pages. A row is the Team page's member row: initials avatar, name, "@username · email", small labels for
+Provider, Unconfirmed, Deactivated and Operator, the last sign-in on the right ("3 days ago" as the Sign-ins card says
+it, or "Never"), and a ⋯. A deactivated account is dimmed and stays in the list.
+
+**Actions** are in the ⋯, a menu on a wide screen and a tablet and a sheet on a phone:
+
+- **Make reset link**, for a local, active account other than your own, and only while password sign-in is on. The link
+  opens under the row (in the sheet on a phone) in a read-only field with **Copy**, as an invite link's does, and a
+  copy the browser refuses leaves the link in the field; **Done** closes it. The link is shown once and kept nowhere.
+- **Deactivate…**, for a local, active account other than your own, asks first, inline under the row (in the sheet on a
+  phone), with what ends: "Turn off Sam Ortiz's account? 2 sign-ins and 1 personal token end. Their items and teams
+  stay." with **Deactivate** and **Cancel**. The counts are read when the entry is chosen. The row then shows
+  Deactivated.
+- **Reactivate**, for a deactivated local account, acts at once and offers Undo in a toast, "Sam Ortiz's account is back
+  on.", which turns it off again with no question, since nothing is left to end.
+- **History**, for every account, opens the account's history under the row (in the sheet on a phone), the History
+  card's list of the account, read with the operator's wording.
+
+The ⋯ shows what the account's `allowed_actions` allow. A provider account, and your own row, have History only: the
+identity provider owns a provider account's state, and the server refuses turning yourself off. Focus goes back to the row's ⋯ after Done or Cancel. Errors show under the row.
+
+**What the person sees.** Signing in to an account that was turned off says "Whoever runs this server has turned off
+your account." and, under it, the operator's contact line when one is set. Their other tabs fall to sign-in on the next
+request, since every session of theirs ended.
+
+**History wording.** The History card of the person and the operator's list read the same entries, worded for the
+reader. For the operator, who did it is named: "Reset link made by Ana Lee.", "Deactivated by Ana Lee. 3 sign-ins
+ended.", "Reactivated by Ana Lee.", and for a command run on the server "Reset link made from the server.",
+"Deactivated from the server. 3 sign-ins ended." and "Reactivated from the server.". The person reads "Reset link made
+by whoever runs the server.", "Turned off by whoever runs the server. 3 sign-ins ended." and "Turned back on by
+whoever runs the server.". Both read "Made an operator from the server." and "Operator role removed from the server.".
+The provider's entries and every other entry read the same for both.
+
 ## Sign in and create account
 
 A card on a wide screen and the bare form on a phone, with a Sign in / Create account switch. Sign in takes "Email
@@ -1257,7 +1306,7 @@ Make a token. The secret lives only in the page's state, so leaving the page dro
 
 Account's last card, after Command line and before Sign out, is headed "History" and holds one collapsed disclosure,
 "Changes to your account", like the ones on a tag or a member, with the same chevron and touch target. It loads only
-when opened, and lists the user's password events, their address changes, the sign-in provider turning the account off and back on, and
+when opened, and lists the user's password events, their address changes, the sign-in provider or an operator turning the account off and back on, the operator role given or taken away, and
 their own heap priority changes, newest first, each a sentence from the server and its time: "Password changed. 2
 other sign-ins ended.", "Reset link made by whoever runs the server.", "Reset link sent by mail, as asked on the
 sign-in page.", "Password set with a reset link. 3 sign-ins ended.", "Address change to sam@new.example asked. A link was mailed there.", "Address changed from sam@old.example to sam@new.example.", "Turned off by your sign-in provider. 3 sign-ins
@@ -1300,7 +1349,12 @@ to an open History at once, and to a closed one by the time it is opened.
 1. **Confirmations.** A reversible change acts at once and offers Undo in a toast: state changes, archiving a heap,
    a view or a parameter. A change that can't be undone, or that affects other people, asks first, inline or in a
    dialog on a wide screen and in a sheet on a phone, and names the object: removing a member, giving up your own
-   admin role, revoking an invite link, and discarding a typed title.
+   admin role, revoking an invite link, and discarding a typed title. Cancel on a form that edits in place (Ask a
+   question, Change reply, Changes asked, an item's or a heap's context) is itself the choice to discard, so it
+   drops the draft without asking; such a form guards its draft from a stray key and from refetches instead.
+   Closing a dialog or a sheet that holds a draft, or leaving the page with one, never drops it silently: Add an
+   item and Split… ask first, and the item's context saves the draft. Changes asked breaks this for now:
+   closing its popover or sheet drops the draft too.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's main state button and ⋯ sit in a bar at its bottom; on a wide screen they sit beside the title.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:
@@ -1322,7 +1376,7 @@ The wide screen shows its keys, and `?` lists them all:
 
 1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
    the search box, `S` `B` `X` at the end of the focused row, `G O` and `G C` beside Open and Closed in the sidebar,
-   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog.
+   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog, `⌘K` (`Ctrl K`) on Find in the sidebar.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
 3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
    `S` `B` `X` when a row can change state, `N`, `/`, and `G C` with no item open; walking and closing with one open;
@@ -1330,7 +1384,7 @@ The wide screen shows its keys, and `?` lists them all:
 4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Wherever the sidebar shows a heap, `G`
    then `O` goes to its Open list, closing an open item, and `G` then `C` to its Closed page; any other key after `G`
    cancels it. Keys are ignored in a field.
-
-Later: ⌘K in the sidebar finds any item by title or key in every heap; Tab acts on the highlighted item (start,
-done, due, copy link), Enter opens it, and it can also create ("Add 'safari' as a new item") and navigate. Searching
-every heap needs a server search endpoint; today's search filters only the loaded list.
+5. `⌘K` (`Ctrl K` off a Mac) anywhere, or Find at the top of the sidebar, opens Find. It finds items by title or
+   key in every heap, goes to a heap, and adds "Add “text” as a new item" to the heap on screen. ↑ ↓ and Enter
+   open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy link, as the item allows), and
+   Shift+Tab goes back.

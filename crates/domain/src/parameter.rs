@@ -248,7 +248,8 @@ impl Parameter {
     }
 
     /// The heap parameter as its team's: the same parameter, options and history, with no weight of its own, since each
-    /// heap that uses a team parameter weights it for itself. Fails if it is archived or already a team's.
+    /// heap that uses a team parameter weights it for itself. It has no tag links of its own: its links continue as
+    /// its heap's own links, which the merge writes. Fails if it is archived or already a team's.
     pub fn into_team(&self, team_id: TeamId) -> Result<Self, ParameterError> {
         self.ensure_in_use()?;
         if self.is_team_owned() {
@@ -257,6 +258,7 @@ impl Parameter {
         Ok(Self {
             owner: ParameterOwner::Team(team_id),
             weight: Weight::OFF,
+            tags: BTreeSet::new(),
             ..self.clone()
         })
     }
@@ -498,7 +500,8 @@ fn ensure_labels_unique(options: &[ParameterOption]) -> Result<(), ParameterErro
 
 /// The text a parameter merge's reach is hashed from: for each parameter in the reach, by parameter ID,
 /// `"<parameter id>:<items>:<labels added, joined by |>:<switches as from>to, joined by |>\n"`. It changes when a
-/// parameter joins or leaves the reach, a count changes or the options it adds or switches change.
+/// parameter joins or leaves the reach, a count changes or the options it adds or switches change. The tags whose
+/// links carry over are left out: links can be edited after the merge, values and options can't be taken back.
 pub fn reach_text<'a>(
     entries: impl IntoIterator<Item = (ParameterId, u32, &'a [OptionLabel], &'a [OptionSwitch])>,
 ) -> String {

@@ -1,7 +1,9 @@
-// A server whose registration is closed, with four accounts that already exist: how a real server gets to the state
+// A server whose registration is closed, with six accounts that already exist: how a real server gets to the state
 // the invite page is for (design/ux.md, Invite page). The third is for the reset page's spec, which changes its
 // password; it can make reset links the way the operator does, with the server's own command (design/ux.md, Reset
-// page). The fourth is for the email change spec, which changes its address. The suite's main server (playwright.config.ts) has
+// page). The fourth is for the email change spec, which changes its address. The fifth is an operator, made one with
+// the server's own command, and the sixth is the account the Accounts spec turns off and on (design/ux.md,
+// Accounts). The suite's main server (playwright.config.ts) has
 // registration open, and a golden path that must prove an invite link is the only way in needs one that doesn't.
 import { expect, test as base } from "@playwright/test";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
@@ -32,6 +34,8 @@ export type ClosedServer = {
   forgetful: SeededUser;
   /** Eli Park, whose email address the email change spec changes. It signs in by username, which stays. */
   mover: SeededUser;
+  /** Ivy Stone, an operator of the server. */
+  operator: SeededUser;
   /**
    * Makes a reset link for `login` (a username or an email address) by running the server's `user reset-link`
    * command against its database, and returns the link. Fails unless the command exits 0.
@@ -95,6 +99,11 @@ async function makeResetLink(baseURL: string, databaseUrl: string, login: string
   return stdout.trim();
 }
 
+/** The operator's command that makes `login` an operator, which the server's own database file lets run beside it. */
+async function makeOperator(baseURL: string, databaseUrl: string, login: string): Promise<void> {
+  await promisify(execFile)(BINARY, ["user", "make-operator", login], { env: serverEnv(baseURL, databaseUrl, false) });
+}
+
 /**
  * The link under `path` in the newest mail to `email` written after `after`, or `undefined` while there is none. The
  * file transport writes quoted-printable: soft line breaks and `=3D` are undone far enough to read a link.
@@ -156,7 +165,7 @@ async function register(baseURL: string, display_name: string): Promise<SeededUs
 /**
  * `closedServer`, one per worker, started the first time a test asks for it: the real binary on a free port the
  * OS picked and a SQLite file and a mail directory in the OS temp directory, deleted at the end. It starts with
- * registration open, registers Ana Ruiz, Sam Ortiz and Mia Chen, stops, and starts again on the same file with
+ * registration open, registers Ana Ruiz, Sam Ortiz, Mia Chen, Eli Park, Ivy Stone and Ola Berg, stops, makes Ivy an operator, and starts again on the same file with
  * registration closed and its mail written to files, as a production server got there, with mail.
  *
  * The binary is the one the suite's web server built (`npm run e2e` builds the web app and embeds it, then builds the
@@ -185,7 +194,11 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
         const member = await register(baseURL, "Sam Ortiz");
         const forgetful = await register(baseURL, "Mia Chen");
         const mover = await register(baseURL, "Eli Park");
+        const operator = await register(baseURL, "Ivy Stone");
+        // Ola Berg, whom the Accounts spec turns off and on, and puts back on when it is done.
+        await register(baseURL, "Ola Berg");
         await stop(server);
+        await makeOperator(baseURL, databaseUrl, operator.username);
 
         server = start(baseURL, databaseUrl, false, mailDirectory);
         await waitUntilReady(baseURL, server);
@@ -195,6 +208,7 @@ export const test = base.extend<object, { closedServer: ClosedServer }>({
           member,
           forgetful,
           mover,
+          operator,
           resetLink: (login) => makeResetLink(baseURL, databaseUrl, login),
           mailedLink: async (email, after, path) => {
             await expect.poll(() => findMailedLink(mailDirectory, email, after, path)).toBeDefined();

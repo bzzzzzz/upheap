@@ -186,6 +186,11 @@ fn classify_service(err: &ServiceError) -> Classified {
             ..simple(StatusCode::UNAUTHORIZED, "token_expired", Category::Permission)
         },
         ServiceError::AccountDeactivated => simple(StatusCode::FORBIDDEN, "account_deactivated", Category::Permission),
+        ServiceError::AccountTurnedOff => simple(StatusCode::FORBIDDEN, "account_turned_off", Category::Permission),
+        ServiceError::AccountProviderManaged => {
+            simple(StatusCode::CONFLICT, "account_provider_managed", Category::Conflict)
+        }
+        ServiceError::OwnAccount => simple(StatusCode::CONFLICT, "own_account", Category::Conflict),
         ServiceError::EmailNotConfirmed => simple(StatusCode::FORBIDDEN, "email_not_confirmed", Category::Permission),
         ServiceError::InvalidCredentials => {
             simple(StatusCode::UNAUTHORIZED, "invalid_credentials", Category::Permission)
@@ -453,9 +458,6 @@ fn classify_service(err: &ServiceError) -> Classified {
             parameter_merge_reach: Some(to_parameter_merge_reach_dto(reach)),
             ..simple(StatusCode::CONFLICT, "parameter_merge_unconfirmed", Category::Conflict)
         },
-        ServiceError::ParameterMergeLinked { .. } => {
-            simple(StatusCode::CONFLICT, "parameter_merge_linked", Category::Conflict)
-        }
         ServiceError::Parameter(error) => classify_parameter(error, simple),
         ServiceError::ParameterNameTaken { .. } => Classified {
             field: Some("name"),

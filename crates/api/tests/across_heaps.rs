@@ -612,15 +612,20 @@ async fn a_tag_or_option_that_isnt_the_teams_is_refused_with_a_team() -> Result<
     );
     let heap_option = heap_parameter.body["options"][0]["id"].as_str().context("option")?;
 
-    for (query, code) in [
-        (format!("?team=shared&tag={heap_tag}"), "tag_not_in_heap"),
+    for (query, code, field) in [
+        (format!("?team=shared&tag={heap_tag}"), "tag_not_in_team", Some("tag")),
         (
             "?team=shared&tag=00000000-0000-0000-0000-000000000000".to_owned(),
-            "tag_not_in_heap",
+            "tag_not_in_team",
+            Some("tag"),
         ),
-        (format!("?team=shared&param={heap_option}"), "option_not_in_heap"),
-        (format!("?param={}", w.gold), "invalid_query"),
-        (format!("?tag={}", w.tag), "invalid_query"),
+        (
+            format!("?team=shared&param={heap_option}"),
+            "option_not_in_heap",
+            Some("param"),
+        ),
+        (format!("?param={}", w.gold), "invalid_query", None),
+        (format!("?tag={}", w.tag), "invalid_query", None),
     ] {
         // Act
         let response = w
@@ -630,6 +635,9 @@ async fn a_tag_or_option_that_isnt_the_teams_is_refused_with_a_team() -> Result<
 
         // Assert
         expect_that!(response.body["code"], eq(&json!(code)), "{query}");
+        if let Some(field) = field {
+            expect_that!(response.body["field"], eq(&json!(field)), "{query}");
+        }
     }
     Ok(())
 }

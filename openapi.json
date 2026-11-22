@@ -1534,7 +1534,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_heap` or `option_not_in_heap`",
+            "description": "`tag_not_in_team` (`field` `tag`) or `option_not_in_heap` (`param`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2359,6 +2359,449 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/operator/accounts": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Every account on the server, by display name ignoring case, then username. Not paged: a server has tens to a few\nhundred accounts, so a client searches and filters the list itself. For operators only.",
+        "operationId": "list_accounts",
+        "parameters": [
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The caller isn't an operator",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/operator/accounts/{user_id}/deactivate": {
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Turns a local account off: it can't sign in, and every sign-in it has ends (web sessions, sign-ins of clients and\npersonal tokens). Its items, teams and memberships stay. An account that is off already answers with\n`ended_sign_ins` 0 and records nothing. For operators only.",
+        "operationId": "deactivate_account",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "The account's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeactivated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The caller isn't an operator, or there is no such account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`account_provider_managed`: the sign-in provider owns the account's state; `own_account`: the caller's own account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/operator/accounts/{user_id}/history": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "The account's history, newest first, as the person's own (`/me/history`) but worded for an operator: who turned\nthe account off or made a reset link is named. For operators only.",
+        "operationId": "get_account_history",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "The account's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` from the previous page.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, 1 to 200. Defaults to 50.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_cursor`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The caller isn't an operator, or there is no such account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/operator/accounts/{user_id}/reactivate": {
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Turns a local account back on. The sign-ins that ended stay ended. An account that isn't off answers `204` and\nrecords nothing. For operators only.",
+        "operationId": "reactivate_account",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "The account's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Turned back on, or wasn't off"
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The caller isn't an operator, or there is no such account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`account_provider_managed`: the sign-in provider owns the account's state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/operator/accounts/{user_id}/reset-link": {
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Makes a password reset link for the account, which works once, for an hour, and cancels the account's earlier\nlink. The link is in this response only. For operators only.",
+        "operationId": "make_reset_link",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "The account's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorResetLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`password_sign_in_off`; `account_turned_off`: an operator turned the account off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The caller isn't an operator, or there is no such account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`account_provider_managed`: the sign-in provider owns the account's state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/operator/accounts/{user_id}/sign-ins": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "How many live sign-ins and personal tokens turning the account off would end, to say so before asking. For\noperators only.",
+        "operationId": "count_sign_ins",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "The account's `id`, from the list.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInsToEnd"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The caller isn't an operator, or there is no such account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/api/v1/password-resets": {
@@ -6790,7 +7233,7 @@
         "tags": [
           "parameters"
         ],
-        "summary": "Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins\nonly. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a\n`parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team\nparameter at the weight it had, and each item's value moves to the option with the same label; for an open item\nwhose option the team parameter has archived, that is the option in use it was replaced by (`switched`). A\nparameter linked to tags can't be merged: `parameter_merge_linked` names them. Repeating the write on a team\nparameter the heap uses succeeds and changes nothing.",
+        "summary": "Makes a heap parameter its team's, in place, and merges the team's same-named heap parameters into it. Admins\nonly. It can't be undone, so it needs `confirm_reach`, the `token` of the `parameter_merge_reach` of a\n`parameter_merge_unconfirmed` refusal, even when nothing merges. Every heap that had one of them uses the team\nparameter at the weight it had, and each item's value moves to the option with the same label; for an open item\nwhose option the team parameter has archived, that is the option in use it was replaced by (`switched`). The tags\na parameter is linked to become its heap's links to the team parameter, for that heap only (`linked_tags`).\nRepeating the write on a team parameter the heap uses succeeds and changes nothing.",
         "operationId": "make_team_parameter",
         "parameters": [
           {
@@ -6864,7 +7307,7 @@
             }
           },
           "409": {
-            "description": "`parameter_merge_unconfirmed`, `parameter_merge_linked`, `parameter_archived` or `heap_archived`",
+            "description": "`parameter_merge_unconfirmed`, `parameter_archived` or `heap_archived`",
             "content": {
               "application/json": {
                 "schema": {
@@ -10714,6 +11157,21 @@
   },
   "components": {
     "schemas": {
+      "AccountDeactivated": {
+        "type": "object",
+        "description": "What turning an account off did.",
+        "required": [
+          "ended_sign_ins"
+        ],
+        "properties": {
+          "ended_sign_ins": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many sign-ins ended: web sessions, sign-ins of clients and personal tokens. 0 for an account that was off\nalready.",
+            "minimum": 0
+          }
+        }
+      },
       "AccountEvent": {
         "type": "object",
         "description": "One event in the account's history.",
@@ -10759,7 +11217,9 @@
           "heap_priority_changed",
           "email_change_asked",
           "email_changed",
-          "email_confirmed"
+          "email_confirmed",
+          "operator_granted",
+          "operator_removed"
         ]
       },
       "AccountHistory": {
@@ -10783,6 +11243,14 @@
             "description": "Pass as `cursor` for the next page; `null` on the last page."
           }
         }
+      },
+      "AccountKind": {
+        "type": "string",
+        "description": "How an account signs in.",
+        "enum": [
+          "local",
+          "provider"
+        ]
       },
       "AcrossHeapsItem": {
         "type": "object",
@@ -11148,7 +11616,9 @@
           "account_reactivated",
           "email_change_asked",
           "email_changed",
-          "email_confirmed"
+          "email_confirmed",
+          "operator_granted",
+          "operator_removed"
         ]
       },
       "AuditChange": {
@@ -14247,7 +14717,8 @@
         "required": [
           "user",
           "teams",
-          "allowed_actions"
+          "allowed_actions",
+          "operator"
         ],
         "properties": {
           "allowed_actions": {
@@ -14256,6 +14727,10 @@
               "$ref": "#/components/schemas/MeAction"
             },
             "description": "What the user may do with their account, such as signing out and making teams."
+          },
+          "operator": {
+            "type": "boolean",
+            "description": "Whether the user is an operator of the server, who reads every account and turns local ones off and on."
           },
           "teams": {
             "type": "array",
@@ -14642,6 +15117,116 @@
           }
         }
       },
+      "OperatorAccount": {
+        "type": "object",
+        "description": "An account in the operator's list.",
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "email",
+          "kind",
+          "confirmed",
+          "deactivated",
+          "operator",
+          "allowed_actions"
+        ],
+        "properties": {
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorAccountAction"
+            }
+          },
+          "confirmed": {
+            "type": "boolean",
+            "description": "Whether the address is confirmed."
+          },
+          "deactivated": {
+            "type": "boolean",
+            "description": "Whether an operator turned a local account off, or the provider turned a provider account off."
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AccountKind"
+          },
+          "last_sign_in_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "UTC milliseconds: when a session was last opened for the account. `null` until one is."
+          },
+          "last_sign_in_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How long ago, in the request's timezone: \"3 days ago\". `null` when the account never signed in."
+          },
+          "operator": {
+            "type": "boolean",
+            "description": "Whether the account is an operator."
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "OperatorAccountAction": {
+        "type": "string",
+        "description": "What the caller may do about an account in the list.",
+        "enum": [
+          "make_reset_link",
+          "deactivate",
+          "reactivate",
+          "history"
+        ]
+      },
+      "OperatorAccountList": {
+        "type": "object",
+        "description": "Every account on the server, by display name ignoring case, then username.",
+        "required": [
+          "accounts"
+        ],
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorAccount"
+            }
+          }
+        }
+      },
+      "OperatorResetLink": {
+        "type": "object",
+        "description": "A reset link just made. This is the only time it is shown.",
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "UTC milliseconds."
+          },
+          "url": {
+            "type": "string",
+            "description": "The whole link: `{base_url}/reset/{token}`. Works once, for an hour, and cancels the account's earlier link."
+          }
+        }
+      },
       "OptionArrangement": {
         "type": "object",
         "description": "One option of a new arrangement.",
@@ -14878,6 +15463,7 @@
           "items",
           "added_options",
           "switched",
+          "linked_tags",
           "starting"
         ],
         "properties": {
@@ -14899,6 +15485,13 @@
             "format": "int32",
             "description": "Items with a value for the parameter, open or closed.",
             "minimum": 0
+          },
+          "linked_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The names of its tags, sorted: each becomes its heap's link to the team parameter, for that heap only."
           },
           "parameter_id": {
             "type": "string",
@@ -16473,6 +17066,27 @@
           }
         }
       },
+      "SignInsToEnd": {
+        "type": "object",
+        "description": "What turning an account off would end.",
+        "required": [
+          "sign_ins",
+          "personal_tokens"
+        ],
+        "properties": {
+          "personal_tokens": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "sign_ins": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Live web sessions and sign-ins of clients such as the CLI.",
+            "minimum": 0
+          }
+        }
+      },
       "SignedOut": {
         "type": "object",
         "description": "Where to send the browser to end the person's session at the identity provider too.",
@@ -17897,6 +18511,10 @@
     {
       "name": "heaps",
       "description": "Creating, renaming and archiving heaps"
+    },
+    {
+      "name": "operator",
+      "description": "What an operator of the server does about accounts. Every endpoint answers `404 not_found` to anyone who isn't one."
     },
     {
       "name": "users",

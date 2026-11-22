@@ -16,7 +16,7 @@ use domain::validation::Field;
 use domain::{Duration, HeapId, ItemId, OptionId, ParameterId, SavedViewId, TagId, UserId, ValidationError, Version};
 use store::StoreError;
 
-use crate::parameters::{LinkedParameter, ParameterMergeReach};
+use crate::parameters::ParameterMergeReach;
 use crate::tags::MergeReach;
 
 /// Why a use case failed. `api` maps each variant to an HTTP status and a stable code.
@@ -40,6 +40,15 @@ pub enum ServiceError {
     /// The identity provider turned the person's access off over SCIM, so no sign-in opens a session for them.
     #[error("the account is deactivated")]
     AccountDeactivated,
+    /// An operator turned the local account off, so no sign-in opens a session for the person.
+    #[error("the account is turned off")]
+    AccountTurnedOff,
+    /// An operator action on an account whose state the sign-in provider owns.
+    #[error("the account is managed by the sign-in provider")]
+    AccountProviderManaged,
+    /// An operator turning off their own account, which would lock them out.
+    #[error("an operator can't turn off their own account")]
+    OwnAccount,
     #[error("email or password is wrong")]
     InvalidCredentials,
     /// The right password for an account that hasn't confirmed its address, on a server with mail set up. A new link
@@ -169,13 +178,6 @@ pub enum ServiceError {
     /// Making a heap parameter a team parameter was not confirmed with the token of its current reach.
     #[error("{}", unconfirmed_message(reach.entries.len() - 1))]
     ParameterMergeUnconfirmed { reach: ParameterMergeReach },
-    /// A parameter the merge would take in is linked to tags, which a team parameter can't be yet. `linked` is in the
-    /// reach's order.
-    #[error(
-        "Unlink the tags first: team parameters can't be linked to tags yet. {}",
-        linked_message(linked)
-    )]
-    ParameterMergeLinked { linked: Vec<LinkedParameter> },
     #[error(transparent)]
     Parameter(#[from] ParameterError),
     #[error("this heap already has a parameter called {name:?}")]
@@ -218,27 +220,6 @@ fn unconfirmed_message(merged: usize) -> String {
         1 => "making this a team parameter merges 1 same-named heap parameter into it".to_owned(),
         n => format!("making this a team parameter merges {n} same-named heap parameters into it"),
     }
-}
-
-/// `Launch's "Customer tier": billing, vip; Support's "customer tier": vip.`
-fn linked_message(linked: &[LinkedParameter]) -> String {
-    let parts: Vec<String> = linked
-        .iter()
-        .map(|parameter| {
-            let archived = if parameter.heap_archived {
-                " (archived heap: unarchive it to unlink)"
-            } else {
-                ""
-            };
-            format!(
-                "{}'s \u{201c}{}\u{201d}{archived}: {}",
-                parameter.heap,
-                parameter.parameter,
-                parameter.tags.join(", ")
-            )
-        })
-        .collect();
-    format!("{}.", parts.join("; "))
 }
 
 /// "1 heap tag", "3 heap tags".

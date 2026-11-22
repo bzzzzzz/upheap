@@ -94,3 +94,17 @@ export function useUpdateMe() {
     onSettled: () => Promise.all([invalidateMe(queryClient), queryClient.invalidateQueries({ queryKey: ["team"] })]),
   });
 }
+
+/**
+ * The items whose title or key matches `text`, in every heap the person can view (ux.md, Keyboard). Callers send the
+ * trimmed text once it has settled, and nothing for a blank one. The previous answer stays while the next one loads.
+ */
+export function useSearch(text: string) {
+  return useQuery({
+    queryKey: ["search", text] as const,
+    queryFn: async () => unwrap(await api.GET("/api/v1/me/search", { params: { query: { q: text } } })),
+    enabled: text !== "",
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}

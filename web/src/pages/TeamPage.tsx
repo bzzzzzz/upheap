@@ -714,13 +714,13 @@ function MembersSection({ team, phone }: { team: Team; phone: boolean }) {
 }
 
 /** Initials in a coloured circle, the colour picked by the user so it stays the same. Decorative. */
-function Avatar({ member }: { member: TeamMember }) {
-  const words = member.display_name.trim().split(/\s+/);
+export function Avatar({ name, id }: { name: string; id: string }) {
+  const words = name.trim().split(/\s+/);
   const initials = [words[0], words.length > 1 ? words.at(-1) : undefined]
     .map((word) => Array.from(word ?? "")[0] ?? "")
     .join("")
     .toUpperCase();
-  const hue = [...member.user_id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % AVATAR_CLASSES.length;
+  const hue = [...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % AVATAR_CLASSES.length;
   return (
     <span
       aria-hidden="true"
@@ -781,7 +781,7 @@ function MemberRow({
   return (
     <li className="flex flex-col">
       <div className="flex items-center gap-3 px-2 py-[9px]">
-        <Avatar member={member} />
+        <Avatar name={member.display_name} id={member.user_id} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="font-medium break-words">{memberName(member, you)}</span>
           <span className="text-xs break-words text-muted">@{member.username}</span>
