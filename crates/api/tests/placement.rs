@@ -261,9 +261,9 @@ async fn the_history_says_which_way_the_item_moved_and_that_it_was_reset() -> Re
     expect_that!(
         phrases,
         unordered_elements_are![
-            eq(&"moved item up in the list"),
-            eq(&"moved item up in the list"),
-            eq(&"reset the list place of"),
+            eq(&"moved up item"),
+            eq(&"moved up item"),
+            eq(&"reset the list place of item"),
         ]
     );
     Ok(())

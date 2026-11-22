@@ -479,9 +479,9 @@ fn describe_phrase(
             .and_then(|placement| placement.get("after"))
             .and_then(Value::as_str);
         return match after {
-            Some("up") => (Cow::Borrowed("moved item up in the list"), false),
-            Some("down") => (Cow::Borrowed("moved item down in the list"), false),
-            _ => (Cow::Borrowed("reset the list place of"), names_entity),
+            Some("up") => (Cow::Borrowed("moved up item"), names_entity),
+            Some("down") => (Cow::Borrowed("moved down item"), names_entity),
+            _ => (Cow::Borrowed("reset the list place of item"), names_entity),
         };
     }
     if action == AuditAction::MemberRoleChanged
@@ -555,8 +555,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::ItemCreated, _) => ("added item", true),
         (AuditAction::ItemUpdated, _) => ("edited item", true),
         (AuditAction::ItemMoved, _) => ("moved item", true),
-        // `describe_phrase` says which way, and a reset names the item.
-        (AuditAction::ItemPlaced, _) => ("reset the list place of", true),
+        // `describe_phrase` says which way it was moved.
+        (AuditAction::ItemPlaced, _) => ("reset the list place of item", true),
         (AuditAction::StepAdded, _) => ("added a step to", true),
         (AuditAction::StepUpdated, _) => ("changed a step of", true),
         (AuditAction::QuestionAsked, _) => ("asked a question on", true),
