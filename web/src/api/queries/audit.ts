@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
-import { apiKey } from "./keys";
+import { apiKey, heapPath } from "./keys";
 
 /** Whose history to read: a heap's or a team's, or one entity's within it. */
 export type AuditScope = { heap: HeapRef } | { team: string };
@@ -13,7 +13,7 @@ export function useAuditLog(scope: AuditScope, entityId?: string) {
   return useInfiniteQuery({
     queryKey:
       "heap" in scope
-        ? apiKey("/api/v1/teams/{team}/heaps/{heap}/audit", { path: scope.heap, query })
+        ? apiKey("/api/v1/teams/{team}/heaps/{heap}/audit", { path: heapPath(scope.heap), query })
         : apiKey("/api/v1/teams/{team}/audit", { path: { team: scope.team }, query }),
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {

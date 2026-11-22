@@ -8,6 +8,7 @@ import {
   parametersKey,
   heapKey,
   heapRecordKeys,
+  heapPath,
   waitingKey,
   invalidateHeap,
   invalidateTeam,
@@ -165,7 +166,7 @@ export type RankingPreviewDraft = Omit<RankingPreviewRequest, "limit">;
  */
 export function useRankingPreview(heapRef: HeapRef, draft: RankingPreviewDraft) {
   return useQuery({
-    queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", { path: heapRef, body: draft }),
+    queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", { path: heapPath(heapRef), body: draft }),
     queryFn: async () =>
       unwrap(
         await api.POST("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", {

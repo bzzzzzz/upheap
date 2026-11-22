@@ -34,28 +34,38 @@ export function apiKey<P extends keyof paths>(path: P, params?: ApiKeyParams<P>)
 
 const ITEMS = "/api/v1/teams/{team}/heaps/{heap}/items";
 
+/**
+ * A heap's path parameters, and nothing else. A key holds its object part whole, so a `HeapRef` that carries more (the
+ * heap moved to also has its `id`) would make a key no hook reads.
+ */
+export const heapPath = (heap: HeapRef): HeapRef => ({ team: heap.team, heap: heap.heap });
+
 /** Every non-closed item, unfiltered: what an item can be blocked by, whatever the list view shows. */
 export const EVERY_NON_CLOSED_ITEM: ListViewQuery = { open: "shown", in_progress: "shown", blocked: "shown" };
 
 // Heaps and teams are cached by their slugs, as their paths name them; a new slug is a new path, and the app moves
 // there. Every list query of a heap sits under `apiKey(ITEMS, { path: heap })`, so one invalidation covers them all.
-export const rankedKey = (heap: HeapRef) => apiKey(ITEMS, { path: heap });
-export const rankedViewKey = (heap: HeapRef, view: ListViewQuery) => apiKey(ITEMS, { path: heap, query: view });
+export const rankedKey = (heap: HeapRef) => apiKey(ITEMS, { path: heapPath(heap) });
+export const rankedViewKey = (heap: HeapRef, view: ListViewQuery) =>
+  apiKey(ITEMS, { path: heapPath(heap), query: view });
 // The marker keeps the candidates apart from a list view whose query is `EVERY_NON_CLOSED_ITEM`, which would share
 // their cache entry (and its `as_of`).
 export const blockerCandidatesKey = (heap: HeapRef) =>
-  [...apiKey(ITEMS, { path: heap, query: EVERY_NON_CLOSED_ITEM }), "blocker-candidates"] as const;
-export const closedKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/items/closed", { path: heap });
-export const tagsKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/tags", { path: heap });
-export const savedViewsKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/views", { path: heap });
-export const parametersKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/parameters", { path: heap });
+  [...apiKey(ITEMS, { path: heapPath(heap), query: EVERY_NON_CLOSED_ITEM }), "blocker-candidates"] as const;
+export const closedKey = (heap: HeapRef) =>
+  apiKey("/api/v1/teams/{team}/heaps/{heap}/items/closed", { path: heapPath(heap) });
+export const tagsKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/tags", { path: heapPath(heap) });
+export const savedViewsKey = (heap: HeapRef) =>
+  apiKey("/api/v1/teams/{team}/heaps/{heap}/views", { path: heapPath(heap) });
+export const parametersKey = (heap: HeapRef) =>
+  apiKey("/api/v1/teams/{team}/heaps/{heap}/parameters", { path: heapPath(heap) });
 export const itemKey = (heap: HeapRef, key: string) =>
-  apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}", { path: { ...heap, item: key } });
+  apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}", { path: { ...heapPath(heap), item: key } });
 export const teamKey = (team: string) => apiKey("/api/v1/teams/{team}", { path: { team } });
 export const teamTagsKey = (team: string) => apiKey("/api/v1/teams/{team}/tags", { path: { team } });
 export const teamParametersKey = (team: string) => apiKey("/api/v1/teams/{team}/parameters", { path: { team } });
 export const inviteLinksKey = (team: string) => apiKey("/api/v1/teams/{team}/invite-links", { path: { team } });
-export const heapKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}", { path: heap });
+export const heapKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}", { path: heapPath(heap) });
 export const waitingKey = apiKey("/api/v1/me/waiting");
 export const decisionsKey = apiKey("/api/v1/me/decisions");
 /** Every view of the list across heaps, by prefix. */
@@ -78,9 +88,10 @@ export function teamKeys(team?: string) {
 
 /** The heap's record and its ranking previews. With no `heap`, those of every heap of the team. */
 export function heapRecordKeys(heap: { team: string; heap?: string }) {
+  const path = heap.heap === undefined ? { team: heap.team } : { team: heap.team, heap: heap.heap };
   return [
-    apiKey("/api/v1/teams/{team}/heaps/{heap}", { path: heap }),
-    apiKey("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", { path: heap }),
+    apiKey("/api/v1/teams/{team}/heaps/{heap}", { path }),
+    apiKey("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", { path }),
   ];
 }
 
