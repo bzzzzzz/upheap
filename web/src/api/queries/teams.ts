@@ -2,7 +2,18 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useNavigate } from "@tanstack/react-router";
 import { api, ensureOk, unwrap } from "../client";
 import type { DataDays, Role, Team } from "../schema";
-import { rankedKey, closedKey, tagsKey, parametersKey, teamKey, heapKey, invalidateMe, invalidateTeam } from "./keys";
+import {
+  apiKey,
+  rankedKey,
+  closedKey,
+  tagsKey,
+  parametersKey,
+  teamKey,
+  teamKeys,
+  heapRecordKeys,
+  invalidateMe,
+  invalidateTeam,
+} from "./keys";
 
 /** The team whose slug is `team`. */
 export function useTeam(team: string) {
@@ -18,7 +29,10 @@ export function useTeam(team: string) {
  */
 export function useTeamData(team: string, choice: { heap: string | undefined; days: DataDays }) {
   return useQuery({
-    queryKey: [...teamKey(team), "data", choice.heap ?? null, choice.days] as const,
+    queryKey: apiKey("/api/v1/teams/{team}/data", {
+      path: { team },
+      query: { heap: choice.heap, days: choice.days },
+    }),
     queryFn: async () =>
       unwrap(
         await api.GET("/api/v1/teams/{team}/data", {
@@ -110,10 +124,16 @@ export function useLeaveTeam(team: Team) {
     onSuccess: async () => {
       // In place of the team's page, so Back doesn't lead to a team the user is no longer in.
       await navigate({ to: "/teams", replace: true });
-      queryClient.removeQueries({ queryKey: teamKey(team.slug) });
+      for (const queryKey of teamKeys(team.slug)) queryClient.removeQueries({ queryKey });
       for (const { slug } of team.heaps) {
         const heap = { team: team.slug, heap: slug };
-        for (const key of [heapKey(heap), rankedKey(heap), closedKey(heap), tagsKey(heap), parametersKey(heap)]) {
+        for (const key of [
+          ...heapRecordKeys(heap),
+          rankedKey(heap),
+          closedKey(heap),
+          tagsKey(heap),
+          parametersKey(heap),
+        ]) {
           queryClient.removeQueries({ queryKey: key });
         }
       }
@@ -122,7 +142,7 @@ export function useLeaveTeam(team: Team) {
   });
 }
 
-const usersKey = (query: string) => ["users", query] as const;
+const usersKey = (query: string) => apiKey("/api/v1/users", { query: { query } });
 
 /**
  * Whether the server takes `query` as a user lookup: 3 characters, or a whole username shorter than that (`ab`), which

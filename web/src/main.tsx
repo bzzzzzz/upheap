@@ -6,7 +6,7 @@ import { RouterProvider as AriaRouterProvider } from "react-aria-components";
 import { createRoot } from "react-dom/client";
 
 import { ApiProblem, isUnauthenticated } from "./api/client";
-import { removeUserQueries } from "./api/queries/keys";
+import { historyKeys, removeUserQueries } from "./api/queries/keys";
 import { followThemeAcrossTabs } from "./components/theme";
 import { createAppRouter, handlesOwnSignIn, isSignInPath, pageHref, signInSearch } from "./routes";
 import "./index.css";
@@ -39,7 +39,9 @@ const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     onError: onUnauthenticated,
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["audit"] });
+      for (const queryKey of historyKeys) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
     },
   }),
   queryCache: new QueryCache({ onError: onUnauthenticated }),

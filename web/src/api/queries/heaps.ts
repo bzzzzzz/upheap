@@ -2,7 +2,17 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClie
 import { useNavigate } from "@tanstack/react-router";
 import { api, unwrap, type HeapRef } from "../client";
 import type { CreateHeapRequest, Heap, HeapWeightsPatchRequest, ParameterList, RankingPreviewRequest } from "../schema";
-import { tagsKey, parametersKey, heapKey, waitingKey, invalidateHeap, invalidateTeam } from "./keys";
+import {
+  apiKey,
+  tagsKey,
+  parametersKey,
+  heapKey,
+  heapRecordKeys,
+  heapPath,
+  waitingKey,
+  invalidateHeap,
+  invalidateTeam,
+} from "./keys";
 
 export function useHeap(heap: HeapRef) {
   return useQuery({
@@ -24,7 +34,7 @@ export function useCreateHeap(team: string) {
 /** Everything that shows a heap's name or archive state. Archiving also changes every item's allowed actions. */
 function invalidateHeapRecord(queryClient: QueryClient, heap: HeapRef) {
   return Promise.all([
-    queryClient.invalidateQueries({ queryKey: heapKey(heap) }),
+    ...heapRecordKeys(heap).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     invalidateTeam(queryClient, heap.team),
     invalidateHeap(queryClient, heap),
     queryClient.invalidateQueries({ queryKey: tagsKey(heap) }),
@@ -91,7 +101,7 @@ export function useSetHeapPriority(team: string) {
     onSuccess: (saved) => queryClient.setQueryData(heapKey({ team, heap: saved.slug }), saved),
     onSettled: (_saved, _error, { heap }) =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: heapKey({ team, heap: heap.slug }) }),
+        ...heapRecordKeys({ team, heap: heap.slug }).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
         // The team's heap list carries the priority too.
         invalidateTeam(queryClient, team),
         queryClient.invalidateQueries({ queryKey: waitingKey }),
@@ -151,12 +161,12 @@ export type RankingPreviewDraft = Omit<RankingPreviewRequest, "limit">;
 
 /**
  * The top of the heap's list with the draft weights, none saved. Only the weights that differ from the saved ones go
- * in `draft`, so no draft is the current top of the list. While a new draft loads, the last result stays. It sits
- * under the heap's key, so saving or refetching the heap refreshes it.
+ * in `draft`, so no draft is the current top of the list. While a new draft loads, the last result stays. `heapRecordKeys`
+ * reaches it, so saving or refetching the heap refreshes it.
  */
 export function useRankingPreview(heapRef: HeapRef, draft: RankingPreviewDraft) {
   return useQuery({
-    queryKey: [...heapKey(heapRef), "ranking-preview", draft],
+    queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", { path: heapPath(heapRef), body: draft }),
     queryFn: async () =>
       unwrap(
         await api.POST("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", {

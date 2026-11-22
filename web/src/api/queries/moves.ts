@@ -1,7 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { hashKey, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
 import type { Item, ItemToStepRequest } from "../schema";
 import {
+  everyItemKey,
   rankedKey,
   closedKey,
   itemKey,
@@ -57,13 +58,15 @@ export function useMoveItem(heap: HeapRef) {
     onSuccess: (saved, { to }) => queryClient.setQueryData(itemKey(to, saved.key), saved),
     onSettled: (saved, _error, { item, to }) => {
       invalidateOpenCounts(queryClient);
-      const gone = itemKey(heap, item.key);
-      const isGone = (key: readonly unknown[]) => saved !== undefined && gone.every((part, i) => key[i] === part);
+      const gone = hashKey(itemKey(heap, item.key));
       for (const queryKey of [rankedKey(heap), rankedKey(to), closedKey(heap), closedKey(to)]) {
         void queryClient.invalidateQueries({ queryKey });
       }
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: ["item"], predicate: (query) => !isGone(query.queryKey) });
+      void queryClient.invalidateQueries({
+        queryKey: everyItemKey,
+        predicate: (query) => saved === undefined || query.queryHash !== gone,
+      });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
       void queryClient.invalidateQueries({ queryKey: decisionsKey });
     },
@@ -98,7 +101,7 @@ export function useMoveItems(heap: HeapRef) {
         void queryClient.invalidateQueries({ queryKey });
       }
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: ["item"] });
+      void queryClient.invalidateQueries({ queryKey: everyItemKey });
       void queryClient.invalidateQueries({ queryKey: waitingKey });
       void queryClient.invalidateQueries({ queryKey: decisionsKey });
     },

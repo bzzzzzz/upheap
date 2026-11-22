@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { api, unwrap, type HeapRef } from "../client";
 import type { CreateItemRequest, Item, ItemPatchRequest, ItemState } from "../schema";
 import {
+  apiKey,
   itemKey,
   invalidateHeap,
   invalidateOpenCounts,
@@ -30,7 +31,7 @@ export function useItem(heap: HeapRef, key: string) {
  */
 export function useDueChoices() {
   return useQuery({
-    queryKey: ["due-choices"],
+    queryKey: apiKey("/api/v1/due-choices"),
     queryFn: async () => unwrap(await api.GET("/api/v1/due-choices")).choices,
     staleTime: 10 * 60_000,
   });

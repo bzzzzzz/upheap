@@ -9,7 +9,7 @@ import {
 import { useRef } from "react";
 import { api, unwrap, type AcrossHeapsQuery } from "../client";
 import type { User } from "../schema";
-import { acrossHeapsKey, waitingKey, decisionsKey, POLL_INTERVAL, invalidateMe, meKey } from "./keys";
+import { apiKey, waitingKey, decisionsKey, POLL_INTERVAL, invalidateMe, meKey, teamKeys } from "./keys";
 
 export const meQuery = queryOptions({
   queryKey: meKey,
@@ -27,7 +27,7 @@ export const useMe = () => useQuery(meQuery);
 export function useAcrossHeapsList(view: AcrossHeapsQuery) {
   const asOf = useRef<number | undefined>(undefined);
   return useQuery({
-    queryKey: [...acrossHeapsKey, view] as const,
+    queryKey: apiKey("/api/v1/me/items", { query: view }),
     queryFn: async () => {
       const data = unwrap(await api.GET("/api/v1/me/items", { params: { query: { ...view, as_of: asOf.current } } }));
       asOf.current = data.as_of;
@@ -65,7 +65,7 @@ export function useDecisions() {
   });
 }
 
-const resultsKey = ["results"] as const;
+const resultsKey = apiKey("/api/v1/me/results");
 
 /** The history of runs that ended as reached in the last 30 days, a page at a time, newest first (ux.md, Agents). */
 export function useResults() {
@@ -91,7 +91,11 @@ export function useUpdateMe() {
         }),
       ),
     // Teams list members by name.
-    onSettled: () => Promise.all([invalidateMe(queryClient), queryClient.invalidateQueries({ queryKey: ["team"] })]),
+    onSettled: () =>
+      Promise.all([
+        invalidateMe(queryClient),
+        ...teamKeys().map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      ]),
   });
 }
 
@@ -101,7 +105,7 @@ export function useUpdateMe() {
  */
 export function useSearch(text: string) {
   return useQuery({
-    queryKey: ["search", text] as const,
+    queryKey: apiKey("/api/v1/me/search", { query: { q: text } }),
     queryFn: async () => unwrap(await api.GET("/api/v1/me/search", { params: { query: { q: text } } })),
     enabled: text !== "",
     placeholderData: keepPreviousData,

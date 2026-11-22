@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ensureOk, unwrap } from "../client";
 import type { ClientSignIn, PersonalToken, PersonalTokenExpiry } from "../schema";
+import { apiKey } from "./keys";
 
-const signInsKey = ["sign-ins"] as const;
+const signInsKey = apiKey("/api/v1/me/sign-ins");
 
 /**
  * The sign-ins of clients such as the CLI, most recently used first. Only the Command line card asks, and it is shown
@@ -29,7 +30,7 @@ export function useEndSignIn() {
   });
 }
 
-const personalTokensKey = ["personal-tokens"] as const;
+const personalTokensKey = apiKey("/api/v1/me/personal-tokens");
 
 /** The signed-in user's live personal tokens, newest first. Only the Command line card asks. */
 export function usePersonalTokens() {
