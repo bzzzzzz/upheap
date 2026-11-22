@@ -468,6 +468,10 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("param"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "option_not_in_heap", Category::Caller)
         },
+        ServiceError::OptionNotInTeam { .. } => Classified {
+            field: Some("param"),
+            ..simple(StatusCode::UNPROCESSABLE_ENTITY, "option_not_in_team", Category::Caller)
+        },
         ServiceError::PasswordHashing(_) | ServiceError::RandomSource(_) => unexpected(),
         ServiceError::Store(store) => match StoreErrorKind::of(store) {
             StoreErrorKind::Unavailable => Classified {

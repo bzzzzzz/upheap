@@ -231,7 +231,7 @@ async fn get_waiting(
         (status = 400, description = "`invalid_query`", body = Problem),
         (status = 401, description = "`unauthenticated`", body = Problem),
         (status = 404, description = "`not_found`", body = Problem),
-        (status = 422, description = "`tag_not_in_team` (`field` `tag`) or `option_not_in_heap` (`param`)", body = Problem),
+        (status = 422, description = "`tag_not_in_team` (`field` `tag`) or `option_not_in_team` (`param`)", body = Problem),
     ))]
 async fn get_items(
     State(state): State<AppState>,

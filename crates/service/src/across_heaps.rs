@@ -77,7 +77,7 @@ impl Services {
     /// `requested_as_of` is honoured as [`list_ranked`](Self::list_ranked) honours it. `view` must sort by priority:
     /// the list across heaps has no heap to resolve a sort by parameter against. It filters by tags and options
     /// only with a `team`, which the caller passes; they must be the team's tags and the options of its parameters
-    /// ([`ServiceError::TagNotInTeam`], [`ServiceError::OptionNotInHeap`]). Options of archived team parameters
+    /// ([`ServiceError::TagNotInTeam`], [`ServiceError::OptionNotInTeam`]). Options of archived team parameters
     /// don't filter. A heap that doesn't use every other parameter the options name is left out unranked, as none of
     /// its items can hold a value for it. Filtering picks rows after each heap is ranked, so the merged order is the
     /// unfiltered one with the other rows taken out. Ranking costs one pass over a heap's non-closed items, so heaps
@@ -237,7 +237,7 @@ impl Services {
             let parameter = parameters
                 .iter()
                 .find(|parameter| parameter.find_option(option_id).is_some())
-                .ok_or(ServiceError::OptionNotInHeap { option_id })?;
+                .ok_or(ServiceError::OptionNotInTeam { option_id })?;
             if !parameter.is_archived() {
                 trimmed.filter.options.insert(option_id);
                 if !named.contains(&parameter.id) {

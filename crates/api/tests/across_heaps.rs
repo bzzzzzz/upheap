@@ -621,7 +621,7 @@ async fn a_tag_or_option_that_isnt_the_teams_is_refused_with_a_team() -> Result<
         ),
         (
             format!("?team=shared&param={heap_option}"),
-            "option_not_in_heap",
+            "option_not_in_team",
             Some("param"),
         ),
         (format!("?param={}", w.gold), "invalid_query", None),

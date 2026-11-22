@@ -188,6 +188,9 @@ pub enum ServiceError {
     /// A list filter names an option that isn't an option of the heap's parameters.
     #[error("option {option_id} is not an option of this heap's parameters")]
     OptionNotInHeap { option_id: OptionId },
+    /// A list filter across heaps names an option that isn't an option of the request's team's parameters.
+    #[error("option {option_id} is not an option of this team's parameters")]
+    OptionNotInTeam { option_id: OptionId },
     /// The random source failed, so no item key could be made.
     #[error("random source failed: {0}")]
     RandomSource(String),
