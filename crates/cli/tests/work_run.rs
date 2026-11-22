@@ -2710,7 +2710,7 @@ async fn a_run_adds_a_task_with_steps_and_is_told_what_an_item_without_context_n
     expect_that!(
         shown.stdout,
         contains_substring(format!(
-            "From: {note} \"Rotate the certs\" (note, ada/personal), added by an agent run"
+            "From: {note} \"Rotate the certs\" (Note, ada/personal), added by an agent run"
         ))
     );
     Ok(())

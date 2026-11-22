@@ -44,7 +44,7 @@ coded_enum! {
 }
 
 impl Goal {
-    /// The goal as people read it, in audit entries.
+    /// The goal as people read it.
     pub const fn label(self) -> &'static str {
         match self {
             Self::WithContext => "With context",
