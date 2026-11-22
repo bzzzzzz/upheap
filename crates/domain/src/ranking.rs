@@ -307,8 +307,8 @@ pub enum PlaceError {
 
 /// The multiplier that puts `item` right above or below `anchor_id` when `items` are ranked at `as_of`.
 ///
-/// `items` are the ranked items of the heap, and `item` must be one of them. The heap is ranked with the item's own placement cleared and every other item's in effect, and the item is left
-/// out of the order it is placed in. Its target score is halfway between the anchor's and the neighbour's on that
+/// `items` are the ranked items of the heap, and `item` must be one of them. The heap is ranked with the item's own
+/// placement cleared and every other item's in effect, and the item is left out of the order it is placed in. Its target score is halfway between the anchor's and the neighbour's on that
 /// side, a tenth past the anchor when there is none, and the next representable score past the anchor when the
 /// halfway score isn't strictly past it (equal scores). The multiplier scales the item's unplaced score, the one it
 /// has with no placement anywhere, to the target; a second ranking with every placement cleared gives it, since

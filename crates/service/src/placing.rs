@@ -46,7 +46,9 @@ impl Services {
 
         let now = self.now();
         let as_of = self.effective_as_of(requested_as_of, now);
-        // Locking reads after the heap lock, so concurrent placements work from each other's rows even on MySQL.
+        // Locking reads of the item rows after the heap lock, so concurrent placements work from each other's
+        // placements even on MySQL. Tags and values are plain reads: a concurrent edit to them can put the item a place
+        // off, which placing it again fixes.
         let ranked: Vec<Item> = store::items::list_items_in_states_locking(&txn, access.heap.id, &StateKind::OPEN)
             .await?
             .into_iter()
