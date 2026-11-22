@@ -172,7 +172,7 @@ type Added = {
   place: { position: number; section: string | undefined } | undefined;
   /** The date a reminder to come joins the list, as people say it; it has no place until then. */
   joins: string | undefined;
-  /** Where the agent it was sent to is going, when an agent has it. */
+  /** Where the agent it was sent to is going, when it was sent with the add. */
   sentTo: Goal | undefined;
 };
 
@@ -203,6 +203,8 @@ type SentAdd = {
   heapName: string;
   onScreen: boolean;
   addAnother: boolean;
+  /** Whether it was sent to an agent with the add, rather than left to the heap's prepare turn. */
+  sending: boolean;
   edits: Partial<Draft>;
   title: string;
   number: number;
@@ -394,6 +396,7 @@ export function AddItemDialog({
       heapName,
       onScreen,
       addAnother,
+      sending,
       edits,
       title: draft.title,
       number: ++latest.current,
@@ -477,7 +480,8 @@ export function AddItemDialog({
       heapName: add.heapName,
       place: shown && { position: shown.entry.position, section: shown.section },
       joins,
-      sentTo: item.turn?.going_to,
+      // Only a send the person chose: the heap's prepare turn was already said in the dialog.
+      sentTo: add.sending ? item.turn?.going_to : undefined,
     };
     if (!add.addAnother || !open.current) {
       // Not over a toast about something done since, such as a row marked done.

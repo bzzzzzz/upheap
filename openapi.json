@@ -12352,7 +12352,7 @@
               },
               {
                 "$ref": "#/components/schemas/SendToAgentRequest",
-                "description": "Sends the new item to an agent in the same request, as `POST …/send` would right after: the same body. The\nturn opens with the item, and the heap's prepare turn doesn't open: an item never gets two. Not for a reminder,\nand not from inside a run."
+                "description": "Sends the new item to an agent in the same request, as `POST …/items/{item}/turn` would right after: the same body. The\nturn opens with the item, and the heap's prepare turn doesn't open: an item never gets two. Not for a reminder,\nand not from inside a run."
               }
             ]
           },

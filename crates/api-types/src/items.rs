@@ -440,7 +440,7 @@ pub struct CreateItemDto {
     /// The item the new one starts blocked by: a non-closed item of the same heap. The new item is created blocked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_by: Option<Uuid>,
-    /// Sends the new item to an agent in the same request, as `POST …/send` would right after: the same body. The
+    /// Sends the new item to an agent in the same request, as `POST …/items/{item}/turn` would right after: the same body. The
     /// turn opens with the item, and the heap's prepare turn doesn't open: an item never gets two. Not for a reminder,
     /// and not from inside a run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
