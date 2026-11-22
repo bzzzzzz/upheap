@@ -9,8 +9,9 @@ import { TeamMark } from "./TeamMark";
 import {
   AGENT_STATE_LABELS,
   AGENT_STATES,
+  capitalised,
+  GOAL_LABELS,
   GOING_TO,
-  GOING_TO_LABELS,
   NEED_LABELS,
   NEEDS,
   SIZE_LABELS,
@@ -299,7 +300,7 @@ export function FilterChips({
     })),
     ...splitList(view.going_to).map((goal) => ({
       key: `going_to:${goal}`,
-      label: `Going to: ${GOING_TO_LABELS[goal as keyof typeof GOING_TO_LABELS]}`,
+      label: `Going to: ${capitalised(GOAL_LABELS[goal as keyof typeof GOAL_LABELS])}`,
       remove: () => onChange({ ...view, going_to: toggled(view.going_to, goal) }),
     })),
   ];
@@ -568,11 +569,11 @@ function NarrowSection({
         {GOING_TO.map((goal) => (
           <Toggle
             key={goal}
-            label={`Going to: ${GOING_TO_LABELS[goal]}`}
+            label={`Going to: ${capitalised(GOAL_LABELS[goal])}`}
             pressed={splitList(view.going_to).includes(goal)}
             onClick={() => onChange({ ...view, going_to: toggled(view.going_to, goal) })}
           >
-            {GOING_TO_LABELS[goal]}
+            {capitalised(GOAL_LABELS[goal])}
           </Toggle>
         ))}
       </PanelRow>

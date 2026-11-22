@@ -263,7 +263,16 @@ test("Changes asked… sends an item an agent brought to a stable state back", a
   await button.click();
   await expect(field).toHaveValue("");
 
+  // Closing it with Escape or a tap outside keeps the draft for the next open.
   await field.fill("Add the rollback steps.");
+  await page.keyboard.press("Escape");
+  await expect(form).toHaveCount(0);
+  await button.click();
+  await expect(field).toHaveValue("Add the rollback steps.");
+  await page.mouse.click(5, 5);
+  await expect(form).toHaveCount(0);
+  await button.click();
+  await expect(field).toHaveValue("Add the rollback steps.");
   await expect(send).toBeEnabled();
   await send.click();
 

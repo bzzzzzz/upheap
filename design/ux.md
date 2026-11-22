@@ -476,7 +476,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    blocked item, Add reason… in ⋯ (Change reason… once one is set), under Change blocker…, opens "Why it's blocked"
    (a popover, a sheet on a phone): one line, where Enter saves, and Remove reason or an empty save clears it. A
    counter shows as the text nears the server's limit; past it Save is off and nothing is cut. It can't be closed
-   while it saves; a failed save keeps the draft and says why, and a save shows no toast. Then
+   while it saves; a failed save keeps the draft and says why, and a save shows no toast. Closing it keeps the draft
+   for the next open; Cancel drops it, and the saved reason shows again. Then
    the chips: the item's place in the list, "#3" (point 9), and who has the item when an agent does, or the button that sends it to
    one when none does (point 15). A
    reminder still ahead has a line under it, "Joins the list on 12 March". The header bar names the section the item
@@ -636,7 +637,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     an agent."). It opens a form: a popover under the button on a wide screen and a tablet, a sheet on
     a phone. The form has the choices "To <where it goes>" (the next stable state: with context, defined or done), on a
     note as written also "To defined", and "All the way", or on a defined task the one line "To done"; "A line for
-    the agent (optional)"; Send and Cancel. Cancel returns focus to the button. Send acts at once, closes the form, gives focus to the chip that
+    the agent (optional)"; Send and Cancel. Cancel returns focus to the button and drops the line and the choice;
+    closing the popover or the sheet keeps them for the next open. Send acts at once, closes the form, gives focus to the chip that
     replaces the button and shows a toast, "Sent to an agent, going to: with context.", with Undo, which takes it back
     without asking or a second toast. The list row's robot sends the same way but for one step with no line, and shows the same toast. A failed send or take back
     says why in the popover, and the form keeps its line. Someone else's send first says "Someone already sent this
@@ -648,7 +650,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     titled "Changes asked": "An agent brought this to: <stage>.", a required "What's wrong" field, **Send back**, off
     until the field has text, and Cancel, sharing a row on a phone. Send back closes the form, shows the toast "Sent
     back to the agent.", and gives focus to the agent chip, which the new turn brings; Cancel returns focus to the
-    button and drops the draft, without asking, and so does closing the popover or the sheet. A failed send keeps
+    button and drops the draft, without asking; closing the popover or the sheet keeps it for the next open. A failed send keeps
     the form and its text and says why under the buttons; if someone sent the item on first, the form closes and a toast says "The agent's work changed meanwhile: there's nothing to
     send back.", the focus goes to the agent chip, and the Changes asked… chip is gone. A reader sees no chip.
 16. **Fields** are labelled values that open their editor on a click. Need, Effort and Impact share a row of three
@@ -1357,8 +1359,9 @@ to an open History at once, and to a closed one by the time it is opened.
    question, Change reply, Changes asked, an item's or a heap's context) is itself the choice to discard, so it
    drops the draft without asking; such a form guards its draft from a stray key and from refetches instead.
    Closing a dialog or a sheet that holds a draft, or leaving the page with one, never drops it silently: Add an
-   item and Split… ask first, and the item's context saves the draft. Changes asked breaks this for now:
-   closing its popover or sheet drops the draft too.
+   item and Split… ask first, the item's context saves the draft, and a popover form (Changes asked, Send to an
+   agent, Why it's blocked) keeps it and shows it again when it reopens, until it is sent or cancelled. A reload
+   or opening another item still drops these short drafts.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's main state button and ⋯ sit in a bar at its bottom; on a wide screen they sit beside the title.
 3. **Every page that edits a list of things** (Tags, Parameters, Members, Heap settings) uses one settings layout:
