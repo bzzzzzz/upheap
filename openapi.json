@@ -17875,7 +17875,7 @@
       },
       "TurnWatch": {
         "type": "object",
-        "description": "A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge or a\nclose.",
+        "description": "A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge\nconflict, a merge or a close.",
         "required": [
           "url",
           "number",

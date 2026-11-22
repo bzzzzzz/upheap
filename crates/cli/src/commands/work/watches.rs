@@ -18,8 +18,8 @@ pub(super) enum ReadError {
     },
 }
 
-/// The fields of `gh pr view --json state,mergeable,comments,reviews,statusCheckRollup` the loop uses. `gh` leaves out or nulls
-/// what a pull request hasn't got, so every field is optional.
+/// The fields of `gh pr view --json state,mergeable,comments,reviews,statusCheckRollup` the loop uses. `gh` leaves
+/// out or nulls what a pull request hasn't got, so every field is optional.
 #[derive(Debug, Default, Deserialize)]
 struct PullRequest {
     state: Option<String>,
@@ -101,8 +101,7 @@ fn login(author: Option<&Author>) -> &str {
 /// What came to the pull request that `json` describes since `since` (UTC milliseconds), as markdown lines in this
 /// order: merged or closed, or a merge conflict on an open one, then new comments, new reviews and failed checks.
 /// Merged, closed and a conflict are states, not events: they count whenever `since` is. `None` when nothing came.
-/// When the lines
-/// would pass `limit` characters, the lines that fit, then `- And <n> more.`
+/// When the lines would pass `limit` characters, the lines that fit, then `- And <n> more.`
 pub(super) fn what_came(json: &str, since: i64, limit: usize) -> Result<Option<String>, ReadError> {
     let pull: PullRequest = serde_json::from_str(json)?;
     let mut lines: Vec<String> = Vec::new();
