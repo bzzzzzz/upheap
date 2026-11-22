@@ -64,7 +64,9 @@ export const AGENT_STATE_LABELS: Record<AgentState, string> = {
 
 /** Where a turn ends, as the list filters by it: a turn sent all the way goes to done. */
 export const GOING_TO: readonly Goal[] = ["with_context", "defined", "done"];
-export const GOING_TO_LABELS: Record<Goal, string> = { with_context: "With context", defined: "Defined", done: "Done" };
+
+/** A label with its first letter capitalised, for where it starts a line: "with context" → "With context". */
+export const capitalised = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
 
 export const STATE_LABELS: Record<ItemState, string> = {
   open: "Open",
