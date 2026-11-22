@@ -616,6 +616,24 @@ test("a blocked item's reason is set, changed and removed from ⋯", async ({ pa
   await expect(status()).toContainText("Blocked: Waiting for the receipt");
   await expect(editor()).toHaveCount(0);
 
+  // Closing it with Escape or a tap outside keeps the draft for the next open; Cancel drops it.
+  dialog = await openEditor("Change reason…");
+  await dialog.getByLabel("Reason").fill("Waiting for the stamp");
+  await page.keyboard.press("Escape");
+  await expect(editor()).toHaveCount(0);
+  dialog = await openEditor("Change reason…");
+  await expect(dialog.getByLabel("Reason")).toHaveValue("Waiting for the stamp");
+  await page.mouse.click(5, 5);
+  await expect(editor()).toHaveCount(0);
+  dialog = await openEditor("Change reason…");
+  await expect(dialog.getByLabel("Reason")).toHaveValue("Waiting for the stamp");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(editor()).toHaveCount(0);
+  dialog = await openEditor("Change reason…");
+  await expect(dialog.getByLabel("Reason")).toHaveValue("Waiting for the receipt");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(status()).toContainText("Blocked: Waiting for the receipt");
+
   // Too long: the counter and the error show, and Save is off.
   dialog = await openEditor("Change reason…");
   await dialog.getByLabel("Reason").fill("x".repeat(301));
