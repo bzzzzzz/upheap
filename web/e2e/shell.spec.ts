@@ -143,6 +143,24 @@ test("each heap in the switcher shows its open count", async ({ page }) => {
   await expect(heaps.getByRole("menuitem", { name: /^Garden\s*, 0 open$/ })).toHaveText(/0$/);
 });
 
+test("the open counts follow items added elsewhere every 30 s", async ({ page, heapPath }) => {
+  // A faked clock, so 30 s pass at once; installed before the page loads, so the app's timers use it.
+  await page.clock.install();
+  await page.reload();
+  await expect(page.getByRole("button", { name: /^Switch heap/ })).toBeVisible();
+
+  // An item added through the API, as an agent or a teammate would, reaches the count on the next poll, with no
+  // reload, focus or write of the person's own.
+  const created = await page.request.post(`/api/v1${heapPath}/items`, {
+    headers: { "x-csrf-protection": "1" },
+    data: { title: "Water the plants", need: "expected" },
+  });
+  expect(created.ok()).toBe(true);
+  await page.clock.fastForward(30_000);
+  const heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("menuitem", { name: /, 1 open\s*, current$/ })).toBeVisible();
+});
+
 test("a modifier-click on a heap opens it in a new tab", async ({ page }) => {
   await addHeaps(page, ["Garden"]);
   const heaps = await openSwitcher(page);

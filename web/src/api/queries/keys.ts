@@ -114,8 +114,8 @@ export function heapRecordKeys(heap: { team: string; heap?: string }) {
 }
 
 /**
- * How often what others change on the server reaches a page left open: the ranked list and the Waiting count are
- * fetched again on this interval. TanStack Query skips it while the tab is hidden.
+ * How often what others change on the server reaches a page left open: the ranked list, the Waiting and Agents counts
+ * and the heaps' open counts are fetched again on this interval. TanStack Query skips it while the tab is hidden.
  */
 export const POLL_INTERVAL = 30_000;
 
@@ -199,8 +199,9 @@ export function invalidateMe(queryClient: QueryClient) {
 }
 
 /**
- * The heaps' open counts in `/me`, which the sidebar shows. Only adding an item or changing its state changes them,
- * so only those refetch `/me`, and nothing waits for it.
+ * The heaps' open counts in `/me`, which the sidebar shows. Of the person's own writes only adding an item or changing
+ * its state changes them, so only those refetch `/me`, and nothing waits for it. What others change reaches them on the
+ * shell's poll (`usePolledMe`).
  */
 export function invalidateOpenCounts(queryClient: QueryClient) {
   void invalidateMe(queryClient);

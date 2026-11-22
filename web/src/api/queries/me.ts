@@ -20,6 +20,14 @@ export const meQuery = queryOptions({
 export const useMe = () => useQuery(meQuery);
 
 /**
+ * `/me` for the app's shell, which shows its heaps' open counts on every page (ux.md, Layout): fetched again every
+ * 30 s like the list and the Waiting count, so an item a teammate or an agent adds or closes reaches the counts with no
+ * write of the person's own. Only the shell reads it this way: every observer of a query runs its own interval, so
+ * polling in `useMe` would fetch `/me` once per component that reads it.
+ */
+export const usePolledMe = () => useQuery({ ...meQuery, staleTime: POLL_INTERVAL, refetchInterval: POLL_INTERVAL });
+
+/**
  * The list across the person's heaps in one view, kept stable within a session like `useRankedList`'s: the first
  * response's `as_of` is sent back on every refetch and view change. While a new view loads, the previous one stays on
  * screen.

@@ -38,7 +38,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useHeap, useSetHeapArchived } from "../api/queries/heaps";
-import { useMe, useDecisions, useWaiting } from "../api/queries/me";
+import { usePolledMe, useDecisions, useWaiting } from "../api/queries/me";
 import { AddItemDialog, OVERLAY } from "../components/AddItem";
 import { FindPalette } from "../components/FindPalette";
 import { Kbd, MAC, WIDE_HINT } from "../components/Kbd";
@@ -57,7 +57,7 @@ import { useSelectMode } from "../components/useSelectMode";
 import { Saving } from "../components/Saving";
 
 export function AppLayout() {
-  const { data: me } = useMe();
+  const { data: me } = usePolledMe();
   useKeyboardInset();
   const { team, heap } = useParams({ strict: false });
   const heapRef = team !== undefined && heap !== undefined ? { team, heap } : undefined;
