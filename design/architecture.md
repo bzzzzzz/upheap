@@ -394,7 +394,7 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
 2. Each factor (need, age, deadline proximity, value per effort, each custom parameter, the tag order) produces a weighted
    component. Age counts from when the item joined the list: its creation, or for an item that was a reminder, its
    `arrives_at` (`ItemForRanking::from`), so a reminder arrives ranked as due that day rather than as an old item.
-   The score combines them. The formula is a named version (`FormulaVersion::V3`) behind one
+   The score combines them. The formula is a named version (`FormulaVersion::V4`) behind one
    function, set in code rather than stored per heap: tests pin orderings per version, so a formula change is an
    explicit test update, and since scores are never stored, switching versions needs no migration. The module doc of
    `domain::ranking` explains the current formula.

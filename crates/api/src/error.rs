@@ -382,7 +382,6 @@ fn classify_service(err: &ServiceError) -> Classified {
             field: Some("anchor"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "anchor_not_ranked", Category::Caller)
         },
-        ServiceError::Place(PlaceError::OutOfRange) => unexpected(),
         ServiceError::MoveTargetNotFound { .. } => Classified {
             field: Some("heap_id"),
             ..simple(StatusCode::UNPROCESSABLE_ENTITY, "heap_not_in_team", Category::Caller)

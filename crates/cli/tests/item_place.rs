@@ -32,7 +32,7 @@ async fn placing_above_puts_the_item_right_above_the_other() -> Result<()> {
     let after = listed(&cli).await;
 
     // Assert
-    expect_that!(placed.stdout, eq(&format!("{last} moved up, just above {second}.\n")));
+    expect_that!(placed.stdout, eq(&format!("{last} moved up in the list.\n")));
     expect_that!(placed.stderr, eq(""));
     expect_that!(placed.exited(0), eq(true));
     expect_that!(after, elements_are![eq(first), eq(last), eq(second)]);
@@ -53,10 +53,7 @@ async fn placing_below_puts_the_item_right_below_the_other() -> Result<()> {
     let after = listed(&cli).await;
 
     // Assert
-    expect_that!(
-        placed.stdout,
-        eq(&format!("{first} moved down, just below {second}.\n"))
-    );
+    expect_that!(placed.stdout, eq(&format!("{first} moved down in the list.\n")));
     expect_that!(placed.exited(0), eq(true));
     expect_that!(after, elements_are![eq(second), eq(first), eq(last)]);
     Ok(())

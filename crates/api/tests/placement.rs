@@ -5,7 +5,8 @@ mod common;
 
 use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode};
-use common::{CSRF, TestApp, TestResponse};
+use common::{CSRF, START, TestApp, TestResponse};
+use domain::Duration;
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -349,6 +350,69 @@ async fn an_anchor_in_another_heap_is_refused_like_a_missing_one() -> Result<()>
         expect_that!(response.body["code"], eq(&json!("anchor_not_ranked")));
         expect_that!(response.body["field"], eq(&json!("anchor")));
     }
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn placing_at_an_earlier_as_of_lands_next_to_the_anchor_in_the_list_of_that_time() -> Result<()> {
+    // Arrange: a list read at the start, then an hour passes.
+    let w = world().await?;
+    w.app.clock.advance(Duration::from_hours(1));
+    let version = w.read(3).await?["version"].clone();
+
+    // Act
+    let placed = w
+        .app
+        .send_with(
+            Method::POST,
+            &format!("{}/place", w.url(3).await?),
+            Some(&w.session),
+            Some(json!({ "anchor": id(&w.items[1]), "side": "above", "as_of": START })),
+            &[CSRF, ("if-match", &version.to_string())],
+        )
+        .await?;
+    let list = w
+        .app
+        .send(
+            Method::GET,
+            &format!("{}/items?as_of={START}", w.app.heap_url(&w.heap).await?),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(placed.status, eq(StatusCode::OK));
+    let titles: Vec<&str> = list.body["ranked"]
+        .as_array()
+        .context("no ranked list")?
+        .iter()
+        .map(|entry| entry["item"]["title"].as_str().unwrap_or_default())
+        .collect();
+    expect_that!(titles, elements_are![eq(&"a"), eq(&"d"), eq(&"b"), eq(&"c")]);
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_closed_item_cannot_be_placed() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let version = w.read(3).await?["version"].clone();
+    let closed = w
+        .app
+        .patch(&w.session, &w.url(3).await?, &version, json!({ "state": "done" }))
+        .await?;
+
+    // Act
+    let refused = w
+        .place_at(3, &closed.body["version"], "above", &id(&w.items[1]))
+        .await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::CONFLICT));
+    expect_that!(refused.body["code"], eq(&json!("item_closed")));
     Ok(())
 }
 

@@ -31,9 +31,11 @@ critical. Then the fields lie to the next reader.
 
 ## Surfaces
 
-- **API:** `POST /items/{key}/place` with `above` or `below` and `as_of`, or with `reset`. Refused when the anchor is
-  the item itself, in another heap, or not in the ranked group. The item's response says whether it is placed and in
-  which direction; the number is never shown, as scores aren't.
+- **API:** `POST /items/{item}/place` with `anchor`, `side` (above or below) and an optional `as_of`; `DELETE
+  /items/{item}/place` resets. The anchor must be an item that ranks (open, in progress or blocked, not a reminder to
+  come) in the same heap, and is refused otherwise, as is the item itself. The API doesn't know the client's list
+  view, so the web offers drag only in the priority list's ranked group. Runs can't place. The item's response says
+  whether it is placed and in which direction; the number is never shown, as scores aren't.
 - **Contributors:** a placed item's first contributor is **Moved up** or **Moved down** (against where its fields
   would put it).
 - **History:** each placement and reset is an audit entry: "Ana moved it up in the list", "Ana reset its place".

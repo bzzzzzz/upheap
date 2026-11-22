@@ -90,14 +90,7 @@ pub async fn run(args: PlaceArgs, app: &App, out: &mut Output) -> Result<(), Cli
                 Some(PlacementDto::Down) => "down",
                 _ => "up",
             };
-            let next_to = match side {
-                PlaceSideDto::Above => "above",
-                PlaceSideDto::Below => "below",
-            };
-            out.line(&format!(
-                "{} moved {way}, just {next_to} {}.",
-                placed.value.key, anchor.value.key
-            ))?;
+            out.line(&format!("{} moved {way} in the list.", placed.value.key))?;
         }
     }
     Ok(())
