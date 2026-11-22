@@ -160,7 +160,7 @@ test("the sidebar's Find button opens it", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Find", exact: true })).toBeVisible();
 });
 
-test("on a phone the top bar's icon opens it, and a tap on a result opens the item", async ({ page }) => {
+test("on a phone the top bar's icon opens it, and a tap on a result opens the item", async ({ page, heapPath }) => {
   test.skip(!isPhone(page), "Only a phone has the top bar");
   await addItem(page, "Fix the gate");
   await page.getByRole("button", { name: "Find in all heaps" }).tap();
@@ -178,6 +178,10 @@ test("on a phone the top bar's icon opens it, and a tap on a result opens the it
   await palette.getByRole("searchbox").fill("gate");
   await palette.getByRole("menuitem", { name: /Fix the gate/ }).tap();
   await expect(page).toHaveURL(/\/items\/[^/]+$/);
+  await expect(palette).toHaveCount(0);
+  // The item took Find's place, so Back goes to the list, not to Find.
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
   await expect(palette).toHaveCount(0);
 });
 

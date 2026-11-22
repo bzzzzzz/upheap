@@ -85,16 +85,17 @@ export function AppLayout() {
   // replaces the entry, and closing it goes back.
   const router = useRouter();
   const findOpen = useRouterState({ select: (state) => state.location.state.finding === true });
-  const openFind = useCallback(
-    () =>
-      void navigate({
-        to: ".",
-        search: (prev: object) => prev,
-        state: (prev) => ({ ...prev, finding: true }),
-        resetScroll: false,
-      }),
-    [navigate],
-  );
+  // The browser's history, not `router.state`, which only catches up once the route has loaded: a second tap before then
+  // must not push a second entry, and a close right after going somewhere from Find must not go back past it.
+  const openFind = useCallback(() => {
+    if (router.history.location.state.finding) return;
+    void navigate({
+      to: ".",
+      search: (prev: object) => prev,
+      state: (prev) => ({ ...prev, finding: true }),
+      resetScroll: false,
+    });
+  }, [navigate, router]);
   // Back is asynchronous: a second close before it lands (Escape heard by the field and the modal) must not go back
   // past the page.
   const leavingFind = useRef(false);
@@ -102,7 +103,7 @@ export function AppLayout() {
     leavingFind.current = false;
   }, [findOpen]);
   const closeFind = () => {
-    if (leavingFind.current || !router.state.location.state.finding) return;
+    if (leavingFind.current || !router.history.location.state.finding) return;
     leavingFind.current = true;
     router.history.back();
   };
@@ -178,7 +179,9 @@ export function AppLayout() {
       {me && (
         <FindPalette
           isOpen={findOpen}
-          onOpenChange={(open) => !open && closeFind()}
+          onOpenChange={(open) => {
+            if (!open) closeFind();
+          }}
           me={me}
           shellHeap={shellHeap}
           onAdd={(heap, title) => setAddingFrom({ heap, title })}

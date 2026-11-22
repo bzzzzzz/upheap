@@ -26,7 +26,6 @@ import { DuePicker } from "./DuePicker";
 import { SectionTitle, rowClass } from "./HeapSwitcher";
 import { Kbd, WIDE_HINT } from "./Kbd";
 import { KindIcon } from "./kindIcons";
-import { PHONE, useMedia } from "./media";
 import { STATE_LABELS, isClosed } from "./labels";
 import { ProblemText } from "./ProblemText";
 import { teamName } from "./teamName";
@@ -89,7 +88,6 @@ function FindBody({
   onAdd: (heap: HeapRef, title: string) => void;
 }) {
   const navigate = useNavigate();
-  const phone = useMedia(PHONE);
   const [text, setText] = useState("");
   // The text the search is sent for, once typing has stopped.
   const [settled, setSettled] = useState("");
@@ -159,15 +157,13 @@ function FindBody({
             className="h-10 w-full rounded-[9px] border-2 border-transparent bg-sunken pr-10 pl-9 text-base outline-none placeholder:text-muted focus:border-accent sm:text-sm [&::-webkit-search-cancel-button]:hidden"
           />
           {/* A phone has no Escape, so there ✕ stays and closes the palette once the field is empty. */}
-          {(text !== "" || phone) && (
-            <Button
-              aria-label={text === "" ? "Close" : "Clear"}
-              onPress={text === "" ? close : undefined}
-              className="absolute right-2.5 flex size-10 items-center justify-center rounded-xl text-ink-soft outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
-            >
-              <X aria-hidden="true" className="size-4" />
-            </Button>
-          )}
+          <Button
+            aria-label={text === "" ? "Close" : "Clear"}
+            onPress={text === "" ? close : undefined}
+            className={`${text === "" ? "sm:hidden" : ""} absolute right-2.5 flex size-10 items-center justify-center rounded-xl text-ink-soft outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-accent`}
+          >
+            <X aria-hidden="true" className="size-4" />
+          </Button>
         </SearchField>
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1.5 pt-1 pb-2">
           {pending && <p className="px-2.5 py-2 text-sm text-muted">Searching…</p>}
