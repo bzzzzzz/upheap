@@ -24,7 +24,7 @@ async fn item_list_shows_the_ranked_list_in_columns() -> Result<()> {
     expect_that!(
         lines[0],
         starts_with(format!(
-            "1  {}  note  Rotate the staging certs     open    s/l  ",
+            "1  {}  Note  Rotate the staging certs     Open    S/L  ",
             key(&items[0])?
         ))
     );
@@ -197,7 +197,7 @@ async fn item_list_gives_a_blocked_items_reason_in_its_state_cell() -> Result<()
     // Assert
     expect_that!(
         shown.stdout,
-        contains_substring("blocked: Waits for the vendor's quote")
+        contains_substring("Blocked: Waits for the vendor's quote")
     );
     Ok(())
 }
@@ -256,22 +256,22 @@ async fn item_list_rows_show_the_kind_the_steps_and_who_the_item_waits_for() -> 
         expect_that!(
             task_line,
             contains_regex(format!(
-                "{task}  .*task  Rotate the staging certs +1/2  open +waits for you  s/l"
+                "{task}  .*Task  Rotate the staging certs +1/2  Open +waits for you  S/L"
             )),
             "{form}"
         );
         expect_that!(
             sent_line,
             contains_regex(format!(
-                "{sent}  .*note  Write the migration guide +open · with an agent +l/m"
+                "{sent}  .*Note  Write the migration guide +Open · with an agent +L/M"
             )),
             "{form}"
         );
         expect_that!(sent_line, not(contains_substring("waits for you")), "{form}");
         // The state cell starts at the same column on every row, whatever the cells before it hold.
         expect_that!(
-            column_of(&out.stdout, &task, "open"),
-            eq(column_of(&out.stdout, &sent, "open")),
+            column_of(&out.stdout, &task, "Open"),
+            eq(column_of(&out.stdout, &sent, "Open")),
             "{form}"
         );
     }
@@ -325,7 +325,7 @@ async fn item_list_closed_lists_closed_items_by_when() -> Result<()> {
     expect_that!(closed.stdout, starts_with("Today\n"));
     expect_that!(
         closed.stdout,
-        contains_substring(format!("{}  Rotate the staging certs  done", key(&items[0])?))
+        contains_substring(format!("{}  Rotate the staging certs  Done", key(&items[0])?))
     );
     expect_that!(quiet.stdout, eq(&format!("{}\n", key(&items[0])?)));
     expect_that!(open.stdout.lines().count(), eq(2));

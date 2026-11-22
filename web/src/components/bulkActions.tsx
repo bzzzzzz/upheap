@@ -74,18 +74,26 @@ export function RefusedPanel({ refused, onClose }: { refused: Refused; onClose: 
   );
 }
 
+/** What the send form holds while it's open, kept by the hook so that closing the popover doesn't drop it. */
+type SendDraft = { reach: Reach; line: string };
+
+const EMPTY_SEND: SendDraft = { reach: "one", line: "" };
+
 /** The form that sends the selection to an agent: how far, and an optional line for the agent. */
 function SendToAgentForm({
+  draft,
+  onDraft,
   pending,
   onSend,
   onCancel,
 }: {
+  draft: SendDraft;
+  onDraft: (draft: SendDraft) => void;
   pending: boolean;
   onSend: (reach: Reach, line: string) => void;
   onCancel: () => void;
 }) {
-  const [reach, setReach] = useState<Reach>("one");
-  const [line, setLine] = useState("");
+  const { reach, line } = draft;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSend(reach, line);
@@ -95,13 +103,13 @@ function SendToAgentForm({
       <RadioGroup
         aria-label="How far"
         value={reach}
-        onChange={(value) => setReach(value as Reach)}
+        onChange={(value) => onDraft({ ...draft, reach: value as Reach })}
         className="flex flex-col"
       >
         <HowFar value="one">One step</HowFar>
         <HowFar value="all_the_way">All the way</HowFar>
       </RadioGroup>
-      <TextField value={line} onChange={setLine} className="flex flex-col gap-1">
+      <TextField value={line} onChange={(value) => onDraft({ ...draft, line: value })} className="flex flex-col gap-1">
         <Label className={labelClass}>A line for the agent (optional)</Label>
         <TextArea rows={3} className={fieldClass} />
       </TextField>
@@ -122,7 +130,8 @@ function SendToAgentForm({
  * through the single-item endpoint; an item the server refuses is listed with its reason and stays selected. `chosen`
  * are the selected rows in the list's order. `begin` starts an action from the button that was pressed, which gets the
  * focus back when a question or the send form is cancelled; `overlays` holds the questions, the send form and the
- * panel of refused items, and is rendered once.
+ * panel of refused items, and is rendered once. Closing the send form keeps its how-far choice and line for the next
+ * open (ux.md, Rules §1); Cancel and a finished Send clear them.
  */
 export function useBulkActions({
   heapRef,
@@ -148,6 +157,7 @@ export function useBulkActions({
   const [running, setRunning] = useState<BulkAction | null>(null);
   const [asking, setAsking] = useState<"done" | "wont_do" | "start" | null>(null);
   const [sending, setSending] = useState(false);
+  const [sendDraft, setSendDraft] = useState<SendDraft>(EMPTY_SEND);
   const [outcome, setOutcome] = useState<(Refused & { action: BulkAction }) | null>(null);
 
   const pausing = chosen.length > 0 && chosen.every((item) => item.state === "in_progress");
@@ -169,6 +179,7 @@ export function useBulkActions({
         refused.push({ item, error: asError(error) });
       }
     }
+    setSendDraft(EMPTY_SEND);
     finish("send", items, refused);
   };
 
@@ -215,6 +226,10 @@ export function useBulkActions({
     setAsking(null);
     setSending(false);
     focusAfterRender(() => opener.current);
+  };
+  const cancelSend = () => {
+    setSendDraft(EMPTY_SEND);
+    cancel();
   };
   // Close keeps select mode, with only the items that stayed unchanged selected.
   const closeOutcome = () => {
@@ -272,9 +287,11 @@ export function useBulkActions({
           <RefusedPanel refused={outcome} onClose={closeOutcome} />
         ) : (
           <SendToAgentForm
+            draft={sendDraft}
+            onDraft={setSendDraft}
             pending={running === "send"}
             onSend={(reach, line) => void runSend(chosen, reach, line)}
-            onCancel={cancel}
+            onCancel={cancelSend}
           />
         )}
       </PopoverSheet>

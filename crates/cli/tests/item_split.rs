@@ -126,22 +126,22 @@ async fn a_task_is_made_from_a_note_and_the_note_became_it() -> Result<()> {
     expect_that!(second.exited(0), eq(true));
     expect_that!(
         shown_note.stdout,
-        contains_substring(format!("Became:\n  {first} \"Rotate staging\" (task, open)\n"))
+        contains_substring(format!("Became:\n  {first} \"Rotate staging\" (Task, Open)\n"))
     );
     expect_that!(
         shown_note.stdout,
         contains_substring(format!(
-            "{} \"Rotate production\" (task, blocked)",
+            "{} \"Rotate production\" (Task, Blocked)",
             second.stdout.trim()
         ))
     );
     expect_that!(
         shown_task.stdout,
-        contains_substring(format!("From: {note} \"Certs are a mess\" (note, ada/personal)"))
+        contains_substring(format!("From: {note} \"Certs are a mess\" (Note, ada/personal)"))
     );
     expect_that!(
         shown_second.stdout,
-        contains_substring(format!("Blocked by  {first}  Rotate staging (open)"))
+        contains_substring(format!("Blocked by  {first}  Rotate staging (Open)"))
     );
     expect_that!(
         became.stdout,
@@ -152,7 +152,7 @@ async fn a_task_is_made_from_a_note_and_the_note_became_it() -> Result<()> {
     expect_that!(body["state"], eq("became"));
     expect_that!(server.read_item(&ada, HEAP, &note).await?["state"], eq("became"));
     let shown = cli.run(&["item", "show", &note]).await;
-    expect_that!(shown.stdout, contains_substring("became"));
+    expect_that!(shown.stdout, contains_substring("Became"));
     Ok(())
 }
 
@@ -347,7 +347,7 @@ async fn a_note_becomes_a_heap_with_its_items_and_item_show_lists_it() -> Result
     expect_that!(became.exited(0), eq(true));
     expect_that!(
         shown.stdout,
-        contains_substring("\"Move posts\" (task, open)\n  heap ada/blog-move")
+        contains_substring("\"Move posts\" (Task, Open)\n  heap ada/blog-move")
     );
     expect_that!(shown.stdout, contains_substring("  heap ada/blog-move \"Blog move\"\n"));
     expect_that!(heap.stdout, contains_substring("A move of the blog."));

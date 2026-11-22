@@ -7,7 +7,7 @@ use api_types::common::{ItemDto, StateDto};
 use api_types::items::ItemPatchDto;
 use clap::Args;
 
-use super::common::{ItemLocation, locate_item, state_text};
+use super::common::{ItemLocation, locate_item};
 use crate::commands::heap_api::HeapApi;
 use crate::commands::{HeapArgs, SharedArgs};
 use crate::lookup::ItemName;
@@ -158,7 +158,7 @@ async fn change_state(
         match out.mode() {
             Mode::Json => out.json(&item.body)?,
             Mode::Quiet => {}
-            Mode::Human => out.line(&format!("{} is already {}.", item.value.key, state_text(target)))?,
+            Mode::Human => out.line(&format!("{} is already {}.", item.value.key, target.label()))?,
         }
         return Ok(());
     }

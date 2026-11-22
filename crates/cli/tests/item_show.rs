@@ -42,12 +42,12 @@ async fn item_show_prints_the_set_fields_and_leaves_out_the_unset() -> Result<()
         shown.stdout.lines().next(),
         some(eq(&format!("{}  Rotate the staging certs", key(&items[0])?)))
     );
-    expect_that!(value_of(&shown.stdout, "Kind"), some(eq("note")));
-    expect_that!(value_of(&shown.stdout, "Stage"), some(eq("as written")));
-    expect_that!(value_of(&shown.stdout, "State"), some(eq("open")));
-    expect_that!(value_of(&shown.stdout, "Need"), some(eq("critical")));
-    expect_that!(value_of(&shown.stdout, "Effort"), some(eq("s")));
-    expect_that!(value_of(&shown.stdout, "Impact"), some(eq("l")));
+    expect_that!(value_of(&shown.stdout, "Kind"), some(eq("Note")));
+    expect_that!(value_of(&shown.stdout, "Stage"), some(eq("As written")));
+    expect_that!(value_of(&shown.stdout, "State"), some(eq("Open")));
+    expect_that!(value_of(&shown.stdout, "Need"), some(eq("Critical")));
+    expect_that!(value_of(&shown.stdout, "Effort"), some(eq("S")));
+    expect_that!(value_of(&shown.stdout, "Impact"), some(eq("L")));
     expect_that!(value_of(&shown.stdout, "Tags"), some(eq("Infra")));
     expect_that!(value_of(&shown.stdout, "Due"), some(ends_with("(firm)")));
     expect_that!(value_of(&shown.stdout, "Created"), some(ends_with("by Ada")));
@@ -58,7 +58,7 @@ async fn item_show_prints_the_set_fields_and_leaves_out_the_unset() -> Result<()
     expect_that!(bare.stdout, not(contains_substring("Context")));
     expect_that!(value_of(&bare.stdout, "Effort"), none());
     expect_that!(value_of(&bare.stdout, "Tags"), none());
-    expect_that!(value_of(&bare.stdout, "Need"), some(eq("idea")));
+    expect_that!(value_of(&bare.stdout, "Need"), some(eq("Idea")));
     Ok(())
 }
 
@@ -86,14 +86,14 @@ async fn item_show_says_an_agent_has_the_item_and_where_it_is_going() -> Result<
 
     // Assert
     expect_that!(shown.exited(0), eq(true));
-    expect_that!(value_of(&shown.stdout, "State"), some(eq("open · with an agent")));
+    expect_that!(value_of(&shown.stdout, "State"), some(eq("Open · with an agent")));
     expect_that!(
         shown.stdout,
         contains_substring("\nTurn: to defined, all the way. \"Use the new CA.\".\n")
     );
     let (_, history) = shown.stdout.split_once("\nHistory\n").context("a History section")?;
     expect_that!(history.lines().next(), some(contains_substring("Ada opened a turn on")));
-    expect_that!(value_of(&without.stdout, "State"), some(eq("open")));
+    expect_that!(value_of(&without.stdout, "State"), some(eq("Open")));
     expect_that!(without.stdout, not(contains_substring("Turn:")));
     Ok(())
 }
@@ -151,7 +151,7 @@ async fn item_show_lists_the_runs_and_marks_the_agents_changes_in_history() -> R
     expect_that!(
         lines.next(),
         some(all![
-            contains_substring("as written → with context"),
+            contains_substring("As written → With context"),
             contains_substring("reached"),
             ends_with("$0.31")
         ])
@@ -371,10 +371,10 @@ async fn item_show_names_the_blocker() -> Result<()> {
     let shown = cli.run(&["item", "show", key(&items[1])?]).await;
 
     // Assert
-    expect_that!(value_of(&shown.stdout, "State"), some(eq("blocked")));
+    expect_that!(value_of(&shown.stdout, "State"), some(eq("Blocked")));
     expect_that!(
         value_of(&shown.stdout, "Blocked by"),
-        some(eq(&format!("{}  Rotate the staging certs (open)", key(&items[0])?)))
+        some(eq(&format!("{}  Rotate the staging certs (Open)", key(&items[0])?)))
     );
     Ok(())
 }

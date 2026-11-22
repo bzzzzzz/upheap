@@ -8,7 +8,7 @@ use crate::commands::SharedArgs;
 use crate::output::{Cell, Mode, Output, Tone, shorten};
 use crate::{App, CliError};
 
-use super::common::{TITLE_WIDTH, heap_label, state_text};
+use super::common::{TITLE_WIDTH, heap_label};
 
 #[derive(Args, Debug)]
 pub struct SearchArgs {
@@ -58,7 +58,7 @@ pub async fn run(args: SearchArgs, app: &App, out: &mut Output) -> Result<(), Cl
                     vec![
                         Cell::toned(name.clone(), key_tone),
                         Cell::toned(shorten(&row.item.title, TITLE_WIDTH), tone),
-                        Cell::toned(state_text(row.item.state), tone),
+                        Cell::toned(row.item.state.label(), tone),
                     ]
                 })
                 .collect();

@@ -146,7 +146,7 @@ mod tests {
             heap_name: "Work",
             heap_handle: "ada/work",
             heap_context: Some("Our infra lives in the ops repo.\n"),
-            item_text: "k3x9a  Rotate the certs\nKind   note\n",
+            item_text: "k3x9a  Rotate the certs\nKind   Note\n",
             line: None,
             runs: 1,
             failed_runs: 0,
@@ -160,7 +160,7 @@ mod tests {
         expect_that!(brief, starts_with("You are working on one item in Upheap"));
         let order: Vec<usize> = [
             "Goal: the item has its context.",
-            "# The heap: Work (ada/work)\n\nOur infra lives in the ops repo.\n\n# The item\n\nk3x9a  Rotate the certs\nKind   note\n\n# This run\n\nGoal: with context.\n",
+            "# The heap: Work (ada/work)\n\nOur infra lives in the ops repo.\n\n# The item\n\nk3x9a  Rotate the certs\nKind   Note\n\n# This run\n\nGoal: with context.\n",
         ]
         .iter()
         .filter_map(|part| brief.find(part))

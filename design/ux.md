@@ -441,7 +441,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     body says "An agent has 2 of them. This takes them back." when it applies, and otherwise, for Done and Won't do,
     "There is no Undo."; Cancel returns focus to the button. Pause never asks, and Send's form is its question.
     Send to an agent… opens a popover under the button (a sheet on a phone) with "How far": One step or All the way,
-    "A line for the agent (optional)", Send and Cancel. Send is off while it runs.
+    "A line for the agent (optional)", Send and Cancel. Send is off while it runs. Closing the popover or the sheet
+    keeps the choice and the line for the next open; Cancel and Send drop them, as does leaving select mode.
     When every item changed, the toast says "Marked 3 items done.", "Closed 3 items as won't do.", "Started 3
     items.", "Paused 3 items." or "Sent 3 items to an agent."; after Done and Won't do select mode ends and the rows
     are gone, and after the others the selection stays. There is no Undo. When some were refused (changed by someone
@@ -1360,7 +1361,7 @@ to an open History at once, and to a closed one by the time it is opened.
    drops the draft without asking; such a form guards its draft from a stray key and from refetches instead.
    Closing a dialog or a sheet that holds a draft, or leaving the page with one, never drops it silently: Add an
    item and Split… ask first, the item's context saves the draft, and a popover form (Changes asked, Send to an
-   agent, Why it's blocked) keeps it and shows it again when it reopens, until it is sent or cancelled. A reload
+   agent from the item or a selection, Why it's blocked) keeps it and shows it again when it reopens, until it is sent or cancelled. A reload
    or opening another item still drops these short drafts.
 2. **The phone and the wide screen share components and differ only in presentation.** On the phone, the item
    sheet's main state button and ⋯ sit in a bar at its bottom; on a wide screen they sit beside the title.

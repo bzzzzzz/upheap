@@ -22,7 +22,7 @@ async fn item_search_lists_the_name_title_and_state_of_each_match() -> Result<()
     expect_that!(
         found.stdout,
         eq(&format!(
-            "ada/personal/{}  Rotate the staging certs  open\n",
+            "ada/personal/{}  Rotate the staging certs  Open\n",
             key(&items[0])?
         ))
     );
@@ -120,13 +120,13 @@ async fn item_search_dims_closed_rows_on_a_terminal_and_prints_plain_text_otherw
     let closed = lines_with(&on_terminal.stdout, "migration");
     expect_that!(open, elements_are![not(contains_substring(faint))]);
     expect_that!(closed, elements_are![starts_with(faint)]);
-    expect_that!(closed, elements_are![contains_substring("done")]);
+    expect_that!(closed, elements_are![contains_substring("Done")]);
     expect_that!(piped.stdout, not(contains_substring("\u{1b}")));
     expect_that!(no_color.stdout, eq(&piped.stdout));
     expect_that!(
         lines_with(&piped.stdout, "migration"),
         elements_are![eq(&format!(
-            "ada/personal/{}  Write the migration guide  done",
+            "ada/personal/{}  Write the migration guide  Done",
             key(&items[1])?
         ))]
     );

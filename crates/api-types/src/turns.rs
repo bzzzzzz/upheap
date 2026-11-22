@@ -87,6 +87,18 @@ impl TryFrom<GoalDto> for Goal {
     }
 }
 
+impl GoalDto {
+    /// The value as people read it: the domain's label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::WithContext => Goal::WithContext.label(),
+            Self::Defined => Goal::Defined.label(),
+            Self::Done => Goal::Done.label(),
+            Self::Unknown => "Unknown",
+        }
+    }
+}
+
 /// Where an item stands with the agents, for the list's `agent` filter.
 ///
 /// - `running`: with an agent, and a run is live now.

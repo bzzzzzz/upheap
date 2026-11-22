@@ -199,10 +199,10 @@ async fn show_says_a_reminder_to_come_joins_the_list_on_its_date() -> Result<()>
     // Assert
     expect_that!(shown.exited(0), eq(true));
     expect_that!(shown.stdout, contains_substring("Kind"));
-    expect_that!(shown.stdout, contains_substring("reminder"));
+    expect_that!(shown.stdout, contains_substring("Reminder"));
     expect_that!(shown.stdout, contains_substring("Joins list"));
     expect_that!(shown.stdout, contains_substring("2099-03-12"));
-    expect_that!(arrived.stdout, contains_substring("reminder"));
+    expect_that!(arrived.stdout, contains_substring("Reminder"));
     expect_that!(arrived.stdout, not(contains_substring("Joins list")));
     Ok(())
 }
