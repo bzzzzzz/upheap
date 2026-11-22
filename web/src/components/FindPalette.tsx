@@ -131,14 +131,17 @@ function FindBody({
     }
   };
 
-  // The row the field's highlight is on, as the input names it in `aria-activedescendant`.
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     // The field would clear its text first; here Escape always closes.
     if (event.key === "Escape") close();
     if (event.key !== "Tab" || event.shiftKey) return;
     event.preventDefault();
-    const id = event.currentTarget.getAttribute("aria-activedescendant");
-    const at = id ? document.getElementById(id)?.dataset.item : undefined;
+    // The highlighted row, as the person sees it. Not the input's `aria-activedescendant`: React Aria sets that up to
+    // half a second after the highlight moves, so ↓ then Tab would act on the row before.
+    const highlighted = event.currentTarget
+      .closest('[role="dialog"]')
+      ?.querySelector<HTMLElement>("[data-item][data-focused]");
+    const at = highlighted?.dataset.item;
     const row = at === undefined ? undefined : rows[Number(at)];
     if (row) setActing(row);
   };
@@ -183,7 +186,7 @@ function FindBody({
               current ? <p className="px-2.5 py-2 text-sm text-muted">Nothing matches “{query}”.</p> : null
             }
           >
-            {/* The server sends open hits first, then closed ones; each keeps its place in `rows` for Tab. */}
+            {/* Open hits, then closed ones, each in the server's order; each keeps its place in `rows` for Tab. */}
             {[
               { title: "Items", hits: found.filter(({ row }) => !isClosed(row.item.state)) },
               { title: "Closed", hits: found.filter(({ row }) => isClosed(row.item.state)) },

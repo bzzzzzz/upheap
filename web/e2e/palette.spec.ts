@@ -89,6 +89,11 @@ test("closed hits come after open ones, under Closed, with their state at every 
   await expect(open).toHaveAttribute("data-focused", "true");
   await page.keyboard.press("ArrowDown");
   await expect(closed).toHaveAttribute("data-focused", "true");
+  // Tab acts on the closed hit, which offers no Mark done.
+  await page.keyboard.press("Tab");
+  await expect(palette.getByRole("heading", { name: "Water the roses" })).toBeVisible();
+  await expect(palette.getByRole("menuitem", { name: "Copy link" })).toBeVisible();
+  await expect(palette.getByRole("menuitem", { name: "Mark done" })).toHaveCount(0);
 });
 
 test("Copy link closes the palette with a toast", async ({ page, context }) => {
