@@ -449,6 +449,7 @@ fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
         "run_add_needs_context" => {
             Some("Add it again with --context-file - and say what it is and why it came up.".to_owned())
         }
+        "run_add_sent" => Some("Add it again without --send; the person sends it on.".to_owned()),
         "run_done_needs_review" => {
             Some("Propose closing: upheap question propose-done <key> \"<what was done>\"".to_owned())
         }
@@ -516,6 +517,7 @@ fn client_exit_code(err: &ClientError) -> u8 {
                     | "run_cost_recorded"
                     | "run_add_reminder"
                     | "run_add_needs_context"
+                    | "run_add_sent"
                     | "run_need_above_origin"
                     | "run_blocker_not_made"
             ) =>
@@ -704,6 +706,11 @@ mod tests {
         let missed = run_refusal(422, "not_reached", "The task has no steps.");
         let reminder = run_refusal(403, "run_add_reminder", "A run adds tasks and notes, not reminders.");
         let no_context = run_refusal(403, "run_add_needs_context", "What a run adds needs a context.");
+        let sent = run_refusal(
+            403,
+            "run_add_sent",
+            "A run doesn't send what it adds: the person sends it on.",
+        );
         let too_high = {
             let mut err = problem(403, "run_need_above_origin");
             if let ClientError::Problem { problem, .. } = &mut err {
@@ -722,6 +729,7 @@ mod tests {
             &missed,
             &reminder,
             &no_context,
+            &sent,
             &too_high,
             &not_made,
         ] {
@@ -752,6 +760,10 @@ mod tests {
             contains(eq(
                 "hint: Add it again with --context-file - and say what it is and why it came up."
             ))
+        );
+        expect_that!(
+            sent.to_message(),
+            contains(eq("hint: Add it again without --send; the person sends it on."))
         );
         expect_that!(
             too_high.to_message(),

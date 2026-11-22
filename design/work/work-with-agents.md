@@ -1208,6 +1208,7 @@ Each is exit 3 with the server's message and code, and a hint saying what to do 
   A reminder added in a run                   "Add it as a task or a note; leave the date in its context."
   An item added in a run with no context      "Add it again with --context-file - and say what it is and why
                                               it came up."
+  An item sent to an agent as a run adds it   "Add it again without --send; the person sends it on."
   A need above the note's                     names the highest it may give
   Closing a task, in a run                    "Propose closing: upheap question propose-done k3x9a ..."
   A proposal without what Review §2 asks      names everything missing: open steps, an open question or
