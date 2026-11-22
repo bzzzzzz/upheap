@@ -476,7 +476,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     Escape or a cancelled pointer puts the row back and saves nothing, as for a step. A click or Enter on the grip opens
     a menu, "Move “title”", with Move up and Move down, each left out at its end of the group. Alt+↑ and Alt+↓ on the
     focused row move it one place; the focus stays on the row. On a phone or tablet there is no grip: a long press
-    (Phone details, point 3 of its gestures) lifts the row, which then follows the finger with the same line and
+    (Phone details, gesture 3) lifts the row, which then follows the finger with the same line and
     scrolling, and lifting the finger drops it. A move that lands where the row was does nothing. A move saves at once,
     and the toast says "Moved “Rotate the certs” up." (or down) with Undo, which takes the placing away when the item had
     none, and otherwise puts the item back next to the row that was above it (below it, when it was first). A move the

@@ -14,7 +14,6 @@ What each doc is for, and when to update it. The rules the docs follow are in [C
 | [work/work-with-agents.md](work/work-with-agents.md) | Work with agents, the design: context, tasks with steps, reminders, questions and the agent loop. Commitments, workflows, concepts and rules, interface, choices | The design changes, until it's built |
 | [work/smaller-changes.md](work/smaller-changes.md) | Smaller changes, the design: why a feature touches so many files, the refactors that remove the repeats, and what stays as it is | The design changes, until it's built |
 | [work/scim.md](work/scim.md) | SCIM provisioning, the design: the provider pushes group membership and deactivation, and group-managed teams follow at once. Promises, setup, endpoints, storage, how a push and a sign-in apply | The design changes, until it's built |
-| [work/manual-placement.md](work/manual-placement.md) | Placing an item by hand, the design: drag an item above or below another, kept as a multiplier on its score, with no field changed. Promises, the multiplier, what changes it, API, CLI, web outline, choices | The design changes, until it's built |
 
 `work/` holds the designs of unbuilt work, each deleted once it's built. Plans, progress and ideas are in Upheap.
 Everything beside it is permanent.

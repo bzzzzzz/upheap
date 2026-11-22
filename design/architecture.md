@@ -412,6 +412,14 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    every item in a group sorted by something other than priority, where those fields don't move it.
 5. **Ties** that the chain length doesn't settle go to the older item, then to the ID, so the order is fully
    deterministic.
+6. **Placement** (product.md, Priority §11) is the one stored input that isn't a field: a positive multiplier on
+   one item, or none. Ranking multiplies the item's score (its own or what it inherits) by it, then applies the
+   blocker rule again, so a blocker still never ranks below what it blocks. On a drop the client sends the anchor,
+   the side and its list's `as_of`; the service ranks the heap at that `as_of` with the item's own placement left
+   out and sets the multiplier so the item lands halfway between the anchor and its neighbour on that side. Placing
+   again replaces the number, a move to another heap drops it, and nothing else touches it. The module doc of
+   `domain::ranking` has the details. The web app only offers it in the ranked group of a heap's priority list,
+   since the API can't know the view a client shows.
 
 A ranking preview ranks the heap with draft weights beside the stored ones, at one `as_of`, and returns the top of
 the default view's ranked group with each item's position under both. It stores nothing.
