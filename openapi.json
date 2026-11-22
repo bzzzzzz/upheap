@@ -16908,7 +16908,8 @@
         "description": "An action the caller can take on a saved view.",
         "enum": [
           "edit",
-          "archive"
+          "archive",
+          "unarchive"
         ]
       },
       "SavedViewList": {

@@ -4734,7 +4734,7 @@ export interface components {
          * @description An action the caller can take on a saved view.
          * @enum {string}
          */
-        SavedViewAction: "edit" | "archive";
+        SavedViewAction: "edit" | "archive" | "unarchive";
         SavedViewList: {
             allowed_actions: components["schemas"]["SavedViewListAction"][];
             heap: components["schemas"]["HeapSummary"];

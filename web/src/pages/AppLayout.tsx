@@ -7,7 +7,6 @@ import {
   useCanGoBack,
   useMatch,
   useParams,
-  useNavigate,
   useRouter,
   useRouterState,
   useSearch,
@@ -77,9 +76,7 @@ export function AppLayout() {
     if (heapId !== undefined) recordRecentHeap(heapId);
   }, [heapId]);
 
-  // The keys that work anywhere in the app (ux.md, Keyboard): `?` shows them all, `g` then `o` or `c` goes to the heap's
-  // Open or Closed. `g` waits for the next key, which either completes it or cancels it, and is not otherwise handled.
-  const navigate = useNavigate();
+  // The keys that work anywhere in the app (ux.md, Keyboard): `?` shows them all, and ⌘K opens Find.
   const [helpOpen, setHelpOpen] = useState(false);
   // Find is a history entry, `state.finding`, so Back closes it, as it leaves select mode. Going somewhere from it
   // replaces the entry, and closing it goes back.
@@ -89,13 +86,13 @@ export function AppLayout() {
   // must not push a second entry, and a close right after going somewhere from Find must not go back past it.
   const openFind = useCallback(() => {
     if (router.history.location.state.finding) return;
-    void navigate({
+    void router.navigate({
       to: ".",
       search: (prev: object) => prev,
       state: (prev) => ({ ...prev, finding: true }),
       resetScroll: false,
     });
-  }, [navigate, router]);
+  }, [router]);
   // Back is asynchronous: a second close before it lands (Escape heard by the field and the modal) must not go back
   // past the page.
   const leavingFind = useRef(false);
@@ -108,14 +105,8 @@ export function AppLayout() {
     router.history.back();
   };
   const [addingFrom, setAddingFrom] = useState<{ heap: HeapRef; title: string } | null>(null);
-  const goingTo = useRef(false);
-  const shellTeam = shellHeap?.team;
-  const shellHeapSlug = shellHeap?.heap;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      // Any key after `g` ends the wait, also one handled elsewhere or typed in a field.
-      const second = goingTo.current;
-      goingTo.current = false;
       // ⌘K (Ctrl K off a Mac) works in fields too, and not over another dialog, the palette itself included.
       if ((MAC ? event.metaKey : event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -128,23 +119,11 @@ export function AppLayout() {
       if (event.key === "?") {
         event.preventDefault();
         setHelpOpen(true);
-      } else if (
-        second &&
-        shellTeam &&
-        shellHeapSlug &&
-        (event.key === "o" || event.key === "c") &&
-        !document.querySelector("[role=dialog]")
-      ) {
-        event.preventDefault();
-        const views = heapViews({ team: shellTeam, heap: shellHeapSlug }, false);
-        void navigate(event.key === "o" ? { to: views.open.to, params: views.open.params } : views.closed);
-      } else if (event.key === "g" && shellTeam) {
-        goingTo.current = true;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [shellTeam, shellHeapSlug, navigate, openFind]);
+  }, [openFind]);
 
   return (
     // On a wide screen the shell is one centred block, at most the sidebar plus the content column plus the item
@@ -273,14 +252,12 @@ function NavLink({
   label,
   current,
   count,
-  hint,
   ...link
-}: LinkProps & { icon: LucideIcon; label: ReactNode; current?: boolean; count?: number; hint?: string }) {
+}: LinkProps & { icon: LucideIcon; label: ReactNode; current?: boolean; count?: number }) {
   return (
     <Link {...link} {...(current && { "data-status": "active", "aria-current": "page" })} className={navItemClass}>
       <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">{label}</span>
-      {hint && <Kbd className={`${WIDE_HINT} ${count === undefined ? "ml-auto" : ""}`}>{hint}</Kbd>}
       {count !== undefined && (
         <span aria-hidden="true" className="ml-auto hidden font-normal text-muted tabular-nums lg:inline">
           {count}
@@ -449,8 +426,8 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
 
       {views && (
         <nav aria-label="Heap views" className="flex flex-col gap-1 lg:gap-0.5">
-          <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} hint="G O" />
-          <NavLink {...views.closed} icon={CircleCheck} label="Closed" hint="G C" />
+          <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} />
+          <NavLink {...views.closed} icon={CircleCheck} label="Closed" />
           <NavLink {...views.activity} icon={Activity} label="Activity" />
           <NavLink {...views.data} icon={ChartColumn} label="Data" />
           <NavLink {...views.settings} icon={Settings} label="Settings" />
