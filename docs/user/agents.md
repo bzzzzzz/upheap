@@ -40,10 +40,10 @@ is done when you agree.
 
 ## What a run may do
 
-1. **A run writes only its own item.** The loop starts the tool with `UPHEAP_RUN` set to the run's ID. Every
-   `upheap` request is then made inside that run: it may write the item's context, steps, questions and comments,
-   make a note or a reminder a task and start it, on the run's own item only, and is refused anything else with
-   exit 3.
+1. **A run writes its own item and what it makes from it.** The loop starts the tool with `UPHEAP_RUN` set to the
+   run's ID. Every `upheap` request is then made inside that run. On its own item it may write the context, steps,
+   questions and comments, and make a note or a reminder a task and start it. It may also add items and a heap
+   made from its note, and say which of the items it made block which. Anything else is refused with exit 3.
 2. **Without `--root`, a run works in the directory the loop was started in.** To prepare an item (give it its
    context, or make it a defined task), `claude` may run the `upheap` commands a run uses (not `auth`), read files
    under that directory and use the web, and nothing else. To do a task, it may also edit files, and run what your

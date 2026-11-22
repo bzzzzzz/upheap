@@ -5,10 +5,12 @@ sign-in.
 
 A cloud session, a container or CI has no browser to sign in with and often no keychain. Make a token for it on the
 web app's Account page, under Command line: **Make a token**, pick how long it lasts, and copy it, since it is shown
-once. Then give the machine the server and the token:
+once. Then give the machine the server, the token and the heap to work in, since it has no config file with a
+default heap:
 
 ```sh
-UPHEAP_SERVER=https://upheap.example.com UPHEAP_TOKEN=uph_... upheap item add "Rotate the staging certs"
+UPHEAP_SERVER=https://upheap.example.com UPHEAP_TOKEN=uph_... UPHEAP_HEAP=sam/personal \
+  upheap item add "Rotate the staging certs"
 ```
 
 A token can do anything you can, until it expires or you revoke it on the same page. Changing or resetting your

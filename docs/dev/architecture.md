@@ -733,7 +733,7 @@ frame-ancestors 'none'`), so a page can't hide the consent page under something 
      7644) are the contract and providers are the only clients
      ([decisions.md](decisions.md#42-with-scim-set-up-the-providers-pushes-decide-a-persons-groups-at-a-scim-endpoint-of-their-own)).
      The token is not a user: the server compares SHA-256 digests of what it got and of the setting, never logs it,
-     and `/api/v1` refuses it like any unknown bearer token. Unset, the paths answer `404` like any unknown path.
+     and `/api/v1` refuses it like any unknown bearer token. Unset, the SCIM routes aren't added at all.
      Three tables mirror the provider (`scim_users`, `scim_groups`, `scim_group_members`), each resource kept whole
      as it was sent. They are the provider's data, not the person's, so a SCIM `DELETE` removes the rows;
      the audit log keeps every team change they caused. Users and

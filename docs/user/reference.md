@@ -38,7 +38,7 @@ only one of your teams has it.
 | 1 | Anything else |
 | 2 | Bad command line |
 | 3 | Refused |
-| 4 | Not signed in, or not found |
+| 4 | Not signed in, not allowed, or not found (the server's `401`, `403` and `404`) |
 | 5 | The server can't be reached |
 | 6 | The local setup is broken: no keychain, no agent tool or one too old, or a `UPHEAP_TOKEN` the server refuses |
 

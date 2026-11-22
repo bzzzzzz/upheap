@@ -268,7 +268,8 @@ What it is not:
 1. Each item has a combined priority score based on need, age, deadline proximity, effort and impact, custom
    parameters, and the heap's tag order. Each factor has a weight, set per heap by its admins, and the weights apply
    to everyone in the team. The weights are the heap's whole ranking policy; there is no separate policy setting.
-   An unset value counts as the lowest-priority option (Items §4), and ties go to the older item.
+   An unset value counts as the lowest-priority option (Items §4), and ties go to the older item, unless one
+   blocks a longer chain.
 2. **Age** counts from the item's creation, including any time spent in progress or blocked. Items are not expected
    to stay in those states long. A reopened item keeps its original creation time. How fast an item ages depends on
    its need: an idea ages slowly, so old ideas don't climb past fresh work someone is waiting for, and a critical

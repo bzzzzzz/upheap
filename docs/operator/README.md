@@ -41,8 +41,9 @@ The server needs two settings, `DATABASE_URL` and `BASE_URL`. It runs its migrat
 
 ## 2. Check it's up
 
-`/healthz` answers `200` while the process is up, and `/readyz` answers `200` when the database answers, which is
-only after the migrations ran. Point a startup or readiness probe at `/readyz`.
+The server listens only after it has connected to the database and run its migrations. From then on `/healthz`
+answers `200` while the process is up, and `/readyz` answers `200` when the database answers. Point a startup or
+readiness probe at `/readyz`.
 
 ```sh
 curl -i http://localhost:8080/readyz

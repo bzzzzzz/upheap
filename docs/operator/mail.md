@@ -24,7 +24,7 @@ upheap-server mail test you@example.com
 docker compose exec upheap upheap-server mail test you@example.com
 ```
 
-It takes the same environment variables as the server, and prints `Sent a test mail to … via …` on success. Exit
+It takes the same environment variables as the server, and prints `Sent a test mail to … from … via …` on success. Exit
 codes: `0` sent, `2` wrong arguments or not an email address, `6` mail isn't set up or the send failed, `1` anything
 else.
 
@@ -42,7 +42,7 @@ upheap-server user confirm sam          # a username or an email address
 docker compose exec upheap upheap-server user confirm sam
 ```
 
-It takes the same environment variables as the server (at least `DATABASE_URL`), needs no mail, and prints
+It takes the same environment variables as the server (at least `DATABASE_URL` and `BASE_URL`), needs no mail, and prints
 `Confirmed @sam's address, sam@example.com.`, or says the address is already confirmed. The confirmation is in the
 user's account history. It runs no migrations and starts no server, so run it once the server of the same version has
 started. Exit codes: `0` confirmed or already confirmed, `2` wrong arguments, `3` no such user, `5` the database can't

@@ -24,7 +24,7 @@ such user, `5` the database can't be reached, `1` anything else, a database a ve
 ## Making a team admin
 
 A team whose groups took out its last admin has nobody who can make another. Whoever runs the server makes a member an
-admin with a command, which takes the same environment variables as the server (at least `DATABASE_URL`):
+admin with a command, which takes the same environment variables as the server (at least `DATABASE_URL` and `BASE_URL`):
 
 ```sh
 upheap-server team make-admin ops sam          # the team's link name, a username
@@ -65,7 +65,7 @@ of the account (web sessions, command-line sign-ins and personal tokens), keeps 
 prints `Deactivated @sam. 3 sign-ins ended.`; the person then can't sign in until `user reactivate`, which restores
 nothing that ended. An account that signs in through the provider is managed by the provider, so both refuse it. Every
 change is in the account's history. The commands take the same environment variables as the server (at least
-`DATABASE_URL`), run no migrations and start no server, so run them once the server of the same version has started.
+`DATABASE_URL` and `BASE_URL`), run no migrations and start no server, so run them once the server of the same version has started.
 Exit codes: `0` done, or already so, `2` wrong arguments, `3` no such user, `4` the account signs in through the
 provider (`deactivate` and `reactivate`), `5` the database can't be reached, `1` anything else, a database a version
 behind included.

@@ -630,7 +630,7 @@ types later would mean new keys for existing items.
 (product.md, The agent loop).
 
 **Decision.** An agent uses the person's own sign-in. What it writes is marked by the run it was written in, and a
-run may write only its own item.
+run may write only its own item and what it makes from it.
 
 **Instead of.** Accounts for agents, with sign-up, team membership and permissions of their own.
 

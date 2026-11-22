@@ -28,7 +28,7 @@ Effort, impact, a due time and a parameter left unset count as the lowest option
 
 1. **Blocking.** An item that blocks another takes on the priority of the most important item it blocks, with a
    small boost, through chains too. The blocker's reasons say "Blocks …".
-2. **Ties** go to the older item.
+2. **Ties** go to the item that blocks the longer chain, then to the older item.
 3. **Placing by hand.** You can put an item right above or below another one without changing its fields:
    `upheap item place k3x9a --above p2m7q`, or `--reset` to undo it. It holds for everyone in the team and for
    agents, until the item is placed again or reset. The ranking stays computed, so a placed item can drift a place

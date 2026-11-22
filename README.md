@@ -19,6 +19,7 @@ Then, with the command-line client (`brew install bzzzzzz/tap/upheap` on macOS w
 
 ```sh
 upheap auth login --server http://localhost:8080
+upheap heap use personal        # your first heap
 upheap item add "Rotate the staging certs" --need expected --effort s --due next-week
 upheap item list
 ```

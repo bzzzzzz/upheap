@@ -63,7 +63,7 @@ at their next sign-in if their groups still name the team).
 At the provider, send the person's groups in the ID token, under the claim `groups` or the one named by
 `UPHEAP_OIDC_GROUPS_CLAIM`. For most providers that means a `groups` scope or a groups claim on the client: add the
 scope to `UPHEAP_OIDC_SCOPES` where the provider needs it. A token that doesn't say, because the claim is missing or
-isn't a list of strings, changes no membership and is logged as a warning. So does Microsoft Entra ID's overage, which
+is neither a list of strings nor one string, changes no membership and is logged as a warning. So does Microsoft Entra ID's overage, which
 leaves the groups out of the token for a person in too many of them. An empty list is an answer: it takes the person out
 of every mapped team. People who sign in with a password never change teams this way.
 
