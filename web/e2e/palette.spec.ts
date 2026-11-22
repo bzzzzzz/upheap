@@ -64,6 +64,33 @@ test("Tab shows the actions, and Mark done marks the item done", async ({ page }
   await expect(palette).toHaveCount(0);
 });
 
+test("closed hits come after open ones, under Closed, with their state at every width", async ({ page }) => {
+  await addItem(page, "Water the ferns");
+  await addItem(page, "Water the roses");
+  let palette = await openFind(page);
+  await palette.getByRole("searchbox").fill("roses");
+  await expect(palette.getByRole("menuitem", { name: /Water the roses/ })).toBeVisible();
+  await page.keyboard.press("Tab");
+  await palette.getByRole("menuitem", { name: "Mark done" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "“Water the roses” is done." })).toBeVisible();
+
+  palette = await openFind(page);
+  await palette.getByRole("searchbox").fill("Water the");
+  const open = palette.getByRole("group", { name: "Items" }).getByRole("menuitem");
+  const closed = palette.getByRole("group", { name: "Closed" }).getByRole("menuitem");
+  await expect(open).toHaveCount(1);
+  await expect(open).toContainText("Water the ferns");
+  await expect(open.getByText("Done", { exact: true })).toHaveCount(0);
+  await expect(closed).toHaveCount(1);
+  await expect(closed).toContainText("Water the roses");
+  // The heap name is hidden on a phone; the label isn't.
+  await expect(closed.getByText("Done", { exact: true })).toBeVisible();
+  // The heading isn't a stop: ↓ goes from the last open hit to the first closed one.
+  await expect(open).toHaveAttribute("data-focused", "true");
+  await page.keyboard.press("ArrowDown");
+  await expect(closed).toHaveAttribute("data-focused", "true");
+});
+
 test("Copy link closes the palette with a toast", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await addItem(page, "Share the plan");

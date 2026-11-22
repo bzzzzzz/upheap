@@ -109,6 +109,7 @@ function FindBody({
 
   const several = me.teams.length > 1;
   const rows = current ? search.data.rows : [];
+  const found = rows.map((row, at) => ({ row, at }));
   const heaps = me.teams.flatMap((team) =>
     team.heaps
       .filter((heap) => !heap.archived && (!searching || heap.name.toLowerCase().includes(query.toLowerCase())))
@@ -182,19 +183,26 @@ function FindBody({
               current ? <p className="px-2.5 py-2 text-sm text-muted">Nothing matches “{query}”.</p> : null
             }
           >
-            {rows.length > 0 && (
-              <MenuSection aria-label="Items" className={sectionClass}>
-                <SectionTitle>Items</SectionTitle>
-                {rows.map((row, at) => (
-                  <ItemResult
-                    key={row.item.id}
-                    row={row}
-                    at={at}
-                    me={me}
-                    onAction={() => goToItem(row.heap.team_slug, row.heap.slug, row.item.key)}
-                  />
-                ))}
-              </MenuSection>
+            {/* The server sends open hits first, then closed ones; each keeps its place in `rows` for Tab. */}
+            {[
+              { title: "Items", hits: found.filter(({ row }) => !isClosed(row.item.state)) },
+              { title: "Closed", hits: found.filter(({ row }) => isClosed(row.item.state)) },
+            ].map(
+              ({ title, hits }) =>
+                hits.length > 0 && (
+                  <MenuSection key={title} aria-label={title} className={sectionClass}>
+                    <SectionTitle>{title}</SectionTitle>
+                    {hits.map(({ row, at }) => (
+                      <ItemResult
+                        key={row.item.id}
+                        row={row}
+                        at={at}
+                        me={me}
+                        onAction={() => goToItem(row.heap.team_slug, row.heap.slug, row.item.key)}
+                      />
+                    ))}
+                  </MenuSection>
+                ),
             )}
             {heaps.length > 0 && (
               <MenuSection aria-label="Go to" className={sectionClass}>
@@ -261,9 +269,14 @@ function placeLabel(me: Me, row: SearchRow): string {
   return me.teams.length > 1 && team ? `${row.heap.name} · ${teamName(team, me)}` : row.heap.name;
 }
 
-/** One found item: its kind, title and key, where it is, and its state when it isn't open. `at` is its place in the results. */
+/**
+ * One found item: its kind, title and key, and where it is. A closed one has a muted title and its state just before
+ * the key, at every width (design/ux.md, Find); one in progress or blocked has its state after the place. `at` is its
+ * place in the results.
+ */
 function ItemResult({ row, at, me, onAction }: { row: SearchRow; at: number; me: Me; onAction: () => void }) {
   const { item } = row;
+  const closed = isClosed(item.state);
   return (
     <MenuItem
       id={`item:${item.id}`}
@@ -273,11 +286,16 @@ function ItemResult({ row, at, me, onAction }: { row: SearchRow; at: number; me:
       className={`${rowClass} sm:gap-2`}
     >
       <KindIcon kind={item.kind} />
-      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+      <span className={`min-w-0 flex-1 truncate ${closed ? "text-muted" : ""}`}>{item.title}</span>
+      {closed && (
+        <span className={`shrink-0 text-xs ${item.state === "done" ? "text-done" : "text-muted"}`}>
+          {STATE_LABELS[item.state]}
+        </span>
+      )}
       <span className="shrink-0 font-mono text-xs text-muted">{item.key}</span>
       <span className="hidden max-w-[40%] shrink-0 truncate text-[13px] text-muted sm:inline">
         {placeLabel(me, row)}
-        {item.state !== "open" && ` · ${STATE_LABELS[item.state]}`}
+        {!closed && item.state !== "open" && ` · ${STATE_LABELS[item.state]}`}
       </span>
     </MenuItem>
   );

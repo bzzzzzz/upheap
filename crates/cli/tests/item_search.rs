@@ -3,7 +3,7 @@
 mod common;
 
 use anyhow::Result;
-use common::{TestCli, TestServer, ada_with_items, key};
+use common::{TestCli, TestServer, ada_with_items, cli_in_heap, key, lines_with};
 use googletest::prelude::*;
 use serde_json::Value;
 
@@ -95,5 +95,40 @@ async fn item_search_needs_the_text() -> Result<()> {
 
     // Assert
     expect_that!(found.exited(2), eq(true));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn item_search_dims_closed_rows_on_a_terminal_and_prints_plain_text_otherwise() -> Result<()> {
+    // Arrange
+    let server = TestServer::start().await?;
+    let (ada, items) = ada_with_items(&server).await?;
+    let mut cli = cli_in_heap(&server, &ada).await?;
+    cli.run(&["item", "done", key(&items[1])?]).await;
+    let faint = "\u{1b}[2m";
+
+    // Act
+    let piped = cli.run(&["item", "search", "the"]).await;
+    cli.env.stdout_is_terminal = true;
+    let on_terminal = cli.run(&["item", "search", "the"]).await;
+    cli.env.no_color = true;
+    let no_color = cli.run(&["item", "search", "the"]).await;
+
+    // Assert
+    let open = lines_with(&on_terminal.stdout, "staging");
+    let closed = lines_with(&on_terminal.stdout, "migration");
+    expect_that!(open, elements_are![not(contains_substring(faint))]);
+    expect_that!(closed, elements_are![starts_with(faint)]);
+    expect_that!(closed, elements_are![contains_substring("done")]);
+    expect_that!(piped.stdout, not(contains_substring("\u{1b}")));
+    expect_that!(no_color.stdout, eq(&piped.stdout));
+    expect_that!(
+        lines_with(&piped.stdout, "migration"),
+        elements_are![eq(&format!(
+            "ada/personal/{}  Write the migration guide  done",
+            key(&items[1])?
+        ))]
+    );
     Ok(())
 }

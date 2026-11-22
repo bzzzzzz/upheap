@@ -1,5 +1,6 @@
 //! `upheap item search <text>`: items by title or key in every heap you can use, open and closed.
 
+use api_types::common::StateDto;
 use api_types::items::{SearchQuery, SearchResultsDto};
 use clap::Args;
 
@@ -46,10 +47,18 @@ pub async fn run(args: SearchArgs, app: &App, out: &mut Output) -> Result<(), Cl
                 .iter()
                 .zip(&names)
                 .map(|(row, name)| {
+                    // A closed hit is faint from end to end, so live work stands out; the state word says it in
+                    // plain text too.
+                    let closed = matches!(row.item.state, StateDto::Done | StateDto::WontDo | StateDto::Became);
+                    let (key_tone, tone) = if closed {
+                        (Tone::Dim, Tone::Dim)
+                    } else {
+                        (Tone::Strong, Tone::Plain)
+                    };
                     vec![
-                        Cell::toned(name.clone(), Tone::Strong),
-                        Cell::new(shorten(&row.item.title, TITLE_WIDTH)),
-                        Cell::new(state_text(row.item.state)),
+                        Cell::toned(name.clone(), key_tone),
+                        Cell::toned(shorten(&row.item.title, TITLE_WIDTH), tone),
+                        Cell::toned(state_text(row.item.state), tone),
                     ]
                 })
                 .collect();

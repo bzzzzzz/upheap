@@ -1393,7 +1393,11 @@ The wide screen shows its keys, and `?` lists them all:
 5. `⌘K` (`Ctrl K` off a Mac) anywhere, Find at the top of the sidebar, or the search icon in a phone's top bar, opens
    Find. It finds items by title or key in every heap, goes to a heap, and adds "Add “text” as a new item" to the heap
    on screen. ↑ ↓ and Enter open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy link, as the
-   item allows), and Shift+Tab goes back. Open, it is a history entry, so Back closes it; going to an item or a heap
-   takes its place, so Back from there returns to where it was opened. On a phone it opens at the top, full width,
-   and ends above the on-screen keyboard, with the results scrolling; ✕ in the field clears it, or closes Find once
-   it's empty, and a tap outside closes it too.
+   item allows), and Shift+Tab goes back. Closed items come after the open ones, in the server's order, under a
+   "Closed" heading styled like "Items" (with only closed hits, "Closed" is the only one). A closed row's title is
+   muted, and its state ("Done" in teal, "Won't do" or "Became" muted) sits just before the key at every width, since a
+   phone hides the heap name. ↑ ↓ move across the heading as if it weren't there. `upheap item search` prints a closed
+   row faint on a terminal, and plain when piped or with `NO_COLOR`: the state column says it either way. Open, Find is
+   a history entry, so Back closes it; going to an item or a heap takes its place, so Back from there returns to where
+   it was opened. On a phone it opens at the top, full width, and ends above the on-screen keyboard, with the results
+   scrolling; ✕ in the field clears it, or closes Find once it's empty, and a tap outside closes it too.
