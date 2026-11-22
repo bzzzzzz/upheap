@@ -152,7 +152,7 @@ export function ListControls({
               onSearch("");
             }
           }}
-          placeholder={phone ? "Search" : "Search titles and descriptions  /"}
+          placeholder={phone ? "Search this list" : "Search titles and descriptions  /"}
           aria-label="Search items"
           className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm placeholder:text-muted max-sm:h-11 max-sm:text-base pointer-coarse:h-11"
         />

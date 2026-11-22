@@ -34,7 +34,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
@@ -81,7 +81,31 @@ export function AppLayout() {
   // Open or Closed. `g` waits for the next key, which either completes it or cancels it, and is not otherwise handled.
   const navigate = useNavigate();
   const [helpOpen, setHelpOpen] = useState(false);
-  const [findOpen, setFindOpen] = useState(false);
+  // Find is a history entry, `state.finding`, so Back closes it, as it leaves select mode. Going somewhere from it
+  // replaces the entry, and closing it goes back.
+  const router = useRouter();
+  const findOpen = useRouterState({ select: (state) => state.location.state.finding === true });
+  const openFind = useCallback(
+    () =>
+      void navigate({
+        to: ".",
+        search: (prev: object) => prev,
+        state: (prev) => ({ ...prev, finding: true }),
+        resetScroll: false,
+      }),
+    [navigate],
+  );
+  // Back is asynchronous: a second close before it lands (Escape heard by the field and the modal) must not go back
+  // past the page.
+  const leavingFind = useRef(false);
+  useEffect(() => {
+    leavingFind.current = false;
+  }, [findOpen]);
+  const closeFind = () => {
+    if (leavingFind.current || !router.state.location.state.finding) return;
+    leavingFind.current = true;
+    router.history.back();
+  };
   const [addingFrom, setAddingFrom] = useState<{ heap: HeapRef; title: string } | null>(null);
   const goingTo = useRef(false);
   const shellTeam = shellHeap?.team;
@@ -94,7 +118,7 @@ export function AppLayout() {
       // ⌘K (Ctrl K off a Mac) works in fields too, and not over another dialog, the palette itself included.
       if ((MAC ? event.metaKey : event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        if (!document.querySelector(OVERLAY)) setFindOpen(true);
+        if (!document.querySelector(OVERLAY)) openFind();
         return;
       }
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -119,7 +143,7 @@ export function AppLayout() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [shellTeam, shellHeapSlug, navigate]);
+  }, [shellTeam, shellHeapSlug, navigate, openFind]);
 
   return (
     // On a wide screen the shell is one centred block, at most the sidebar plus the content column plus the item
@@ -134,9 +158,9 @@ export function AppLayout() {
       <ListSearchProvider listKey={onList && heapRef ? `${heapRef.team}/${heapRef.heap}` : onAll ? "all" : undefined}>
         <div className="lg:bg-[linear-gradient(to_right,var(--sunken)_50%,var(--canvas)_50%)]">
           <div className="min-h-dvh sm:flex lg:mx-auto lg:max-w-[92rem]">
-            {me && <Sidebar me={me} heapRef={shellHeap} onFind={() => setFindOpen(true)} />}
+            {me && <Sidebar me={me} heapRef={shellHeap} onFind={openFind} />}
             <div className="min-w-0 flex-1 bg-canvas">
-              {me && <PhoneTopBar me={me} heapRef={shellHeap} />}
+              {me && <PhoneTopBar me={me} heapRef={shellHeap} onFind={openFind} />}
               {/* On a phone, room at the bottom for the tabs. */}
               <div className="mx-auto max-w-3xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-24 lg:mx-0 lg:max-w-none lg:has-[[data-item-pane]]:pr-0">
                 {heapRef && <ArchivedNotice key={`${heapRef.team}/${heapRef.heap}`} heapRef={heapRef} />}
@@ -154,7 +178,7 @@ export function AppLayout() {
       {me && (
         <FindPalette
           isOpen={findOpen}
-          onOpenChange={setFindOpen}
+          onOpenChange={(open) => !open && closeFind()}
           me={me}
           shellHeap={shellHeap}
           onAdd={(heap, title) => setAddingFrom({ heap, title })}
@@ -449,8 +473,8 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
   );
 }
 
-/** The heap name on a phone, which switches heap. */
-function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) {
+/** The heap name on a phone, which switches heap, then Find and Select at the end. */
+function PhoneTopBar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined; onFind: () => void }) {
   const { heap } = useShellLinks(me, heapRef);
   const team = titleTeam(me, heapRef);
   return (
@@ -472,7 +496,17 @@ function PhoneTopBar({ me, heapRef }: { me: Me; heapRef: HeapRef | undefined }) 
           </button>
         )}
       </HeapSwitcher>
-      <PhoneSelect heapRef={heapRef} />
+      <div className="ml-auto flex shrink-0 items-center">
+        <button
+          type="button"
+          onClick={onFind}
+          aria-label="Find in all heaps"
+          className="flex size-11 items-center justify-center rounded-lg text-ink-soft outline-none focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          <Search aria-hidden="true" className="size-5" />
+        </button>
+        <PhoneSelect heapRef={heapRef} />
+      </div>
     </header>
   );
 }
@@ -512,7 +546,7 @@ function PhoneSelect({ heapRef }: { heapRef: HeapRef | undefined }) {
     <button
       type="button"
       onClick={enter}
-      className="ml-auto min-h-11 shrink-0 rounded-lg px-3 text-base font-medium text-accent-ink outline-none focus-visible:outline-2 focus-visible:outline-accent"
+      className="min-h-11 shrink-0 rounded-lg px-3 text-base font-medium text-accent-ink outline-none focus-visible:outline-2 focus-visible:outline-accent"
     >
       Select
     </button>

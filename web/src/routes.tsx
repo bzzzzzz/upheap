@@ -694,6 +694,8 @@ declare module "@tanstack/history" {
     fullBack?: boolean;
     /** Set on the entry of a heap's list in select mode, so Back leaves select mode. */
     selecting?: boolean;
+    /** Set on the entry the Find palette opens, so Back closes it. */
+    finding?: boolean;
     /** Set on each click of an agent's mark in a history, so a second click on the same run is a new location. */
     runLinkedAt?: number;
     /**

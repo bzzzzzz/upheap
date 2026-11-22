@@ -26,6 +26,7 @@ import { DuePicker } from "./DuePicker";
 import { SectionTitle, rowClass } from "./HeapSwitcher";
 import { Kbd, WIDE_HINT } from "./Kbd";
 import { KindIcon } from "./kindIcons";
+import { PHONE, useMedia } from "./media";
 import { STATE_LABELS, isClosed } from "./labels";
 import { ProblemText } from "./ProblemText";
 import { teamName } from "./teamName";
@@ -42,7 +43,9 @@ const sectionClass = "flex flex-col not-first:mt-3";
 /**
  * The palette ⌘K opens (design/ux.md, Keyboard): finds an item by title or key in every heap, goes to a heap, adds the
  * text as a new item in the heap on screen, and with Tab shows the highlighted item's actions. It is a modal at the top
- * of the screen at every width. `onAdd` is told the heap and title once the palette has closed.
+ * of the screen at every width; on a phone it fills the width and ends above the on-screen keyboard. The shell keeps it
+ * open as a history entry: going to an item or a heap replaces that entry, which closes it, and `onOpenChange(false)`
+ * goes back. `onAdd` is told the heap and title once the palette has closed.
  */
 export function FindPalette({
   isOpen,
@@ -62,9 +65,9 @@ export function FindPalette({
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       isDismissable
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 pt-[10vh]"
+      className="fixed inset-x-0 top-0 bottom-(--keyboard-inset) z-50 flex items-start justify-center bg-black/40 px-2 pt-[max(env(safe-area-inset-top),0.5rem)] pb-2 sm:bottom-0 sm:px-4 sm:pt-[10vh] sm:pb-0"
     >
-      <Modal className="flex max-h-[80dvh] w-full max-w-[560px] flex-col overflow-hidden rounded-2xl bg-surface text-ink shadow-xl outline-none">
+      <Modal className="flex max-h-full w-full sm:max-h-[80dvh] max-w-[560px] flex-col overflow-hidden rounded-2xl bg-surface text-ink shadow-xl outline-none">
         <Dialog aria-label="Find" className="flex min-h-0 flex-1 flex-col outline-none">
           <FindBody me={me} shellHeap={shellHeap} close={() => onOpenChange(false)} onAdd={onAdd} />
         </Dialog>
@@ -86,6 +89,7 @@ function FindBody({
   onAdd: (heap: HeapRef, title: string) => void;
 }) {
   const navigate = useNavigate();
+  const phone = useMedia(PHONE);
   const [text, setText] = useState("");
   // The text the search is sent for, once typing has stopped.
   const [settled, setSettled] = useState("");
@@ -114,14 +118,11 @@ function FindBody({
   );
   const addHeap = shellHeap && heapOf(me, shellHeap);
 
-  const goToHeap = (team: string, heap: string) => {
-    close();
-    void navigate({ to: "/teams/$team/heaps/$heap", params: { team, heap } });
-  };
-  const goToItem = (team: string, heap: string, item: string) => {
-    close();
-    void navigate({ to: "/teams/$team/heaps/$heap/items/$item", params: { team, heap, item } });
-  };
+  // In place of the palette's entry, so Back from there goes to where Find was opened.
+  const goToHeap = (team: string, heap: string) =>
+    void navigate({ to: "/teams/$team/heaps/$heap", params: { team, heap }, replace: true });
+  const goToItem = (team: string, heap: string, item: string) =>
+    void navigate({ to: "/teams/$team/heaps/$heap/items/$item", params: { team, heap, item }, replace: true });
 
   // Before the field's own handlers (the menu's Enter among them), which would act on the highlighted row.
   const holdKeys = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -157,9 +158,11 @@ function FindBody({
             onKeyDown={onKeyDown}
             className="h-10 w-full rounded-[9px] border-2 border-transparent bg-sunken pr-10 pl-9 text-base outline-none placeholder:text-muted focus:border-accent sm:text-sm [&::-webkit-search-cancel-button]:hidden"
           />
-          {text !== "" && (
+          {/* A phone has no Escape, so there ✕ stays and closes the palette once the field is empty. */}
+          {(text !== "" || phone) && (
             <Button
-              aria-label="Clear"
+              aria-label={text === "" ? "Close" : "Clear"}
+              onPress={text === "" ? close : undefined}
               className="absolute right-2.5 flex size-10 items-center justify-center rounded-xl text-ink-soft outline-none hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
             >
               <X aria-hidden="true" className="size-4" />
