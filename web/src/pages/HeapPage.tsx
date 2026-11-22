@@ -152,9 +152,13 @@ export function HeapPage({
 
   return (
     // On a wide screen the item pane sits beside the list; narrower, it's fixed over it.
-    <div className="lg:flex lg:items-start">
+    // With a mouse, the list's column fills the height left in the window, so its hint bar ends at the window's bottom.
+    <div className="lg:flex lg:items-start lg:pointer-fine:flex-1">
       {/* Under a full-screen item the list stays, keeping its place, but out of reach of the keyboard. */}
-      <div inert={full} className="min-w-0 flex-1 lg:has-[~[data-item-pane]]:pr-6">
+      <div
+        inert={full}
+        className="min-w-0 flex-1 lg:has-[~[data-item-pane]]:pr-6 lg:pointer-fine:flex lg:pointer-fine:flex-col lg:pointer-fine:self-stretch"
+      >
         <ListPage
           heapRef={heapRef}
           itemKey={itemKey}
@@ -368,89 +372,95 @@ function ListPage({
   );
 
   return (
-    <main>
-      <div className="flex items-center justify-between gap-4 sm:mt-6 sm:mb-4">
-        {/* On a phone the heap name is already at the top, as the heap switcher. */}
-        <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight max-sm:sr-only">
-          {heap.name}
-          {team && <span className="font-normal text-muted"> · {team}</span>}
-        </h1>
-        <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
-      </div>
+    // On a wide screen with a mouse, the hint bar sits at the end of a column at least the window's height, so it
+    // stays at the window's bottom for a short heap as for a long one (ux.md, Keyboard).
+    <main className="lg:pointer-fine:flex lg:pointer-fine:flex-1 lg:pointer-fine:flex-col">
+      {/* Room under the list, so the last row clears the hint bar and a toast over it. */}
+      <div className="lg:pointer-fine:pb-12">
+        <div className="flex items-center justify-between gap-4 sm:mt-6 sm:mb-4">
+          {/* On a phone the heap name is already at the top, as the heap switcher. */}
+          <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight max-sm:sr-only">
+            {heap.name}
+            {team && <span className="font-normal text-muted"> · {team}</span>}
+          </h1>
+          <AddItem heapRef={heapRef} view={view} search={search} disabled={heap.archived} />
+        </div>
 
-      {select ? (
-        <>
-          {/* The wide bar takes the toolbar's place; a phone keeps the toolbar under its own bars. */}
-          <div className="sm:hidden">{controls}</div>
-          <SelectionBars
+        {select ? (
+          <>
+            {/* The wide bar takes the toolbar's place; a phone keeps the toolbar under its own bars. */}
+            <div className="sm:hidden">{controls}</div>
+            <SelectionBars
+              heapRef={heapRef}
+              items={select.items}
+              selected={select.selected}
+              onSelect={select.onSelect}
+              onDone={select.onDone}
+            />
+          </>
+        ) : (
+          controls
+        )}
+
+        {changed && (
+          <FilterChips
             heapRef={heapRef}
-            items={select.items}
-            selected={select.selected}
-            onSelect={select.onSelect}
-            onDone={select.onDone}
+            view={view}
+            onChange={onViewChange}
+            // What the filters leave, before the search narrows it further, so both counts mean the same thing.
+            shown={listed}
+            // Not while the previous view stands in for this one, so a count from it never shows ("5 of 3").
+            total={list.isPlaceholderData ? undefined : unfiltered_count}
           />
-        </>
-      ) : (
-        controls
-      )}
+        )}
 
-      {changed && (
-        <FilterChips
-          heapRef={heapRef}
-          view={view}
-          onChange={onViewChange}
-          // What the filters leave, before the search narrows it further, so both counts mean the same thing.
-          shown={listed}
-          // Not while the previous view stands in for this one, so a count from it never shows ("5 of 3").
-          total={list.isPlaceholderData ? undefined : unfiltered_count}
-        />
-      )}
-
-      {search.trim() !== "" && (
-        <p role="status" className="sr-only">
-          {shown === 1 ? "1 item matches" : `${shown} items match`}
-        </p>
-      )}
-
-      {/* While another view loads, the previous one stays on screen, dimmed. */}
-      <div aria-busy={list.isPlaceholderData} className={list.isPlaceholderData ? "opacity-60" : undefined}>
-        {shown === 0 && (
-          <p className="py-12 text-center text-stone-500">
-            {listed === 0 && hidden_count === 0 && !narrowed
-              ? "Nothing here yet. Add the first thing on your plate."
-              : "No items match."}
+        {search.trim() !== "" && (
+          <p role="status" className="sr-only">
+            {shown === 1 ? "1 item matches" : `${shown} items match`}
           </p>
         )}
 
-        {pinned.length > 0 && <Section title={pinnedTitle(pinned)}>{rows(pinned, true)}</Section>}
+        {/* While another view loads, the previous one stays on screen, dimmed. */}
+        <div aria-busy={list.isPlaceholderData} className={list.isPlaceholderData ? "opacity-60" : undefined}>
+          {shown === 0 && (
+            <p className="py-12 text-center text-stone-500">
+              {listed === 0 && hidden_count === 0 && !narrowed
+                ? "Nothing here yet. Add the first thing on your plate."
+                : "No items match."}
+            </p>
+          )}
 
-        {ranked.length > 0 && <Section title={pinned.length > 0 ? "Up next" : undefined}>{rows(ranked)}</Section>}
+          {pinned.length > 0 && <Section title={pinnedTitle(pinned)}>{rows(pinned, true)}</Section>}
 
-        {blocked.length > 0 && <Section title="Blocked">{rows(blocked)}</Section>}
+          {ranked.length > 0 && <Section title={pinned.length > 0 ? "Up next" : undefined}>{rows(ranked)}</Section>}
 
-        {coming.length > 0 && (
-          <Section title="Reminders to come">
-            <ol className="flex flex-col">
-              {coming.map((item) => (
-                <ComingRow
-                  key={item.id}
-                  item={item}
-                  heapRef={heapRef}
-                  selected={item.key === itemKey}
-                  itemOpen={itemKey !== undefined}
-                  filters={rowFilters}
-                />
-              ))}
-            </ol>
-          </Section>
-        )}
+          {blocked.length > 0 && <Section title="Blocked">{rows(blocked)}</Section>}
+
+          {coming.length > 0 && (
+            <Section title="Reminders to come">
+              <ol className="flex flex-col">
+                {coming.map((item) => (
+                  <ComingRow
+                    key={item.id}
+                    item={item}
+                    heapRef={heapRef}
+                    selected={item.key === itemKey}
+                    itemOpen={itemKey !== undefined}
+                    filters={rowFilters}
+                  />
+                ))}
+              </ol>
+            </Section>
+          )}
+        </div>
+
+        {hidden_count > 0 && <HiddenNote count={hidden_count} view={view} onViewChange={onViewChange} />}
       </div>
-
-      {hidden_count > 0 && <HiddenNote count={hidden_count} view={view} onViewChange={onViewChange} />}
 
       <section
         aria-label="Keys on this screen"
-        className="sticky bottom-0 hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-canvas/95 py-2 text-xs text-muted lg:pointer-fine:flex"
+        data-hint-bar=""
+        className="sticky bottom-0 mt-auto hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-canvas/95 py-2 text-xs text-muted lg:pointer-fine:flex"
       >
         {hints.map(({ keys, label }) => (
           <span key={keys} className="flex items-center gap-1.5">

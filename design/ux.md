@@ -1386,9 +1386,9 @@ The wide screen shows its keys, and `?` lists them all:
    the search box, `S` `B` `X` at the end of the focused row, `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog,
    `⌘K` (`Ctrl K`) on Find in the sidebar.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
-3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
-   `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and closing with one open;
-   selecting in select mode. It ends with `?`, All keys.
+3. A hint bar at the bottom of the window, under the heap's list however short it is, has the keys for what's on
+   screen: moving and opening, `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and
+   closing with one open; selecting in select mode. It ends with `?`, All keys.
 4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Keys are ignored in a field. Open and
    Closed have no keys: they are one click away in the sidebar.
 5. `⌘K` (`Ctrl K` off a Mac) anywhere, Find at the top of the sidebar, or the search icon in a phone's top bar, opens
