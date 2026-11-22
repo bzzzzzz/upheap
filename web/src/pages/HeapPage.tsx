@@ -347,7 +347,6 @@ function ListPage({
             : []),
           ...(heap.archived ? [] : [{ keys: "N", label: "Add" }]),
           { keys: "/", label: "Search" },
-          { keys: "G C", label: "Closed" },
         ];
   // A tag or parameter chip in a row joins the view's filter, or leaves it when it is in it already.
   const rowFilters: RowFilters = {

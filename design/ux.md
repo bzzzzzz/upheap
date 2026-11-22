@@ -1375,15 +1375,14 @@ Chromium, against the real server.
 The wide screen shows its keys, and `?` lists them all:
 
 1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
-   the search box, `S` `B` `X` at the end of the focused row, `G O` and `G C` beside Open and Closed in the sidebar,
-   `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog, `⌘K` (`Ctrl K`) on Find in the sidebar.
+   the search box, `S` `B` `X` at the end of the focused row, `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog,
+   `⌘K` (`Ctrl K`) on Find in the sidebar.
 2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
 3. A hint bar under the heap's list, sticky at the bottom, has the keys for what's on screen: moving and opening,
-   `S` `B` `X` when a row can change state, `N`, `/`, and `G C` with no item open; walking and closing with one open;
+   `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and closing with one open;
    selecting in select mode. It ends with `?`, All keys.
-4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Wherever the sidebar shows a heap, `G`
-   then `O` goes to its Open list, closing an open item, and `G` then `C` to its Closed page; any other key after `G`
-   cancels it. Keys are ignored in a field.
+4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Keys are ignored in a field. Open and
+   Closed have no keys: they are one click away in the sidebar.
 5. `⌘K` (`Ctrl K` off a Mac) anywhere, or Find at the top of the sidebar, opens Find. It finds items by title or
    key in every heap, goes to a heap, and adds "Add “text” as a new item" to the heap on screen. ↑ ↓ and Enter
    open, Tab shows the highlighted item's actions (Start, Mark done, Due, Copy link, as the item allows), and
