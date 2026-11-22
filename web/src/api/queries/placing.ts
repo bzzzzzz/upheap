@@ -1,15 +1,15 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef, type ListViewQuery } from "../client";
-import type { Item, PlaceSide, RankedList } from "../schema";
-import { invalidateHeap, itemEditsScope, itemKey, rankedKey } from "./keys";
+import type { Item, ListSort, PlaceSide, RankedList } from "../schema";
+import { invalidateHeap, itemEditsScope, itemKey, placingKey, rankedKey } from "./keys";
 
 /** The newest version of `item` known: the one given, or the cached one if a save has landed since. */
 const newestVersion = (queryClient: QueryClient, heap: HeapRef, item: Item) =>
   Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
 
 /**
- * Puts the ranked row `id` on `side` of the row `anchor`, in every cached view of the heap's list in the priority order that has both in its
- * ranked group. The rest of the list stays as it was, and the `as_of` with it.
+ * Puts the ranked row `id` on `side` of the row `anchor`, in a list that has both in its ranked group. The rest of
+ * the list stays as it was, and the `as_of` with it. Which cached views it is applied to is the caller's predicate.
  */
 function reordered(list: RankedList, id: string, anchor: string, side: PlaceSide): RankedList {
   const moved = list.ranked.find((entry) => entry.item.id === id);
@@ -19,30 +19,31 @@ function reordered(list: RankedList, id: string, anchor: string, side: PlaceSide
   return { ...list, ranked: [...others.slice(0, at), moved, ...others.slice(at)] };
 }
 
-/** Shared by every placing, so that a refetch waits for the last of a quick run of them. */
-const placingKey = ["placing"] as const;
-
 /** Fetches the heap again once no other placing is under way: an earlier one's list would show the older order. */
 const settled = (queryClient: QueryClient, heap: HeapRef) =>
-  queryClient.isMutating({ mutationKey: placingKey }) === 1 ? invalidateHeap(queryClient, heap) : undefined;
+  queryClient.isMutating({ mutationKey: placingKey(heap) }) === 1 ? invalidateHeap(queryClient, heap) : undefined;
 
-/** Whether a cached list query is the priority order: the one a placing reorders. Other sorts show another order. */
+/** Whether a list sort is the priority order, the one a row can be placed in. Other sorts show another order. */
+export const isPrioritySort = (sort: ListSort | undefined) => sort === undefined || sort === "priority";
+
+/** Whether a cached list query is in the priority order: the one a placing reorders. */
 const isPriorityView = (key: readonly unknown[]) => {
   const query = (key[1] as { query?: ListViewQuery } | undefined)?.query;
-  return query?.sort === undefined || query.sort === "priority";
+  return isPrioritySort(query?.sort);
 };
 
 /**
  * Places an item next to another of its heap's ranked rows, as the list on screen (`asOf`) shows them. The row takes
  * its new place in the cached lists at once; the saved item is written into the cache, and the heap is fetched again
- * whatever the outcome, which brings the server's order and puts the row back if the placing was refused. It runs in
- * the item edits' scope and sends the newest version it knows of, as `useMoveItem` does.
+ * once the last of the placings under way has settled, whatever the outcome, which brings the server's order and puts
+ * the row back if the placing was refused. It runs in the item edits' scope and sends the newest version it knows of,
+ * as `useMoveItem` does.
  */
 export function usePlaceItem(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: itemEditsScope,
-    mutationKey: placingKey,
+    mutationKey: placingKey(heap),
     mutationFn: async ({ item, anchor, side, asOf }: { item: Item; anchor: string; side: PlaceSide; asOf: number }) =>
       unwrap(
         await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/place", {
@@ -71,7 +72,7 @@ export function useResetPlacement(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: itemEditsScope,
-    mutationKey: placingKey,
+    mutationKey: placingKey(heap),
     mutationFn: async ({ item }: { item: Item }) =>
       unwrap(
         await api.DELETE("/api/v1/teams/{team}/heaps/{heap}/items/{item}/place", {

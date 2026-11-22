@@ -6,6 +6,7 @@ import { ApiProblem, isNotFound, requestIdOf, type HeapRef } from "../api/client
 import type { Item, ItemPatchRequest, RankedItem, RankedList } from "../api/schema";
 import { useUpdateItem } from "../api/queries/items";
 import { useRankedList } from "../api/queries/lists";
+import { isPrioritySort } from "../api/queries/placing";
 import { useMe } from "../api/queries/me";
 import { useConfirmAgentStateChange } from "../components/agentConfirm";
 import { AddItem } from "../components/AddItem";
@@ -147,11 +148,7 @@ export function HeapPage({
       previousKey={index > 0 ? onScreen[index - 1]?.key : undefined}
       nextKey={index >= 0 ? onScreen[index + 1]?.key : undefined}
       listName={list.data?.heap.name}
-      list={
-        (view.sort === undefined || view.sort === "priority") && search.trim() === "" && !list.isPlaceholderData
-          ? list.data
-          : undefined
-      }
+      list={isPrioritySort(view.sort) && search.trim() === "" && !list.isPlaceholderData ? list.data : undefined}
       onClose={closeItem}
     />
   );
@@ -332,7 +329,7 @@ function ListPage({
   // The ranked group can be placed by hand (ux.md, The list) only in the priority sort, with nothing searched for and
   // no selecting, by someone who can edit its items, which the server says for all of them or none.
   const placing =
-    (view.sort === undefined || view.sort === "priority") &&
+    isPrioritySort(view.sort) &&
     search.trim() === "" &&
     !select &&
     !list.isPlaceholderData &&

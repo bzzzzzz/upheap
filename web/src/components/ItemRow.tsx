@@ -408,20 +408,44 @@ function RowGrip({ item, place }: { item: Item; place: RowPlace }) {
   const name = `Move “${item.title}”`;
   // The button under it stops a press from bubbling, so the drag starts on the way down. The menu's popover is in this
   // tree too, though not in this element: a press in it is not a press on the grip.
-  const { onPointerDown, ...gripProps } = place.grip;
-  // A mouse opens the menu as the press starts; a press that goes on to lift the row closes it again.
-  if (open && place.lift !== null) setOpen(false);
+  const { onPointerDown, onPointerUp, onPointerCancel, ...gripProps } = place.grip;
+  // React Aria opens the menu as a mouse press starts, but that press may be the start of a drag. The request waits
+  // here until the press ends without having dragged. This is the grip's own element, not the button, because the
+  // drag's pointer capture keeps the button from seeing the press end.
+  const pressing = useRef(false);
+  const requested = useRef(false);
   return (
     <span
       {...gripProps}
-      onPointerDownCapture={(event) => event.currentTarget.contains(event.target as Node) && onPointerDown(event)}
+      onPointerDownCapture={(event) => {
+        if (!event.currentTarget.contains(event.target as Node)) return;
+        pressing.current = event.pointerType === "mouse" || event.pointerType === "pen";
+        requested.current = false;
+        onPointerDown(event);
+      }}
+      onPointerUp={(event) => {
+        onPointerUp(event);
+        if (pressing.current && requested.current && !place.dragged()) setOpen(true);
+        pressing.current = false;
+        requested.current = false;
+      }}
+      onPointerCancel={(event) => {
+        onPointerCancel(event);
+        pressing.current = false;
+        requested.current = false;
+      }}
       data-row-grip
       className={`relative z-10 -mr-1 flex size-6 shrink-0 touch-none items-center justify-center text-muted opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 ${
         place.lift === null ? "cursor-grab" : "cursor-grabbing opacity-100"
       }`}
     >
-      {/* The end of a drag over the button isn't a click on it. */}
-      <MenuTrigger isOpen={open} onOpenChange={(next) => setOpen(next && !place.dragged())}>
+      <MenuTrigger
+        isOpen={open}
+        onOpenChange={(next) => {
+          if (next && pressing.current) requested.current = true;
+          else setOpen(next);
+        }}
+      >
         <Button
           aria-label={name}
           className="flex size-6 items-center justify-center rounded-md outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"

@@ -33,12 +33,13 @@ test.describe("with a mouse", () => {
     const toY = (top?.y ?? 0) + 2;
     await page.mouse.down();
     for (let i = 1; i <= 6; i++) await page.mouse.move((start?.x ?? 0) + 4, fromY + ((toY - fromY) * i) / 6);
+    // The menu never opens for a press that goes on to drag, not even for a moment.
+    await expect(page.getByRole("menu")).toHaveCount(0);
     const saved = placed(page);
     await page.mouse.up();
     await saved;
     await expect(toast(page, "Moved “Water the plants” up.")).toBeVisible();
     await expectOrder(page, ["Water the plants", "Rotate the certs", "Call the bank"]);
-    // The grip's menu opens as the press starts, and a drag closes it.
     await expect(page.getByRole("menu")).toHaveCount(0);
 
     await page.reload();
@@ -114,7 +115,13 @@ test.describe("with a mouse", () => {
       await page.keyboard.press("Alt+ArrowDown");
       await expectOrder(page, shown(moved));
       // The fetch from the last placing answers now, with the order before this move. It must not take this one away.
+      const delivered = stale.map(() =>
+        page.waitForResponse((r) => /\/heaps\/[^/]+\/items$/.test(new URL(r.url()).pathname)),
+      );
       await Promise.all(stale.map((release) => release()));
+      await Promise.all(delivered);
+      // The page reads the body and renders after the response is in: a frame later it has handled it.
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       await expectOrder(page, shown(moved));
       // This placing is saved, and the fetch after it is made, to be answered after the next move.
       await expect.poll(() => placings).toBe(moved);
@@ -134,6 +141,13 @@ test.describe("with a mouse", () => {
     await page.keyboard.press("Alt+ArrowUp");
     await expect(page.getByRole("status").filter({ hasText: "Moved" })).toHaveCount(0);
     await expectOrder(page, ["Rotate the certs", "Call the bank", "Water the plants"]);
+  });
+
+  test("a plain click on the grip opens the menu with Move up and Move down", async ({ page, heapPath }) => {
+    await listOfThree(page, heapPath);
+    await grip(page, "Call the bank").getByRole("button", { name: "Move “Call the bank”" }).click();
+    await expect(page.getByRole("menuitem", { name: "Move up" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Move down" })).toBeVisible();
   });
 
   test("Move down in the grip's menu moves the row, and Undo puts it back unplaced", async ({ page, heapPath }) => {
@@ -235,9 +249,11 @@ test.describe("with a finger", () => {
     heapPath,
     context,
   }) => {
-    // The clock is ours, so the press's time can be passed without waiting for it.
+    // The page loads on a running clock, then the clock is paused: the press's time passes only by `runFor`, so
+    // neither a stall nor a wait can reach it.
     await page.clock.install();
     await listOfThree(page, heapPath);
+    await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 1000));
     let placings = 0;
     page.on("request", (request) => {
       if (/\/place$/.test(request.url())) placings++;
