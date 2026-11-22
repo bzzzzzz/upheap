@@ -348,6 +348,8 @@ test("an item watching a pull request says so on its row and in its item, with t
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
   await chip(page).click();
   await expect(who(page)).toContainText("Watching PR #7 since");
-  await expect(who(page)).toContainText("It comes back on a new comment, a failed check, a merge or a close.");
+  await expect(who(page)).toContainText(
+    "It comes back on a new comment, a failed check, a merge conflict, a merge or a close.",
+  );
   await expect(who(page).getByRole("link", { name: "PR #7", exact: true })).toHaveAttribute("href", pr);
 });

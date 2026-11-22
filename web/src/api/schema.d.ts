@@ -5176,8 +5176,8 @@ export interface components {
          */
         TurnSource: "go_ahead" | "prepare";
         /**
-         * @description A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge or a
-         *     close.
+         * @description A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge
+         *     conflict, a merge or a close.
          */
         TurnWatch: {
             /**

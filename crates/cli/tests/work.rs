@@ -157,7 +157,7 @@ async fn watch_ends_the_run_and_says_when_the_item_comes_back() -> Result<()> {
     expect_that!(
         watching.stdout,
         eq(&format!(
-            "Watching: {note} comes back when the pull request gets a comment or a failed check, or is merged or closed.\n"
+            "Watching: {note} comes back when the pull request gets a comment, a failed check or a merge conflict, or is merged or closed.\n"
         ))
     );
     expect_that!(finished.stdout, eq("Run ended: watching. ($0.12)\n"));

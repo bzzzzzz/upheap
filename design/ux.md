@@ -646,7 +646,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
     with "With an agent since 14:02" (the time today, else the date as the server words it: "yesterday", "3 Nov"),
     "going to: <state>" and ", all the way" for that reach; while it watches a pull request, "Watching PR #276 since
-    14:05. It comes back on a new comment, a failed check, a merge or a close.", the PR a link that opens in a new tab;
+    14:05. It comes back on a new comment, a failed check, a merge conflict, a merge or a close.", the PR a link that opens in a new tab;
     the person's line in quotes, and "Prepared on add" for an
     item the heap's setting sent. If the item waits for the person it reads "An agent is waiting for your answer,
     going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons: Retry and Take back are

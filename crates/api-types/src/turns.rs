@@ -232,8 +232,8 @@ pub struct TurnDto {
     pub watch: Option<TurnWatchDto>,
 }
 
-/// A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge or a
-/// close.
+/// A pull request an open turn waits on. It comes back to the agent on a new comment, a failed check, a merge
+/// conflict, a merge or a close.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = TurnWatch)]
 pub struct TurnWatchDto {

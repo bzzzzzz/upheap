@@ -1,5 +1,5 @@
 //! What a watched pull request got since its watch began: reads what `gh pr view --json
-//! state,comments,reviews,statusCheckRollup` printed and says what came, one markdown line each.
+//! state,mergeable,comments,reviews,statusCheckRollup` printed and says what came, one markdown line each.
 //!
 //! Pure: no `gh`, no clock. The loop (`run.rs`) runs `gh` and sends what this says to the server.
 
@@ -18,11 +18,13 @@ pub(super) enum ReadError {
     },
 }
 
-/// The fields of `gh pr view --json state,comments,reviews,statusCheckRollup` the loop uses. `gh` leaves out or nulls
-/// what a pull request hasn't got, so every field is optional.
+/// The fields of `gh pr view --json state,mergeable,comments,reviews,statusCheckRollup` the loop uses. `gh` leaves
+/// out or nulls what a pull request hasn't got, so every field is optional.
 #[derive(Debug, Default, Deserialize)]
 struct PullRequest {
     state: Option<String>,
+    /// `MERGEABLE`, `CONFLICTING`, or `UNKNOWN` while GitHub works it out after a push.
+    mergeable: Option<String>,
     #[serde(default)]
     comments: Vec<Comment>,
     #[serde(default)]
@@ -97,14 +99,19 @@ fn login(author: Option<&Author>) -> &str {
 }
 
 /// What came to the pull request that `json` describes since `since` (UTC milliseconds), as markdown lines in this
-/// order: merged or closed, then new comments, new reviews and failed checks. `None` when nothing did. When the lines
-/// would pass `limit` characters, the lines that fit, then `- And <n> more.`
+/// order: merged or closed, or a merge conflict on an open one, then new comments, new reviews and failed checks.
+/// Merged, closed and a conflict are states, not events: they count whenever `since` is. `None` when nothing came.
+/// When the lines would pass `limit` characters, the lines that fit, then `- And <n> more.`
 pub(super) fn what_came(json: &str, since: i64, limit: usize) -> Result<Option<String>, ReadError> {
     let pull: PullRequest = serde_json::from_str(json)?;
     let mut lines: Vec<String> = Vec::new();
     match pull.state.as_deref() {
         Some("MERGED") => lines.push("- Merged.".to_owned()),
         Some("CLOSED") => lines.push("- Closed without merging.".to_owned()),
+        // Behind the base branch isn't a conflict: it can still be merged, and every merge to the base would fire it.
+        _ if pull.mergeable.as_deref() == Some("CONFLICTING") => {
+            lines.push("- Merge conflicts with the base branch.".to_owned());
+        }
         _ => {}
     }
     for comment in &pull.comments {
@@ -207,6 +214,40 @@ mod tests {
     #[gtest]
     fn a_closed_pull_request_says_so() {
         expect_that!(came(r#"{"state":"CLOSED"}"#), some(eq("- Closed without merging.")));
+    }
+
+    #[gtest]
+    fn a_conflict_says_so_whenever_it_began() {
+        expect_that!(
+            came(r#"{"state":"OPEN","mergeable":"CONFLICTING"}"#),
+            some(eq("- Merge conflicts with the base branch."))
+        );
+    }
+
+    #[gtest]
+    fn a_conflict_comes_before_what_else_came() {
+        let json = r#"{"state":"OPEN","mergeable":"CONFLICTING","comments":[
+            {"author":{"login":"bot"},"createdAt":"2026-01-10T10:00:01Z","url":"https://x/c"}]}"#;
+        expect_that!(
+            came(json),
+            some(eq(
+                "- Merge conflicts with the base branch.\n- A comment by @bot: https://x/c"
+            ))
+        );
+    }
+
+    #[gtest]
+    fn mergeable_or_unknown_is_no_news() {
+        expect_that!(came(r#"{"state":"OPEN","mergeable":"MERGEABLE"}"#), none());
+        expect_that!(came(r#"{"state":"OPEN","mergeable":"UNKNOWN"}"#), none());
+    }
+
+    #[gtest]
+    fn a_closed_pull_request_with_a_conflict_says_only_that_it_closed() {
+        expect_that!(
+            came(r#"{"state":"CLOSED","mergeable":"CONFLICTING"}"#),
+            some(eq("- Closed without merging."))
+        );
     }
 
     #[gtest]

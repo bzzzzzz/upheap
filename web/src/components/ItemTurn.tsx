@@ -348,7 +348,8 @@ function TurnText({ item, turn }: { item: Item; turn: Turn }) {
           >
             PR #{turn.watch.number}
           </a>{" "}
-          since {turn.watch.since_label}. It comes back on a new comment, a failed check, a merge or a close.
+          since {turn.watch.since_label}. It comes back on a new comment, a failed check, a merge conflict, a merge or a
+          close.
         </p>
       )}
       {turn.line && <p className="text-sm break-words whitespace-pre-wrap text-ink-soft">“{turn.line}”</p>}

@@ -330,7 +330,7 @@ enum WorkCommand {
     Reached(commands::work::reached::ReachedArgs),
     /// Give the turn back: there was nothing to do for its goal (needs UPHEAP_RUN)
     HandBack(commands::work::hand_back::HandBackArgs),
-    /// End the run to wait on its own pull request: the item comes back on a comment, a failed check, a merge or a close (needs UPHEAP_RUN)
+    /// End the run to wait on its own pull request: the item comes back on a comment, a failed check, a merge conflict, a merge or a close (needs UPHEAP_RUN)
     Watch(commands::work::watch::WatchArgs),
     /// End the run and record what it cost (needs UPHEAP_RUN)
     Finish(commands::work::finish::FinishArgs),

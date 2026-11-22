@@ -5,7 +5,8 @@ own settings for this tool.
 
 Before anything, read the comments and the questions under the item: they say where this task stands.
 - The latest comment says "Back from watching": read what came at its links (the comments, the failed check's log),
-  deal with it, and carry on.
+  deal with it, and carry on. A merge conflict: merge the base branch in, resolve it and push; if GitHub shows no
+  conflict any more, it was seen just before your push. If you can't resolve it, ask the person.
 - A review replied "Changes asked": read the reply and the comments at the link, change the work, and ask for
   review again with `upheap question review` (below). Use the same link, or `--piece` if the piece moved to a new
   link: that is the next round.
