@@ -1157,6 +1157,14 @@ fn endpoints() -> Vec<Endpoint> {
             StatusCode::OK,
         ),
         row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/views/{view_id}/unarchive",
+            edit,
+            Target::SavedView,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
             Method::GET,
             "/teams/{team}/heaps/{heap}/parameters",
             view,

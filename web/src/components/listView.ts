@@ -7,6 +7,8 @@ import type {
   Goal,
   ItemState,
   ListSort,
+  ListView,
+  ListViewInput,
   Need,
   RankedItem,
   RankedList,
@@ -240,6 +242,37 @@ export function toListQuery(search: ListSearch): ListViewQuery {
     Object.entries(query).filter(([, value]) => value !== undefined && !(Array.isArray(value) && value.length === 0)),
   ) as ListViewQuery;
 }
+
+/**
+ * The list settings a saved view applies, as the page's search. The agent filters aren't part of a view, so they are
+ * never in it.
+ */
+export function searchOfView(view: ListView): ListSearch {
+  return parseListSearch({
+    ...view,
+    sort_parameter: view.sort_parameter ?? undefined,
+    tag: joinList(view.tag),
+    need: joinList(view.need),
+    effort: joinList(view.effort),
+    impact: joinList(view.impact),
+    param: joinList(view.param),
+  });
+}
+
+/** What to save for the list on screen: its settings, without the agent filters, which a view doesn't hold. */
+export const viewInputOf = (search: ListSearch): ListViewInput =>
+  toListQuery({ ...search, agent: undefined, going_to: undefined });
+
+/**
+ * Whether the saved view holds the list's settings, the agent filters aside: what updating it would save is what it
+ * has.
+ */
+export const holdsSettings = (view: ListView, search: ListSearch) =>
+  JSON.stringify(toListQuery(searchOfView(view))) === JSON.stringify(viewInputOf(search));
+
+/** Whether the list on screen shows exactly what the saved view does, agent filters included. */
+export const isCurrentView = (view: ListView, search: ListSearch) =>
+  JSON.stringify(toListQuery(searchOfView(view))) === JSON.stringify(toListQuery(search));
 
 /**
  * The API query for the list on screen: the view's, and while search text is entered, the reminders to come too, so

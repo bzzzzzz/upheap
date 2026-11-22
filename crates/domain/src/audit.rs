@@ -46,6 +46,7 @@ coded_enum! {
         SavedViewCreated = "saved_view_created",
         SavedViewUpdated = "saved_view_updated",
         SavedViewArchived = "saved_view_archived",
+        SavedViewUnarchived = "saved_view_unarchived",
         ParameterCreated = "parameter_created",
         ParameterUpdated = "parameter_updated",
         ParameterArchived = "parameter_archived",

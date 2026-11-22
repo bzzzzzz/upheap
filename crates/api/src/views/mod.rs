@@ -1,4 +1,4 @@
-//! A heap's saved views: listing them, saving one, changing it and archiving it. Views are never deleted.
+//! A heap's saved views: listing them, saving one, changing it, archiving it and bringing it back. Views are never deleted.
 
 use api_types::common::HeapSummaryDto;
 use api_types::list_view::ListViewDto;
@@ -28,6 +28,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(list_views, create_view))
         .routes(routes!(update_view))
         .routes(routes!(archive_view))
+        .routes(routes!(unarchive_view))
 }
 
 /// `{view_id}` in a path below the heap's.
@@ -140,6 +141,26 @@ async fn archive_view(
     let entry = state
         .services
         .archive_saved_view(path.principal, path.heap.heap_id, SavedViewId::from_uuid(view_id))
+        .await?;
+    Ok(Json(to_saved_view_dto(entry)))
+}
+
+/// Brings an archived saved view back into the heap's list. Unarchiving a view that is in use succeeds.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/views/{view_id}/unarchive", tag = "views", security(("session" = [])),
+    params(HeapParams, ("view_id" = Uuid, Path)),
+    responses(
+        (status = 200, body = SavedViewDto),
+        (status = 404, body = Problem),
+        (status = 409, description = "`heap_archived`", body = Problem),
+    ))]
+async fn unarchive_view(
+    State(state): State<AppState>,
+    path: HeapPath,
+    ApiPath(ViewPathId { view_id }): ApiPath<ViewPathId>,
+) -> Result<Json<SavedViewDto>, ApiError> {
+    let entry = state
+        .services
+        .unarchive_saved_view(path.principal, path.heap.heap_id, SavedViewId::from_uuid(view_id))
         .await?;
     Ok(Json(to_saved_view_dto(entry)))
 }

@@ -82,14 +82,15 @@ test("the need filter comes from the link, as the server applies it", async ({ p
   await expect(on).toContainText("1 of 3");
 });
 
-test("the sort sits in the toolbar, and on a phone at the top of the panel", async ({ page }) => {
+test("the sort sits in the toolbar, and on a phone in the panel after the views", async ({ page }) => {
   await addItem(page, "Slog", { effort: "XL" });
   await addItem(page, "Quick win", { effort: "S", impact: "XL" });
 
   const panel = await openFilters(page);
   if (isPhone(page)) {
     await expect(page.getByLabel("Sort by", { exact: true }).and(page.locator("select"))).toBeHidden();
-    await expect(panel.getByRole("heading", { level: 3 }).first()).toHaveText("Sort by");
+    await expect(panel.getByRole("heading", { level: 3 }).first()).toHaveText("Views");
+    await expect(panel.getByRole("heading", { level: 3 }).nth(1)).toHaveText("Sort by");
     await panel.getByRole("radiogroup", { name: "Sort by" }).getByText("Largest impact", { exact: true }).click();
     await panel.getByRole("button", { name: /^Show 2 items$/ }).click();
   } else {

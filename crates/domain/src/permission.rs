@@ -100,7 +100,8 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::ParameterMerged
         | AuditAction::SavedViewCreated
         | AuditAction::SavedViewUpdated
-        | AuditAction::SavedViewArchived => Permission::EditItems,
+        | AuditAction::SavedViewArchived
+        | AuditAction::SavedViewUnarchived => Permission::EditItems,
         AuditAction::ParameterCreated
         | AuditAction::ParameterUpdated
         | AuditAction::ParameterArchived

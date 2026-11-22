@@ -564,6 +564,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::SavedViewCreated, _) => ("saved view", true),
         (AuditAction::SavedViewUpdated, _) => ("changed view", true),
         (AuditAction::SavedViewArchived, _) => ("archived view", true),
+        (AuditAction::SavedViewUnarchived, _) => ("unarchived view", true),
         (AuditAction::ParameterCreated, _) => ("added parameter", true),
         (AuditAction::ParameterUpdated, _) => ("changed parameter", true),
         (AuditAction::ParameterArchived, _) => ("archived parameter", true),
@@ -647,6 +648,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::TagMerged
         | AuditAction::SavedViewUpdated
         | AuditAction::SavedViewArchived
+        | AuditAction::SavedViewUnarchived
         | AuditAction::ParameterUpdated
         | AuditAction::ParameterArchived
         | AuditAction::ParameterMerged

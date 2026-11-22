@@ -161,6 +161,7 @@ mod tests {
                 "saved_view_created",
                 "saved_view_updated",
                 "saved_view_archived",
+                "saved_view_unarchived",
                 "parameter_created",
                 "parameter_updated",
                 "parameter_archived",

@@ -1,4 +1,4 @@
-//! Saved view use cases: listing a heap's views, saving a new one, changing one and archiving it.
+//! Saved view use cases: listing a heap's views, saving a new one, changing one, archiving it and bringing it back.
 //!
 //! Every write locks the heap first, like item and tag writes, so a view can't be saved into a heap archived while
 //! the write waited. Views are archived, never deleted.
@@ -161,6 +161,42 @@ impl Services {
             )
             .await?;
         tracing::info!(heap_id = %heap.id, %view_id, user_id = %principal.user_id, "saved view archived");
+        Ok(with_actions(saved, &heap, role))
+    }
+
+    /// Puts an archived view back in the heap's list. Unarchiving a view that is in use succeeds and changes nothing.
+    ///
+    /// No `If-Match`, like archiving.
+    pub async fn unarchive_saved_view(
+        &self,
+        principal: Principal,
+        heap_id: HeapId,
+        view_id: SavedViewId,
+    ) -> Result<SavedViewEntry, ServiceError> {
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        let (heap, role, current) = lock_for_write(&txn, principal, heap_id, view_id).await?;
+        let Some(archived_at) = current.archived_at else {
+            return Ok(with_actions(current, &heap, role));
+        };
+
+        let now = self.now();
+        let restored = SavedView {
+            archived_at: None,
+            ..current.clone()
+        };
+        let diff = json!({ AuditField::ArchivedAt.code(): { "before": archived_at.as_millis(), "after": null } });
+        let saved = self
+            .save_saved_view(
+                txn,
+                &heap,
+                principal,
+                &restored,
+                AuditAction::SavedViewUnarchived,
+                diff,
+                now,
+            )
+            .await?;
+        tracing::info!(heap_id = %heap.id, %view_id, user_id = %principal.user_id, "saved view unarchived");
         Ok(with_actions(saved, &heap, role))
     }
 
