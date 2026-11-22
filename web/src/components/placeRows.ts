@@ -74,15 +74,15 @@ export function usePlaceRows(heapRef: HeapRef, list: Pick<RankedList, "ranked" |
     const from = ranked.findIndex((entry) => entry.item.id === id);
     const entry = ranked[from];
     const target = placementTarget(ranked, id, index);
-    if (!entry || !target || from === index) return;
-    const { item } = entry;
     const back = placementTarget(ranked, id, from);
+    if (!entry || !target || !back || from === index) return;
+    const { item } = entry;
     place.mutateAsync({ item, ...target, asOf }).then((saved) => {
       setToast({
         message: `Moved “${item.title}” ${index < from ? "up" : "down"}.`,
         undo: () => {
           const undone =
-            item.placement === null || !back
+            item.placement === null
               ? reset.mutateAsync({ item: saved })
               : place.mutateAsync({ item: saved, ...back, asOf });
           undone.then(undefined, failed);

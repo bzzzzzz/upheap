@@ -409,6 +409,8 @@ function RowGrip({ item, place }: { item: Item; place: RowPlace }) {
   // The button under it stops a press from bubbling, so the drag starts on the way down. The menu's popover is in this
   // tree too, though not in this element: a press in it is not a press on the grip.
   const { onPointerDown, ...gripProps } = place.grip;
+  // A mouse opens the menu as the press starts; a press that goes on to lift the row closes it again.
+  if (open && place.lift !== null) setOpen(false);
   return (
     <span
       {...gripProps}

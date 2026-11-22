@@ -1,14 +1,14 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, unwrap, type HeapRef } from "../client";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { api, unwrap, type HeapRef, type ListViewQuery } from "../client";
 import type { Item, PlaceSide, RankedList } from "../schema";
 import { invalidateHeap, itemEditsScope, itemKey, rankedKey } from "./keys";
 
 /** The newest version of `item` known: the one given, or the cached one if a save has landed since. */
-const newestVersion = (queryClient: ReturnType<typeof useQueryClient>, heap: HeapRef, item: Item) =>
+const newestVersion = (queryClient: QueryClient, heap: HeapRef, item: Item) =>
   Math.max(item.version, queryClient.getQueryData<Item>(itemKey(heap, item.key))?.version ?? 0);
 
 /**
- * Puts the ranked row `id` on `side` of the row `anchor`, in every cached view of the heap's list that has both in its
+ * Puts the ranked row `id` on `side` of the row `anchor`, in every cached view of the heap's list in the priority order that has both in its
  * ranked group. The rest of the list stays as it was, and the `as_of` with it.
  */
 function reordered(list: RankedList, id: string, anchor: string, side: PlaceSide): RankedList {
@@ -18,6 +18,19 @@ function reordered(list: RankedList, id: string, anchor: string, side: PlaceSide
   const at = others.findIndex((entry) => entry.item.id === anchor) + (side === "below" ? 1 : 0);
   return { ...list, ranked: [...others.slice(0, at), moved, ...others.slice(at)] };
 }
+
+/** Shared by every placing, so that a refetch waits for the last of a quick run of them. */
+const placingKey = ["placing"] as const;
+
+/** Fetches the heap again once no other placing is under way: an earlier one's list would show the older order. */
+const settled = (queryClient: QueryClient, heap: HeapRef) =>
+  queryClient.isMutating({ mutationKey: placingKey }) === 1 ? invalidateHeap(queryClient, heap) : undefined;
+
+/** Whether a cached list query is the priority order: the one a placing reorders. Other sorts show another order. */
+const isPriorityView = (key: readonly unknown[]) => {
+  const query = (key[1] as { query?: ListViewQuery } | undefined)?.query;
+  return query?.sort === undefined || query.sort === "priority";
+};
 
 /**
  * Places an item next to another of its heap's ranked rows, as the list on screen (`asOf`) shows them. The row takes
@@ -29,6 +42,7 @@ export function usePlaceItem(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: itemEditsScope,
+    mutationKey: placingKey,
     mutationFn: async ({ item, anchor, side, asOf }: { item: Item; anchor: string; side: PlaceSide; asOf: number }) =>
       unwrap(
         await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/place", {
@@ -39,14 +53,16 @@ export function usePlaceItem(heap: HeapRef) {
           body: { anchor, side, as_of: asOf },
         }),
       ),
-    onMutate: ({ item, anchor, side }) => {
+    onMutate: async ({ item, anchor, side }) => {
+      // A fetch still on its way carries the older order and would write it over this one.
+      await queryClient.cancelQueries({ queryKey: rankedKey(heap) });
       queryClient.setQueriesData<RankedList>(
-        { queryKey: rankedKey(heap) },
+        { queryKey: rankedKey(heap), predicate: (query) => isPriorityView(query.queryKey) },
         (list) => list && reordered(list, item.id, anchor, side),
       );
     },
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
-    onSettled: () => invalidateHeap(queryClient, heap),
+    onSettled: () => settled(queryClient, heap),
   });
 }
 
@@ -55,6 +71,7 @@ export function useResetPlacement(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
     scope: itemEditsScope,
+    mutationKey: placingKey,
     mutationFn: async ({ item }: { item: Item }) =>
       unwrap(
         await api.DELETE("/api/v1/teams/{team}/heaps/{heap}/items/{item}/place", {
@@ -65,6 +82,6 @@ export function useResetPlacement(heap: HeapRef) {
         }),
       ),
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
-    onSettled: () => invalidateHeap(queryClient, heap),
+    onSettled: () => settled(queryClient, heap),
   });
 }

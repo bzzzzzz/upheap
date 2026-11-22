@@ -147,7 +147,11 @@ export function HeapPage({
       previousKey={index > 0 ? onScreen[index - 1]?.key : undefined}
       nextKey={index >= 0 ? onScreen[index + 1]?.key : undefined}
       listName={list.data?.heap.name}
-      list={list.data}
+      list={
+        (view.sort === undefined || view.sort === "priority") && search.trim() === "" && !list.isPlaceholderData
+          ? list.data
+          : undefined
+      }
       onClose={closeItem}
     />
   );

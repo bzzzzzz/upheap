@@ -38,6 +38,8 @@ test.describe("with a mouse", () => {
     await saved;
     await expect(toast(page, "Moved “Water the plants” up.")).toBeVisible();
     await expectOrder(page, ["Water the plants", "Rotate the certs", "Call the bank"]);
+    // The grip's menu opens as the press starts, and a drag closes it.
+    await expect(page.getByRole("menu")).toHaveCount(0);
 
     await page.reload();
     await expectOrder(page, ["Water the plants", "Rotate the certs", "Call the bank"]);
@@ -73,6 +75,55 @@ test.describe("with a mouse", () => {
 
     await page.reload();
     await expectOrder(page, ["Call the bank", "Rotate the certs", "Water the plants"]);
+  });
+
+  test("quick Alt+↓ presses on a slow connection keep every move", async ({ page, heapPath }) => {
+    await seed(page, heapPath, "Rotate the certs");
+    for (const title of ["Call the bank", "Water the plants", "Pay the rent", "Book the dentist"]) {
+      await seed(page, heapPath, title);
+    }
+    await page.goto(heapPath);
+    await expectOrder(page, [
+      "Rotate the certs",
+      "Call the bank",
+      "Water the plants",
+      "Pay the rent",
+      "Book the dentist",
+    ]);
+    // A list fetch is made at once and its answer held back, as a slow connection would: it lands after the next move.
+    const held: (() => Promise<void>)[] = [];
+    let holding = true;
+    await page.route(
+      (url) => /\/heaps\/[^/]+\/items$/.test(url.pathname),
+      async (route) => {
+        if (!holding) return route.continue();
+        const response = await route.fetch();
+        held.push(() => route.fulfill({ response }).catch(() => undefined));
+      },
+    );
+    let placings = 0;
+    page.on("response", (response) => {
+      if (/\/place$/.test(response.url())) placings++;
+    });
+    const link = row(page, "Rotate the certs").getByRole("link", { name: /^Rotate the certs/ });
+    await link.focus();
+    const others = ["Call the bank", "Water the plants", "Pay the rent", "Book the dentist"];
+    const shown = (moved: number) => [...others.slice(0, moved), "Rotate the certs", ...others.slice(moved)];
+    for (let moved = 1; moved <= 4; moved++) {
+      const stale = held.splice(0);
+      await page.keyboard.press("Alt+ArrowDown");
+      await expectOrder(page, shown(moved));
+      // The fetch from the last placing answers now, with the order before this move. It must not take this one away.
+      await Promise.all(stale.map((release) => release()));
+      await expectOrder(page, shown(moved));
+      // This placing is saved, and the fetch after it is made, to be answered after the next move.
+      await expect.poll(() => placings).toBe(moved);
+      await expect.poll(() => held.length).toBeGreaterThan(0);
+    }
+    holding = false;
+    await Promise.all(held.splice(0).map((release) => release()));
+    await page.reload();
+    await expectOrder(page, [...others, "Rotate the certs"]);
   });
 
   test("Alt+↑ on the first row does nothing", async ({ page, heapPath }) => {
@@ -179,18 +230,37 @@ test.describe("with a finger", () => {
     await expectOrder(page, ["Water the plants", "Rotate the certs", "Call the bank"]);
   });
 
-  test("a vertical move before the press is over leaves the row where it is", async ({ page, heapPath, context }) => {
+  test("a move before the press is over leaves the row where it is, however far the finger goes", async ({
+    page,
+    heapPath,
+    context,
+  }) => {
+    // The clock is ours, so the press's time can be passed without waiting for it.
+    await page.clock.install();
     await listOfThree(page, heapPath);
-    const target = row(page, "Call the bank");
+    let placings = 0;
+    page.on("request", (request) => {
+      if (/\/place$/.test(request.url())) placings++;
+    });
+    const target = row(page, "Water the plants");
     const box = await target.boundingBox();
+    const top = await row(page, "Rotate the certs").boundingBox();
     const x = (box?.x ?? 0) + 40;
     const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
     const cdp = await context.newCDPSession(page);
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - 30 }] });
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    const touch = (type: "touchStart" | "touchMove" | "touchEnd", at: number) =>
+      cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y: at }] });
+    await touch("touchStart", y);
+    // Past the slop of the press, and on up to where a lift would have dropped the row first.
+    const toY = (top?.y ?? 0) + 2;
+    for (let i = 1; i <= 6; i++) await touch("touchMove", y + ((toY - y) * i) / 6);
+    // The finger is still down when the press's time passes.
+    await page.clock.runFor(1000);
     await expect(target).not.toHaveCSS("z-index", "10");
+    await touch("touchEnd", toY);
+    await page.clock.runFor(1000);
     await expectOrder(page, ["Rotate the certs", "Call the bank", "Water the plants"]);
     await expect(page.getByRole("status").filter({ hasText: "Moved" })).toHaveCount(0);
+    expect(placings).toBe(0);
   });
 });
