@@ -201,7 +201,7 @@ async fn an_archived_view_leaves_the_list_and_cant_be_changed() -> Result<()> {
     // Assert
     expect_that!(archived.status, eq(StatusCode::OK));
     expect_that!(archived.body["archived_at"], eq(&json!(common::START)));
-    expect_that!(archived.body["allowed_actions"], eq(&json!([])));
+    expect_that!(archived.body["allowed_actions"], eq(&json!(["unarchive"])));
     expect_that!(again.status, eq(StatusCode::OK));
     expect_that!(again.body["version"], eq(&archived.body["version"]));
     expect_that!(names(&listed), elements_are![eq(&"Kept")]);

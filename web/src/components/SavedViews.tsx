@@ -77,10 +77,12 @@ export function ViewsSection({
   const remove = (saved: SavedView) => {
     onLeave();
     void archive.mutateAsync(saved).then(
-      () =>
+      (archived) =>
         setToast({
           message: `Archived ${saved.name}.`,
-          undo: () => void unarchive.mutateAsync(saved).then(undefined, failed),
+          undo: archived.allowed_actions.includes("unarchive")
+            ? () => void unarchive.mutateAsync(archived).then(undefined, failed)
+            : undefined,
         }),
       failed,
     );

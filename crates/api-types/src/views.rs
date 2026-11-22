@@ -18,6 +18,7 @@ use crate::list_view::{ListViewDto, ListViewInputDto};
 pub enum SavedViewActionDto {
     Edit,
     Archive,
+    Unarchive,
 }
 
 impl From<SavedViewAction> for SavedViewActionDto {
@@ -25,6 +26,7 @@ impl From<SavedViewAction> for SavedViewActionDto {
         match action {
             SavedViewAction::Edit => Self::Edit,
             SavedViewAction::Archive => Self::Archive,
+            SavedViewAction::Unarchive => Self::Unarchive,
         }
     }
 }

@@ -329,6 +329,8 @@ pub enum SavedViewAction {
     Edit,
     /// Take it out of the heap's list of views.
     Archive,
+    /// Put an archived view back in the heap's list.
+    Unarchive,
 }
 
 /// An action a client may offer on a heap's list of saved views.
@@ -338,10 +340,14 @@ pub enum SavedViewListAction {
     Create,
 }
 
-/// What `role` can do with `view` in `heap`. Empty for archived views and archived heaps.
+/// What `role` can do with `view` in `heap`. An archived view can only be unarchived, and nothing in an archived
+/// heap changes.
 pub fn allowed_saved_view_actions(view: &SavedView, heap: &Heap, role: Role) -> Vec<SavedViewAction> {
-    if view.is_archived() || !can_edit_heap_content(heap, role) {
+    if !can_edit_heap_content(heap, role) {
         return Vec::new();
+    }
+    if view.is_archived() {
+        return vec![SavedViewAction::Unarchive];
     }
     vec![SavedViewAction::Edit, SavedViewAction::Archive]
 }
@@ -774,6 +780,44 @@ mod tests {
             elements_are![eq(&ParameterListAction::Create)]
         );
         expect_that!(allowed_team_parameter_list_actions(Role::Member), is_empty());
+    }
+
+    fn saved_view(archived: bool) -> SavedView {
+        let fields = crate::saved_view::NewSavedView {
+            name: Name::parse("Mine").expect("valid"),
+            list_view: crate::list_view::ListView::default(),
+        };
+        let view = SavedView::new(
+            crate::SavedViewId::from_uuid(Uuid::from_u128(4)),
+            crate::HeapId::from_uuid(Uuid::from_u128(2)),
+            fields,
+            UserId::from_uuid(Uuid::from_u128(5)),
+            Timestamp::EPOCH,
+        );
+        SavedView {
+            archived_at: archived.then_some(Timestamp::EPOCH),
+            ..view
+        }
+    }
+
+    #[gtest]
+    fn an_archived_view_can_only_be_unarchived_and_nothing_changes_in_an_archived_heap() {
+        for role in [Role::Admin, Role::Member] {
+            expect_that!(
+                allowed_saved_view_actions(&saved_view(false), &heap(false), role),
+                elements_are![eq(&SavedViewAction::Edit), eq(&SavedViewAction::Archive)]
+            );
+            expect_that!(
+                allowed_saved_view_actions(&saved_view(true), &heap(false), role),
+                elements_are![eq(&SavedViewAction::Unarchive)]
+            );
+            for archived in [false, true] {
+                expect_that!(
+                    allowed_saved_view_actions(&saved_view(archived), &heap(true), role),
+                    is_empty()
+                );
+            }
+        }
     }
 
     #[gtest]
