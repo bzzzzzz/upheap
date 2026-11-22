@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import { compactButtonClass } from "./buttons";
 import { Field } from "./Field";
 import { itemProblem } from "./itemProblems";
@@ -15,24 +13,29 @@ const length = (text: string) => [...text].length;
 /**
  * The form in "Why it's blocked" (ux.md, The item §2): one line of text for what the item waits for outside the heap.
  * Save, or Enter, sends the text and Remove reason clears it; an empty text clears too. `save` resolves once the server
- * has it, and the editor stays open with the draft when it fails, saying why. `onDone` closes it. While it
+ * has it, and the editor stays open with the draft when it fails, saying why. `onDone` closes it, after a save or on
+ * Cancel. The caller holds the draft, so closing the popover another way keeps it (ux.md, Rules §1). While it
  * saves it can't be closed, so a failure always shows and a late success can't close an editor opened after it. An
  * input takes one line, so pasted line breaks never reach the text.
  */
 export function BlockReasonEditor({
   reason,
+  draft,
+  onDraftChange,
   save,
   saving,
   error,
   onDone,
 }: {
   reason: string | null;
+  /** What the field holds: the kept draft, or the saved reason when there is none. */
+  draft: string;
+  onDraftChange: (draft: string) => void;
   save: (reason: string | null) => Promise<unknown>;
   saving: boolean;
   error: Error | null;
   onDone: () => void;
 }) {
-  const [draft, setDraft] = useState(reason ?? "");
   const text = draft.trim();
   const chars = length(text);
   const tooLong = chars > MAX_CHARS;
@@ -54,7 +57,7 @@ export function BlockReasonEditor({
       <Field
         label="Reason"
         value={draft}
-        onChange={setDraft}
+        onChange={onDraftChange}
         readOnly={saving}
         autoFocus
         onFocus={(event) => event.target.select()}

@@ -121,6 +121,37 @@ test("sending from the item with a line shows who has it, in the item and in the
   await expect(history).toContainText("took back a turn");
 });
 
+test("closing the send form keeps its line and choice for the next open, and Cancel drops them", async ({
+  page,
+  heapPath,
+}) => {
+  const { key } = await seed(page, heapPath, "Rotate the certs");
+  await open(page, heapPath, key, "Rotate the certs");
+  const line = () => sendForm(page).getByLabel("A line for the agent (optional)");
+  const allTheWay = () => sendForm(page).getByRole("radio", { name: "All the way" });
+
+  await openSendForm(page);
+  await sendForm(page).locator("label").filter({ hasText: "All the way" }).click();
+  await line().fill("Use the new CA.");
+  await page.keyboard.press("Escape");
+  await expect(sendForm(page)).toHaveCount(0);
+  await openSendForm(page);
+  await expect(line()).toHaveValue("Use the new CA.");
+  await expect(allTheWay()).toBeChecked();
+
+  await page.mouse.click(5, 5);
+  await expect(sendForm(page)).toHaveCount(0);
+  await openSendForm(page);
+  await expect(line()).toHaveValue("Use the new CA.");
+  await expect(allTheWay()).toBeChecked();
+
+  await sendForm(page).getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(sendForm(page)).toHaveCount(0);
+  await openSendForm(page);
+  await expect(line()).toHaveValue("");
+  await expect(sendForm(page).getByRole("radio", { name: "To with context" })).toBeChecked();
+});
+
 test("all the way is offered and shown, and a defined task has one way to go", async ({ page, heapPath }) => {
   const { key } = await seed(page, heapPath, "Rotate the certs");
   await open(page, heapPath, key, "Rotate the certs");

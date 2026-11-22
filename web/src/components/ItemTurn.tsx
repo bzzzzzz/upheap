@@ -270,12 +270,16 @@ function SendToAgent({
   const formOpen = isOpen && !item.turn;
   // Set by a send made here. Focus moving to the chip closes the popover as if it was left, which mustn't cancel it.
   const sent = useRef(false);
+  // The form's draft lives here, not in the form the popover unmounts, so closing it keeps the draft (ux.md, Rules
+  // §1). Send and Cancel clear it.
+  const [draft, setDraft] = useState<SendDraft>(emptySendDraft);
 
   const sendNow = (reach: Reach, line: string, picked?: Goal) => {
     sent.current = false;
     return sendWithUndo(item, reach, line.trim() === "" ? null : line, picked).then((saved) => {
       if (!saved) return;
       sent.current = true;
+      setDraft(emptySendDraft);
       onClose(true);
     });
   };
@@ -295,8 +299,13 @@ function SendToAgent({
         goal={goal}
         goalChoices={goalChoices}
         pending={pending}
+        draft={draft}
+        onDraftChange={setDraft}
         onSend={(reach, line, picked) => void sendNow(reach, line, picked)}
-        onCancel={() => onClose(false)}
+        onCancel={() => {
+          setDraft(emptySendDraft);
+          onClose(false);
+        }}
       />
       {error && (
         <>
@@ -361,9 +370,13 @@ export function HowFar({ value, children }: { value: string; children: ReactNode
   );
 }
 
+/** What the send form holds until it sends or is cancelled: how far, and the line for the agent. */
+type SendDraft = { choice: "one" | "further" | "all_the_way"; line: string };
+const emptySendDraft: SendDraft = { choice: "one", line: "" };
+
 /**
- * The form that sends the item: how far, and an optional line for the agent. Its draft lives here, so a refetch of
- * the item leaves it alone, and closing the form throws it away. A defined task has one way to go, to done. A note
+ * The form that sends the item: how far, and an optional line for the agent. Its draft is held by the caller, so a
+ * refetch of the item and closing the form both leave it alone. A defined task has one way to go, to done. A note
  * as written has a third choice, "To defined", between going one state and going all the way: it sends one turn with
  * that goal. `onSend` gets the goal only for that choice.
  */
@@ -371,17 +384,20 @@ function SendForm({
   goal,
   goalChoices,
   pending,
+  draft,
+  onDraftChange,
   onSend,
   onCancel,
 }: {
   goal: Goal;
   goalChoices: Goal[];
   pending: boolean;
+  draft: SendDraft;
+  onDraftChange: (draft: SendDraft) => void;
   onSend: (reach: Reach, line: string, goal?: Goal) => void;
   onCancel: () => void;
 }) {
-  const [choice, setChoice] = useState<"one" | "further" | "all_the_way">("one");
-  const [line, setLine] = useState("");
+  const { choice, line } = draft;
   // The goal past the default one, when the server offers it. If it stops being offered while "To defined" is picked
   // (the item changed meanwhile), the pick counts as "one".
   const further = goalChoices.find((other) => other !== goal);
@@ -400,7 +416,7 @@ function SendForm({
         <RadioGroup
           aria-label="How far"
           value={picked}
-          onChange={(value) => setChoice(value as typeof choice)}
+          onChange={(value) => onDraftChange({ ...draft, choice: value as SendDraft["choice"] })}
           className="flex flex-col"
         >
           <HowFar value="one">To {GOAL_LABELS[goal]}</HowFar>
@@ -408,7 +424,11 @@ function SendForm({
           <HowFar value="all_the_way">All the way</HowFar>
         </RadioGroup>
       )}
-      <TextField value={line} onChange={setLine} className="flex flex-col gap-1">
+      <TextField
+        value={line}
+        onChange={(next) => onDraftChange({ ...draft, line: next })}
+        className="flex flex-col gap-1"
+      >
         <Label className={labelClass}>A line for the agent (optional)</Label>
         <TextArea rows={3} className={fieldClass} />
       </TextField>
@@ -429,7 +449,8 @@ function SendForm({
  * server offers `redo_turn` (ux.md, The item §15): opens a form that says what is wrong and sends the item back, to the
  * same goal. A popover on a wide screen and a tablet, a sheet on a phone. `onSent` runs once the send has closed the
  * form, for the caller that moves focus on to the agent chip, which the new turn brings. Cancelling returns focus to
- * the button.
+ * the button. The draft lives here, so closing the popover keeps it for the next open (ux.md, Rules §1); Send back
+ * and Cancel clear it.
  */
 export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef; item: Item; onSent: () => void }) {
   const button = useRef<HTMLButtonElement>(null);
@@ -437,6 +458,7 @@ export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef
   const redo = useRedoTurn(heapRef);
   const setToast = useToast();
   const [open, setOpen] = useState(false);
+  const [line, setLine] = useState("");
   // Set by a send made here. Focus moving to the chip closes the popover as if it was left, which mustn't cancel it.
   const sent = useRef(false);
   if (item.turn || !item.allowed_actions.includes("redo_turn")) return null;
@@ -450,6 +472,7 @@ export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef
     return redo.mutateAsync({ item, line }).then(
       () => {
         sent.current = true;
+        setLine("");
         setOpen(false);
         setToast({ message: "Sent back to the agent." });
         onSent();
@@ -497,29 +520,37 @@ export function ChangesAskedButton({ heapRef, item, onSent }: { heapRef: HeapRef
           stage={item.stage}
           pending={redo.isPending}
           error={redo.error}
-          onSend={(line) => void send(line)}
-          onCancel={close}
+          line={line}
+          onLineChange={setLine}
+          onSend={(text) => void send(text)}
+          onCancel={() => {
+            setLine("");
+            close();
+          }}
         />
       </PopoverSheet>
     </>
   );
 }
 
-/** The form that sends the work back: what is wrong, required. Its draft lives here and closing the form drops it. */
+/** The form that sends the work back: what is wrong, required. The caller holds its draft. */
 function ChangesAskedForm({
   stage,
   pending,
   error,
+  line,
+  onLineChange,
   onSend,
   onCancel,
 }: {
   stage: Item["stage"];
   pending: boolean;
   error: Error | null;
+  line: string;
+  onLineChange: (line: string) => void;
   onSend: (line: string) => void;
   onCancel: () => void;
 }) {
-  const [line, setLine] = useState("");
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (line.trim() !== "" && !pending) onSend(line);
@@ -527,7 +558,7 @@ function ChangesAskedForm({
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
       {stage && <p className="text-sm">An agent brought this to: {STAGE_LABELS[stage]}.</p>}
-      <TextField value={line} onChange={setLine} isRequired className="flex flex-col gap-1">
+      <TextField value={line} onChange={onLineChange} isRequired className="flex flex-col gap-1">
         <Label className={labelClass}>What's wrong</Label>
         <TextArea rows={3} className={fieldClass} />
       </TextField>

@@ -128,6 +128,8 @@ export function ItemActions({
   const [changing, setChanging] = useState(false);
   const [moving, setMoving] = useState(false);
   const [editingReason, setEditingReason] = useState(false);
+  // What was typed in Why it's blocked, kept across a close and cleared by a save or Cancel; null while nothing is.
+  const [reasonDraft, setReasonDraft] = useState<string | null>(null);
   // Awaitable, and apart from `save`, so the editor says its own failure and the pane doesn't say it twice.
   const saveReason = useUpdateItem(heapRef);
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
@@ -395,10 +397,15 @@ export function ItemActions({
       >
         <BlockReasonEditor
           reason={item.blocked_reason ?? null}
+          draft={reasonDraft ?? item.blocked_reason ?? ""}
+          onDraftChange={setReasonDraft}
           save={(blocked_reason) => saveReason.mutateAsync({ item, patch: { blocked_reason } })}
           saving={saveReason.isPending}
           error={saveReason.error}
-          onDone={closeEditingReason}
+          onDone={() => {
+            setReasonDraft(null);
+            closeEditingReason();
+          }}
         />
       </PopoverSheet>
     </>
