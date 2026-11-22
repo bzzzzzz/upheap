@@ -1152,6 +1152,50 @@ test("selected items are sent to an agent at once", async ({ page }) => {
   await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
 });
 
+test("closing the selection's send form keeps its line and choice, and Cancel and Send drop them", async ({ page }) => {
+  await addHeaps(page, ["Garden"]);
+  for (const title of ["Water the plants", "Pull the weeds"]) await addItem(page, title);
+  await selectItems(page, ["Water the plants", "Pull the weeds"]);
+  const form = page.getByRole("dialog", { name: "Send to an agent", exact: true });
+  const line = () => form.getByLabel("A line for the agent (optional)");
+  const allTheWay = () => form.getByRole("radio", { name: "All the way" });
+  const openForm = () => bulkButton(page, "Send to an agent…").click();
+  const typeDraft = async () => {
+    await form.locator("label").filter({ hasText: "All the way" }).click();
+    await line().fill("Use the new hose.");
+  };
+  const expectEmpty = async () => {
+    await expect(line()).toHaveValue("");
+    await expect(form.getByRole("radio", { name: "One step" })).toBeChecked();
+  };
+
+  await openForm();
+  await typeDraft();
+  await page.keyboard.press("Escape");
+  await expect(form).toHaveCount(0);
+  await openForm();
+  await expect(line()).toHaveValue("Use the new hose.");
+  await expect(allTheWay()).toBeChecked();
+
+  await page.mouse.click(5, 5);
+  await expect(form).toHaveCount(0);
+  await openForm();
+  await expect(line()).toHaveValue("Use the new hose.");
+  await expect(allTheWay()).toBeChecked();
+
+  await form.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await openForm();
+  await expectEmpty();
+
+  await typeDraft();
+  await form.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(toastWith(page, "Sent 2 items to an agent.")).toBeVisible();
+  await expect(form).toHaveCount(0);
+  await openForm();
+  await expectEmpty();
+});
+
 test("Start on a selection where an agent has an item asks first, and confirming starts them", async ({
   page,
   heapPath,
