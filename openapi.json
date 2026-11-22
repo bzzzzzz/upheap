@@ -1534,7 +1534,7 @@
             }
           },
           "422": {
-            "description": "`tag_not_in_team` (`field` `tag`) or `option_not_in_heap` (`param`)",
+            "description": "`tag_not_in_team` (`field` `tag`) or `option_not_in_team` (`param`)",
             "content": {
               "application/json": {
                 "schema": {
