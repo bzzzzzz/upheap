@@ -14,6 +14,9 @@ const EDGE_ZONE = 48;
 const EDGE_SCROLL = 8;
 /** How far the pointer moves before a press on the grip is a drag, so a click near the pane's edge scrolls nothing. */
 const DRAG_START = 6;
+/** How long a finger stays within how far of where it went down before the press lifts a row. */
+const PRESS_TIME = 400;
+const PRESS_SLOP = 8;
 
 /**
  * Dragging a row by its grip, with pointer events (mouse, touch and pen alike). The dragged row follows the pointer
@@ -69,8 +72,19 @@ export function useDragToReorder<Id>({
     else if (above) setLineY(above.bottom - listTop);
   }, [listRef, rows]);
 
+  // A long press waiting for its time, and whether the lifted row came from one.
+  const press = useRef<{ pointerId: number; startX: number; startY: number; y: number; timer: number } | null>(null);
+  const [byPress, setByPress] = useState(false);
+  // Whether the latest press went on to drag, so a control under the pointer can tell the end of a drag from a click.
+  const dragged = useRef(false);
+  const clearPress = () => {
+    if (press.current) window.clearTimeout(press.current.timer);
+    press.current = null;
+  };
+
   const end = useCallback(() => {
     session.current = null;
+    setByPress(false);
     setLifted(null);
     setDy(0);
     setLineY(null);
@@ -105,55 +119,124 @@ export function useDragToReorder<Id>({
     };
   }, [lifted, measure, end]);
 
+  // Starts a session for the row `id` on the pointer `pointerId`, captured by `element`. A session that starts `held` is
+  // lifted at once: a long press has gone past `DRAG_START` already.
+  const begin = (id: Id, element: Element, pointerId: number, clientY: number, held: boolean) => {
+    if (session.current || !listRef.current) return;
+    element.setPointerCapture(pointerId);
+    let scroller: Element = document.scrollingElement ?? document.documentElement;
+    for (let node = listRef.current.parentElement; node; node = node.parentElement) {
+      const { overflowY } = getComputedStyle(node);
+      if (/auto|scroll|overlay/.test(overflowY) && node.scrollHeight > node.clientHeight) {
+        scroller = node;
+        break;
+      }
+    }
+    const index = ids.indexOf(id);
+    session.current = {
+      id,
+      pointerId,
+      startY: clientY,
+      startListTop: listRef.current.getBoundingClientRect().top,
+      pointerY: clientY,
+      others: ids.filter((other) => other !== id),
+      index,
+      landing: index,
+      scroller,
+      moved: held,
+    };
+    dragged.current = held;
+    if (held) setLifted(id);
+  };
+
+  const handlers = {
+    onPointerMove: (event: ReactPointerEvent<HTMLElement>) => {
+      if (session.current?.pointerId !== event.pointerId) return;
+      session.current.pointerY = event.clientY;
+      if (!session.current.moved && Math.abs(event.clientY - session.current.startY) > DRAG_START) {
+        session.current.moved = true;
+        dragged.current = true;
+        setLifted(session.current.id);
+      }
+      measure();
+    },
+    onPointerUp: (event: ReactPointerEvent<HTMLElement>) => {
+      const current = session.current;
+      if (current?.pointerId !== event.pointerId) return;
+      measure();
+      end();
+      if (current.moved && current.landing !== current.index) onDrop(current.id, current.landing);
+    },
+    onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => {
+      if (session.current?.pointerId === event.pointerId) end();
+    },
+  };
+
+  // A lifted row is dragged by the finger, not the page: the page doesn't scroll by touch meanwhile.
+  useEffect(() => {
+    if (!byPress) return;
+    const stop = (event: TouchEvent) => event.preventDefault();
+    document.addEventListener("touchmove", stop, { passive: false });
+    return () => document.removeEventListener("touchmove", stop);
+  }, [byPress]);
+
+  useEffect(() => clearPress, []);
+
   return {
     active: lifted !== null,
     lifted,
     dy,
     lineY,
+    /** Whether the latest press went on to drag. */
+    dragged: () => dragged.current,
     gripProps: (id: Id): GripProps => ({
+      ...handlers,
       onPointerDown: (event) => {
-        if (event.button !== 0 || session.current || !listRef.current) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        let scroller: Element = document.scrollingElement ?? document.documentElement;
-        for (let node = listRef.current.parentElement; node; node = node.parentElement) {
-          const { overflowY } = getComputedStyle(node);
-          if (/auto|scroll|overlay/.test(overflowY) && node.scrollHeight > node.clientHeight) {
-            scroller = node;
-            break;
-          }
-        }
-        const index = ids.indexOf(id);
-        session.current = {
-          id,
-          pointerId: event.pointerId,
-          startY: event.clientY,
-          startListTop: listRef.current.getBoundingClientRect().top,
-          pointerY: event.clientY,
-          others: ids.filter((other) => other !== id),
-          index,
-          landing: index,
-          scroller,
-          moved: false,
+        if (event.button !== 0) return;
+        begin(id, event.currentTarget, event.pointerId, event.clientY, false);
+      },
+    }),
+    /**
+     * The handlers of a row that lifts after a long press: the pointer stays within `PRESS_SLOP` for `PRESS_TIME`, then
+     * the row is lifted and follows the finger as a grip's row does. A move past the slop before then, a lift of the
+     * finger or a cancelled pointer ends the press, so a swipe or a scroll goes on as it would.
+     */
+    pressProps: (id: Id): GripProps => ({
+      ...handlers,
+      onPointerDown: (event) => {
+        if (event.button !== 0 || session.current) return;
+        const element = event.currentTarget;
+        const { pointerId, clientX, clientY } = event;
+        clearPress();
+        press.current = {
+          pointerId,
+          startX: clientX,
+          startY: clientY,
+          y: clientY,
+          timer: window.setTimeout(() => {
+            // Where the finger is by now.
+            const y = press.current?.y ?? clientY;
+            press.current = null;
+            begin(id, element, pointerId, y, true);
+            setByPress(true);
+          }, PRESS_TIME),
         };
       },
       onPointerMove: (event) => {
-        if (session.current?.pointerId !== event.pointerId) return;
-        session.current.pointerY = event.clientY;
-        if (!session.current.moved && Math.abs(event.clientY - session.current.startY) > DRAG_START) {
-          session.current.moved = true;
-          setLifted(session.current.id);
+        const current = press.current;
+        if (current?.pointerId === event.pointerId) {
+          current.y = event.clientY;
+          if (Math.hypot(event.clientX - current.startX, event.clientY - current.startY) > PRESS_SLOP) clearPress();
         }
-        measure();
+        handlers.onPointerMove(event);
       },
       onPointerUp: (event) => {
-        const current = session.current;
-        if (current?.pointerId !== event.pointerId) return;
-        measure();
-        end();
-        if (current.moved && current.landing !== current.index) onDrop(current.id, current.landing);
+        clearPress();
+        handlers.onPointerUp(event);
       },
       onPointerCancel: (event) => {
-        if (session.current?.pointerId === event.pointerId) end();
+        clearPress();
+        handlers.onPointerCancel(event);
       },
     }),
   };

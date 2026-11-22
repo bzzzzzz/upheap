@@ -1,15 +1,19 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useId, useRef, useState } from "react";
 
-import type { HeapRef } from "../api/client";
-import type { Item, RankedItem } from "../api/schema";
-import { chipClass } from "./buttons";
+import { requestIdOf, type HeapRef } from "../api/client";
+import { usePlaceItem, useResetPlacement } from "../api/queries/placing";
+import type { Item, RankedItem, RankedList } from "../api/schema";
+import { chipClass, compactButtonClass } from "./buttons";
+import { itemProblem } from "./itemProblems";
 import { AgentChip, ChangesAskedButton, SendToAgentButton } from "./ItemTurn";
 import { KindIcon, StageIcon } from "./kindIcons";
 import { isClosed, KIND_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
 import { useOverListLink } from "./overList";
+import { placementTarget } from "./placeRows";
 import { PopoverSheet } from "./PopoverSheet";
 import { formatDate, isToCome } from "./reminders";
+import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 // With spaces, so the line reads as "Task · With context · Open" to anything that takes its text.
@@ -31,12 +35,15 @@ export function StatusLine({
   heapRef,
   item,
   entry,
+  list,
   canReopen,
   onTakenBack,
 }: {
   heapRef: HeapRef;
   item: Item;
   entry: RankedItem | undefined;
+  /** The ranked group on screen, if any, for putting a reset place back. */
+  list: Pick<RankedList, "ranked" | "as_of"> | undefined;
   canReopen: boolean;
   onTakenBack: () => void;
 }) {
@@ -132,8 +139,51 @@ export function StatusLine({
         <SendToAgentButton heapRef={heapRef} item={item} onSent={() => setSent((n) => n + 1)} />
         <ChangesAskedButton heapRef={heapRef} item={item} onSent={() => setSent((n) => n + 1)} />
       </div>
+      {item.placement && !closed && <PlacedLine heapRef={heapRef} item={item} list={list} />}
       {date && isToCome(item) && <p className="text-sm text-ink-soft">Joins the list on {date}</p>}
     </div>
+  );
+}
+
+/**
+ * Says the item was put in its place by hand, with Reset for someone who can edit it (ux.md, The item). Reset takes the
+ * placing away and offers Undo, which puts the item next to the row it had above it (below it, when it was first)
+ * in the ranked group on screen; with the item not in that group, there is no Undo.
+ */
+function PlacedLine({
+  heapRef,
+  item,
+  list,
+}: {
+  heapRef: HeapRef;
+  item: Item;
+  list: Pick<RankedList, "ranked" | "as_of"> | undefined;
+}) {
+  const reset = useResetPlacement(heapRef);
+  const place = usePlaceItem(heapRef);
+  const setToast = useToast();
+  const failed = (error: Error) =>
+    setToast({ message: itemProblem(error), error: true, requestId: requestIdOf(error) });
+  const onReset = () => {
+    const at = list?.ranked.findIndex((e) => e.item.id === item.id) ?? -1;
+    const back = list && at >= 0 ? placementTarget(list.ranked, item.id, at) : undefined;
+    reset.mutateAsync({ item }).then((saved) => {
+      setToast({
+        message: "Reset its place.",
+        undo:
+          back && list && (() => place.mutateAsync({ item: saved, ...back, asOf: list.as_of }).then(undefined, failed)),
+      });
+    }, failed);
+  };
+  return (
+    <p className="flex items-center gap-2 text-sm text-muted">
+      {item.placement === "up" ? "Moved up in the list" : "Moved down in the list"}
+      {item.allowed_actions.includes("edit") && (
+        <button type="button" onClick={onReset} className={compactButtonClass.quiet}>
+          Reset
+        </button>
+      )}
+    </p>
   );
 }
 

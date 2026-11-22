@@ -5,7 +5,7 @@ import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { isNotFound, type HeapRef } from "../api/client";
-import type { Item, ItemPatchRequest, ItemState, RankedItem } from "../api/schema";
+import type { Item, ItemPatchRequest, ItemState, RankedItem, RankedList } from "../api/schema";
 import { useItem, useSavingFields, useUpdateItem } from "../api/queries/items";
 import { useMe } from "../api/queries/me";
 import { gerund, takesBack } from "./agentConfirm";
@@ -59,6 +59,7 @@ export function ItemPane({
   nextKey,
   walkLink,
   listName,
+  list,
   onClose,
 }: {
   heapRef: HeapRef;
@@ -71,6 +72,8 @@ export function ItemPane({
   walkLink?: (key: string) => LinkProps;
   /** The name of the list behind the pane, for the button that closes a missing item; none where it's All items. */
   listName?: string | undefined;
+  /** The ranked group on screen behind the pane, for putting an item back where it was after Reset; none where there isn't one. */
+  list?: Pick<RankedList, "ranked" | "as_of"> | undefined;
   onClose: () => void;
 }) {
   const item = useItem(heapRef, itemKey);
@@ -135,7 +138,7 @@ export function ItemPane({
       </>
     );
   } else {
-    body = <ItemFields key={item.data.id} heapRef={heapRef} item={item.data} entry={entry} />;
+    body = <ItemFields key={item.data.id} heapRef={heapRef} item={item.data} entry={entry} list={list} />;
   }
 
   return (
@@ -431,7 +434,17 @@ function useDragToClose(onClose: () => void) {
  * for the person, the fields, the context, the steps, the questions and the history. Each change saves on its own, with
  * the item's version in `If-Match`.
  */
-function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; entry: RankedItem | undefined }) {
+function ItemFields({
+  heapRef,
+  item,
+  entry,
+  list,
+}: {
+  heapRef: HeapRef;
+  item: Item;
+  entry: RankedItem | undefined;
+  list: Pick<RankedList, "ranked" | "as_of"> | undefined;
+}) {
   const phone = useMedia(PHONE);
   const update = useUpdateItem(heapRef);
   const savingTitle = useSavingFields(heapRef, item.key).has("title");
@@ -556,7 +569,14 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
           {!phone && actions("inline")}
         </div>
         {!phone && confirmAsking}
-        <StatusLine heapRef={heapRef} item={item} entry={entry} canReopen={canReopen} onTakenBack={focusMore} />
+        <StatusLine
+          heapRef={heapRef}
+          item={item}
+          entry={entry}
+          list={list}
+          canReopen={canReopen}
+          onTakenBack={focusMore}
+        />
       </div>
 
       <WaitsForYou heapRef={heapRef} item={item} waits={waits} />

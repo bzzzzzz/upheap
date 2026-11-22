@@ -22,6 +22,7 @@ import { ItemPane, useFullScreenShown } from "../components/ItemPane";
 import { useListSearch } from "../components/listSearch";
 import { itemProblem } from "../components/itemProblems";
 import { FilterChips, ListControls, type Panel } from "../components/ListControls";
+import { usePlaceRows } from "../components/placeRows";
 import { SelectionBars } from "../components/SelectionBar";
 import { titleTeam } from "../components/teamName";
 import { useToast } from "../components/UndoToast";
@@ -40,7 +41,7 @@ import {
   viewChanges,
   type ListSearch,
 } from "../components/listView";
-import { Kbd } from "../components/Kbd";
+import { Kbd, MAC } from "../components/Kbd";
 import { HeapNotFound } from "../components/NotFound";
 import { RequestId } from "../components/RequestId";
 
@@ -146,6 +147,7 @@ export function HeapPage({
       previousKey={index > 0 ? onScreen[index - 1]?.key : undefined}
       nextKey={index >= 0 ? onScreen[index + 1]?.key : undefined}
       listName={list.data?.heap.name}
+      list={list.data}
       onClose={closeItem}
     />
   );
@@ -323,6 +325,15 @@ function ListPage({
   const listed = everyEntry(list.data).length;
   const shown = pinned.length + ranked.length + blocked.length + coming.length;
   const narrowed = search.trim() !== "" || filters > 0;
+  // The ranked group can be placed by hand (ux.md, The list) only in the priority sort, with nothing searched for and
+  // no selecting, by someone who can edit its items, which the server says for all of them or none.
+  const placing =
+    (view.sort === undefined || view.sort === "priority") &&
+    search.trim() === "" &&
+    !select &&
+    !list.isPlaceholderData &&
+    ranked.length > 1 &&
+    ranked[0]?.item.allowed_actions.includes("edit") === true;
   // The keys the hint bar shows for what's on screen (ux.md, Keyboard).
   const canChange = [...pinned, ...ranked, ...blocked].some((entry) =>
     entry.item.allowed_actions.includes("change_state"),
@@ -342,6 +353,7 @@ function ListPage({
       : [
           { keys: "↑ ↓", label: "Move" },
           { keys: "↵", label: "Open" },
+          ...(placing ? [{ keys: MAC ? "⌥↑↓" : "Alt ↑↓", label: "Move" }] : []),
           ...(canChange
             ? [
                 { keys: "S", label: "Start" },
@@ -359,17 +371,16 @@ function ListPage({
     toggleTag: (tagId) => onViewChange({ ...view, tag: toggled(view.tag, tagId) }),
     toggleOption: (optionId) => onViewChange({ ...view, param: toggled(view.param, optionId) }),
   };
-  const rows = (entries: RankedItem[], pinned?: boolean) => (
-    <ItemList
-      entries={entries}
-      filters={rowFilters}
-      heapRef={heapRef}
-      itemKey={itemKey}
-      onChangeState={onChangeState}
-      compact={(entry) => pinned === true && entry.item.state === "in_progress"}
-      select={select}
-    />
-  );
+  const listProps = (entries: RankedItem[], pinned?: boolean) => ({
+    entries,
+    filters: rowFilters,
+    heapRef,
+    itemKey,
+    onChangeState,
+    compact: (entry: RankedItem) => pinned === true && entry.item.state === "in_progress",
+    select,
+  });
+  const rows = (entries: RankedItem[], pinned?: boolean) => <ItemList {...listProps(entries, pinned)} />;
 
   return (
     // On a wide screen with a mouse, the hint bar sits at the end of a column at least the window's height, so it
@@ -432,7 +443,11 @@ function ListPage({
 
           {pinned.length > 0 && <Section title={pinnedTitle(pinned)}>{rows(pinned, true)}</Section>}
 
-          {ranked.length > 0 && <Section title={pinned.length > 0 ? "Up next" : undefined}>{rows(ranked)}</Section>}
+          {ranked.length > 0 && (
+            <Section title={pinned.length > 0 ? "Up next" : undefined}>
+              <RankedRows {...listProps(ranked)} list={list.data} placing={placing} />
+            </Section>
+          )}
 
           {blocked.length > 0 && <Section title="Blocked">{rows(blocked)}</Section>}
 
@@ -543,6 +558,25 @@ export function Section({ title, children }: { title: string | undefined; childr
   );
 }
 
+/**
+ * The ranked group, whose rows can be placed by hand while `placing`. It is one component either way, so the rows keep
+ * their place (and the focus) when placing turns on or off, as a list of two becomes a list of one.
+ */
+function RankedRows({ list, placing, ...props }: ItemListProps & { list: RankedList; placing: boolean }) {
+  const place = usePlaceRows(props.heapRef, list);
+  return <ItemList {...props} placing={placing ? place : undefined} />;
+}
+
+type ItemListProps = {
+  entries: RankedItem[];
+  heapRef: HeapRef;
+  itemKey: string | undefined;
+  filters: RowFilters;
+  onChangeState: ChangeState;
+  compact: (entry: RankedItem) => boolean;
+  select: SelectState | undefined;
+};
+
 /** With `compact`, a row leaves out why it ranks where it does, so pinned in-progress rows don't crowd the list. */
 function ItemList({
   entries,
@@ -552,19 +586,18 @@ function ItemList({
   onChangeState,
   compact,
   select,
-}: {
-  entries: RankedItem[];
-  heapRef: HeapRef;
-  itemKey: string | undefined;
-  filters: RowFilters;
-  onChangeState: ChangeState;
-  compact: (entry: RankedItem) => boolean;
-  select: SelectState | undefined;
+  placing,
+}: ItemListProps & {
+  /** Set for the group whose rows can be placed by hand: the drag over the list, and what each row needs. */
+  placing?: ReturnType<typeof usePlaceRows>;
 }) {
   return (
-    <ol className="flex flex-col">
+    <ol
+      ref={placing?.listRef}
+      className={`flex flex-col ${placing ? "relative" : ""} ${placing?.active ? "select-none" : ""}`}
+    >
       <AnimatePresence initial={false}>
-        {entries.map((entry) => (
+        {entries.map((entry, index) => (
           <ItemRow
             key={entry.item.id}
             entry={entry}
@@ -574,6 +607,7 @@ function ItemList({
             compact={compact(entry)}
             filters={filters}
             onChangeState={onChangeState}
+            place={placing?.rowPlace(entry.item.id, index)}
             selection={
               select && {
                 selected: select.selected.has(entry.item.id),
@@ -583,6 +617,13 @@ function ItemList({
           />
         ))}
       </AnimatePresence>
+      {placing?.lineY != null && (
+        <li
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 h-0.5 bg-accent"
+          style={{ top: placing.lineY - 1 }}
+        />
+      )}
     </ol>
   );
 }
