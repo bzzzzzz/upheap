@@ -61,6 +61,18 @@ pub async fn list_saved_views(db: &impl ConnectionTrait, heap_id: HeapId) -> Res
     Ok(views)
 }
 
+/// Every view of `heap_id`, archived ones included, in no particular order. For writes that must reach every view,
+/// such as a merge rewriting the IDs they name, so an archived view never holds an ID that is gone.
+pub async fn list_all_saved_views(db: &impl ConnectionTrait, heap_id: HeapId) -> Result<Vec<SavedView>, StoreError> {
+    saved_views::Entity::find()
+        .filter(saved_views::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .all(db)
+        .await?
+        .into_iter()
+        .map(to_saved_view)
+        .collect()
+}
+
 /// The views among `ids` that belong to `heap_id`, archived ones included, in no particular order. IDs from other
 /// heaps, or unknown ones, are left out.
 pub async fn list_saved_views_by_ids(

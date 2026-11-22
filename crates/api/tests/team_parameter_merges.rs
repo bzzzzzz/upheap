@@ -370,6 +370,55 @@ async fn a_heap_parameter_becomes_the_teams_and_the_same_named_one_merges_into_i
 
 #[gtest]
 #[tokio::test]
+async fn an_archived_view_follows_the_merge_too() -> Result<()> {
+    // Arrange
+    let w = world().await?;
+    let tier_a = w.heap_parameter(&w.a, "Customer tier", &["Gold", "Silver"], 30).await?;
+    let tier_b = w.heap_parameter(&w.b, "customer tier", &["gold"], 5).await?;
+    let view = w
+        .save_view(
+            &w.b,
+            json!({ "name": "Golds", "view": {
+                "param": [option_id(&tier_b, "gold")], "sort": "parameter", "sort_parameter": id(&tier_b),
+            } }),
+        )
+        .await?;
+    let archived = w
+        .app
+        .send(
+            Method::POST,
+            &format!("{}/views/{}/archive", w.app.heap_url(&w.b).await?, id(&view)),
+            Some(&w.session),
+            None,
+        )
+        .await?;
+
+    // Act
+    let confirmed = w.make_team_confirmed(&w.a, &tier_a).await?;
+    let stored = w.app.stored_view(id(&view)).await?;
+
+    // Assert
+    expect_that!(archived.status, eq(StatusCode::OK));
+    expect_that!(confirmed.status, eq(StatusCode::OK));
+    expect_that!(stored.archived_at.is_some(), eq(true));
+    let options: Vec<String> = stored
+        .list_view
+        .filter
+        .options
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    expect_that!(options, elements_are![eq(&option_id(&confirmed.body, "Gold"))]);
+    let team_parameter = domain::ParameterId::from_uuid(id(&tier_a).parse()?);
+    expect_that!(
+        stored.list_view.sort,
+        eq(domain::list_view::SortKey::Parameter(team_parameter))
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn the_merge_is_in_the_history_of_the_items_it_moved_and_of_the_team() -> Result<()> {
     // Arrange
     let w = world().await?;

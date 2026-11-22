@@ -1464,15 +1464,15 @@ async fn write_heap_use(
     Ok(())
 }
 
-/// Points the saved views of the merged parameter's heap at the team parameter: the options it filters by become the
-/// ones they merged into, and a sort by the merged parameter becomes a sort by the team parameter. Like a tag merge,
-/// views get no entries.
+/// Points the saved views of the merged parameter's heap, archived ones included, at the team parameter: the options
+/// it filters by become the ones they merged into, and a sort by the merged parameter becomes a sort by the team
+/// parameter. Like a tag merge, views get no entries.
 async fn move_views(
     txn: &DatabaseTransaction,
     team_parameter: ParameterId,
     other: &MergedParameter,
 ) -> Result<(), ServiceError> {
-    for mut view in store::saved_views::list_saved_views(txn, other.heap.id).await? {
+    for mut view in store::saved_views::list_all_saved_views(txn, other.heap.id).await? {
         let filter = &view.list_view.filter;
         let sorted = view.list_view.sort == SortKey::Parameter(other.parameter.id);
         if !sorted

@@ -633,6 +633,14 @@ impl TestApp {
         .await
     }
 
+    /// The saved view with `view_id` as stored, archived or not, for what the API doesn't show of an archived view.
+    pub async fn stored_view(&self, view_id: impl AsRef<str>) -> Result<domain::saved_view::SavedView> {
+        let id = domain::SavedViewId::from_uuid(view_id.as_ref().parse()?);
+        store::saved_views::find_saved_view(&self.db, id)
+            .await?
+            .context("saved view not stored")
+    }
+
     /// `/api/v1/teams/{team}` for the team with `team_id`, from its slug in the database.
     pub async fn team_url(&self, team_id: impl AsRef<str>) -> Result<String> {
         let id: uuid::Uuid = team_id.as_ref().parse()?;
