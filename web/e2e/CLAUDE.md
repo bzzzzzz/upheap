@@ -28,9 +28,9 @@ what only the new state shows, such as the Reopen button.
 - `toBeFocused()` is fine and retries. If one fails now and then, the app is probably moving focus on a timer or a
   guessed number of frames, racing React Aria's own focus restore after an overlay closes. Fix the app, not the test:
   move focus after the render (`useFocusAfterRender` in `web/src/components/useFocusAfterRender.ts`), not on a timer
-  ([engineering-principles.md](../../design/engineering-principles.md), TypeScript and React, Components).
+  ([engineering-principles.md](../../docs/dev/engineering-principles.md), TypeScript and React, Components).
 - Each test makes its own account and data, so tests run in parallel and share nothing
-  ([engineering-principles.md](../../design/engineering-principles.md), TypeScript and React, Tests).
+  ([engineering-principles.md](../../docs/dev/engineering-principles.md), TypeScript and React, Tests).
 
 ## Reproducing a suspected race
 

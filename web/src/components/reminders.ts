@@ -1,4 +1,4 @@
-// Reminders: an item with a date, out of the ranked list until then (design/ux.md, The list). The server decides what
+// Reminders: an item with a date, out of the ranked list until then (ux.md, The list). The server decides what
 // is ranked; the client only words the date and tells a reminder still to come from one that has arrived.
 import type { Item } from "../api/schema";
 

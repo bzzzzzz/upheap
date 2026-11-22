@@ -6,7 +6,8 @@ their reasons, are in [decisions.md](decisions.md).
 
 This doc explains mechanisms and reasons. What the code states, it doesn't repeat: the endpoints are in
 `openapi.json` (`upheap-server openapi` prints it), the error codes in `crates/api/src/error.rs`, the schema in
-`crates/store/src/migration`, the configuration variables and the crate layout in [README.md](../README.md).
+`crates/store/src/migration`, the configuration variables in [configuration.md](../operator/configuration.md) and the crate layout in
+[README.md](../../README.md#layout).
 
 ## Principles
 
@@ -36,7 +37,7 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 | Web app       | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed                                                                                                                                                                                                                                    |
 | Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz`                                                                                                                                                                                                                                                                                            |
 | Testing       | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end                                                                                                                                                                                                                 |
-| Packaging     | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the CLI and the server as static binaries on GitHub Releases, with a Homebrew cask for the CLI in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli-and-the-server)) |
+| Packaging     | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](../operator/operations.md)); the CLI and the server as static binaries on GitHub Releases, with a Homebrew cask for the CLI in `bzzzzzz/homebrew-tap` ([operations.md](../operator/operations.md#releasing-the-cli-and-the-server)) |
 
 ## Workspace
 
@@ -44,7 +45,7 @@ Dependencies point one way: `server → api → service → store, domain`, with
 `server → mail` beside it, and `service → mail` for the mail it sends. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and
 property-tested in isolation, and `store` and `api` never depend on each other.
 `api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
-linking the server. The crates and their roles are listed in [README.md](../README.md#layout); each crate's root
+linking the server. The crates and their roles are listed in [README.md](../../README.md#layout); each crate's root
 module says what it owns.
 
 ## Data model
@@ -669,7 +670,7 @@ frame-ancestors 'none'`), so a page can't hide the consent page under something 
    - A proxy that puts HTTP Basic auth in front of the server works for the web app but not for the CLI, since a
      request carries one `Authorization` header. Such a proxy has to let `/api` through.
 3. **External identity provider:** one generic OpenID Connect provider per server, set with environment variables
-   ([README.md](../README.md#signing-in-through-a-provider)). Discovery, PKCE, the nonce and the ID token's signature
+   ([sign-in.md](../operator/sign-in.md#setting-up-the-provider)). Discovery, PKCE, the nonce and the ID token's signature
    and claims are security code, so the `openidconnect` crate does them.
    - **Start and callback.** The start (`GET /auth/oidc/start`, a link the browser follows) stores a row in
      `oidc_sign_ins` keyed by the SHA-256 of a random `state`, holding a nonce, a PKCE verifier and the app path to
@@ -764,7 +765,7 @@ frame-ancestors 'none'`), so a page can't hide the consent page under something 
      cleared: a new session, a changed address or a confirmation doesn't start it over, so one account can't mail
      more than five addresses in 15 minutes. Registration mails each new address once but has no count, since
      the server has no client to key one by and a cap for the whole server would let anyone stop all sign-ups:
-     the README asks operators to rate-limit `POST /auth/register` at the reverse proxy, or to close registration.
+     [mail.md](../operator/mail.md#setting-it-up) asks operators to rate-limit `POST /auth/register` at the reverse proxy, or to close registration.
      A notice to the old address follows an applied change, which a mailed link limits already.
    - A password change (`POST /me/password`, the session cookie only) takes the current password. Each try counts
      against the same limit per session, not per account, so someone using up the account's sign-in attempts can't
@@ -1045,7 +1046,7 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
 ## Configuration and deployment
 
 1. Configuration comes from environment variables, validated at startup; the variables and their defaults are in
-   [README.md](../README.md#configuration). No session secret is needed, because session tokens are random and
+   [configuration.md](../operator/configuration.md). No session secret is needed, because session tokens are random and
    stored hashed rather than signed. The operator's contact line goes out with the public password-reset options
    (`GET /password-resets`), because the sign-in page already reads them before anyone signs in.
 2. On startup the server runs pending migrations, then serves the API and the web app on one port. On Postgres the
@@ -1053,7 +1054,7 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
    SQLite aren't run with several instances.
 3. **Default deployment:** the Docker image with SQLite on a mounted volume.
 4. **Production:** `DATABASE_URL` points at Postgres or MySQL. TLS terminates at a reverse proxy, or at Cloud Run in
-   front of a Neon database ([operations.md](operations.md)).
+   front of a Neon database ([operations.md](../operator/operations.md)).
 5. **Health checks:** `/healthz` returns `200` while the process is up. `/readyz` returns `200` only once migrations
    have finished and the database answers a ping, so orchestrators route traffic only to ready instances. Neither
    needs authentication, and neither reveals versions or configuration.
@@ -1245,4 +1246,4 @@ section is how it maps onto this API.
    `upheap auth login` with a browser that answers the consent page. The `UPHEAP_TOKEN` tests make a personal token
    through the API and run with an empty keychain and no config directory.
 
-The commands are in [README.md](../README.md#develop).
+The commands are in [README.md](../../README.md#develop).

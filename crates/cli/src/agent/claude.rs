@@ -1,5 +1,5 @@
 //! Claude's command-line tool as an agent: the command line for each kind of access, and what its stream says. The
-//! permission flags are the ones in the README's agent paragraph, kept in `arguments`. Starting the process, and
+//! permission flags are the ones in agents.md (What a run may do), kept in `arguments`. Starting the process, and
 //! watching and stopping it, are in [`super::process`].
 
 use std::path::PathBuf;

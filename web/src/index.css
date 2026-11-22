@@ -18,7 +18,7 @@
 }
 
 /*
- * Design tokens (design/ux.md, Toolkit). Each colour is named for its job, and dark mode swaps the values here,
+ * Design tokens (ux.md, Toolkit). Each colour is named for its job, and dark mode swaps the values here,
  * so components use `bg-surface` rather than a `bg-white dark:bg-stone-900` pair. The values follow the mockups:
  * stone for ink and surfaces, amber for the accent, teal for done, violet for custom parameters, red for overdue.
  */

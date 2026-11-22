@@ -1,4 +1,4 @@
-// The invite page (design/ux.md, Invite page): the golden path of stage 1 on a server with registration closed,
+// The invite page (ux.md, Invite page): the golden path of stage 1 on a server with registration closed,
 // and a small test for each state of the page.
 import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test";
 

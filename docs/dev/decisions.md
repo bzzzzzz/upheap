@@ -274,7 +274,7 @@ joined the supported databases and the CI matrix.
 background work between requests, so any timer would have to be Cloud Scheduler calling an endpoint; cold starts of
 about a second. Neon's pooler runs in transaction mode, which is why the migration lock is transaction-scoped
 (decision 13). Running the suites on Postgres found four portability fixes, listed in
-[architecture.md](architecture.md#data-model). The setup is in [operations.md](operations.md).
+[architecture.md](architecture.md#data-model). The setup is in [operations.md](../operator/operations.md).
 
 ## 22. One React app for every width
 
@@ -351,7 +351,7 @@ every parameter edit move the heap's version would close that gap but make renam
 download on Linux, and the release has to be repeatable from a tag.
 
 **Decision.** A tag `vX.Y.Z` on main, equal to the workspace version, runs
-[`release.yml`](../.github/workflows/release.yml): three native builds (Apple silicon macOS, and x86_64 and aarch64
+[`release.yml`](../../.github/workflows/release.yml): three native builds (Apple silicon macOS, and x86_64 and aarch64
 Linux), a GitHub Release, and a cask pushed to `bzzzzzz/homebrew-tap`.
 
 - **A cask, not a formula.** Homebrew expects formulas to build from source and prebuilt binaries to ship as casks.
@@ -366,14 +366,14 @@ Linux), a GitHub Release, and a cask pushed to `bzzzzzz/homebrew-tap`.
 - **Unsigned for now.** The cask clears the quarantine flag in its postflight, because Gatekeeper would refuse an
   un-notarized binary. The keychain entry is read through the system's `security` tool, so an upgrade doesn't ask.
   Notarizing later needs an Apple Developer ID and changes neither the cask's name nor the tap.
-- **Version-free asset names,** so `releases/latest/download/<name>` stays stable and the README's Linux commands
+- **Version-free asset names,** so `releases/latest/download/<name>` stays stable and the user's guide's Linux commands
   never change. The version is in the tag and in the URL path the cask uses.
 
 **Instead of.** A formula built from source, which makes every install compile; a release per binary target with
 versioned names; shipping the server binary too, which stays Docker-only.
 
 **Consequences.** A published release's assets are never replaced: a bad release is fixed by a new patch version.
-The tap needs a write deploy key, kept as a secret ([operations.md](operations.md#releasing-the-cli-and-the-server)).
+The tap needs a write deploy key, kept as a secret ([operations.md](../operator/operations.md#releasing-the-cli-and-the-server)).
 Release builds use no cache, so they take a few minutes longer.
 
 **Superseded in part** by §40: the server ships as a download too.

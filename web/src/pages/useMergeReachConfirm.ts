@@ -1,4 +1,4 @@
-// The flow both merge confirms share (design/ux.md, Tags and Parameters): the reach a write was refused with, the
+// The flow both merge confirms share (ux.md, Tags and Parameters): the reach a write was refused with, the
 // reach it is refused with again if it changed meanwhile, what differs between the two, and the confirm and cancel
 // that follow. The dialogs keep only what they list.
 import { useEffect, useId, useRef, useState, type RefObject } from "react";

@@ -7,7 +7,7 @@
 //!
 //! A heap parameter can be made its team's, and the team's same-named heap parameters merge into it, once the caller
 //! has confirmed the reach: the parameters it takes in, and how many items have a value for each. Like a team tag
-//! merge, that writes in every heap of the team, so it takes every heap lock (design/architecture.md, Cycle detection
+//! merge, that writes in every heap of the team, so it takes every heap lock (architecture.md, Cycle detection
 //! and locking).
 
 use std::collections::{BTreeMap, BTreeSet};

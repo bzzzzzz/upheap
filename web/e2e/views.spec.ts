@@ -1,4 +1,4 @@
-// Saved views in the Filters panel (design/ux.md, The list §6), at each width: save the list's settings, apply a
+// Saved views in the Filters panel (ux.md, The list §6), at each width: save the list's settings, apply a
 // view, and rename, update and archive it.
 import { addItem, expect, isPhone, row, test } from "./fixtures";
 import type { Page } from "@playwright/test";

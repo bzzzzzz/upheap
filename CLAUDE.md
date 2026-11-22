@@ -23,21 +23,26 @@ Build, run and check commands are in [README.md](README.md).
 
 ## Docs
 
-Read [design/engineering-principles.md](design/engineering-principles.md) before writing code. **Must follow.**
-Where code and principles disagree, fix one of them. [design/architecture.md](design/architecture.md) explains how
-it's built and why, and [design/decisions.md](design/decisions.md) records the few choices that are costly to
-reverse. [design/README.md](design/README.md) indexes every doc and says what each is for.
+Read [docs/dev/engineering-principles.md](docs/dev/engineering-principles.md) before writing code. **Must
+follow.** Where code and principles disagree, fix one of them.
+[docs/dev/architecture.md](docs/dev/architecture.md) explains how it's built and why, and
+[docs/dev/decisions.md](docs/dev/decisions.md) records the few choices that are costly to reverse.
+[docs/README.md](docs/README.md) indexes every doc and says what each is for:
+[docs/user/](docs/user/README.md) for someone using it, [docs/operator/](docs/operator/README.md) for someone
+running it, `docs/dev/` for us.
 
 Rules for the docs:
 
 1. **One home per fact.** What code or a generated file states, no doc repeats: endpoints are in `openapi.json`,
-   error codes in `crates/api/src/error.rs`, the schema in the migrations, configuration in README.md. Docs explain
-   mechanisms and reasons, and link to the rest.
-2. **Plans, status and ideas live in Upheap; `design/work/` holds designs.** A piece of work to do is a task in
+   error codes in `crates/api/src/error.rs`, the schema in the migrations, the commands to develop and check in
+   README.md, configuration in `docs/operator/configuration.md`. Docs explain mechanisms and reasons, and link to
+   the rest. The code is the main documentation and architecture.md a reference: most changes don't touch it, and
+   none adds an implementation detail to it.
+2. **Plans, status and ideas live in Upheap; `docs/dev/work/` holds designs.** A piece of work to do is a task in
    Upheap, in the heap it fits, with when it's done and what it waits for; an idea, an open question or a thought
    for later is a note there. Upheap ranks them and holds their state. Nothing in the repository lists them, and
    nothing lists what's built: the code and product.md say that, and the pull requests are the history.
-3. **A design for unbuilt work is temporary.** `design/work/<name>.md` holds the design of a feature or change
+3. **A design for unbuilt work is temporary.** `docs/dev/work/<name>.md` holds the design of a feature or change
    while it's built: what it is, why, and how it works. Nothing outside `work/` links into it but CLAUDE.md and the
    index: code and the permanent docs cite the permanent doc that holds a mechanism, or nothing until one does.
    Once built, the mechanisms worth keeping move into architecture.md or the module docs, what passes rule 4 into
@@ -46,8 +51,8 @@ Rules for the docs:
    that only a product change could break: not how a screen behaves, an edge case or an error state. decisions.md
    takes a choice that had a real alternative someone would propose again, is costly to reverse, and has a reason
    the code can't show: not a name, a label, wording, or anything one pull request can undo. The rest belongs in
-   a design in `design/work/`, ux.md, architecture.md, a code comment or the pull request's description. When in doubt, leave
-   it out, and name every entry added to either doc in the pull request's description.
+   a design in `docs/dev/work/`, ux.md, architecture.md, a code comment or the pull request's description. When in
+   doubt, leave it out, and name every entry added to either doc in the pull request's description.
 5. **The repository reads without Upheap.** Not every reader can open the heap, so nothing committed depends on
    it. No doc, code comment, test or commit message names an Upheap item by key, title or link, names the heap it
    is in, or says that something is a task, a note or an idea in Upheap. A design states its stages, what it leaves
@@ -56,15 +61,15 @@ Rules for the docs:
    pull request's description may name the items it serves. Upheap as the product a doc describes is something
    else: "the person replies in Upheap" is the feature, "an idea in Upheap" is our planning.
 
-When asked to write a "doc", write it as a Markdown file in `design/`, or in `design/work/` for unbuilt work, and
-add it to `design/README.md`, not as an external document (Claude Docs,
+When asked to write a "doc", write it as a Markdown file under `docs/`, in the folder of its reader, or in
+`docs/dev/work/` for unbuilt work, and add it to `docs/README.md`, not as an external document (Claude Docs,
 Notion, Google Docs).
 
 When you work on an item in Upheap, record progress, findings, decisions and where the work is as comments on the
 item (`upheap comment add`), not by rewriting its context. Rewrite an item's context only when the task's
 definition did change: what the work is, or what done looks like. Then say in a comment what changed and why.
 
-Never add a plan, progress, what's next, an idea, an open question or a follow-up to a file in `design/work/`. Add it to
+Never add a plan, progress, what's next, an idea, an open question or a follow-up to a file in `docs/dev/work/`. Add it to
 Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can use Upheap: the `upheap` command is
 installed and signed in. Leave no pointer to it in the file (rule 5). When it can't, name the follow-up in your reply
 and in the pull request's description, so the owner can add it.

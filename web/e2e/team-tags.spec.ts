@@ -1,4 +1,4 @@
-// Team tags (design/ux.md, Tags): made on the Team page, picked and filtered in every heap of the team, renamed in one
+// Team tags (ux.md, Tags): made on the Team page, picked and filtered in every heap of the team, renamed in one
 // place, and listed on a heap's Tags tab.
 import type { Page } from "@playwright/test";
 

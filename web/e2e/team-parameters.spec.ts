@@ -1,4 +1,4 @@
-// Team parameters (design/ux.md, Heap settings and Teams and Team): made on the Team page, chosen by each heap on its
+// Team parameters (ux.md, Heap settings and Teams and Team): made on the Team page, chosen by each heap on its
 // Parameters tab, weighted on its Ranking page, and set on items like any parameter.
 import type { Page } from "@playwright/test";
 import {

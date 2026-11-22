@@ -1,4 +1,4 @@
-// An item open full screen (design/ux.md, The item): `full=1` in the address, a header button, and Escape, ✕ and Back
+// An item open full screen (ux.md, The item): `full=1` in the address, a header button, and Escape, ✕ and Back
 // out of it. A phone has no button, only the full-height sheet a full link opens.
 import type { Page } from "@playwright/test";
 

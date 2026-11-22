@@ -1,4 +1,4 @@
-// Reminders (design/ux.md: The list, The item, Adding an item), at each width: added with a date, out of the list
+// Reminders (ux.md: The list, The item, Adding an item), at each width: added with a date, out of the list
 // until it, found by Filters › Show and by search, and made a task once it has arrived.
 import { addDialog, closeField, expect, field, isPhone, itemPane, test, type Need } from "./fixtures";
 import type { Page } from "@playwright/test";

@@ -1,6 +1,6 @@
 //! Connecting to the database at startup, retried with backoff: a database that scales to zero (Neon) can take
 //! longer to wake than one try's timeout, and an instance that exits on the first timeout fails its deploy. See
-//! "Startup and shutdown" in design/architecture.md.
+//! "Startup and shutdown" in architecture.md.
 
 use std::future::Future;
 use std::time::Duration;

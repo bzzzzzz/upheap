@@ -44,8 +44,8 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
    personal heap. Later visits sign in; when the session ends, sign-in brings the user back to the page they were on
    (recovery).
 2. **Getting into a shared heap** (setup). Someone creates a team on Teams and becomes its admin; the Team page
-   opens. The admin adds a heap, adds each teammate (who must have an account; invitations come later), and makes a
-   second admin so the team doesn't hang on one person. A teammate finds the heap in the sidebar or the heap
+   opens. The admin adds a heap, adds each teammate (who must have an account, or sends an invite link to one who
+   hasn't), and makes a second admin so the team doesn't hang on one person. A teammate finds the heap in the sidebar or the heap
    switcher.
 3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one with
    its row's play button, `s`, a swipe left or Start in the item; finish it with its row's circle, a swipe right, or
@@ -1236,7 +1236,7 @@ history entry as it is shown, so a reload doesn't repeat it.
 
 `/reset/{token}` is where a password reset link leads, outside the app's shell like sign-in and in the same card, the
 same way at every width, and needs no sign-in: holding the link is the permission, so a signed-in visitor sees the
-same page. The link comes from the operator, who makes it with the server's command (README, Resetting a password), or
+same page. The link comes from the operator, who makes it with the server's command (accounts.md, Resetting a password), or
 by mail, when the user asked for it on the sign-in page. The two are the same kind of link. The server decides
 the state, and the page only shows it:
 

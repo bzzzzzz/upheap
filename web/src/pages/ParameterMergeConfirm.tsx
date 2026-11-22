@@ -1,4 +1,4 @@
-// The confirm before a heap parameter becomes its team's and same-named heap parameters merge into it (design/ux.md,
+// The confirm before a heap parameter becomes its team's and same-named heap parameters merge into it (ux.md,
 // Parameters): the shell of the team tag's merge confirm, with the parameters it takes in.
 import { ApiProblem } from "../api/client";
 import type { ParameterMergeReach } from "../api/schema";

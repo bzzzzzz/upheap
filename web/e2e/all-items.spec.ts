@@ -1,4 +1,4 @@
-// The All items page (design/ux.md, All items): every open item of the person's heaps in one list, at each width.
+// The All items page (ux.md, All items): every open item of the person's heaps in one list, at each width.
 // Server build only, as it is the list of the account's heaps.
 import type { Page } from "@playwright/test";
 

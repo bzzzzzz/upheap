@@ -1,7 +1,7 @@
 import { expect, expectOrder, itemPane, openItem, row, seed, test } from "./fixtures";
 import type { Locator, Page } from "@playwright/test";
 
-// Placing an item by hand in the priority list (design/ux.md, The list): the grip, Alt+↑/↓ and a long press on a phone.
+// Placing an item by hand in the priority list (ux.md, The list): the grip, Alt+↑/↓ and a long press on a phone.
 
 const headers = { "x-csrf-protection": "1" };
 

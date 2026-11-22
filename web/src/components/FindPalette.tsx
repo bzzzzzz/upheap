@@ -40,7 +40,7 @@ const DEBOUNCE_MS = 150;
 const sectionClass = "flex flex-col not-first:mt-3";
 
 /**
- * The palette ⌘K opens (design/ux.md, Keyboard): finds an item by title or key in every heap, goes to a heap, adds the
+ * The palette ⌘K opens (ux.md, Keyboard): finds an item by title or key in every heap, goes to a heap, adds the
  * text as a new item in the heap on screen, and with Tab shows the highlighted item's actions. It is a modal at the top
  * of the screen at every width; on a phone it fills the width and ends above the on-screen keyboard. The shell keeps it
  * open as a history entry: going to an item or a heap replaces that entry, which closes it, and `onOpenChange(false)`
@@ -274,7 +274,7 @@ function placeLabel(me: Me, row: SearchRow): string {
 
 /**
  * One found item: its kind, title and key, and where it is. A closed one has a muted title and its state just before
- * the key, at every width (design/ux.md, Find); one in progress or blocked has its state after the place. `at` is its
+ * the key, at every width (ux.md, Find); one in progress or blocked has its state after the place. `at` is its
  * place in the results.
  */
 function ItemResult({ row, at, me, onAction }: { row: SearchRow; at: number; me: Me; onAction: () => void }) {

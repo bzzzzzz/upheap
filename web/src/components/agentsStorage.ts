@@ -1,4 +1,4 @@
-// Whether the person folded Your decision on the Agents page (design/ux.md, Agents). It is about this device's habits,
+// Whether the person folded Your decision on the Agents page (ux.md, Agents). It is about this device's habits,
 // so it lives in localStorage like the heap switcher's folded teams. Storage can be blocked or hold anything, so a
 // failed read is "not folded" and a failed write just isn't remembered.
 

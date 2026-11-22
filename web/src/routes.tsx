@@ -1,5 +1,5 @@
 // The URL is the state: the heap and the page live in the route, so links and reloads work. Paths name teams, heaps
-// and items by their handles (design/architecture.md, Handles), and `/h/…` short links expand to them.
+// and items by their handles (architecture.md, Handles), and `/h/…` short links expand to them.
 import type { QueryClient } from "@tanstack/react-query";
 import {
   type AnyRouteMatch,
@@ -541,7 +541,7 @@ const dataRoute = createRoute({
   },
 });
 
-// Short links (design/architecture.md, Handles): the handles alone, in fixed positions, swapped for the full path as they open.
+// Short links (architecture.md, Handles): the handles alone, in fixed positions, swapped for the full path as they open.
 // The router does it, so the server needs no route for them.
 const shortTeamRoute = createRoute({
   getParentRoute: () => rootRoute,

@@ -44,7 +44,7 @@ export const openItemCount = (me: Me, team?: string) =>
       0,
     );
 
-/** From this many unarchived heaps it gets a search field, Recent and folding teams (design/ux.md, Phone details). */
+/** From this many unarchived heaps it gets a search field, Recent and folding teams (ux.md, Phone details). */
 export const LONG_LIST = 8;
 /** How many recent heaps show. */
 const RECENT_SHOWN = 4;

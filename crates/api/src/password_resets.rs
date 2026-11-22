@@ -1,5 +1,5 @@
 //! Asking for a password reset link by mail, opening a link and setting a password through it, by the link's token.
-//! The operator makes links with a server command (README, Resetting a password).
+//! The operator makes links with a server command (accounts.md, Resetting a password).
 
 use api_types::auth::{
     PasswordResetAccountDto, PasswordResetDto, PasswordResetOptionsDto, PasswordResetStateDto, RequestPasswordResetDto,

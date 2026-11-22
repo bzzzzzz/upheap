@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 /**
- * The short link to a team, heap or item (design/architecture.md, Handles): `/h/` and its handles, which the router expands
+ * The short link to a team, heap or item (architecture.md, Handles): `/h/` and its handles, which the router expands
  * to the full path. Below the app's base.
  */
 export function shortLink(...handles: string[]): string {

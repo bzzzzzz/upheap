@@ -1,6 +1,6 @@
 import { addItem, expect, markDoneFromList, row, test } from "./fixtures";
 
-// Not-found pages, the connection banner and the request ID on server errors (design/ux.md, Conflicts and errors).
+// Not-found pages, the connection banner and the request ID on server errors (ux.md, Conflicts and errors).
 
 test("an unknown address shows Page not found, and its button goes to Waiting for me", async ({ page }) => {
   await page.goto("/no-such-page");

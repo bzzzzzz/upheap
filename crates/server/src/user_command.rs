@@ -27,7 +27,7 @@ use crate::terminal::for_terminal;
 
 const USAGE: &str = "usage: upheap-server user reset-link <username or email>\n       upheap-server user confirm <username or email>\n       upheap-server user list\n       upheap-server user deactivate <username or email>\n       upheap-server user reactivate <username or email>\n       upheap-server user make-operator <username or email>\n       upheap-server user remove-operator <username or email>";
 
-/// Exit codes, as documented in the README (Resetting a password, Operators). `0` is a link made, an address
+/// Exit codes, as documented in accounts.md (Resetting a password, Operators and accounts). `0` is a link made, an address
 /// confirmed or already confirmed, or an account change made or already so.
 const EXIT_UNEXPECTED: u8 = 1;
 const EXIT_USAGE: u8 = 2;

@@ -1,4 +1,4 @@
-// Connecting the CLI (design/architecture.md, Authentication and authorization §2): the consent page, as the browser
+// Connecting the CLI (architecture.md, Authentication and authorization §2): the consent page, as the browser
 // half of the OAuth flow. The CLI's loopback listener is stood in for by routing its address, so no port has to be
 // opened.
 import { createHash, randomBytes } from "node:crypto";

@@ -1,4 +1,4 @@
-// The Email card on Account: changing the address, confirmed by a link mailed to the new one (design/ux.md, Email).
+// The Email card on Account: changing the address, confirmed by a link mailed to the new one (ux.md, Email).
 // The server says so with the `change_email` action; without it the address is a read-only row in the Profile card.
 import { useRef, useState, type FormEvent } from "react";
 

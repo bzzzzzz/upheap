@@ -1,6 +1,6 @@
 import { addItem, expect, itemPane, openItem, row, test } from "./fixtures";
 
-// One step ahead in the list and the item (design/ux.md, The list and The item), with a mouse: the rows' state
+// One step ahead in the list and the item (ux.md, The list and The item), with a mouse: the rows' state
 // button and Done, quiet until the row is hovered, and a phone swipes instead.
 test.beforeEach(({ isMobile }) => {
   test.skip(isMobile, "The quiet-until-hover buttons and the pane's ↑ ↓ are for a wide screen with a mouse.");
