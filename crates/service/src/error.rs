@@ -8,6 +8,7 @@ use domain::parameter::ParameterError;
 use domain::password_reset::ResetLinkError;
 use domain::permission::Permission;
 use domain::question::QuestionError;
+use domain::ranking::PlaceError;
 use domain::run::{NotReached, RunError};
 use domain::step::StepError;
 use domain::team::TeamError;
@@ -90,6 +91,9 @@ pub enum ServiceError {
     VersionConflict { expected: Version, current: Version },
     #[error(transparent)]
     Item(#[from] ItemError),
+    /// An item can't be placed where it was asked to.
+    #[error(transparent)]
+    Place(#[from] PlaceError),
     #[error(transparent)]
     Step(#[from] StepError),
     #[error(transparent)]

@@ -591,6 +591,17 @@ fn describe_phrase(
             return (Cow::Borrowed("moved item here from another team"), names_entity);
         }
     }
+    if action == AuditAction::ItemPlaced {
+        let after = diff
+            .get(AuditField::Placement.code())
+            .and_then(|placement| placement.get("after"))
+            .and_then(Value::as_str);
+        return match after {
+            Some("up") => (Cow::Borrowed("moved up item"), names_entity),
+            Some("down") => (Cow::Borrowed("moved down item"), names_entity),
+            _ => (Cow::Borrowed("reset the list place of item"), names_entity),
+        };
+    }
     if action == AuditAction::MemberRoleChanged
         && diff.get(AuditField::MadeBy.code()).and_then(Value::as_str) == Some("operator")
     {
@@ -662,6 +673,8 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::ItemCreated, _) => ("added item", true),
         (AuditAction::ItemUpdated, _) => ("edited item", true),
         (AuditAction::ItemMoved, _) => ("moved item", true),
+        // `describe_phrase` says which way it was moved.
+        (AuditAction::ItemPlaced, _) => ("reset the list place of item", true),
         (AuditAction::StepAdded, _) => ("added a step to", true),
         (AuditAction::StepUpdated, _) => ("changed a step of", true),
         (AuditAction::QuestionAsked, _) => ("asked a question on", true),
@@ -758,6 +771,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::HeapPriorityChanged
         | AuditAction::ItemUpdated
         | AuditAction::ItemMoved
+        | AuditAction::ItemPlaced
         | AuditAction::TurnReached
         | AuditAction::TurnRedone
         | AuditAction::ReplyChanged
@@ -896,6 +910,7 @@ const fn describe_field(field: AuditField, entity_type: EntityType) -> &'static 
         AuditField::StepContext => "Step context",
         AuditField::StepState => "Step state",
         AuditField::StepPlace => "Step place",
+        AuditField::Placement => "Place in the list",
         AuditField::Question => "Question",
         AuditField::QuestionKind | AuditField::Kind => "Kind",
         AuditField::QuestionText => "Question text",
@@ -1029,6 +1044,8 @@ fn reading(field: AuditField, entity_type: EntityType) -> Reading {
         AuditField::Name if entity_type == EntityType::User => Reading::Unshown,
         // The name the log of the team an item left keeps for it; the phrase and the heap say the rest.
         AuditField::ItemTitle => Reading::Unshown,
+        // The phrase says which way the item was placed.
+        AuditField::Placement => Reading::Unshown,
         AuditField::Parameters => Reading::PerParameter,
         AuditField::Kind => coded(|code| Kind::from_code(code).map(Kind::label)),
         AuditField::Stage => coded(|code| Stage::from_code(code).map(Stage::label)),

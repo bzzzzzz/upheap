@@ -275,3 +275,6 @@ export const itemEditsScope = { id: "item-edits" } as const;
 
 /** The key of `useUpdateItem`'s mutations in `heap`, so `useSavingFields` finds those pending, whichever component pressed. */
 export const itemEditKey = (heap: HeapRef) => ["item-edit", heapPath(heap)] as const;
+
+/** The key of the mutations that place an item by hand in `heap`, so a fetch waits for the last of a quick run of them. */
+export const placingKey = (heap: HeapRef) => ["placing", heapPath(heap)] as const;

@@ -1,7 +1,7 @@
 use sea_orm::entity::prelude::*;
 
 #[sea_orm::model]
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "items")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -20,6 +20,8 @@ pub struct Model {
     pub due_firm: Option<bool>,
     /// UTC milliseconds; set for a reminder, and kept when it becomes a task.
     pub arrives_at: Option<i64>,
+    /// The multiplier a person placed the item with; `None` when it is not placed.
+    pub placement: Option<f64>,
     pub created_at: i64,
     pub created_by: Option<String>,
     pub closed_at: Option<i64>,

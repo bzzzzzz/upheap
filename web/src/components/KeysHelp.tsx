@@ -27,6 +27,7 @@ const GROUPS: { title: string; keys: { keys: string[]; does: string }[] }[] = [
       { keys: ["S"], does: "Start" },
       { keys: ["B"], does: "Block" },
       { keys: ["X"], does: "Mark done" },
+      { keys: ["⌥↑↓", "Alt ↑↓"], does: "Move the item up or down, in the priority sort" },
       { keys: ["A"], does: "Send to an agent, one step" },
       { keys: ["N"], does: "Add an item" },
       { keys: ["/"], does: "Search" },

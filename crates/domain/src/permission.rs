@@ -79,6 +79,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         AuditAction::ItemCreated
         | AuditAction::ItemUpdated
         | AuditAction::ItemMoved
+        | AuditAction::ItemPlaced
         | AuditAction::HeapContextUpdated
         | AuditAction::StepAdded
         | AuditAction::StepUpdated

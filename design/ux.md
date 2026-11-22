@@ -322,6 +322,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    state it's in), until one is picked or the row is tapped. Each is followed by a toast with Undo. A tap just after a drag doesn't open the item.
 2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of 120 px
    springs it back.
+3. On a row that can be placed (The list point 20), a finger held for 400 ms within about 8 px lifts it, and from then
+   the finger drags it up or down. A move past 8 px before then ends the press, so a sideways move still swipes (point 1)
+   and a vertical one scrolls; a quick tap still opens the item. While a row is lifted the page doesn't scroll and the
+   row doesn't swipe. The press opens no link menu or callout.
 
 ## The list
 
@@ -469,6 +473,23 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     moved:" and a line for each, "Title — reason", with **Close**; Close keeps select mode with only the refused
     rows selected, so Move can be tried again. A request that fails as a whole shows its error above the buttons, and
     nothing moved.
+20. **Placing a row by hand** moves an item up or down in the ranked group, "Up next" or the untitled group when
+    nothing is pinned, and only in the Priority sort. It is off in any other sort, with text in the search box, in
+    select mode, on pinned and blocked rows and reminders to come, and for someone who can't edit the items (a reader,
+    an archived heap); tag and parameter filters leave it on, as the server places the item next to the row it is dropped
+    by. The item lands in the order of the list on screen, so the row stays where it was put as time passes, and the
+    server says which way it moved: the row's first reason is "Moved up" or "Moved down". On a wide screen a grip
+    sits at the end of the row after the kind and stage icons, in a slot of its own, quiet until the row is hovered or
+    has focus within, and above the row's link, so pressing it never opens the item. Dragging it moves the row with the
+    pointer; a 2 px accent line shows where it lands, which is always within the group; the pane scrolls near its edge;
+    Escape or a cancelled pointer puts the row back and saves nothing, as for a step. A click or Enter on the grip opens
+    a menu, "Move “title”", with Move up and Move down, each left out at its end of the group. Alt+↑ and Alt+↓ on the
+    focused row move it one place; the focus stays on the row. On a phone or tablet there is no grip: a long press
+    (Phone details, gesture 3) lifts the row, which then follows the finger with the same line and
+    scrolling, and lifting the finger drops it. A move that lands where the row was does nothing. A move saves at once,
+    and the toast says "Moved “Rotate the certs” up." (or down) with Undo, which takes the placing away when the item had
+    none, and otherwise puts the item back next to the row that was above it (below it, when it was first). A move the
+    server refuses, because the item changed meanwhile or the row it was dropped by closed, puts the row back and says why.
 
 ## The item
 
@@ -745,6 +766,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     leaving after a walk shows the pane of the item walked to. The list stays under it, so it keeps its scroll
     position and selection. A phone has no button, as the sheet already fills most of the screen. A full link opened
     on a phone shows the sheet at full height.
+24. An item that was placed by hand (The list point 20) says so in a muted line under the status line: "Moved up in the
+    list" or "Moved down in the list", with a small **Reset** for someone who can edit it. Reset puts the item back by
+    its fields and says "Reset its place." in a toast with Undo, which places it next to the row it had above it (below
+    it, when it was first) in the ranked group on screen; with the item not in that group, the toast has no Undo. A
+    closed item shows no line, and the line goes with the placing.
 
 ## Adding an item
 
@@ -1414,9 +1440,10 @@ The wide screen shows its keys, and `?` lists them all:
 1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
    the search box, `S` `B` `X` at the end of the focused row, `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog,
    `⌘K` (`Ctrl K`) on Find in the sidebar.
-2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
+2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list. Alt+↑ and Alt+↓ on a row move the
+   item up or down (The list point 20), on any width with a keyboard.
 3. A hint bar at the bottom of the window, under the heap's list however short it is, has the keys for what's on
-   screen: moving and opening, `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and
+   screen: moving and opening, `⌥↑↓` (`Alt ↑↓` off a Mac) where rows can be placed (The list point 20), `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and
    closing with one open; selecting in select mode. It ends with `?`, All keys.
 4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Keys are ignored in a field. Open and
    Closed have no keys: they are one click away in the sidebar.

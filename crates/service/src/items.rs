@@ -1622,7 +1622,7 @@ async fn build_comment_views(
 /// `now`, and its parameters in use. This is where reminders to come leave the ranking: every list, the agents'
 /// queue and Waiting for me read the heap's open items through it. The split is at the server's `now`, not at the
 /// time a list ranks at, so a reminder whose date has come is ranked even in a list frozen from before it.
-async fn load_open_items(
+pub(crate) async fn load_open_items(
     db: &impl ConnectionTrait,
     heap_id: HeapId,
     now: Timestamp,
@@ -1689,7 +1689,7 @@ pub(crate) async fn rank_open_items(
 }
 
 /// The heap's ranked tags in its tag order, the highest first, out of all its tags.
-fn ordered_tags<'t>(order: &[TagId], tags: &'t [Tag]) -> Vec<&'t Tag> {
+pub(crate) fn ordered_tags<'t>(order: &[TagId], tags: &'t [Tag]) -> Vec<&'t Tag> {
     order
         .iter()
         .filter_map(|id| tags.iter().find(|tag| tag.id == *id))

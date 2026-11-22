@@ -21,7 +21,7 @@ use store::{ConnectionTrait, DatabaseConnection};
 use uuid::Uuid;
 
 /// Migrations before the comment runs one.
-const BEFORE_COMMENT_RUNS: u32 = 54;
+const BEFORE_COMMENT_RUNS: u32 = 55;
 
 fn at(millis: i64) -> Result<Timestamp> {
     Timestamp::from_millis(millis).context("in range")
