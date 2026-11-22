@@ -10,7 +10,7 @@
 //!
 //! **Custom parameters** count like the heap's own factors: each parameter in use adds its weight times where the
 //! item's option sits in the parameter's order, from 1 for the first option to 0 for the last. An unset value
-//! counts as the last option (product.md, Priority §4), and an archived option as the option that replaced it.
+//! counts as the last option (product.md, Items §4), and an archived option as the option that replaced it.
 //!
 //! **Tags** take part through the heap's tag order: an item's highest-ranked tag among those in the order scores
 //! from 1 for the first tag down to 0 for the last, times the Tags weight. An item with no ranked tag sits at the
@@ -18,7 +18,7 @@
 //! never add. With the weight at 0 the component is nothing and the score is the one formula V2 gave.
 //!
 //! **Held back by** lists the fields the person could change to lift an item: a low need, no due date, unset sizes,
-//! a tag low in the order. It follows the formula's weights and its defaults for unset sizes (product.md, Priority §9). A blocker ranked by
+//! a tag low in the order. It follows the formula's weights and its defaults for unset sizes (product.md, Priority §6). A blocker ranked by
 //! what it blocks has none, since its own fields don't move it.
 //!
 //! **Placement** is a multiplier on an item's score, its own or what it inherits, set when a person drops it above or
@@ -403,8 +403,8 @@ const BEYOND_ANCHOR: f64 = 1.1;
 
 /// What keeps `item` from ranking higher: a low need, no due date and unset sizes and a tag low in the order, each only while its factor
 /// counts, since otherwise changing it would move nothing. The need counts through its weight and through the
-/// age factor, which it scales. Unset values count as the lowest (product.md, Priority §4), and the item answers
-/// "why isn't this higher?" with them (Priority §9). Custom parameters are not named.
+/// age factor, which it scales. Unset values count as the lowest (product.md, Items §4), and the item answers
+/// "why isn't this higher?" with them (Priority §6). Custom parameters are not named.
 fn find_gaps(
     formula: FormulaVersion,
     policy: &HeapPolicy,

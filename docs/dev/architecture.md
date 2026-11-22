@@ -6,8 +6,8 @@ their reasons, are in [decisions.md](decisions.md).
 
 This doc explains mechanisms and reasons. What the code states, it doesn't repeat: the endpoints are in
 `openapi.json` (`upheap-server openapi` prints it), the error codes in `crates/api/src/error.rs`, the schema in
-`crates/store/src/migration`, the configuration variables in [configuration.md](../operator/configuration.md) and the crate layout in
-[README.md](../../README.md#layout).
+`crates/store/src/migration`, the configuration variables in
+[configuration.md](../operator/configuration.md) and the crate layout in [README.md](../../README.md#layout).
 
 ## Principles
 
@@ -45,7 +45,13 @@ Dependencies point one way: `server → api → service → store, domain`, with
 `server → mail` beside it, and `service → mail` for the mail it sends. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and
 property-tested in isolation, and `store` and `api` never depend on each other.
 `api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
-linking the server. The crates and their roles are listed in [README.md](../../README.md#layout); each crate's root
+linking the server. It copies each domain enum as a type of its own on purpose: the API tolerates values it
+doesn't know in what it only reads, leaves some values out, and its list of values is the reviewed contract. The
+conversions are exhaustive `match`es, so a new value fails the build until it is added, and a macro declaring the
+copies was tried and dropped because it would hide that contract. In `domain`, an enum whose codes are stored is
+declared with `coded_enum!`, which exists for the one thing a `match` can't check: that the list of every value
+holds every variant. Files that nearly every feature edits (`domain::permission`, `api/src/error.rs`, the access
+control table test) are meant to be: the build or the test fails until the feature is classified there. The crates and their roles are listed in [README.md](../../README.md#layout); each crate's root
 module says what it owns.
 
 ## Data model
@@ -122,7 +128,6 @@ The tables and columns are in the migrations. These are the conventions they fol
   come has no score: its rows come after the ranked ones, by the reminder's date, soonest first. It returns at most
   500 rows, with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
   whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
-  `details` and `reply_comment` are `MEDIUMTEXT` on MySQL.
   **A review and a done proposal are question kinds** with fixed choices too (Approved or Changes asked; Close as done
   or Not yet), asked only by an agent in a run whose turn goes to done, on a task. A review's link, piece (the link
   itself when none is named) and round live on its row; the round is fixed when it is asked, as one more than the
@@ -140,14 +145,13 @@ The tables and columns are in the migrations. These are the conventions they fol
 number)`, and never reused; it is the comment's name (`k3x9a.c3`). Any item takes one, open or closed, in an active
   heap. An item has at most 200, and the 201st is refused (`too_many_comments`): the size assumption that lets a
   single-item response carry all of them, at most 200 times 20,000 characters, while a list row carries `comments:
-null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. `body` is
-  `MEDIUMTEXT` on MySQL. A comment written in a run keeps the run (`run_id`, from the request's `Upheap-Run`), as its
+null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. A comment written in a run keeps the run (`run_id`, from the request's `Upheap-Run`), as its
   audit entry does, so clients show it as the agent's without reading the history; a person's has none.
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with the send it belongs to
   (`send_id`, the ID of the send's first turn: a turn a person or the prepare setting opens starts a send, and the
   next stage of an all-the-way send and a split's turn for its task carry it on), a reach (one state, or
   all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens, or picked by the
-  person: defined, for a note as written, which all the way opens at defined anyway; then stored), the person's optional line (`MEDIUMTEXT` on MySQL), who opened it and whether the person sent it or the heap's
+  person: defined, for a note as written, which all the way opens at defined anyway; then stored), the person's optional line, who opened it and whether the person sent it or the heap's
   prepare setting did, then when and by whom it ended and how (taken back, handed back, or reached), its watch, and how many of its runs in a
   row failed (`failed_runs`).
   Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
@@ -308,7 +312,12 @@ null`; raising it means paging them. Moving an item keeps its comments, which ha
   for it.
 - **The heap's ranking policy** is its row: the need, age, deadline, value and tags weights on `heaps`, plus each
   parameter's weight, and the heap's tag order. The weights and the order change together through one endpoint, in
-  one transaction under the heap lock. The policy includes the weights of the team parameters the heap uses, which
+  one transaction under the heap lock, because a weight only means something next to the others (a factor's share
+  is its weight out of the total) and separate writes per row could leave the policy half-saved. The heap's version
+  orders these saves, moving on also when one changes only parameter weights. A parameter's own `PATCH` still sets
+  its weight alone, guarded by the parameter's version only, so a weights save made meanwhile against other
+  parameters still succeeds; making every parameter edit move the heap's version would close that gap but make
+  renames conflict with parameter edits. The policy includes the weights of the team parameters the heap uses, which
   are on its use rows. The tag order is a JSON list of tag IDs on `heaps.tag_order`, the highest
   first (`NULL` when empty), rather than a rank column on `tags` or a table of its own: it belongs to the heap, it is
   saved under the heap's version with the weights, and a tag shared by several heaps (a team tag) can then sit at its
@@ -417,7 +426,7 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    every item in a group sorted by something other than priority, where those fields don't move it.
 5. **Ties** that the chain length doesn't settle go to the older item, then to the ID, so the order is fully
    deterministic.
-6. **Placement** (product.md, Priority §11) is the one stored input that isn't a field: a positive multiplier on
+6. **Placement** (product.md, Priority §8) is the one stored input that isn't a field: a positive multiplier on
    one item, or none. Ranking multiplies the item's score (its own or what it inherits) by it, then applies the
    blocker rule again, so a blocker still never ranks below what it blocks. On a drop the client sends the anchor,
    the side and its list's `as_of`; the service ranks the heap at that `as_of` with the item's own placement left
@@ -719,6 +728,39 @@ frame-ancestors 'none'`), so a page can't hide the consent page under something 
      their sign-ins as a push would. A record being created with the subject, or moved onto it, has no such row yet. On MySQL the lock's gap lock makes that write wait, and the SCIM
      user writes run at READ COMMITTED so that after the wait they see the account; on Postgres both sides also take
      an advisory lock on the subject. Password sign-in, invite registration and reset never sync.
+   - **Provisioning over SCIM.** With `UPHEAP_SCIM_TOKEN` set, the provider pushes its users and groups to
+     `/scim/v2`, outside `/api/v1`, in SCIM's own JSON and error shape and not in `openapi.json`: the RFCs (7643,
+     7644) are the contract and providers are the only clients
+     ([decisions.md](decisions.md#42-with-scim-set-up-the-providers-pushes-decide-a-persons-groups-at-a-scim-endpoint-of-their-own)).
+     The token is not a user: the server compares SHA-256 digests of what it got and of the setting, never logs it,
+     and `/api/v1` refuses it like any unknown bearer token. Unset, the paths answer `404` like any unknown path.
+     Three tables mirror the provider (`scim_users`, `scim_groups`, `scim_group_members`), each resource kept whole
+     as it was sent. They are the provider's data, not the person's, so a SCIM `DELETE` removes the rows;
+     the audit log keeps every team change they caused. Users and
+     groups the map doesn't name are kept like the rest, so a group mapped later already has its members.
+     A SCIM user is linked to an account through `user_identities`: the configured issuer and the SCIM user's
+     `externalId` as the subject, never email or `userName`. The link is looked up each time and not stored, so a
+     person who signs in for the first time is linked from then on. `externalId` carries the subject by rule rather
+     than by a setting, since every provider that can push the subject can put it there. It isn't unique: several
+     SCIM users with one `externalId` are one person, read by one rule for a push, a sign-in and the refusal alike.
+     The person is inactive only when every record is, and their groups are those of the active records together.
+     A group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its `displayName` or its `externalId`, so the operator
+     writes one map in the words the ID token already uses. Each mapped team is decided on its own: a team is
+     **pushed** when every one of its groups matches a stored group, and only then does a push change it. So pushing
+     the group of one team never empties another, pushing a team's groups one at a time doesn't empty it, and
+     pushing people before their groups empties nothing. A write that can change someone's groups runs in one
+     transaction with the team changes it causes, through the same sync a sign-in runs and with the same audit
+     entries. The write that makes a team pushed for the first time syncs every pushed person for it; the write that
+     makes it stop being pushed syncs the people it touched with their remaining groups, and from then on the team
+     follows the token again. At sign-in, a person with a SCIM record is synced from the pushed state for pushed
+     teams, not from the ID token, so a token minted a moment before a push can't undo it.
+     A write that leaves a linked person inactive, or deletes their last record, ends every sign-in of their account
+     in the same transaction and records `account_deactivated` in their personal team once; a repeated push records
+     nothing. While SCIM is set up and the person is inactive, opening a session fails where every sign-in,
+     registration and password reset opens one, and the surrounding transaction rolls back. The provider normally
+     refuses such a person itself; this is the backstop, there because a password reset could otherwise give a
+     provider-made account a password. A person with no record is not off. The `PATCH` forms and filters the
+     endpoints accept are the ones Okta and Entra ID send, and are in the module docs of `service::scim`.
    - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)
      makes every password path in the service layer fail with `PasswordSignInOff`, so the API and the operator
      command both refuse: sign-in, registration, invite registration, asking for and using a reset link, and the
@@ -1096,8 +1138,8 @@ section is how it maps onto this API.
    refusals. `item block --by` sets `blocked_by_item_id` and `--reason` sets `blocked_reason` in the
    same request; a bare key there is in the blocked item's heap.
 4. **Due times** are a rough choice, matched by label against `GET /due-choices` (ignoring case, `-` as a space) and
-   sent with `firm: false`, or a `YYYY-MM-DD` date with `firm: true`
-   ([decisions.md](decisions.md#26-the-due-picker-offers-rough-choices-the-server-owns)). Every request carries the
+   sent with `firm: false`, or a `YYYY-MM-DD` date with `firm: true`. The server owns the list so that a choice
+   always reads back with the label it was picked by ([Time and timezones](#time-and-timezones) §5). Every request carries the
    `Time-Zone` header with the machine's zone, so dates and labels read as they would in the browser. The `--due`
    help names the choices from `domain::due`, the rule the server lists them by, since help is read offline; the
    dates and the match still come from the server.

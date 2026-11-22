@@ -707,7 +707,7 @@ function AddedBy({ item }: { item: Item }) {
 }
 
 /**
- * Where the item came from (work-with-agents, W8): `From: "Rotate the certs", a note`, linking to that item, and
+ * Where the item came from: `From: "Rotate the certs", a note`, linking to that item, and
  * " · added by an agent" when a run added it. An item whose origin the viewer can't see shows "Added by an agent"
  * alone. Nothing when it has neither.
  */

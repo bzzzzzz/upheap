@@ -13,7 +13,7 @@ both say so. The numbers have gaps: an entry that no longer passes the bar is re
 
 ## 1. A stable order comes from a frozen `as_of`, not from server state
 
-**Context.** The list must not reorder on its own during a session (product.md, Priority §6), while an edited item
+**Context.** The list must not reorder on its own during a session (product.md, Priority §5), while an edited item
 should move at once and teammates' edits should still show up.
 
 **Decision.** The score is a deterministic function of item data and time, so the server returns an `as_of` with
@@ -210,56 +210,6 @@ key when it moves to another heap of its team unless the target heap has it, and
 ([architecture.md](architecture.md), Handles). The service draws the random bytes from an injected
 `RandomSource`, so tests can script keys.
 
-## 17. The local build is the same backend compiled to WebAssembly, with Cargo features for what it lacks
-
-**Context.** A static, single-user version of Upheap was wanted for trying it out and for personal use, without a
-server.
-
-**Decision.** The backend crates compile to wasm and run in a Web Worker; the web app swaps only its `fetch`. What
-only a shared server needs (`accounts`) and what the browser can't run (`trace-and-timeout`) are Cargo features
-the local build leaves out.
-
-**Instead of.** A second implementation in JavaScript, or a runtime "local mode" flag in one build.
-
-**Consequences.** Ranking, validation, permissions and the API are one codebase, and the native tests cover the
-local user too. Nothing left out can reach the wasm, which keeps it smaller. A feature added to the
-server must be placed behind `accounts` when the local build can't offer it.
-
-**Superseded** by §34.
-
-## 18. SQLite in the browser through SeaORM's proxy connection, on `opfs-sahpool`
-
-**Context.** The local build needs a database in the browser that runs the same migrations and SQL as the server.
-sqlx doesn't build for wasm, and GitHub Pages can't send the COOP and COEP headers that the main OPFS VFS needs.
-
-**Decision.** The official SQLite-wasm build with the `opfs-sahpool` VFS, in a worker, reached through SeaORM's
-`ProxyDatabaseTrait` with the connection opened as SQLite so SeaORM emits the same SQL as on the server.
-
-**Instead of.** IndexedDB or a JavaScript store with its own schema, or sqlx on wasm.
-
-**Consequences.** One connection per database, so the worker holds a Web Lock and the app runs in one tab at a
-time. The proxy types result columns from the entity metadata, since SQLite declares every integer alike. Released
-migrations reach users' browsers directly and can never be edited.
-
-**Superseded** by §34.
-
-## 19. Export and import are worker messages, not API endpoints
-
-**Context.** The local build's data lives in one browser, which can clear it, so users need a copy and a way to
-restore it.
-
-**Decision.** The worker takes `export`, `import` and `count` messages beside the HTTP requests, in the same queue.
-The web app reaches them through a build-time import (`#local-database`) that resolves to nothing in the server
-build. The date of the last download is kept in `localStorage` and worded by the web app itself.
-
-**Instead of.** `/api/v1/export` and `/import` endpoints, or storing the date on the server.
-
-**Consequences.** The server build holds none of this code and the API stays what a server can do. Whether the
-feature exists is a fact about the build, not a permission, so it bypasses `allowed_actions`. The storage note is
-the one exception to thin clients (Thin clients §2 of the principles).
-
-**Superseded** by §34.
-
 ## 20. Production runs on Cloud Run with Neon Postgres
 
 **Context.** A small deployment should cost close to nothing when idle. Cloud Run has no persistent disk, so SQLite
@@ -316,34 +266,6 @@ touch-safe behaviour.
 **Consequences.** One dependency instead of owned code; touch handled properly (a scroll doesn't fire a press,
 focus survives the on-screen keyboard); `GridList` gives the list keyboard navigation and, later, selection for
 bulk actions.
-
-## 26. The due picker offers rough choices the server owns
-
-**Context.** Most due times are loose ("next week"), and a loose due time must read back with the term it was
-picked by, never as a date.
-
-**Decision.** The picker offers rough choices first and Exact date last. The server lists the choices
-(`GET /due-choices`) with their dates and labels in the request's timezone, and the client only shows them.
-
-**Instead of.** A date picker everywhere, or rough choices computed in the client.
-
-**Consequences.** "Next week" can never come back as "in a few days", because the server's fuzzy bands leave room
-around each choice. The CLI's `--due next-week` uses the same list. Only an exact due time can be overdue.
-
-## 28. Weights are saved together as one policy
-
-**Context.** The heap's weights and each parameter's weight live on different rows, each with its own version, but
-the weights only mean something next to each other: a factor's share is its weight out of the total.
-
-**Decision.** One endpoint saves them all in one transaction, under the heap lock. The heap's version orders these
-saves, moving on also when one changes only parameter weights, and each parameter's version is checked too.
-
-**Instead of.** Separate PATCHes per row, which can leave the policy half-saved.
-
-**Consequences.** A rename elsewhere conflicts with a weights save, and the client saves again after refetching. The
-parameter PATCH still sets a weight alone, from the Parameters tab, guarded by the parameter's version only: it
-doesn't move the heap's version, so a weights save made meanwhile against other parameters still succeeds. Making
-every parameter edit move the heap's version would close that gap but make renames conflict with parameter edits.
 
 ## 30. The CLI ships as a Homebrew cask from its own tap, built by a hand-written workflow
 
@@ -406,8 +328,8 @@ backend, and a second end-to-end suite.
 **Instead of.** Keeping it, with its size limit lifted.
 
 **Consequences.** One configuration to build and test. Code may use what the server has: the blocking pool, timers
-and `Instant`. Data people kept in the browser build isn't migrated. Supersedes §17, §18 and §19. §2, §12, §15 and §22 cite the local build in passing and stand on their other
-reasons.
+and `Instant`. Data people kept in the browser build isn't migrated. Supersedes §17, §18 and §19, which described that build and are no longer in this file. §2, §12, §15 and §22
+cite the local build in passing and stand on their other reasons.
 
 ## 35. A gone blocker is read, not stored; done frees, won't do, became and a move wait for the person
 
@@ -672,7 +594,7 @@ account and its sign-ins stay.
 ## 48. An item placed by hand keeps a multiplier on its score, not a stored position
 
 **Context.** People need to move an item up or down without changing a field that isn't wrong (product.md,
-Priority §11). The order is computed from item data and time and never stored (1).
+Priority §8). The order is computed from item data and time and never stored (1).
 
 **Decision.** A placed item stores one positive multiplier, worked out on the drop so the item lands between its new
 neighbours, and applied to its score in every ranking. It doesn't fade; it stays until the item is placed again or
@@ -686,3 +608,60 @@ leaves agents without an order to follow.
 **Consequences.** The ranking stays a deterministic function of stored data and time, with no order to keep in step.
 A placed item can drift a place or two as others age; placing it again fixes that. The number is never shown, so a
 client can't put an earlier multiplier back exactly: Undo places the item next to its former neighbour instead.
+
+## 49. A note, a task and a reminder are one item type with a kind, changed in place
+
+**Context.** Work arrives as a thought, becomes defined work, and sometimes starts as something to come back to on a
+date (product.md, Notes, tasks and reminders). The three had to be ranked together and to turn into each other.
+
+**Decision.** One item type with a kind. A note that becomes a task is the same row: it keeps its key, its age and
+its history.
+
+**Instead of.** Three types, with a new item made at each move. That loses the age, which the ranking counts, and
+breaks every link to the note.
+
+**Consequences.** One ranking covers everything, and every list, filter and API shape handles one type. What only
+one kind has (a task's steps, a reminder's date) hangs off the item and is empty for the others. Splitting the
+types later would mean new keys for existing items.
+
+## 50. Agents act as the person, not as accounts of their own
+
+**Context.** An agent reads contexts and writes to items through the command-line client, on the person's machine
+(product.md, The agent loop).
+
+**Decision.** An agent uses the person's own sign-in. What it writes is marked by the run it was written in, and a
+run may write only its own item.
+
+**Instead of.** Accounts for agents, with sign-up, team membership and permissions of their own.
+
+**Consequences.** Nothing to set up or grant, and a person can't lose track of what "their" agent may reach: it is
+never more than they can. In a shared heap an agent's change reads as its member's, marked as made in a run. Giving
+agents accounts later would change who the audit log names.
+
+## 51. Turns and runs are stored, not derived from the audit log
+
+**Context.** The queue, the claim, a run's cost and the page of what agents did all need to know which items are
+with an agent, which go an agent is having at one, and how each ended.
+
+**Decision.** A turn (an item handed to an agent) and a run (one go at a turn) are rows of their own, never deleted,
+written beside the audit entries of what happened.
+
+**Instead of.** Reading them back from the audit log, which records the same events.
+
+**Consequences.** The queue and the claim are plain queries under the heap lock, and a run carries what the log has
+no place for: its heartbeat, its cost, its tool and model. Two records of one event have to agree, which holds
+because both are written in one transaction.
+
+## 52. Heaps are compared by score times a priority the person sets
+
+**Context.** A person with several heaps needs one order across them: for all their items, for what waits for them
+and for the agents' queue (product.md, Heaps §6).
+
+**Decision.** An item's score in its own heap, times a number from 1 to 10 the person gives that heap, theirs alone.
+
+**Instead of.** Taking heaps in a fixed order, or one agent loop per heap, either of which starves every heap but
+the first or leaves the person to split their attention by hand.
+
+**Consequences.** The top of every heap gets attention, and one number moves a heap. It assumes scores from
+different heaps can be compared as they are, which holds while heaps keep similar factor weights. A heap with
+unusual weights or many custom parameters sits higher or lower than it should, and its priority is the correction.

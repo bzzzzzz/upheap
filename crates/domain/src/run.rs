@@ -1,4 +1,4 @@
-//! Runs: one go an agent has at the turn of an item (Work with agents, Runs and The agent loop).
+//! Runs: one go an agent has at the turn of an item (architecture.md, Data model).
 //!
 //! A run is claimed from the queue, holds one item, and ends one of seven ways. An agent that goes quiet is not waited
 //! for: a run nobody has heard from in [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and is written

@@ -1,8 +1,8 @@
 # Web app UX
 
-How the web app looks and behaves, at every width and in both builds: the principles, the core flows, the toolkit,
-the layout per width, each screen, the rules that settle questions, and what comes later. The mockups live outside
-the repository, in the "Upheap layouts" canvas; a board is named where this doc relies on one.
+How the web app looks and behaves, at every width: the principles, the core flows, the toolkit, the layout per
+width, each screen, and the rules that settle questions. What the product promises is in [product.md](product.md).
+The mockups live outside the repository, in the "Upheap layouts" canvas; a board is named where this doc relies on one.
 
 The app is one React app whose layout changes with the width: **phone** under 640 px, **tablet** 640 to 1023 px,
 **wide** 1024 px and up. It never ranks, checks permissions or works out labels; the server does
@@ -818,7 +818,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
 4. **The server owns the choices.** Which dates the rough choices stand for, and what they're called, must agree
    with the fuzzy labels the server gives back, or "Next week" could come back as "in a few days". So the server
    lists the choices (`GET /due-choices`), each with its label and date in the request's timezone, and the client
-   only shows them ([decisions.md](decisions.md#26-the-due-picker-offers-rough-choices-the-server-owns)).
+   only shows them.
 5. **Due starts at None** in the Add dialog, with the rough choices one tap away. On a phone's row of due chips
    nothing is picked instead, and a second tap on a chip clears it. In the item, the picker is a sheet of 52 px rows
    with Exact date and Clear due.

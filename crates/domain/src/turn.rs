@@ -1,4 +1,4 @@
-//! Turns: an item handed to an agent, and taken back (Work with agents, Concepts and Opening a turn).
+//! Turns: an item handed to an agent, and taken back (architecture.md, Data model).
 //!
 //! A turn is its own row, so sending an item or taking it back never conflicts with editing it (architecture.md,
 //! Data model). An item has at most one open turn. Turns are never deleted: a taken-back one keeps its row.
