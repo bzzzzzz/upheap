@@ -316,6 +316,34 @@ test("the dialog starts from the list's filters, also after each item added", as
   await expect(toast).not.toContainText("#");
 });
 
+test("adding from Find starts from the list's filters and search, as N does", async ({ page }) => {
+  await addItem(page, "Water the plants", { effort: "S" });
+  await filterBy(page, "Effort", "S");
+  await page.getByLabel("Search items").fill("plants");
+
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("ControlOrMeta+k");
+  const palette = page.getByRole("dialog", { name: "Find", exact: true });
+  await palette.getByRole("searchbox", { name: "Find" }).fill("Patch the servers");
+  await palette.getByRole("menuitem", { name: /^Add “Patch the servers” as a new item/ }).click();
+
+  // The dialog starts from the list's filters.
+  const dialog = addDialog(page);
+  await expect(dialog.getByLabel("Title")).toHaveValue("Patch the servers");
+  await expectSize(page, "Effort", "S");
+  await fillIn(page, "Patch the servers");
+  await dialog.getByLabel("Title").press("Enter");
+  await expect(dialog).toHaveCount(0);
+
+  // The list's search hides the item, so the message says where without a position.
+  const toast = page.getByRole("status").filter({ hasText: "Added “Patch the servers” to " });
+  await expect(toast).toBeVisible();
+  await expect(toast).not.toContainText("#");
+  // Without the search it shows, so it took the filtered effort.
+  await page.getByLabel("Search items").fill("");
+  await expect(row(page, "Patch the servers")).toBeVisible();
+});
+
 test("a parameter the filters pick one option of starts with it, under More fields on a phone", async ({ page }) => {
   await addParameter(page, "Customer", 50, ["Enterprise", "Free"]);
   await goTo(page, "Open");
