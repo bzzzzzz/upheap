@@ -397,6 +397,27 @@ async fn two_commands_refreshing_at_once_dont_sign_the_user_out() -> Result<()> 
 
 #[gtest]
 #[tokio::test]
+async fn a_read_while_another_command_replaces_the_sign_in_waits_for_it() -> Result<()> {
+    // Arrange: the keychain entry is removed and then written again, and this command reads it in between.
+    let server = TestServer::start().await?;
+    let ada = server.register("ada", "Ada").await?;
+    let cli = TestCli::signed_in(&server, &ada).await?;
+    let before = cli.stored(&server)?;
+    cli.tokens.miss_next_load();
+
+    // Act
+    let heaps = cli.run(&["heap", "list", "--quiet"]).await;
+
+    // Assert
+    expect_that!(heaps.stderr, eq(""));
+    expect_that!(heaps.stdout, eq("ada/personal\n"));
+    expect_that!(heaps.exited(0), eq(true));
+    expect_that!(cli.stored(&server)?, eq(&before));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn login_replaces_an_earlier_sign_in_and_ends_it_on_the_server() -> Result<()> {
     // Arrange
     let server = TestServer::start().await?;
