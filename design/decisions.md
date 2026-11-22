@@ -668,3 +668,21 @@ which turns one stolen session into a way to make more operators.
 **Consequences.** Becoming an operator still takes a shell on the server, once; everything after that can be done
 signed in. A server with no operator works as before, from the shell. Removing the role ends nothing else: the
 account and its sign-ins stay.
+
+## 48. An item placed by hand keeps a multiplier on its score, not a stored position
+
+**Context.** People need to move an item up or down without changing a field that isn't wrong (product.md,
+Priority §11). The order is computed from item data and time and never stored (1).
+
+**Decision.** A placed item stores one positive multiplier, worked out on the drop so the item lands between its new
+neighbours, and applied to its score in every ranking. It doesn't fade; it stays until the item is placed again or
+reset. It counts for everyone in the heap.
+
+**Instead of.** Shifting the time the item ages from, which reuses the age factor but needs huge shifts for slow
+needs such as ideas. A stored constraint ("just below X"), which keeps an exact order but brings chains, cycles and
+the question of what happens when X closes. A personal order per person, which splits the team's one ranking and
+leaves agents without an order to follow.
+
+**Consequences.** The ranking stays a deterministic function of stored data and time, with no order to keep in step.
+A placed item can drift a place or two as others age; placing it again fixes that. The number is never shown, so a
+client can't put an earlier multiplier back exactly: Undo places the item next to its former neighbour instead.

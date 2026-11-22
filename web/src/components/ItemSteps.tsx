@@ -11,8 +11,7 @@ import {
   Plus,
   Undo2,
 } from "lucide-react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
@@ -26,6 +25,7 @@ import { MenuEntry, MenuPopover } from "./Menu";
 import { useOverListLink } from "./overList";
 import { RequestId } from "./RequestId";
 import { Saving } from "./Saving";
+import { useDragToReorder, type GripProps } from "./useDragToReorder";
 
 /**
  * A task's steps (ux.md, The item point 11): a checklist, inline at every width, each step saving as it's changed. An
@@ -82,10 +82,10 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
       .mutateAsync({ step, patch: { after: index === 0 ? null : (order[index - 1] ?? null) } })
       .then(settled, settled);
   };
-  const drag = useStepDrag({
+  const drag = useDragToReorder({
     listRef,
     rows,
-    numbers: steps.map((step) => step.number),
+    ids: steps.map((step) => step.number),
     onDrop: moveTo,
   });
 
@@ -171,164 +171,6 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
 const slotClass = "flex size-9 shrink-0 items-center justify-center pointer-coarse:size-11";
 const iconButtonClass =
   "flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11";
-
-/** The pointer handlers of a step's grip. */
-type GripProps = {
-  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
-  onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
-};
-
-/** How near the edge of the scrolling pane the pointer scrolls it, and by how much a frame. */
-const EDGE_ZONE = 48;
-const EDGE_SCROLL = 8;
-/** How far the pointer moves before a press on the grip is a drag, so a click near the pane's edge scrolls nothing. */
-const DRAG_START = 6;
-
-/**
- * Dragging a step by its grip, with pointer events (mouse, touch and pen alike). The dragged row follows the pointer
- * (`dy`, for `lifted`) while the others stay, and `lineY` is where the landing place's line goes, within the list. The
- * landing place is the number of other rows whose midpoint is above the pointer; the rows' rects are read again at
- * every move and frame, since the pane may be scrolling. Escape and a cancelled pointer put the row back.
- */
-function useStepDrag({
-  listRef,
-  rows,
-  numbers,
-  onDrop,
-}: {
-  listRef: React.RefObject<HTMLUListElement | null>;
-  rows: React.RefObject<Map<number, HTMLLIElement>>;
-  /** The step numbers in the shown order. */
-  numbers: readonly number[];
-  /** Called with the step and the index it lands at in the shown order. */
-  onDrop: (number: number, index: number) => void;
-}) {
-  const [lifted, setLifted] = useState<number | null>(null);
-  const [dy, setDy] = useState(0);
-  const [lineY, setLineY] = useState<number | null>(null);
-  const session = useRef<{
-    number: number;
-    pointerId: number;
-    startY: number;
-    startListTop: number;
-    pointerY: number;
-    others: readonly number[];
-    index: number;
-    landing: number;
-    scroller: Element;
-    /** Whether the pointer has gone past `DRAG_START` from where it went down; until then a press is not a drag. */
-    moved: boolean;
-  } | null>(null);
-
-  const measure = useCallback(() => {
-    const current = session.current;
-    const list = listRef.current;
-    if (!current || !list) return;
-    const listTop = list.getBoundingClientRect().top;
-    // The list moves when its pane scrolls, and the row has to stay under the pointer.
-    setDy(current.pointerY - current.startY + current.startListTop - listTop);
-    const rects = current.others.map((number) => rows.current.get(number)?.getBoundingClientRect());
-    const landing = rects.filter((rect) => rect && (rect.top + rect.bottom) / 2 < current.pointerY).length;
-    current.landing = landing;
-    const above = rects[landing - 1];
-    const below = rects[landing];
-    if (landing === current.index) setLineY(null);
-    else if (above && below) setLineY((above.bottom + below.top) / 2 - listTop);
-    else if (below) setLineY(below.top - listTop);
-    else if (above) setLineY(above.bottom - listTop);
-  }, [listRef, rows]);
-
-  const end = useCallback(() => {
-    session.current = null;
-    setLifted(null);
-    setDy(0);
-    setLineY(null);
-  }, []);
-
-  useEffect(() => {
-    if (lifted === null) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // Only the drag takes this Escape: the item stays open.
-      event.preventDefault();
-      event.stopPropagation();
-      end();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    let frame = requestAnimationFrame(function scroll() {
-      const current = session.current;
-      if (current) {
-        const edge =
-          current.scroller === document.scrollingElement
-            ? { top: 0, bottom: window.innerHeight }
-            : current.scroller.getBoundingClientRect();
-        if (current.pointerY < edge.top + EDGE_ZONE) current.scroller.scrollTop -= EDGE_SCROLL;
-        else if (current.pointerY > edge.bottom - EDGE_ZONE) current.scroller.scrollTop += EDGE_SCROLL;
-        measure();
-      }
-      frame = requestAnimationFrame(scroll);
-    });
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      cancelAnimationFrame(frame);
-    };
-  }, [lifted, measure, end]);
-
-  return {
-    active: lifted !== null,
-    lifted,
-    dy,
-    lineY,
-    gripProps: (number: number): GripProps => ({
-      onPointerDown: (event) => {
-        if (event.button !== 0 || session.current || !listRef.current) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        let scroller: Element = document.scrollingElement ?? document.documentElement;
-        for (let node = listRef.current.parentElement; node; node = node.parentElement) {
-          const { overflowY } = getComputedStyle(node);
-          if (/auto|scroll|overlay/.test(overflowY) && node.scrollHeight > node.clientHeight) {
-            scroller = node;
-            break;
-          }
-        }
-        const index = numbers.indexOf(number);
-        session.current = {
-          number,
-          pointerId: event.pointerId,
-          startY: event.clientY,
-          startListTop: listRef.current.getBoundingClientRect().top,
-          pointerY: event.clientY,
-          others: numbers.filter((other) => other !== number),
-          index,
-          landing: index,
-          scroller,
-          moved: false,
-        };
-      },
-      onPointerMove: (event) => {
-        if (session.current?.pointerId !== event.pointerId) return;
-        session.current.pointerY = event.clientY;
-        if (!session.current.moved && Math.abs(event.clientY - session.current.startY) > DRAG_START) {
-          session.current.moved = true;
-          setLifted(session.current.number);
-        }
-        measure();
-      },
-      onPointerUp: (event) => {
-        const current = session.current;
-        if (current?.pointerId !== event.pointerId) return;
-        measure();
-        end();
-        if (current.moved && current.landing !== current.index) onDrop(current.number, current.landing);
-      },
-      onPointerCancel: (event) => {
-        if (session.current?.pointerId === event.pointerId) end();
-      },
-    }),
-  };
-}
 
 function StepRow({
   step,

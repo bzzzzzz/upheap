@@ -190,6 +190,23 @@ impl ApiClient {
         self.read_json(response).await
     }
 
+    /// `DELETE /api/v1/<path>` of the resource at `version`, for an endpoint that answers with a body, as the holder
+    /// of `token`.
+    pub async fn delete_at_version<T: DeserializeOwned>(
+        &self,
+        path: &[&str],
+        version: u32,
+        token: &str,
+    ) -> Result<Fetched<T>, ClientError> {
+        let request = self
+            .http
+            .delete(self.api_url(path))
+            .header(reqwest::header::IF_MATCH, format!("\"{version}\""))
+            .bearer_auth(token);
+        let response = self.send(request).await?;
+        self.read_json(response).await
+    }
+
     /// `POST /api/v1/<path>` with no body, for an endpoint that answers `204`, as the holder of `token`. The request
     /// says `Content-Length: 0` on purpose: a proxy such as Cloud Run's front end answers a POST with no length
     /// `411 Length Required` before it reaches the server.

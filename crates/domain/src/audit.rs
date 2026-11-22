@@ -26,6 +26,7 @@ coded_enum! {
         ItemCreated = "item_created",
         ItemUpdated = "item_updated",
         ItemMoved = "item_moved",
+        ItemPlaced = "item_placed",
         StepAdded = "step_added",
         StepUpdated = "step_updated",
         QuestionAsked = "question_asked",
@@ -118,6 +119,8 @@ coded_enum! {
         /// The title an item had when it left a team: how that team's log names it afterwards. Never shown as a change.
         ItemTitle = "item_title",
         Key = "key",
+        /// Which way an item is placed in its heap's list, or nothing.
+        Placement = "placement",
         Kind = "kind",
         Stage = "stage",
         Name = "name",

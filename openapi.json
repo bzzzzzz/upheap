@@ -4948,6 +4948,278 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/items/{item}/place": {
+      "post": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Places an item right above or below another item of its heap in the ranked list, without changing any of its\nfields, and answers with the item. Send the item's `version` in `If-Match`. The item gets a multiplier on its own\nscore, worked out so it lands between the anchor and the item next to it when the heap is ranked at `as_of`; the\nmultiplier is never shown, only which way the item is placed (`placement`). It stays until the item is placed\nagain, which replaces it, or reset (`DELETE`); field edits keep it, and moving the item to another heap drops it.\nA blocker never ranks below what it blocks, so a blocker placed below what it blocks stops just above it. The\nanchor must be another item of the heap that ranks: open, in progress or blocked, and not a reminder to come. The\nitem must rank too: a reminder to come can't be placed.",
+        "operationId": "place_item",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemPlaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A body that isn't an `anchor` and a `side`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "From inside a run: `run_forbidden`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `item_closed`, `item_not_ranked` (a reminder to come) or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`anchor_not_ranked`: the anchor is missing, the item itself, in another heap, closed or a reminder to come",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "items"
+        ],
+        "summary": "Takes an item's place by hand away, so it ranks by its fields again, and answers with the item. Send the item's\n`version` in `If-Match`. An item that isn't placed is answered unchanged after the version check, and nothing is\nrecorded.",
+        "operationId": "reset_placement",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "description": "The item's key, unique within the heap.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "k3x9a"
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The `version` of what is being edited, for example `\"3\"`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Time-Zone",
+            "in": "header",
+            "description": "The device's IANA timezone, for example `Europe/Berlin`. Labels and dates use it. Defaults to UTC.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "From inside a run: `run_forbidden`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`version_conflict`, `item_closed` or `heap_archived`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`version_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/items/{item}/questions": {
       "post": {
         "tags": [
@@ -11581,6 +11853,7 @@
           "item_created",
           "item_updated",
           "item_moved",
+          "item_placed",
           "step_added",
           "step_updated",
           "question_asked",
@@ -12774,7 +13047,8 @@
           "value",
           "parameter",
           "tags",
-          "blocks"
+          "blocks",
+          "placement"
         ]
       },
       "FinishRequest": {
@@ -13490,6 +13764,7 @@
           "became_steps",
           "became_heaps",
           "need",
+          "placement",
           "tags",
           "parameters",
           "created_at",
@@ -13748,6 +14023,17 @@
               "$ref": "#/components/schemas/ItemParameter"
             },
             "description": "A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,\nby parameter name."
+          },
+          "placement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Placement",
+                "description": "Which way a person placed the item against where its fields put it (`…/place`): `up` or `down`. `null` when it\nis not placed. The multiplier itself is never shown."
+              }
+            ]
           },
           "questions": {
             "type": [
@@ -14132,6 +14418,33 @@
             ]
           }
         }
+      },
+      "ItemPlaceRequest": {
+        "type": "object",
+        "description": "Where to place an item in its heap's list.",
+        "required": [
+          "anchor",
+          "side"
+        ],
+        "properties": {
+          "anchor": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The item to place it next to: another item of the same heap that ranks (open, in progress or blocked, and not\na reminder to come)."
+          },
+          "as_of": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The `as_of` of the list the person is looking at, so the item lands where it was dropped there. Ignored when\nit's in the future or too old, and then the current time is used. Omit to place it in the order of now."
+          },
+          "side": {
+            "$ref": "#/components/schemas/PlaceSide"
+          }
+        },
+        "additionalProperties": false
       },
       "ItemRef": {
         "type": "object",
@@ -15825,6 +16138,22 @@
             "description": "What to call it, to tell it from the others: at most 64 characters, trimmed, without control characters."
           }
         }
+      },
+      "PlaceSide": {
+        "type": "string",
+        "description": "Which side of the anchor to place an item on.",
+        "enum": [
+          "above",
+          "below"
+        ]
+      },
+      "Placement": {
+        "type": "string",
+        "description": "Which way a placed item sits against where its fields would put it.",
+        "enum": [
+          "up",
+          "down"
+        ]
       },
       "Problem": {
         "type": "object",
