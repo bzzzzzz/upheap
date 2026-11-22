@@ -214,7 +214,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   an item has at most one. It is refused while the item has an open question, and a watching turn is out of the queue
   without being waiting for the person. The server never reaches GitHub: the loop lists the open watches
   (`GET /work/watches`), reads each pull request with the person's `gh` about once a minute, and when something is
-  newer than `watch_since` (a comment, a review, a failed check, a merge or a close) fires the watch
+  newer than `watch_since` (a comment, a review, a failed check), or the pull request is in a state that fires at any
+  time (merged, closed, or `mergeable: CONFLICTING`), fires the watch
   (`POST /work/watches/{turn}/fire`), which clears it and adds a comment on the item, written as the person running the
   loop with the comment's usual audit entry.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in

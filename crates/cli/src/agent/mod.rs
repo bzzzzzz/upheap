@@ -173,7 +173,7 @@ pub struct PullRequestError(pub String);
 
 /// The pull requests a machine can read, with its own `gh`.
 pub trait PullRequests: Send + Sync {
-    /// What `gh pr view <url> --json state,comments,reviews,statusCheckRollup` prints, as JSON text.
+    /// What `gh pr view <url> --json state,mergeable,comments,reviews,statusCheckRollup` prints, as JSON text.
     fn view(&self, url: &str) -> Pin<Box<dyn Future<Output = Result<String, PullRequestError>> + Send + '_>>;
 }
 
@@ -185,7 +185,13 @@ impl PullRequests for SystemPullRequests {
         let url = url.to_owned();
         Box::pin(async move {
             let output = tokio::process::Command::new("gh")
-                .args(["pr", "view", &url, "--json", "state,comments,reviews,statusCheckRollup"])
+                .args([
+                    "pr",
+                    "view",
+                    &url,
+                    "--json",
+                    "state,mergeable,comments,reviews,statusCheckRollup",
+                ])
                 .stdin(std::process::Stdio::null())
                 .output()
                 .await

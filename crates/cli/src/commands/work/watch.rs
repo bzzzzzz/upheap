@@ -1,7 +1,7 @@
 //! `upheap work watch <pr-url>`: the run waits on its own pull request and ends, so its worker slot is free.
 //!
 //! It takes no item: the run knows it. The turn stays with the agent, out of the queue, until `work run` finds the
-//! pull request has a new comment or review, a failed check, or is merged or closed.
+//! pull request has a new comment or review, a failed check or a merge conflict, or is merged or closed.
 
 use api_types::work::{RunDto, WatchRequestDto};
 use clap::Args;
@@ -35,7 +35,7 @@ pub async fn run(args: WatchArgs, app: &App, out: &mut Output) -> Result<(), Cli
         Mode::Json => out.json(&watching.body)?,
         Mode::Quiet => {}
         Mode::Human => out.line(&format!(
-            "Watching: {} comes back when the pull request gets a comment or a failed check, or is merged or closed.",
+            "Watching: {} comes back when the pull request gets a comment, a failed check or a merge conflict, or is merged or closed.",
             watching.value.item.key
         ))?,
     }
