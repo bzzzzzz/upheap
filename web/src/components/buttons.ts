@@ -1,7 +1,7 @@
 // Token-styled buttons from the first-set mockups (WideAccount), for pages fitted to the first-set palette. Touch
 // keeps 44 px targets.
 export const buttonClass =
-  "inline-flex items-center justify-center gap-2 text-sm font-medium disabled:opacity-40 pointer-coarse:min-h-11";
+  "inline-flex items-center justify-center gap-2 text-sm font-medium disabled:not-aria-busy:opacity-40 pointer-coarse:min-h-11";
 export const borderedClass = "border border-line-strong bg-surface text-ink hover:bg-sunken";
 /** For buttons without a visible border, so they stand as tall as bordered ones beside them. */
 export const unborderedClass = "border border-transparent";

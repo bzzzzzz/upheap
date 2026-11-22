@@ -2,7 +2,7 @@ import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from "@t
 import { useRef } from "react";
 import { api, unwrap, type HeapRef, type ListViewQuery } from "../client";
 import type { RankedList } from "../schema";
-import { rankedViewKey, blockerCandidatesKey, closedKey, EVERY_NON_CLOSED_ITEM, POLL_INTERVAL } from "./keys";
+import { apiKey, rankedViewKey, blockerCandidatesKey, closedKey, EVERY_NON_CLOSED_ITEM, POLL_INTERVAL } from "./keys";
 
 /**
  * The ranked list in one view, kept stable within a session: the first response's `as_of` is sent back on every
@@ -53,6 +53,18 @@ export function useClosedItems(heap: HeapRef) {
           params: { path: heap, query: { cursor: pageParam } },
         }),
       ),
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
+  });
+}
+
+/** The closed items of all the person's heaps, or of `team`'s, most recently closed first, a page at a time. */
+export function useClosedAcrossHeaps(team: string | undefined) {
+  const query = team === undefined ? {} : { team };
+  return useInfiniteQuery({
+    queryKey: apiKey("/api/v1/me/items/closed", { query }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) =>
+      unwrap(await api.GET("/api/v1/me/items/closed", { params: { query: { ...query, cursor: pageParam } } })),
     getNextPageParam: (page) => page.next_cursor ?? undefined,
   });
 }

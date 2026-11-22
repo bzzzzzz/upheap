@@ -11,6 +11,7 @@ import { fieldClass, focusClass, HowFar, labelClass } from "./ItemTurn";
 import { itemProblem } from "./itemProblems";
 import { PopoverSheet } from "./PopoverSheet";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
@@ -114,7 +115,8 @@ function SendToAgentForm({
         <TextArea rows={3} className={fieldClass} />
       </TextField>
       <div className="flex gap-2 max-sm:grid max-sm:grid-cols-2">
-        <Button type="submit" isDisabled={pending} className={`${compactButtonClass.primary} ${focusClass}`}>
+        <Button type="submit" isPending={pending} className={`${compactButtonClass.primary} ${focusClass}`}>
+          <Saving pending={pending} />
           Send
         </Button>
         <Button onPress={onCancel} isDisabled={pending} className={`${compactButtonClass.quiet} ${focusClass}`}>

@@ -48,7 +48,8 @@ Ending the run
   back: `upheap work hand-back --reason "<why, in a line>"`, and stop. The item goes back to the person as it is.
   Blocked is not nothing to do: ask the person instead.
 - If the run would only wait on its own pull request for something that will come (a bot's review, a check you
-  expect to fail), don't wait: end the run with `upheap work watch <pr-url>`, and stop. The item comes back when the
-  pull request gets a comment or a failed check, or is merged or closed, with a comment saying what came. A check
-  that passes doesn't bring it back, so don't watch only for checks to pass. Never after asking a question or a
-  review: then the item waits for the person.
+  expect to fail), don't wait: end the run with `upheap work watch <pr-url>`, and stop. Resolve conflicts with its
+  base branch first: a pull request with conflicts comes back at once. If you can't resolve them, ask the person
+  instead of watching. The item comes back when the pull request gets a comment, a failed check or a merge conflict,
+  or is merged or closed, with a comment saying what came. A check that passes doesn't bring it back, so don't watch
+  only for checks to pass. Never after asking a question or a review: then the item waits for the person.

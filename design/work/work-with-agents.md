@@ -145,8 +145,8 @@ is resolved or turned into a task.
    have said is critical to act on fast. Upheap and agents never decide that for them.
 3. An agent that has to wait for the person goes on to the next item it can work on.
 4. An agent waiting on its own work's place (a pull request's checks or a bot's review) doesn't hold a worker: it
-   watches the pull request, and the item comes back to it by itself on a new comment, a failed check, a merge or a
-   close. A watch is only for the agent's own waits: while a review request is open the item waits for the person,
+   watches the pull request, and the item comes back to it by itself on a new comment, a failed check, a merge
+   conflict, a merge or a close. A watch is only for the agent's own waits: while a review request is open the item waits for the person,
    and only their reply sends it back.
 
 **Stable states**
@@ -393,7 +393,7 @@ week), setup (once or rarely) or recovery.
 1. The agent's work is in a pull request, and all that is left is CI to finish or a bot's review.
 2. It ends the run with `work watch`. The worker's slot is free and the item is out of the queue.
 3. The loop checks the pull request with `gh` about once a minute. A new comment or review, a failed check, a merge
-   or a close brings the item back: a comment on the item says what came, and the item is in the queue again.
+   conflict, a merge or a close brings the item back: a comment on the item says what came, and the item is in the queue again.
 4. The next run reads that comment, deals with what came and carries on as A1 from step 3.
 
 **A5. A run dies.** Recovery, for A1.
@@ -620,9 +620,12 @@ change it makes carries the run it was made in.
 1. A run makes a watch by ending as watching, with the pull request's address. It is refused while the item has an
    open question: that item waits for the person, and only their reply sends it back.
 2. A watch fires when the pull request has a comment or a review newer than the watch, a check that failed after
-   it, or is merged or closed, whoever wrote it. A pull request already merged or closed fires at once. Nothing
-   else fires it: checks that pass don't, and neither does a comment the person adds in Upheap (they take the item
-   back to have it now).
+   it, a merge conflict with its base branch, or is merged or closed, whoever wrote it. Merged, closed and a
+   conflict are states: a pull request already in one fires at once. A conflict is what GitHub reports as
+   conflicting; being behind the base branch isn't one (it can still be merged, and every merge to the base would
+   fire it), and a mergeability GitHub hasn't worked out yet is looked at again on the next check. Nothing else
+   fires it: checks that pass don't, and neither does a comment the person adds in Upheap (they take the item back
+   to have it now).
 3. Firing clears the watch and adds a comment on the item, by the person whose loop found it, saying what came with
    the links. The item is in the queue again at its ranked place.
 4. A watch ends with its turn: taking the turn back, starting or closing the item, or reaching its goal by hand
@@ -815,8 +818,8 @@ joining the queue; and need being settled for everything made from a note.
    with 2.1.322: `Read(./**)` allows a file under the start directory and refuses `/etc/hosts`, where a bare `Read`
    allows any path; a heredoc on a command's stdin passes a prefix rule; that version has no Grep tool. Exit 0 with
    `is_error` false is a run that ended; anything else is a failed run, with its cost still reported.
-2. **Reading a pull request with `gh`.** `gh pr view --json state,comments,reviews,statusCheckRollup` gives what the
-   loop needs (assumed from `gh`'s documented fields).
+2. **Reading a pull request with `gh`.** `gh pr view --json state,mergeable,comments,reviews,statusCheckRollup` gives
+   what the loop needs (assumed from `gh`'s documented fields).
 3. **Nothing else.** Claims that lapse, checked moves and in-place kind changes are ordinary.
 
 ## 5. Interface
@@ -997,7 +1000,7 @@ Who has it, by state:
                          [Send on ▾] [Changes asked…]  Changes asked takes a line saying what's wrong.
   With an agent:         "With an agent since 14:02, going to: defined."  [Take back]
   Watching a PR:         the same, then "Watching PR #276 since 14:05. It comes back on a new comment, a failed
-                         check, a merge or a close.", the PR a link.  [Take back]
+                         check, a merge conflict, a merge or a close.", the PR a link.  [Take back]
   Stuck:                 shown under Waits for you, with [Retry] [Take back].
   Closed, any reminder, an archived heap: no line. A reminder becomes a task first.
 Steps: a tap ticks or unticks; the title is edited in place; Drop is under the step's ⋯.

@@ -3,33 +3,44 @@ import { useId } from "react";
 
 import { isNotFound, type HeapRef } from "../api/client";
 import type { ClosedGroup, Item } from "../api/schema";
-import { useReopenItem } from "../api/queries/items";
-import { useClosedItems } from "../api/queries/lists";
+import { useReopenAcrossHeaps, useReopenItem } from "../api/queries/items";
+import { useClosedAcrossHeaps, useClosedItems } from "../api/queries/lists";
+import { useMe } from "../api/queries/me";
+import { acrossSubtitle } from "../components/acrossHeaps";
 import { becameWords, CLOSED_GROUP_LABELS, STATE_LABELS } from "../components/labels";
 import { useUserName } from "../components/userName";
-import { HeapNotFound } from "../components/NotFound";
+import { HeapNotFound, TeamNotFound } from "../components/NotFound";
+import { teamName } from "../components/teamName";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
-/** A run of items next to each other with the same `closed_group`, as the server groups them. */
+/** A closed item on screen: the item, the heap it is in, and what names that heap on the list across heaps. */
+interface ClosedEntry {
+  item: Item;
+  heapRef: HeapRef;
+  heapLabel?: string;
+}
+
+/** A run of entries next to each other with the same `closed_group`, as the server groups them. */
 interface ClosedSection {
   group: ClosedGroup;
-  items: Item[];
+  entries: ClosedEntry[];
 }
 
 /**
- * Splits `items`, in server order, into runs that share a `closed_group`. Every page loaded so far is one list, so a
+ * Splits `entries`, in server order, into runs that share a `closed_group`. Every page loaded so far is one list, so a
  * group that goes on into the next page stays one section.
  */
-function toSections(items: Item[]): ClosedSection[] {
+function toSections(entries: ClosedEntry[]): ClosedSection[] {
   const sections: ClosedSection[] = [];
-  for (const item of items) {
+  for (const entry of entries) {
     // Closed items always have a group; the fallback only satisfies the type.
-    const group = item.closed_group ?? "earlier";
+    const group = entry.item.closed_group ?? "earlier";
     const last = sections.at(-1);
     if (last && last.group === group) {
-      last.items.push(item);
+      last.entries.push(entry);
     } else {
-      sections.push({ group, items: [item] });
+      sections.push({ group, entries: [entry] });
     }
   }
   return sections;
@@ -48,49 +59,121 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
   }
   if (closed.isError) {
     if (isNotFound(closed.error)) return <HeapNotFound />;
-    return (
-      <>
-        <p role="alert" className="py-16 text-center text-overdue-ink">
-          {closed.error.message}
-        </p>
-        <RequestId error={closed.error} className="justify-center" />
-      </>
-    );
+    return <LoadFailed error={closed.error} />;
   }
 
-  const items = closed.data.pages.flatMap((page) => page.items);
+  return (
+    <ClosedList
+      intro="Done and won't-do items, newest first. "
+      entries={closed.data.pages.flatMap((page) => page.items.map((item) => ({ item, heapRef })))}
+      reopening={reopen.isPending ? reopen.variables.id : null}
+      onReopen={({ item }) => reopen.mutate(item)}
+      reopenError={reopen.error}
+      more={closed}
+    />
+  );
+}
+
+/**
+ * The closed items of all the person's heaps, or of one team's, in one list (ux.md, All items): the heap's Closed
+ * page, each row naming its heap.
+ */
+export function AllClosedPage({ team }: { team: string | undefined }) {
+  const { data: me } = useMe();
+  const closed = useClosedAcrossHeaps(team);
+  const reopen = useReopenAcrossHeaps();
+
+  if (closed.isPending) {
+    return <p className="py-16 text-center text-muted">Loading…</p>;
+  }
+  if (closed.isError) {
+    if (isNotFound(closed.error)) return <TeamNotFound />;
+    return <LoadFailed error={closed.error} />;
+  }
+
+  // The team is named only where the rows are of several: with one chosen, or for a person in one, the heap is enough.
+  const several = team === undefined && (me?.teams.length ?? 0) > 1;
+  return (
+    <ClosedList
+      intro={acrossSubtitle(me, team, "newest first. ")}
+      entries={closed.data.pages.flatMap((page) =>
+        page.items.map(({ item, heap }) => {
+          const ofTeam = me?.teams.find((t) => t.slug === heap.team_slug);
+          return {
+            item,
+            heapRef: { team: heap.team_slug, heap: heap.slug },
+            heapLabel: several && me && ofTeam ? `${heap.name} · ${teamName(ofTeam, me)}` : heap.name,
+          };
+        }),
+      )}
+      reopening={reopen.isPending ? reopen.variables.item.id : null}
+      onReopen={({ item, heapRef }) => reopen.mutate({ heap: heapRef, item })}
+      reopenError={reopen.error}
+      more={closed}
+    />
+  );
+}
+
+function LoadFailed({ error }: { error: Error }) {
+  return (
+    <>
+      <p role="alert" className="py-16 text-center text-overdue-ink">
+        {error.message}
+      </p>
+      <RequestId error={error} className="justify-center" />
+    </>
+  );
+}
+
+/** The Closed page's heading, groups and Load more, for one heap's items or several heaps'. */
+function ClosedList({
+  intro,
+  entries,
+  reopening,
+  onReopen,
+  reopenError,
+  more,
+}: {
+  /** What the list holds, which a phone leaves out. */
+  intro: string;
+  entries: ClosedEntry[];
+  /** The id of the item being reopened, which every Reopen waits for. */
+  reopening: string | null;
+  onReopen: (entry: ClosedEntry) => void;
+  reopenError: Error | null;
+  more: { hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown };
+}) {
   return (
     <main>
       <h1 className="mt-6 mb-1 text-[22px] font-semibold tracking-tight">Closed</h1>
       <p className="mb-5 text-[13px] text-ink-soft">
-        <span className="max-sm:hidden">Done and won&apos;t-do items, newest first. </span>
+        <span className="max-sm:hidden">{intro}</span>
         You can reopen an item for a week after it closes.
       </p>
-      {items.length === 0 && <p className="py-12 text-center text-muted">Nothing closed yet.</p>}
-      {toSections(items).map((section, index) => (
+      {entries.length === 0 && <p className="py-12 text-center text-muted">Nothing closed yet.</p>}
+      {toSections(entries).map((section, index) => (
         <ClosedGroupSection
           // Groups can repeat, in the unlikely case the clock moves between pages, so the index keeps keys unique.
           key={`${index}-${section.group}`}
           section={section}
-          heapRef={heapRef}
-          reopening={reopen.isPending}
-          onReopen={(item) => reopen.mutate(item)}
+          reopening={reopening}
+          onReopen={onReopen}
         />
       ))}
-      {reopen.error && (
+      {reopenError && (
         <>
           <p role="alert" className="mt-2 text-sm text-overdue-ink">
-            {reopen.error.message}
+            {reopenError.message}
           </p>
-          <RequestId error={reopen.error} />
+          <RequestId error={reopenError} />
         </>
       )}
-      {closed.hasNextPage && (
+      {more.hasNextPage && (
         <div className="mt-4 flex justify-center">
           <button
             type="button"
-            onClick={() => void closed.fetchNextPage()}
-            disabled={closed.isFetchingNextPage}
+            onClick={() => void more.fetchNextPage()}
+            disabled={more.isFetchingNextPage}
             className="rounded-[7px] px-3 py-[5px] text-[13px] text-muted hover:bg-sunken hover:text-ink pointer-coarse:min-h-11"
           >
             Load more
@@ -103,14 +186,12 @@ export function ClosedPage({ heap: heapRef }: { heap: HeapRef }) {
 
 function ClosedGroupSection({
   section,
-  heapRef,
   reopening,
   onReopen,
 }: {
   section: ClosedSection;
-  heapRef: HeapRef;
-  reopening: boolean;
-  onReopen: (item: Item) => void;
+  reopening: string | null;
+  onReopen: (entry: ClosedEntry) => void;
 }) {
   const headingId = useId();
   return (
@@ -122,26 +203,28 @@ function ClosedGroupSection({
         {CLOSED_GROUP_LABELS[section.group]}
       </h2>
       <ol className="divide-line rounded-xl border border-line bg-surface p-1 max-sm:divide-y max-sm:rounded-[14px]">
-        {section.items.map((item) => (
-          <ClosedRow key={item.id} item={item} heapRef={heapRef} reopening={reopening} onReopen={onReopen} />
+        {section.entries.map((entry) => (
+          <ClosedRow key={entry.item.id} entry={entry} reopening={reopening} onReopen={onReopen} />
         ))}
       </ol>
     </section>
   );
 }
 
-/** One closed item: its state mark (wide screens only), the title, "Done · today by you", and Reopen while allowed. */
+/**
+ * One closed item: its state mark (wide screens only), the title, "Done · today by you", its heap on the list across
+ * heaps, and Reopen while allowed.
+ */
 function ClosedRow({
-  item,
-  heapRef,
+  entry,
   reopening,
   onReopen,
 }: {
-  item: Item;
-  heapRef: HeapRef;
-  reopening: boolean;
-  onReopen: (item: Item) => void;
+  entry: ClosedEntry;
+  reopening: string | null;
+  onReopen: (entry: ClosedEntry) => void;
 }) {
+  const { item, heapRef, heapLabel } = entry;
   const by = useUserName(item.closed_by);
   const wontDo = item.state === "wont_do";
   const became = item.state === "became";
@@ -157,18 +240,21 @@ function ClosedRow({
         >
           {item.title}
         </Link>
-        <p className="text-xs text-muted max-sm:text-[13px]">
+        <p className="text-xs break-words text-muted max-sm:text-[13px]">
           {became ? becameText(item) : STATE_LABELS[item.state]} · {item.closed_label}
           {by && ` by ${by}`}
+          {heapLabel && ` · ${heapLabel}`}
         </p>
       </div>
       {item.allowed_actions.includes("reopen") && (
         <button
           type="button"
-          disabled={reopening}
-          onClick={() => onReopen(item)}
-          className="shrink-0 rounded-[7px] border border-line px-3 py-[5px] text-[13px] text-ink hover:bg-sunken disabled:opacity-60 max-sm:min-h-11 max-sm:rounded-xl"
+          disabled={reopening !== null}
+          aria-busy={reopening === item.id || undefined}
+          onClick={() => onReopen(entry)}
+          className="inline-flex shrink-0 items-center gap-2 rounded-[7px] border border-line px-3 py-[5px] text-[13px] text-ink hover:bg-sunken disabled:not-aria-busy:opacity-60 max-sm:min-h-11 max-sm:rounded-xl"
         >
+          <Saving pending={reopening === item.id} />
           Reopen
         </button>
       )}

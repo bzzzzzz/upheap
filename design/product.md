@@ -286,6 +286,11 @@ What it is not:
 10. **Tag order:** a heap's admins can put its tags in an order. An item's highest-ranked tag lifts it when that tag
     is high in the order and pushes it down when it is low; an item with no ranked tag sits in the middle. The tag
     order has a weight like any other factor, and starts at 0, so ordering tags moves nothing until it is turned up.
+11. **Placing by hand:** anyone who may edit items can put an item right above or below another one in the heap's
+    list, without changing any of its fields, from the web app, the CLI or the API. It is part of the heap's one
+    ranking, so it holds for everyone in the team and for agents. It lasts until the item is placed again or its
+    place is reset; field edits keep it. The ranking stays computed, so a placed item can drift a place or two over
+    days as others age or near their deadlines. The list says the item was moved up or down, never by how much.
 
 The factors above are the commitment; the numbers aren't. The formula and its numbers live in the code, versioned
 ([decisions.md](decisions.md), decision 4).

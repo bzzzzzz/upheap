@@ -143,6 +143,24 @@ test("each heap in the switcher shows its open count", async ({ page }) => {
   await expect(heaps.getByRole("menuitem", { name: /^Garden\s*, 0 open$/ })).toHaveText(/0$/);
 });
 
+test("the open counts follow items added elsewhere every 30 s", async ({ page, heapPath }) => {
+  // A faked clock, so 30 s pass at once; installed before the page loads, so the app's timers use it.
+  await page.clock.install();
+  await page.reload();
+  await expect(page.getByRole("button", { name: /^Switch heap/ })).toBeVisible();
+
+  // An item added through the API, as an agent or a teammate would, reaches the count on the next poll, with no
+  // reload, focus or write of the person's own.
+  const created = await page.request.post(`/api/v1${heapPath}/items`, {
+    headers: { "x-csrf-protection": "1" },
+    data: { title: "Water the plants", need: "expected" },
+  });
+  expect(created.ok()).toBe(true);
+  await page.clock.fastForward(30_000);
+  const heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("menuitem", { name: /, 1 open\s*, current$/ })).toBeVisible();
+});
+
 test("a modifier-click on a heap opens it in a new tab", async ({ page }) => {
   await addHeaps(page, ["Garden"]);
   const heaps = await openSwitcher(page);
@@ -162,6 +180,35 @@ test("the heap switcher starts a new heap in the heap's team", async ({ page }) 
   await expect(heaps).toHaveCount(0);
   await expect(page).toHaveURL(/\/heaps\/garden$/);
   await expect(page.getByRole("button", { name: "Switch heap: Garden" })).toBeVisible();
+});
+
+test("the key hints stay whole under the New heap button when the team's name is long", async ({ page }) => {
+  await createTeam(page, "The Department of Long Names");
+  await page.getByRole("button", { name: "+ New heap" }).click();
+  await page.getByLabel("New heap name").fill("Launch");
+  await page.getByRole("button", { name: "Add heap" }).click();
+  await page
+    .getByRole("region", { name: "Heaps" })
+    .getByRole("link", { name: /Launch/ })
+    .click();
+  await expect(page).toHaveURL(/\/heaps\/launch$/);
+  const heaps = await openSwitcher(page);
+  await expect(heaps.getByRole("button", { name: /^New heap in / })).toBeVisible();
+  // The hints are for a keyboard: a phone, or a finger on a tablet, has none.
+  test.skip(isNarrow(page) || (await isCoarse(page)), "no key hints without a keyboard");
+
+  const hints = heaps.getByText("↑↓ move · ↵ open · esc");
+  await expect(hints).toBeVisible();
+  await expect
+    .poll(async () => {
+      const panel = await heaps.boundingBox();
+      const box = await hints.boundingBox();
+      if (!panel || !box) return false;
+      return (
+        Math.round(box.x) >= Math.round(panel.x) && Math.round(box.x + box.width) <= Math.round(panel.x + panel.width)
+      );
+    })
+    .toBe(true);
 });
 
 test("a heap made from the switcher takes the link name given", async ({ page }) => {

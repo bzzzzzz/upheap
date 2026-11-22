@@ -10,6 +10,7 @@ import { problemMessage } from "../components/ProblemText";
 import { AuthCard, authButtonClass } from "./AuthPage";
 import { Checking, Heading, Notice, Retry, useMoveFocus, type MoveFocus } from "./authStates";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
 /** The line the app shows once the user lands (`NoticeLine`). */
 const SIGNED_IN_NOTICE = "Password changed. You're signed in.";
@@ -169,7 +170,8 @@ function SetPassword({ account, token }: { account: PasswordResetAccount; token:
           <RequestId error={aboveButton} />
         </>
       )}
-      <button type="submit" disabled={busy} className={authButtonClass}>
+      <button type="submit" disabled={busy} aria-busy={busy || undefined} className={authButtonClass}>
+        <Saving pending={busy} />
         Set password and sign in
       </button>
       <p className="text-center text-xs text-muted">This signs you out everywhere else.</p>

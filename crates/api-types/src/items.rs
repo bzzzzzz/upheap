@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use domain::item::{Age, BlockReason, Description, Due, ItemPatch, Kind, NewItem, NewOrigin, Stage, StateKind, Title};
 use domain::list_view::ListView;
+use domain::ranking::PlaceSide;
 use domain::tag::parse_tag_set;
 use domain::turn::{AgentState, Goal};
 use domain::{ItemId, OptionId, ParameterId, TagId, ValidationError};
@@ -407,6 +408,41 @@ pub struct ClosedItemsDto {
     pub next_cursor: Option<String>,
 }
 
+/// Which closed items of the list across heaps to read (`GET /me/items/closed`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct AcrossHeapsClosedQuery {
+    /// Only the heaps of this team, by its slug. A team you aren't in is `not_found`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
+    /// `next_cursor` from the previous page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// Page size, 1 to 200. Defaults to 50.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u64>,
+}
+
+/// A page of the closed items of all the caller's heaps.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AcrossHeapsClosed)]
+pub struct AcrossHeapsClosedDto {
+    /// Most recently closed first.
+    pub items: Vec<AcrossHeapsClosedItemDto>,
+    /// Pass as `cursor` for the next page; `null` on the last page.
+    pub next_cursor: Option<String>,
+}
+
+/// A closed item of the list across heaps.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(as = AcrossHeapsClosedItem)]
+pub struct AcrossHeapsClosedItemDto {
+    /// The heap the item is in, and its team.
+    pub heap: ItemHeapDto,
+    /// The item as its own heap's closed list gives it.
+    pub item: ItemDto,
+}
+
 #[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateItemRequest)]
 pub struct CreateItemDto {
@@ -758,6 +794,38 @@ mod tests {
 pub struct ItemMoveDto {
     /// The heap to move the item to: a heap of any team the caller may edit items in.
     pub heap_id: Uuid,
+}
+
+/// Where to place an item in its heap's list.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = ItemPlaceRequest)]
+pub struct ItemPlaceDto {
+    /// The item to place it next to: another item of the same heap that ranks (open, in progress or blocked, and not
+    /// a reminder to come).
+    pub anchor: Uuid,
+    pub side: PlaceSideDto,
+    /// The `as_of` of the list the person is looking at, so the item lands where it was dropped there. Ignored when
+    /// it's in the future or too old, and then the current time is used. Omit to place it in the order of now.
+    pub as_of: Option<i64>,
+}
+
+/// Which side of the anchor to place an item on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = PlaceSide)]
+pub enum PlaceSideDto {
+    Above,
+    Below,
+}
+
+impl From<PlaceSideDto> for PlaceSide {
+    fn from(side: PlaceSideDto) -> Self {
+        match side {
+            PlaceSideDto::Above => Self::Above,
+            PlaceSideDto::Below => Self::Below,
+        }
+    }
 }
 
 /// An item to move, with the version the caller last read.

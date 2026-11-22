@@ -25,18 +25,18 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 
 ## Stack
 
-| Area | Choice |
-| --- | --- |
-| Backend | Rust (stable), a Cargo workspace |
-| HTTP | axum on tokio, tower middleware |
-| API contract | Code-first OpenAPI 3.1 with utoipa. The web app's TypeScript types are generated from it with openapi-typescript, and CI fails on drift |
-| Data access | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres |
-| Migrations | sea-orm-migration, embedded in the binary and run at startup |
-| Auth | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients, and personal tokens for machines with no browser. One OpenID Connect provider per server, through the `openidconnect` crate, next to local accounts |
-| Web app | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed |
-| Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz` |
-| Testing | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end |
-| Packaging | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the CLI and the server as static binaries on GitHub Releases, with a Homebrew cask for the CLI in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli-and-the-server)) |
+| Area          | Choice                                                                                                                                                                                                                                                                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend       | Rust (stable), a Cargo workspace                                                                                                                                                                                                                                                                                                                           |
+| HTTP          | axum on tokio, tower middleware                                                                                                                                                                                                                                                                                                                            |
+| API contract  | Code-first OpenAPI 3.1 with utoipa. The web app's TypeScript types are generated from it with openapi-typescript, and CI fails on drift                                                                                                                                                                                                                    |
+| Data access   | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres                                                                                                                                                                                                                                                      |
+| Migrations    | sea-orm-migration, embedded in the binary and run at startup                                                                                                                                                                                                                                                                                               |
+| Auth          | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients, and personal tokens for machines with no browser. One OpenID Connect provider per server, through the `openidconnect` crate, next to local accounts                                |
+| Web app       | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed                                                                                                                                                                                                                                    |
+| Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz`                                                                                                                                                                                                                                                                                            |
+| Testing       | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end                                                                                                                                                                                                                 |
+| Packaging     | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](operations.md)); the CLI and the server as static binaries on GitHub Releases, with a Homebrew cask for the CLI in `bzzzzzz/homebrew-tap` ([operations.md](operations.md#releasing-the-cli-and-the-server)) |
 
 ## Workspace
 
@@ -136,11 +136,12 @@ The tables and columns are in the migrations. These are the conventions they fol
   clash with their edits. A comment has no `version` and is never changed or deleted, and adding one never bumps the
   item's `version`, so it never conflicts with an edit and needs no `If-Match`. Its `number` is one past the highest the
   item has had, given under the heap lock with a locking read like a step's, backed by a unique index on `(item_id,
-  number)`, and never reused; it is the comment's name (`k3x9a.c3`). Any item takes one, open or closed, in an active
+number)`, and never reused; it is the comment's name (`k3x9a.c3`). Any item takes one, open or closed, in an active
   heap. An item has at most 200, and the 201st is refused (`too_many_comments`): the size assumption that lets a
   single-item response carry all of them, at most 200 times 20,000 characters, while a list row carries `comments:
-  null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. `body` is
-  `MEDIUMTEXT` on MySQL.
+null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. `body` is
+  `MEDIUMTEXT` on MySQL. A comment written in a run keeps the run (`run_id`, from the request's `Upheap-Run`), as its
+  audit entry does, so clients show it as the agent's without reading the history; a person's has none.
 - **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with the send it belongs to
   (`send_id`, the ID of the send's first turn: a turn a person or the prepare setting opens starts a send, and the
   next stage of an all-the-way send and a split's turn for its task carry it on), a reach (one state, or
@@ -216,7 +217,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   an item has at most one. It is refused while the item has an open question, and a watching turn is out of the queue
   without being waiting for the person. The server never reaches GitHub: the loop lists the open watches
   (`GET /work/watches`), reads each pull request with the person's `gh` about once a minute, and when something is
-  newer than `watch_since` (a comment, a review, a failed check, a merge or a close) fires the watch
+  newer than `watch_since` (a comment, a review, a failed check), or the pull request is in a state that fires at any
+  time (merged, closed, or `mergeable: CONFLICTING`), fires the watch
   (`POST /work/watches/{turn}/fire`), which clears it and adds a comment on the item, written as the person running the
   loop with the comment's usual audit entry.
   **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
@@ -321,7 +323,7 @@ The tables and columns are in the migrations. These are the conventions they fol
   therefore holds working links, each worth a membership for at most a week; revoking one ends it. A link's end is
   derived from `created_at` and one constant in `domain`, not stored.
 - **Portable SQL in practice.** The differences met so far, which new SQL has to respect: in `ON CONFLICT DO
-  UPDATE` Postgres refuses a bare column name that could mean the existing row or `excluded`, so upserts name
+UPDATE` Postgres refuses a bare column name that could mean the existing row or `excluded`, so upserts name
   their columns with the table; Postgres pads `char(n)` and reads it back padded, so every `char` column holds
   values of exactly its length; identifiers are quoted per backend; SQLite's `LOWER` lowercases ASCII only and
   Postgres's all of Unicode, so a comparison lowercases both sides in SQL, never one side in Rust; and after any
@@ -334,12 +336,12 @@ UUIDs are good keys but bad names: nobody can read `/heaps/0196f3a2-…/items/01
 terminal. So every user, team, heap and item also has a short handle, used in URLs, API paths and the CLI, while
 the UUIDs stay the database keys.
 
-| Thing | Handle | Unique within | Example | Who sets it |
-| --- | --- | --- | --- | --- |
-| User | username | everyone, shared with teams | `eugene` | the user, once, at sign-up |
-| Team | slug | everyone, shared with users | `my-team` | admins; derived from the name if not given |
-| Heap | slug | its team | `backlog` | admins; derived from the name if not given |
-| Item | key | its heap | `k3x9a` | the server, at random |
+| Thing | Handle   | Unique within               | Example   | Who sets it                                |
+| ----- | -------- | --------------------------- | --------- | ------------------------------------------ |
+| User  | username | everyone, shared with teams | `eugene`  | the user, once, at sign-up                 |
+| Team  | slug     | everyone, shared with users | `my-team` | admins; derived from the name if not given |
+| Heap  | slug     | its team                    | `backlog` | admins; derived from the name if not given |
+| Item  | key      | its heap                    | `k3x9a`   | the server, at random                      |
 
 Display names, team names and heap names stay free text that can repeat. Only handles are unique.
 
@@ -396,7 +398,7 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
 2. Each factor (need, age, deadline proximity, value per effort, each custom parameter, the tag order) produces a weighted
    component. Age counts from when the item joined the list: its creation, or for an item that was a reminder, its
    `arrives_at` (`ItemForRanking::from`), so a reminder arrives ranked as due that day rather than as an old item.
-   The score combines them. The formula is a named version (`FormulaVersion::V3`) behind one
+   The score combines them. The formula is a named version (`FormulaVersion::V4`) behind one
    function, set in code rather than stored per heap: tests pin orderings per version, so a formula change is an
    explicit test update, and since scores are never stored, switching versions needs no migration. The module doc of
    `domain::ranking` explains the current formula.
@@ -405,7 +407,7 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    one memoized walk, so it's linear in the number of items and carries through chains. Ties go to the item blocking
    the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
 4. **Contributors** are the largest weighted components, each with a label and a relative share ("Deadline in a few
-   days", "Blocks *Migrate auth*"). Scores themselves are never returned.
+   days", "Blocks _Migrate auth_"). Scores themselves are never returned.
    **Held back by** names what the person could change to lift an item: a low need, no due date, unset sizes, a tag
    low in the heap's tag order. A
    factor counts while its weight is above 0 (the need while its weight or the age weight is), and unset sizes are
@@ -414,6 +416,14 @@ blocking edges, and an `as_of` time go in; positions, contributors and held-back
    every item in a group sorted by something other than priority, where those fields don't move it.
 5. **Ties** that the chain length doesn't settle go to the older item, then to the ID, so the order is fully
    deterministic.
+6. **Placement** (product.md, Priority §11) is the one stored input that isn't a field: a positive multiplier on
+   one item, or none. Ranking multiplies the item's score (its own or what it inherits) by it, then applies the
+   blocker rule again, so a blocker still never ranks below what it blocks. On a drop the client sends the anchor,
+   the side and its list's `as_of`; the service ranks the heap at that `as_of` with the item's own placement left
+   out and sets the multiplier so the item lands halfway between the anchor and its neighbour on that side. Placing
+   again replaces the number, a move to another heap drops it, and nothing else touches it. The module doc of
+   `domain::ranking` has the details. The web app only offers it in the ranked group of a heap's priority list,
+   since the API can't know the view a client shows.
 
 A ranking preview ranks the heap with draft weights beside the stored ones, at one `as_of`, and returns the top of
 the default view's ranked group with each item's position under both. It stores nothing.
@@ -433,6 +443,13 @@ list to that team's heaps: they are filtered from the viewable heaps before any 
 within them is the unscoped list's, and the cap below applies after. A team that doesn't exist, that the caller isn't
 in or that isn't a valid handle is `not_found`, as every handle lookup answers, so teams can't be probed. It returns at most
 500 rows, pinned first, with `count` the true total: the size assumption that lets it skip paging.
+
+The closed items and the history across the same heaps (`GET /me/items/closed`, `GET /me/audit`, each with the
+optional `team`) are not merges of per-heap reads: one query reads a page over all the heaps, ordered and paged by
+the cursor a single heap's read uses, and each row is then built as its own heap builds it. A closed item gets its
+heap's tags, parameters and the caller's role there. The history reads each team's heaps with the actions the
+caller's role in that team may see, so a member of one team and an admin of another sees in each heap what its own
+history shows them. Archived heaps are left out of both, as they are from the list.
 
 ### Session-stable order
 
@@ -644,7 +661,7 @@ a fixed time.
      cross-site page can't set that header either, and CSRF is a cookie problem. Other `Authorization` schemes, such
      as the `Basic` credentials a browser sends to a proxy, are ignored and the cookie rules apply.
    - No page of the web app may be framed by another site (`X-Frame-Options: DENY`, `Content-Security-Policy:
-     frame-ancestors 'none'`), so a page can't hide the consent page under something that gets the user to click
+frame-ancestors 'none'`), so a page can't hide the consent page under something that gets the user to click
      Allow.
    - A request that's wrong in some other way than its client or redirect URI is shown as an error on the page, not
      sent back to the client as RFC 6749 suggests: the only client is first-party, so such a request is a bug the

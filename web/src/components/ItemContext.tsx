@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type Se
 import { ApiProblem, requestIdOf } from "../api/client";
 import type { Item } from "../api/schema";
 import { compactButtonClass } from "./buttons";
+import { Saving } from "./Saving";
 import { useRegisterDraft, type FlushDraft } from "./contextDraft";
 import { itemProblem } from "./itemProblems";
 import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
@@ -12,6 +13,7 @@ import { RequestId } from "./RequestId";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
+import { sectionHeadingClass } from "./sectionHeading";
 
 /** A blank text is no text, as the save stores it. */
 const normal = (text: string) => (text.trim() === "" ? "" : text);
@@ -89,7 +91,7 @@ export function ItemContext({
       className="flex flex-col gap-2 border-t border-line pt-3 outline-none"
     >
       <div className="flex min-h-9 items-center justify-between gap-2 pointer-coarse:min-h-11">
-        <h3 className="text-xs font-semibold text-muted">Context</h3>
+        <h3 className={sectionHeadingClass}>Context</h3>
         {canEdit && !(editing && !phone) && (
           <button
             ref={editButton}
@@ -318,7 +320,14 @@ function ContextForm({
         className="min-h-40 w-full rounded-lg border border-line bg-surface focus-within:border-accent"
       />
       <div className="flex gap-2 max-sm:[&>button]:flex-1">
-        <button type="button" disabled={pending} onClick={saveAndClose} className={compactButtonClass.primary}>
+        <button
+          type="button"
+          disabled={pending}
+          aria-busy={pending || undefined}
+          onClick={saveAndClose}
+          className={compactButtonClass.primary}
+        >
+          <Saving pending={pending} />
           {conflict ? "Save again" : "Save"}
         </button>
         <button type="button" onClick={discard} className={compactButtonClass.quiet}>

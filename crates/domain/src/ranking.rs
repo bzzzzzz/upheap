@@ -21,6 +21,13 @@
 //! a tag low in the order. It follows the formula's weights and its defaults for unset sizes (product.md, Priority §9). A blocker ranked by
 //! what it blocks has none, since its own fields don't move it.
 //!
+//! **Placement** is a multiplier on an item's score, its own or what it inherits, set when a person drops it above or
+//! below another item: it is worked out so the item lands halfway between its new neighbours ([`placement_for`]),
+//! and kept until the item is placed again or reset. The blocker rule then applies again to the placed scores, with
+//! an unplaced item counting by its own score, so a blocker never ranks below what it blocks and follows a placed
+//! item both ways: one placed down drops its blocker to just above it, and one placed above its blocker lifts the
+//! blocker. A placed blocker stops just above what it blocks. Items with none rank as they did before it existed.
+//!
 //! **Blockers** take on the priority of the most important item they block, times a small boost, through whole
 //! chains. The blocking edges form a forest because cycles are refused on write; the walk still tolerates a cycle
 //! in stored data by ignoring the edge that closes it.
@@ -29,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::due::fuzzy_label;
 use crate::heap::HeapPolicy;
-use crate::item::{Due, Item, Need, Size};
+use crate::item::{Due, Item, Need, Placement, Size};
 use crate::parameter::Parameter;
 use crate::tag::Tag;
 use crate::{ItemId, OptionId, ParameterId, TagId, Timestamp};
@@ -37,16 +44,20 @@ use crate::{ItemId, OptionId, ParameterId, TagId, Timestamp};
 /// A named version of the scoring formula.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaVersion {
-    /// V2 plus the Tags factor; with the Tags weight at 0 every score is V2's.
+    /// V3 plus placement; items with no placement rank as V3 did.
     ///
-    /// V2 is a weighted sum of need, age scaled by need, deadline proximity, value per effort and the custom
+    /// V3 is V2 plus the Tags factor; with the Tags weight at 0 every score is V2's. V2 is a weighted sum of need, age scaled by need, deadline proximity, value per effort and the custom
     /// parameters. It replaced `V1`, which had no need: items it ranked all count as expected, so they mostly kept
     /// their order, except that a blocker, which takes on 1.1 times the score of what it blocks, could move above
     /// an item it was just below.
-    V3,
+    V4,
 }
 
-pub const CURRENT_FORMULA: FormulaVersion = FormulaVersion::V3;
+pub const CURRENT_FORMULA: FormulaVersion = FormulaVersion::V4;
+
+/// What a score counts as when it is below this, for a placed item: there is something to scale, and a multiplier
+/// stays finite.
+const FLOOR: f64 = 1e-6;
 
 /// At most this many contributors are returned per item.
 pub const MAX_CONTRIBUTORS: usize = 2;
@@ -56,7 +67,7 @@ pub const MAX_CONTRIBUTORS: usize = 2;
 pub const MIN_SECONDARY_SHARE_PERCENT: u8 = 10;
 
 /// The inputs ranking needs from an item.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ItemForRanking<'a> {
     pub id: ItemId,
     /// Shown in the "Blocks …" contributor of the item that blocks this one.
@@ -72,6 +83,8 @@ pub struct ItemForRanking<'a> {
     pub parameters: &'a BTreeMap<ParameterId, OptionId>,
     /// The item's tags; only those in the heap's tag order count.
     pub tags: &'a BTreeSet<TagId>,
+    /// The multiplier a person placed the item with.
+    pub placement: Option<f64>,
 }
 
 impl<'a> From<&'a Item> for ItemForRanking<'a> {
@@ -87,6 +100,7 @@ impl<'a> From<&'a Item> for ItemForRanking<'a> {
             blocked_by: item.blocked_by(),
             parameters: &item.parameters,
             tags: &item.tags,
+            placement: item.placement.map(Placement::get),
         }
     }
 }
@@ -104,6 +118,8 @@ pub enum Factor {
     Tags,
     /// Priority inherited from an item this one blocks.
     Blocks,
+    /// The item was placed by hand: "Moved up" or "Moved down".
+    Placement,
 }
 
 /// One reason for an item's position.
@@ -166,33 +182,84 @@ pub fn rank(
     as_of: Timestamp,
 ) -> Vec<RankedItem> {
     let parameters: Vec<&Parameter> = parameters.iter().filter(|p| !p.is_archived()).collect();
-    let own: Vec<(f64, Vec<Component>)> = items
+    let boost = blocker_boost(formula);
+    let components: Vec<Vec<Component>> = items
         .iter()
-        .map(|item| {
-            let components = score_components(formula, policy, &parameters, tag_order, item, as_of);
-            let total = components.iter().map(|c| c.value).sum();
-            (total, components)
-        })
+        .map(|item| score_components(formula, policy, &parameters, tag_order, item, as_of))
         .collect();
-    let inherited = inherit_from_blocked(items, &own, blocker_boost(formula));
+    let own: Vec<f64> = components.iter().map(|c| c.iter().map(|c| c.value).sum()).collect();
+    // Pass 1: the scores the items would have with no placement.
+    let unplaced = inherit_from_blocked(items, &own, boost);
+    // Pass 2: a placed item's base is its unplaced score times its placement, an unplaced item's is its own score, and
+    // the blocker rule applies again, so a blocker follows what it blocks both ways.
+    let placed = if items.iter().any(|item| item.placement.is_some()) {
+        let bases: Vec<f64> = items
+            .iter()
+            .zip(&unplaced)
+            .zip(&own)
+            .map(|((item, unplaced), &own)| {
+                item.placement
+                    .map_or(own, |placement| unplaced.score.max(FLOOR) * placement)
+            })
+            .collect();
+        let second = inherit_from_blocked(items, &bases, boost);
+        Some((bases, second))
+    } else {
+        None
+    };
 
-    let mut scored: Vec<(Inherited, &ItemForRanking<'_>, Vec<Component>)> = own
+    /// An item with what its contributors are worked out from.
+    type Scored<'a, 'i> = (Inherited, &'a ItemForRanking<'i>, Vec<Component>, Option<Shift>, f64);
+    let mut scored: Vec<Scored<'_, '_>> = components
         .into_iter()
-        .zip(inherited)
+        .zip(&unplaced)
         .zip(items)
-        .map(|(((own_total, mut components), inherited), item)| {
-            if let Some(via) = inherited.via {
+        .enumerate()
+        .map(|(i, ((mut components, first), item))| {
+            let (result, base) = match &placed {
+                Some((bases, second)) => (
+                    Inherited {
+                        // A placed item's base came from what it inherited, so its first reason still holds.
+                        via: if item.placement.is_some() {
+                            second[i].via.or(first.via)
+                        } else {
+                            second[i].via
+                        },
+                        ..second[i]
+                    },
+                    bases[i],
+                ),
+                None => (*first, own[i]),
+            };
+            let shift = item.placement.map(|placement| Shift {
+                share_percent: percent((result.score - first.score).abs(), result.score.max(first.score)),
+                up: placement >= 1.0,
+            });
+            // The shares are measured against the final score, or for a placed item the unplaced one.
+            let share_total = if shift.is_some() {
+                first.score.max(FLOOR)
+            } else {
+                result.score
+            };
+            let raised = placed.as_ref().and_then(|(_, second)| second[i].via);
+            if let Some(via) = result.via {
+                // Pass 2's raise is measured from the item's base; otherwise the blocked item's priority from pass 1.
+                let value = if raised.is_some() {
+                    result.score - base
+                } else {
+                    first.score - own[i]
+                };
                 components.push(Component {
                     factor: Factor::Blocks,
-                    value: inherited.score - own_total,
+                    value,
                     label: format!("Blocks “{}”", items[via].title),
                 });
             }
-            (inherited, item, components)
+            (result, item, components, shift, share_total)
         })
         .collect();
 
-    scored.sort_by(|(score_a, a, _), (score_b, b, _)| {
+    scored.sort_by(|(score_a, a, _, _, _), (score_b, b, _, _, _)| {
         score_b
             .score
             .total_cmp(&score_a.score)
@@ -204,19 +271,135 @@ pub fn rank(
     scored
         .into_iter()
         .zip(1u32..)
-        .map(|((inherited, item, components), position)| RankedItem {
-            item_id: item.id,
-            position,
-            score: inherited.score,
-            contributors: select_contributors(components, inherited.score),
-            held_back_by: if inherited.via.is_some() {
-                Vec::new()
-            } else {
-                find_gaps(formula, policy, tag_order, item)
+        .map(
+            |((inherited, item, components, shift, share_total), position)| RankedItem {
+                item_id: item.id,
+                position,
+                score: inherited.score,
+                contributors: select_contributors(components, share_total, shift),
+                held_back_by: if inherited.via.is_some() {
+                    Vec::new()
+                } else {
+                    find_gaps(formula, policy, tag_order, item)
+                },
             },
-        })
+        )
         .collect()
 }
+
+/// Which side of the anchor an item is placed on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceSide {
+    Above,
+    Below,
+}
+
+/// Why a placement can't be worked out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum PlaceError {
+    /// The anchor isn't among the ranked items, or is the item itself.
+    #[error("the anchor isn't among the ranked items")]
+    AnchorNotRanked,
+    /// The item isn't among the ranked items, as a reminder to come isn't.
+    #[error("the item isn't among the ranked items")]
+    ItemNotRanked,
+}
+
+/// The multiplier that puts `item` right above or below `anchor_id` when `items` are ranked at `as_of`.
+///
+/// `items` are the ranked items of the heap, and `item` must be one of them. The heap is ranked with the item's own
+/// placement cleared and every other item's in effect, and the item is left out of the order it is placed in. Its target score is halfway between the anchor's and the neighbour's on that
+/// side, a tenth past the anchor when there is none, and the next representable score past the anchor when the
+/// halfway score isn't strictly past it (equal scores). The multiplier scales the item's unplaced score, the one it
+/// has with no placement anywhere, to the target; a second ranking with every placement cleared gives it, since
+/// that is the score `rank` multiplies.
+// The inputs are the ones `rank` takes, plus what is placed where; grouping them would only rename them.
+#[allow(clippy::too_many_arguments, clippy::expect_used)]
+pub fn placement_for(
+    formula: FormulaVersion,
+    policy: &HeapPolicy,
+    parameters: &[Parameter],
+    tag_order: &[&Tag],
+    items: &[ItemForRanking<'_>],
+    item: &ItemForRanking<'_>,
+    anchor_id: ItemId,
+    side: PlaceSide,
+    as_of: Timestamp,
+) -> Result<Placement, PlaceError> {
+    let others_placed: Vec<ItemForRanking<'_>> = items
+        .iter()
+        .map(|other| ItemForRanking {
+            placement: if other.id == item.id { None } else { other.placement },
+            ..*other
+        })
+        .collect();
+    let ranking = rank(formula, policy, parameters, tag_order, &others_placed, as_of);
+    let others: Vec<&RankedItem> = ranking.iter().filter(|ranked| ranked.item_id != item.id).collect();
+    let anchor = others
+        .iter()
+        .position(|ranked| ranked.item_id == anchor_id)
+        .ok_or(PlaceError::AnchorNotRanked)?;
+    let anchor_score = others[anchor].score;
+    let neighbour = match side {
+        PlaceSide::Above => anchor.checked_sub(1),
+        PlaceSide::Below => anchor.checked_add(1),
+    }
+    .and_then(|index| others.get(index));
+    let target = match (neighbour, side) {
+        (Some(neighbour), _) => (anchor_score + neighbour.score) / 2.0,
+        (None, PlaceSide::Above) => anchor_score * BEYOND_ANCHOR,
+        (None, PlaceSide::Below) => anchor_score / BEYOND_ANCHOR,
+    };
+    let beyond_neighbour = |target: f64| {
+        neighbour.is_none_or(|neighbour| match side {
+            PlaceSide::Above => target < neighbour.score,
+            PlaceSide::Below => target > neighbour.score,
+        })
+    };
+    let target = match side {
+        PlaceSide::Above if target > anchor_score && beyond_neighbour(target) => target,
+        PlaceSide::Above => anchor_score.next_up(),
+        PlaceSide::Below if target < anchor_score && beyond_neighbour(target) => target,
+        PlaceSide::Below => anchor_score.next_down(),
+    };
+    // The multiplier scales the score `rank` multiplies, the item's with no placement anywhere.
+    let all_cleared: Vec<ItemForRanking<'_>> = items
+        .iter()
+        .map(|other| ItemForRanking {
+            placement: None,
+            ..*other
+        })
+        .collect();
+    let unplaced_score = rank(formula, policy, parameters, tag_order, &all_cleared, as_of)
+        .iter()
+        .find(|ranked| ranked.item_id == item.id)
+        .ok_or(PlaceError::ItemNotRanked)?
+        .score
+        .max(FLOOR);
+    let mut multiplier = target.max(FLOOR) / unplaced_score;
+    // The division can round back onto the anchor's score; step until the product is strictly past it.
+    let is_past_anchor = |multiplier: f64| match side {
+        PlaceSide::Above => unplaced_score * multiplier > anchor_score,
+        PlaceSide::Below => unplaced_score * multiplier < anchor_score,
+    };
+    for _ in 0..MAX_TIE_STEPS {
+        if is_past_anchor(multiplier) {
+            break;
+        }
+        multiplier = match side {
+            PlaceSide::Above => multiplier.next_up(),
+            PlaceSide::Below => multiplier.next_down(),
+        };
+    }
+    Ok(Placement::new(multiplier)
+        .expect("both sides are clamped to FLOOR and the scores are finite, so the ratio is finite and positive"))
+}
+
+/// How many representable multipliers are tried past the first, when the product lands on the anchor's score.
+const MAX_TIE_STEPS: usize = 8;
+
+/// How far past the anchor an item is placed when nothing sits on that side of it.
+const BEYOND_ANCHOR: f64 = 1.1;
 
 /// What keeps `item` from ranking higher: a low need, no due date and unset sizes and a tag low in the order, each only while its factor
 /// counts, since otherwise changing it would move nothing. The need counts through its weight and through the
@@ -245,7 +428,7 @@ fn find_gaps(
     }
     if policy.value_weight.get() > 0 {
         let (unset_effort, unset_impact) = match formula {
-            FormulaVersion::V3 => (v3::UNSET_EFFORT, v3::UNSET_IMPACT),
+            FormulaVersion::V4 => (v4::UNSET_EFFORT, v4::UNSET_IMPACT),
         };
         let label = match (item.effort, item.impact) {
             (None, None) => Some("Effort and impact not set".to_owned()),
@@ -259,7 +442,7 @@ fn find_gaps(
     }
     if policy.tags_weight.get() > 0
         && let Some((tag, raw)) = best_tag(tag_order, item)
-        && raw < v3::NEUTRAL_TAG
+        && raw < v4::NEUTRAL_TAG
     {
         gaps.push(HeldBack {
             gap: Gap::Tags,
@@ -305,7 +488,7 @@ enum Visit {
 /// Each item's score as the maximum of its own and `boost` times the inherited score of each item it blocks.
 ///
 /// A memoized depth-first walk, iterative so long chains can't overflow the stack: linear in items and edges.
-fn inherit_from_blocked(items: &[ItemForRanking<'_>], own: &[(f64, Vec<Component>)], boost: f64) -> Vec<Inherited> {
+fn inherit_from_blocked(items: &[ItemForRanking<'_>], own: &[f64], boost: f64) -> Vec<Inherited> {
     let index: HashMap<ItemId, usize> = items.iter().enumerate().map(|(i, item)| (item.id, i)).collect();
     // `blocked[b]` lists the items that wait for item `b`, by ID so the result doesn't depend on input order.
     let mut blocked: Vec<Vec<usize>> = vec![Vec::new(); items.len()];
@@ -338,7 +521,7 @@ fn inherit_from_blocked(items: &[ItemForRanking<'_>], own: &[(f64, Vec<Component
                 continue;
             }
             let mut best = Inherited {
-                score: own[node].0,
+                score: own[node],
                 via: None,
                 height: 0,
             };
@@ -375,38 +558,62 @@ fn score_components(
     as_of: Timestamp,
 ) -> Vec<Component> {
     match formula {
-        FormulaVersion::V3 => v3::components(policy, parameters, tag_order, item, as_of),
+        FormulaVersion::V4 => v4::components(policy, parameters, tag_order, item, as_of),
     }
 }
 
 /// Factor applied to a score a blocker inherits, because finishing both takes more work than finishing one.
 const fn blocker_boost(formula: FormulaVersion) -> f64 {
     match formula {
-        FormulaVersion::V3 => v3::BLOCKER_BOOST,
+        FormulaVersion::V4 => v4::BLOCKER_BOOST,
     }
 }
 
-fn select_contributors(mut components: Vec<Component>, total: f64) -> Vec<Contributor> {
+/// How placing moved an item's score.
+#[derive(Clone, Copy)]
+struct Shift {
+    /// The share of the larger of the placed and the unplaced score that the move is, in whole percent.
+    share_percent: u8,
+    up: bool,
+}
+
+/// The contributors of an item scoring `total`: the placement first when there is one, then the largest components.
+fn select_contributors(mut components: Vec<Component>, total: f64, shift: Option<Shift>) -> Vec<Contributor> {
     if total <= 0.0 {
         return Vec::new();
     }
     components.sort_by(|a, b| b.value.total_cmp(&a.value));
-    components
+    let placed = shift.map(|shift| Contributor {
+        factor: Factor::Placement,
+        label: if shift.up { "Moved up" } else { "Moved down" }.to_owned(),
+        share_percent: shift.share_percent,
+    });
+    let led = placed.is_some();
+    placed
         .into_iter()
-        .filter(|c| c.value > 0.0 && !c.label.is_empty())
-        .map(|c| Contributor {
-            factor: c.factor,
-            label: c.label,
-            share_percent: ((c.value / total) * 100.0).round().clamp(1.0, 100.0) as u8,
-        })
-        .enumerate()
-        .filter(|(index, c)| *index == 0 || c.share_percent >= MIN_SECONDARY_SHARE_PERCENT)
-        .map(|(_, c)| c)
+        .chain(
+            components
+                .into_iter()
+                .filter(|c| c.value > 0.0 && !c.label.is_empty())
+                .map(|c| Contributor {
+                    factor: c.factor,
+                    label: c.label,
+                    share_percent: percent(c.value, total),
+                })
+                .enumerate()
+                .filter(|(index, c)| (*index == 0 && !led) || c.share_percent >= MIN_SECONDARY_SHARE_PERCENT)
+                .map(|(_, c)| c),
+        )
         .take(MAX_CONTRIBUTORS)
         .collect()
 }
 
-mod v3 {
+/// `part` of `total` in whole percent, 1 to 100.
+fn percent(part: f64, total: f64) -> u8 {
+    ((part / total) * 100.0).round().clamp(1.0, 100.0) as u8
+}
+
+mod v4 {
     //! Each factor yields a value of roughly 0 to 1 for typical items, multiplied by the heap's weight for it.
 
     use super::{Component, Factor, ItemForRanking, best_tag, fuzzy_label};
@@ -655,6 +862,7 @@ mod tests {
             blocked_by: None,
             parameters: &NO_VALUES,
             tags: &NO_TAGS,
+            placement: None,
         }
     }
 
@@ -676,6 +884,389 @@ mod tests {
 
     fn order(ranked: &[RankedItem]) -> Vec<ItemId> {
         ranked.iter().map(|r| r.item_id).collect()
+    }
+
+    /// Five items that rank by age alone, oldest first: 1, 2, 3, 4, 5.
+    fn aged() -> Vec<ItemForRanking<'static>> {
+        (1..=5).map(|n| item(n, -10 * (6 - n as i64))).collect()
+    }
+
+    /// `items` ranked at day 0 after `moved` is placed on `side` of `anchor`, with the placement it got.
+    fn ranked_after_placing(
+        items: &[ItemForRanking<'static>],
+        moved: ItemId,
+        anchor: ItemId,
+        side: PlaceSide,
+    ) -> (Vec<ItemId>, Vec<RankedItem>) {
+        let policy = HeapPolicy::default();
+        let item = *items.iter().find(|i| i.id == moved).expect("in items");
+        let placement =
+            placement_for(CURRENT_FORMULA, &policy, &[], &[], items, &item, anchor, side, day(0)).expect("placeable");
+        let placed: Vec<_> = items
+            .iter()
+            .map(|i| ItemForRanking {
+                placement: (i.id == moved).then_some(placement.get()),
+                ..*i
+            })
+            .collect();
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[], &placed, day(0));
+        (order(&ranked), ranked)
+    }
+
+    #[gtest]
+    fn placing_an_item_above_another_puts_it_right_above() {
+        let items = aged();
+
+        let (placed, _) = ranked_after_placing(&items, id(5), id(3), PlaceSide::Above);
+
+        expect_that!(
+            placed,
+            elements_are![eq(&id(1)), eq(&id(2)), eq(&id(5)), eq(&id(3)), eq(&id(4))]
+        );
+    }
+
+    #[gtest]
+    fn placing_an_item_below_another_puts_it_right_below() {
+        let items = aged();
+
+        let (placed, _) = ranked_after_placing(&items, id(1), id(3), PlaceSide::Below);
+
+        expect_that!(
+            placed,
+            elements_are![eq(&id(2)), eq(&id(3)), eq(&id(1)), eq(&id(4)), eq(&id(5))]
+        );
+    }
+
+    #[gtest]
+    fn placing_an_item_above_the_top_or_below_the_bottom_puts_it_there() {
+        let items = aged();
+
+        let (top, _) = ranked_after_placing(&items, id(5), id(1), PlaceSide::Above);
+        let (bottom, _) = ranked_after_placing(&items, id(1), id(5), PlaceSide::Below);
+
+        expect_that!(
+            top,
+            elements_are![eq(&id(5)), eq(&id(1)), eq(&id(2)), eq(&id(3)), eq(&id(4))]
+        );
+        expect_that!(
+            bottom,
+            elements_are![eq(&id(2)), eq(&id(3)), eq(&id(4)), eq(&id(5)), eq(&id(1))]
+        );
+    }
+
+    #[gtest]
+    fn placing_an_already_placed_item_again_lands_where_asked() {
+        let items = aged();
+        let (_, first) = ranked_after_placing(&items, id(5), id(1), PlaceSide::Above);
+        let policy = HeapPolicy::default();
+        let before = placement_for(
+            CURRENT_FORMULA,
+            &policy,
+            &[],
+            &[],
+            &items,
+            &items[4],
+            id(1),
+            PlaceSide::Above,
+            day(0),
+        )
+        .expect("placeable");
+        let items_placed: Vec<_> = items
+            .iter()
+            .map(|i| ItemForRanking {
+                placement: (i.id == id(5)).then_some(before.get()),
+                ..*i
+            })
+            .collect();
+
+        let again = placement_for(
+            CURRENT_FORMULA,
+            &policy,
+            &[],
+            &[],
+            &items_placed,
+            &items_placed[4],
+            id(2),
+            PlaceSide::Below,
+            day(0),
+        )
+        .expect("placeable");
+        let items_again: Vec<_> = items
+            .iter()
+            .map(|i| ItemForRanking {
+                placement: (i.id == id(5)).then_some(again.get()),
+                ..*i
+            })
+            .collect();
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[], &items_again, day(0));
+
+        expect_that!(order(&first)[0], eq(id(5)));
+        expect_that!(
+            order(&ranked),
+            elements_are![eq(&id(1)), eq(&id(2)), eq(&id(5)), eq(&id(3)), eq(&id(4))]
+        );
+    }
+
+    #[gtest]
+    fn a_placed_items_first_contributor_says_which_way() {
+        let items = aged();
+
+        let (_, up) = ranked_after_placing(&items, id(5), id(1), PlaceSide::Above);
+        let (_, down) = ranked_after_placing(&items, id(1), id(5), PlaceSide::Below);
+
+        expect_that!(up[0].contributors[0].factor, eq(Factor::Placement));
+        expect_that!(up[0].contributors[0].label, eq("Moved up"));
+        let moved_down = down.iter().find(|r| r.item_id == id(1)).expect("ranked");
+        expect_that!(moved_down.contributors[0].factor, eq(Factor::Placement));
+        expect_that!(moved_down.contributors[0].label, eq("Moved down"));
+        expect_that!(moved_down.contributors.len(), le(MAX_CONTRIBUTORS));
+    }
+
+    #[gtest]
+    fn a_blocker_placed_below_what_it_blocks_still_ranks_above_it() {
+        let mut items = aged();
+        // Item 1, the oldest, blocks item 5, the newest.
+        items[4].blocked_by = Some(id(1));
+
+        let (placed, _) = ranked_after_placing(&items, id(1), id(5), PlaceSide::Below);
+
+        expect_that!(position_in(&placed, id(1)), lt(position_in(&placed, id(5))));
+    }
+
+    #[gtest]
+    fn an_item_placed_above_its_blocker_lifts_the_blocker() {
+        let mut items = aged();
+        // Item 4 waits for item 1, the oldest and so the first.
+        items[3].blocked_by = Some(id(1));
+        // The blocked item is placed above everything.
+        let (placed, _) = ranked_after_placing(&items, id(4), id(1), PlaceSide::Above);
+
+        expect_that!(position_in(&placed, id(1)), lt(position_in(&placed, id(4))));
+        expect_that!(position_in(&placed, id(4)), lt(position_in(&placed, id(2))));
+    }
+
+    #[gtest]
+    fn a_blocker_placed_down_stays_marked_down_and_just_above_what_it_blocks() {
+        let mut items = aged();
+        // Item 5, the newest, blocks item 1, the oldest, so the order is 5, 1, 2, 3, 4.
+        items[0].blocked_by = Some(id(5));
+        let policy = HeapPolicy::default();
+        let placement = placement_for(
+            CURRENT_FORMULA,
+            &policy,
+            &[],
+            &[],
+            &items,
+            &items[4],
+            id(1),
+            PlaceSide::Below,
+            day(0),
+        )
+        .expect("placeable");
+        let placed: Vec<_> = items
+            .iter()
+            .map(|i| ItemForRanking {
+                placement: (i.id == id(5)).then_some(placement.get()),
+                ..*i
+            })
+            .collect();
+
+        let ranked = rank(CURRENT_FORMULA, &policy, &[], &[], &placed, day(0));
+        let blocker = ranked.iter().find(|r| r.item_id == id(5)).expect("ranked");
+
+        expect_that!(placement.direction(), eq(crate::item::PlacementDirection::Down));
+        expect_that!(
+            order(&ranked),
+            elements_are![eq(&id(5)), eq(&id(1)), eq(&id(2)), eq(&id(3)), eq(&id(4))]
+        );
+        expect_that!(blocker.contributors[0].label, eq("Moved down"));
+
+        // With the blocked item gone nothing lifts the placed one, so it ranks lower than it would unplaced.
+        let without_blocked: Vec<_> = placed.iter().filter(|i| i.id != id(1)).copied().collect();
+        let unplaced: Vec<_> = without_blocked
+            .iter()
+            .map(|i| ItemForRanking { placement: None, ..*i })
+            .collect();
+        let after = rank(CURRENT_FORMULA, &policy, &[], &[], &without_blocked, day(0));
+        let before = rank(CURRENT_FORMULA, &policy, &[], &[], &unplaced, day(0));
+        let score = |ranked: &[RankedItem]| ranked.iter().find(|r| r.item_id == id(5)).expect("ranked").score;
+        expect_that!(score(&after), lt(score(&before)));
+    }
+
+    #[gtest]
+    fn placing_between_equal_scores_still_moves_the_item() {
+        for age in [0, 1, 3, 7, 10, 13, 29, 30, 100, 365] {
+            let items: Vec<_> = (1..=3).map(|n| item(n, -age)).collect();
+
+            let (above, _) = ranked_after_placing(&items, id(3), id(2), PlaceSide::Above);
+            let (below, _) = ranked_after_placing(&items, id(2), id(3), PlaceSide::Below);
+
+            expect_that!(
+                position_in(&above, id(3)),
+                lt(position_in(&above, id(2))),
+                "above, age {age}"
+            );
+            expect_that!(
+                position_in(&below, id(2)),
+                gt(position_in(&below, id(3))),
+                "below, age {age}"
+            );
+        }
+    }
+
+    /// `items` with `moved` placed on `side` of `anchor`, the other placements kept.
+    fn placed_on(
+        items: &[ItemForRanking<'static>],
+        moved: ItemId,
+        anchor: ItemId,
+        side: PlaceSide,
+    ) -> Vec<ItemForRanking<'static>> {
+        let item = *items.iter().find(|i| i.id == moved).expect("in items");
+        let placement = placement_for(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[],
+            items,
+            &item,
+            anchor,
+            side,
+            day(0),
+        )
+        .expect("placeable");
+        items
+            .iter()
+            .map(|i| ItemForRanking {
+                placement: if i.id == moved {
+                    Some(placement.get())
+                } else {
+                    i.placement
+                },
+                ..*i
+            })
+            .collect()
+    }
+
+    #[gtest]
+    fn placing_a_blocker_of_a_placed_item_lands_where_asked() {
+        let mut items: Vec<_> = (1..=10).map(|n| item(n, -10 * (11 - n as i64))).collect();
+        // Item 10 blocks item 9.
+        items[8].blocked_by = Some(id(10));
+        // Placing 9 above 8 lifts 10 with it.
+        let items = placed_on(&items, id(9), id(8), PlaceSide::Above);
+
+        let items = placed_on(&items, id(10), id(5), PlaceSide::Above);
+
+        let ranked = rank(CURRENT_FORMULA, &HeapPolicy::default(), &[], &[], &items, day(0));
+        let order = order(&ranked);
+        expect_that!(position_in(&order, id(10)) + 1, eq(position_in(&order, id(5))));
+    }
+
+    #[gtest]
+    fn a_blocker_follows_what_it_blocks_when_that_is_placed_down() {
+        let mut items = aged();
+        // Item 5, the newest, blocks item 1, the oldest, so the order is 5, 1, 2, 3, 4.
+        items[0].blocked_by = Some(id(5));
+
+        let (placed, ranked) = ranked_after_placing(&items, id(1), id(4), PlaceSide::Below);
+
+        // The blocker takes 1.1 times the score of what it blocks, which is placed a tenth below the last item, so
+        // it ends level with that item, ahead of it by the longer chain it blocks.
+        expect_that!(
+            placed,
+            elements_are![eq(&id(2)), eq(&id(3)), eq(&id(5)), eq(&id(4)), eq(&id(1))]
+        );
+        let blocker = ranked.iter().find(|r| r.item_id == id(5)).expect("ranked");
+        // It is ranked by what it blocks, so nothing of its own is held back.
+        expect_that!(blocker.held_back_by, is_empty());
+    }
+
+    #[gtest]
+    fn a_placed_down_items_shares_are_not_above_its_unplaced_ones() {
+        let items = aged();
+        let policy = HeapPolicy::default();
+        let before = rank(CURRENT_FORMULA, &policy, &[], &[], &items, day(0));
+        let unplaced = &before.iter().find(|r| r.item_id == id(1)).expect("ranked").contributors;
+
+        let (_, ranked) = ranked_after_placing(&items, id(1), id(5), PlaceSide::Below);
+        let placed = &ranked.iter().find(|r| r.item_id == id(1)).expect("ranked").contributors;
+
+        expect_that!(placed[0].label, eq("Moved down"));
+        for contributor in &placed[1..] {
+            let was = unplaced
+                .iter()
+                .find(|c| c.label == contributor.label)
+                .expect("was there");
+            expect_that!(
+                contributor.share_percent,
+                le(was.share_percent),
+                "{}",
+                contributor.label
+            );
+        }
+    }
+
+    #[gtest]
+    fn the_anchor_must_be_another_ranked_item() {
+        let items = aged();
+        let policy = HeapPolicy::default();
+
+        for anchor in [id(5), id(99)] {
+            let placed = placement_for(
+                CURRENT_FORMULA,
+                &policy,
+                &[],
+                &[],
+                &items,
+                &items[4],
+                anchor,
+                PlaceSide::Above,
+                day(0),
+            );
+            expect_that!(placed, err(eq(PlaceError::AnchorNotRanked)), "{anchor:?}");
+        }
+    }
+
+    #[gtest]
+    fn the_item_must_be_ranked() {
+        let items = aged();
+
+        let placed = placement_for(
+            CURRENT_FORMULA,
+            &HeapPolicy::default(),
+            &[],
+            &[],
+            &items[..4],
+            &items[4],
+            id(1),
+            PlaceSide::Above,
+            day(0),
+        );
+
+        expect_that!(placed, err(eq(PlaceError::ItemNotRanked)));
+    }
+
+    #[gtest]
+    fn a_zero_score_keeps_the_multiplier_finite() {
+        let items = aged();
+
+        let placement = placement_for(
+            CURRENT_FORMULA,
+            &all_off(),
+            &[],
+            &[],
+            &items,
+            &items[4],
+            id(1),
+            PlaceSide::Above,
+            day(0),
+        );
+
+        expect_that!(placement, ok(anything()));
+    }
+
+    fn position_in(order: &[ItemId], item: ItemId) -> usize {
+        order.iter().position(|id| *id == item).expect("ranked")
     }
 
     #[gtest]
@@ -1594,6 +2185,7 @@ mod tests {
                 blocked_by: None,
                 parameters: &NO_VALUES,
                 tags: &NO_TAGS,
+                placement: None,
             })
     }
 

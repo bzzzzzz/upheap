@@ -10,6 +10,7 @@ import { itemProblem } from "./itemProblems";
 import { RequestId } from "./RequestId";
 import { focusClass, labelClass, pickBoxClass, pickClass } from "./ItemQuestions";
 import { LazyMarkdownEditor } from "./LazyMarkdownEditor";
+import { Saving } from "./Saving";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
 // The limits the server enforces (openapi `AskQuestionRequest`); the form only keeps Ask off past them.
@@ -378,9 +379,11 @@ function AskForm({
         </Button>
         <Button
           type="submit"
-          isDisabled={!valid || ask.isPending}
+          isPending={ask.isPending}
+          isDisabled={!valid}
           className={`${compactButtonClass.primary} ${focusClass} max-sm:min-h-11 max-sm:w-full`}
         >
+          <Saving pending={ask.isPending} />
           Ask
         </Button>
       </div>

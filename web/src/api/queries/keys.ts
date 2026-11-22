@@ -71,6 +71,8 @@ export const waitingKey = apiKey("/api/v1/me/waiting");
 export const decisionsKey = apiKey("/api/v1/me/decisions");
 /** Every view of the list across heaps, by prefix. */
 export const acrossHeapsKey = apiKey("/api/v1/me/items");
+/** The closed items across heaps, of every team and of each one, by prefix. */
+export const acrossClosedKey = apiKey("/api/v1/me/items/closed");
 export const meKey = apiKey("/api/v1/me");
 /** Every cached item, in every heap. */
 export const everyItemKey = apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}");
@@ -82,6 +84,7 @@ export const everyItemKey = apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{ite
 export const historyKeys = [
   apiKey("/api/v1/teams/{team}/heaps/{heap}/audit"),
   apiKey("/api/v1/teams/{team}/audit"),
+  apiKey("/api/v1/me/audit"),
   apiKey("/api/v1/me/history"),
   apiKey("/api/v1/operator/accounts/{user_id}/history"),
 ];
@@ -114,8 +117,8 @@ export function heapRecordKeys(heap: { team: string; heap?: string }) {
 }
 
 /**
- * How often what others change on the server reaches a page left open: the ranked list and the Waiting count are
- * fetched again on this interval. TanStack Query skips it while the tab is hidden.
+ * How often what others change on the server reaches a page left open: the ranked list, the Waiting count, the Agents
+ * page and the heaps' open counts are fetched again on this interval. TanStack Query skips it while the tab is hidden.
  */
 export const POLL_INTERVAL = 30_000;
 
@@ -125,11 +128,25 @@ export function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: rankedKey(heap) }),
     queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
+    queryClient.invalidateQueries({ queryKey: acrossClosedKey }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
     queryClient.invalidateQueries({ queryKey: everyItemKey }),
-    // An item's state or order changes what waits for the person, and in what order.
+    invalidateCounts(queryClient),
+  ]);
+}
+
+/**
+ * The counts the navigation shows on every page, what waits for the person and the heaps' open counts in `/me`, and
+ * the Agents page's Your decision. Every write to an item, a question, a step or a turn fetches all three again, rather
+ * than each write naming the ones it can move: a reply can close its item, a new kind or date can make an item a
+ * reminder to come, sending an item on takes it off Your decision, and a count missed is a number that stays wrong
+ * until the next poll. Waiting for me and Your decision are waited for, as their pages show the rows; `/me` isn't, so
+ * no write waits for the whole of it.
+ */
+export function invalidateCounts(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: meKey });
+  return Promise.all([
     queryClient.invalidateQueries({ queryKey: waitingKey }),
-    // Starting, closing or sending on an item takes it off Your decision.
     queryClient.invalidateQueries({ queryKey: decisionsKey }),
   ]);
 }
@@ -199,14 +216,6 @@ export function invalidateMe(queryClient: QueryClient) {
 }
 
 /**
- * The heaps' open counts in `/me`, which the sidebar shows. Only adding an item or changing its state changes them,
- * so only those refetch `/me`, and nothing waits for it.
- */
-export function invalidateOpenCounts(queryClient: QueryClient) {
-  void invalidateMe(queryClient);
-}
-
-/**
  * Puts the item a turn write answered with into the heap's cached lists, so a row shows the turn, or its end, as soon as
  * the write lands rather than when the refetch after it does: until then the row would still offer to send. Only the
  * ranked lists are changed; the blocker candidates share their key's prefix with another shape.
@@ -263,3 +272,9 @@ export function removeUserQueries(queryClient: QueryClient, keep?: (queryKey: re
 
 /** The scope that makes edits of items run one at a time. */
 export const itemEditsScope = { id: "item-edits" } as const;
+
+/** The key of `useUpdateItem`'s mutations in `heap`, so `useSavingFields` finds those pending, whichever component pressed. */
+export const itemEditKey = (heap: HeapRef) => ["item-edit", heapPath(heap)] as const;
+
+/** The key of the mutations that place an item by hand in `heap`, so a fetch waits for the last of a quick run of them. */
+export const placingKey = (heap: HeapRef) => ["placing", heapPath(heap)] as const;

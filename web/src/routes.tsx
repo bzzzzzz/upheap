@@ -28,12 +28,12 @@ import { RequestId } from "./components/RequestId";
 import { AllItemsPage } from "./pages/AllItemsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { AccountsPage } from "./pages/AccountsPage";
-import { HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
+import { AllActivityPage, HeapActivityPage, TeamActivityPage } from "./pages/ActivityPage";
 import { AppLayout } from "./pages/AppLayout";
 import { AuthorizePage } from "./pages/AuthorizePage";
 import { AuthPage } from "./pages/AuthPage";
 import { AgentsPage } from "./pages/AgentsPage";
-import { ClosedPage } from "./pages/ClosedPage";
+import { AllClosedPage, ClosedPage } from "./pages/ClosedPage";
 import { DataPage, type DataSearch } from "./pages/DataPage";
 import { HeapPage } from "./pages/HeapPage";
 import { HeapContextSettings, HeapGeneralSettings, HeapSettingsLayout } from "./pages/HeapSettingsPage";
@@ -608,6 +608,30 @@ const allRoute = createRoute({
   },
 });
 
+/** The team a page across heaps is limited to: `?team=<slug>`, and nothing else. */
+const parseAcrossTeam = (search: Record<string, unknown>): { team?: string } =>
+  typeof search.team === "string" && search.team !== "" ? { team: search.team } : {};
+
+/** The closed items of every heap, or of one team's (ux.md, All items). */
+const allClosedRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/all/closed",
+  validateSearch: parseAcrossTeam,
+  component: function AllClosedRoute() {
+    return <AllClosedPage team={allClosedRoute.useSearch().team} />;
+  },
+});
+
+/** What happened in every heap, or in one team's (ux.md, All items). */
+const allActivityRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/all/activity",
+  validateSearch: parseAcrossTeam,
+  component: function AllActivityRoute() {
+    return <AllActivityPage team={allActivityRoute.useSearch().team} />;
+  },
+});
+
 const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/account", component: AccountPage });
 
 /** Every account on the server, for operators (ux.md, Accounts). Anyone else sees the not-found page. */
@@ -657,6 +681,8 @@ const routeTree = rootRoute.addChildren([
     waitingRoute,
     agentsRoute,
     allRoute,
+    allClosedRoute,
+    allActivityRoute,
     accountRoute,
     accountsRoute,
     notFoundRoute,

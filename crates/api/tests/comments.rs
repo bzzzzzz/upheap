@@ -4,7 +4,7 @@ mod common;
 
 use anyhow::{Context, Result};
 use axum::http::{Method, StatusCode};
-use common::{TestApp, TestResponse};
+use common::{CSRF, TestApp, TestResponse};
 use googletest::prelude::*;
 use serde_json::{Value, json};
 
@@ -273,5 +273,59 @@ async fn an_items_history_says_who_commented_and_what() -> Result<()> {
         entries[1].1,
         eq(&json!({ "comment": 1, "comment_text": "Use the internal CA." }))
     );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_comment_written_in_a_run_names_the_run_and_a_persons_names_none() -> Result<()> {
+    // Arrange: the note is sent to an agent, and a run claims it.
+    let (app, session, heap, key) = note().await?;
+    let path = item_path(&app, &heap, &key).await?;
+    let sent = app
+        .send(
+            Method::POST,
+            &format!("{path}/turn"),
+            Some(&session),
+            Some(json!({ "reach": "one" })),
+        )
+        .await?;
+    assert_that!(sent.status, eq(StatusCode::CREATED));
+    let heap_ref = app
+        .heap_url(&heap)
+        .await?
+        .strip_prefix("/api/v1/teams/")
+        .context("heap url")?
+        .replace("/heaps/", "/");
+    let claimed = app
+        .send(
+            Method::POST,
+            "/api/v1/work/runs",
+            Some(&session),
+            Some(json!({ "heaps": [heap_ref] })),
+        )
+        .await?;
+    assert_that!(claimed.status, eq(StatusCode::CREATED));
+    let run = claimed.body["run"]["id"].clone();
+    let run_header = run.as_str().context("no run")?;
+
+    // Act: the agent comments in its run, as the CLI does, and then the person does.
+    let by_agent = app
+        .send_with(
+            Method::POST,
+            &format!("{path}/comments"),
+            Some(&session),
+            Some(json!({ "body": "Wrote the context." })),
+            &[CSRF, ("upheap-run", run_header)],
+        )
+        .await?;
+    let by_person = comment(&app, &session, &heap, &key, json!({ "body": "Thanks." })).await?;
+
+    // Assert
+    assert_that!(by_agent.status, eq(StatusCode::CREATED));
+    assert_that!(by_person.status, eq(StatusCode::CREATED));
+    let read = get(&app, &session, &heap, &key).await?;
+    expect_that!(read["comments"][0]["run_id"], eq(&run));
+    expect_that!(read["comments"][1]["run_id"], eq(&Value::Null));
     Ok(())
 }

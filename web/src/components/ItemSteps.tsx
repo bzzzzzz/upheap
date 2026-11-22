@@ -11,8 +11,7 @@ import {
   Plus,
   Undo2,
 } from "lucide-react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
@@ -25,6 +24,9 @@ import { Markdown } from "./Markdown";
 import { MenuEntry, MenuPopover } from "./Menu";
 import { useOverListLink } from "./overList";
 import { RequestId } from "./RequestId";
+import { Saving } from "./Saving";
+import { sectionHeadingClass } from "./sectionHeading";
+import { useDragToReorder, type GripProps } from "./useDragToReorder";
 
 /**
  * A task's steps (ux.md, The item point 11): a checklist, inline at every width, each step saving as it's changed. An
@@ -38,6 +40,9 @@ import { RequestId } from "./RequestId";
 export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const add = useAddStep(heapRef, item.key);
   const update = useUpdateStep(heapRef, item.key);
+  // The write that is on its way, which is the latest one: a step shows it saving when the write is a tick, a drop, or
+  // a new title or context of its own.
+  const writing = update.isPending ? update.variables : undefined;
   // Which steps show their context: local to this view, closed to begin with.
   const [shown, setShown] = useState<ReadonlySet<number>>(new Set());
   const canAdd = item.allowed_actions.includes("add_step");
@@ -78,10 +83,10 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
       .mutateAsync({ step, patch: { after: index === 0 ? null : (order[index - 1] ?? null) } })
       .then(settled, settled);
   };
-  const drag = useStepDrag({
+  const drag = useDragToReorder({
     listRef,
     rows,
-    numbers: steps.map((step) => step.number),
+    ids: steps.map((step) => step.number),
     onDrop: moveTo,
   });
 
@@ -98,10 +103,8 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
   const progress = item.step_progress;
 
   return (
-    <section aria-label="Steps" className="flex flex-col gap-1.5">
-      <h3 className="text-xs font-medium text-ink-soft">
-        {progress ? `Steps ${progress.ticked}/${progress.total}` : "Steps"}
-      </h3>
+    <section aria-label="Steps" className="flex flex-col gap-1.5 border-t border-line pt-3">
+      <h3 className={sectionHeadingClass}>{progress ? `Steps ${progress.ticked}/${progress.total}` : "Steps"}</h3>
       {steps.length > 0 && (
         <ul ref={listRef} className={`relative flex flex-col ${drag.active ? "select-none" : ""}`}>
           {steps.map((step, index) => (
@@ -117,6 +120,7 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
               onMove={(delta) => moveTo(step.number, index + delta)}
               grip={drag.gripProps(step.number)}
               lift={drag.lifted === step.number ? drag.dy : null}
+              saving={writing?.step.number === step.number ? writing.patch : null}
               contextShown={shown.has(step.number)}
               onToggleContext={() => toggleContext(step.number)}
               onSave={(patch) =>
@@ -142,6 +146,7 @@ export function ItemSteps({ heapRef, item }: { heapRef: HeapRef; item: Item }) {
       </span>
       {canAdd && (
         <AddStep
+          saving={add.isPending}
           onAdd={(title) =>
             add.mutateAsync({ title }).then(
               () => true,
@@ -166,164 +171,6 @@ const slotClass = "flex size-9 shrink-0 items-center justify-center pointer-coar
 const iconButtonClass =
   "flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:size-11";
 
-/** The pointer handlers of a step's grip. */
-type GripProps = {
-  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
-  onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
-};
-
-/** How near the edge of the scrolling pane the pointer scrolls it, and by how much a frame. */
-const EDGE_ZONE = 48;
-const EDGE_SCROLL = 8;
-/** How far the pointer moves before a press on the grip is a drag, so a click near the pane's edge scrolls nothing. */
-const DRAG_START = 6;
-
-/**
- * Dragging a step by its grip, with pointer events (mouse, touch and pen alike). The dragged row follows the pointer
- * (`dy`, for `lifted`) while the others stay, and `lineY` is where the landing place's line goes, within the list. The
- * landing place is the number of other rows whose midpoint is above the pointer; the rows' rects are read again at
- * every move and frame, since the pane may be scrolling. Escape and a cancelled pointer put the row back.
- */
-function useStepDrag({
-  listRef,
-  rows,
-  numbers,
-  onDrop,
-}: {
-  listRef: React.RefObject<HTMLUListElement | null>;
-  rows: React.RefObject<Map<number, HTMLLIElement>>;
-  /** The step numbers in the shown order. */
-  numbers: readonly number[];
-  /** Called with the step and the index it lands at in the shown order. */
-  onDrop: (number: number, index: number) => void;
-}) {
-  const [lifted, setLifted] = useState<number | null>(null);
-  const [dy, setDy] = useState(0);
-  const [lineY, setLineY] = useState<number | null>(null);
-  const session = useRef<{
-    number: number;
-    pointerId: number;
-    startY: number;
-    startListTop: number;
-    pointerY: number;
-    others: readonly number[];
-    index: number;
-    landing: number;
-    scroller: Element;
-    /** Whether the pointer has gone past `DRAG_START` from where it went down; until then a press is not a drag. */
-    moved: boolean;
-  } | null>(null);
-
-  const measure = useCallback(() => {
-    const current = session.current;
-    const list = listRef.current;
-    if (!current || !list) return;
-    const listTop = list.getBoundingClientRect().top;
-    // The list moves when its pane scrolls, and the row has to stay under the pointer.
-    setDy(current.pointerY - current.startY + current.startListTop - listTop);
-    const rects = current.others.map((number) => rows.current.get(number)?.getBoundingClientRect());
-    const landing = rects.filter((rect) => rect && (rect.top + rect.bottom) / 2 < current.pointerY).length;
-    current.landing = landing;
-    const above = rects[landing - 1];
-    const below = rects[landing];
-    if (landing === current.index) setLineY(null);
-    else if (above && below) setLineY((above.bottom + below.top) / 2 - listTop);
-    else if (below) setLineY(below.top - listTop);
-    else if (above) setLineY(above.bottom - listTop);
-  }, [listRef, rows]);
-
-  const end = useCallback(() => {
-    session.current = null;
-    setLifted(null);
-    setDy(0);
-    setLineY(null);
-  }, []);
-
-  useEffect(() => {
-    if (lifted === null) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // Only the drag takes this Escape: the item stays open.
-      event.preventDefault();
-      event.stopPropagation();
-      end();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    let frame = requestAnimationFrame(function scroll() {
-      const current = session.current;
-      if (current) {
-        const edge =
-          current.scroller === document.scrollingElement
-            ? { top: 0, bottom: window.innerHeight }
-            : current.scroller.getBoundingClientRect();
-        if (current.pointerY < edge.top + EDGE_ZONE) current.scroller.scrollTop -= EDGE_SCROLL;
-        else if (current.pointerY > edge.bottom - EDGE_ZONE) current.scroller.scrollTop += EDGE_SCROLL;
-        measure();
-      }
-      frame = requestAnimationFrame(scroll);
-    });
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      cancelAnimationFrame(frame);
-    };
-  }, [lifted, measure, end]);
-
-  return {
-    active: lifted !== null,
-    lifted,
-    dy,
-    lineY,
-    gripProps: (number: number): GripProps => ({
-      onPointerDown: (event) => {
-        if (event.button !== 0 || session.current || !listRef.current) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        let scroller: Element = document.scrollingElement ?? document.documentElement;
-        for (let node = listRef.current.parentElement; node; node = node.parentElement) {
-          const { overflowY } = getComputedStyle(node);
-          if (/auto|scroll|overlay/.test(overflowY) && node.scrollHeight > node.clientHeight) {
-            scroller = node;
-            break;
-          }
-        }
-        const index = numbers.indexOf(number);
-        session.current = {
-          number,
-          pointerId: event.pointerId,
-          startY: event.clientY,
-          startListTop: listRef.current.getBoundingClientRect().top,
-          pointerY: event.clientY,
-          others: numbers.filter((other) => other !== number),
-          index,
-          landing: index,
-          scroller,
-          moved: false,
-        };
-      },
-      onPointerMove: (event) => {
-        if (session.current?.pointerId !== event.pointerId) return;
-        session.current.pointerY = event.clientY;
-        if (!session.current.moved && Math.abs(event.clientY - session.current.startY) > DRAG_START) {
-          session.current.moved = true;
-          setLifted(session.current.number);
-        }
-        measure();
-      },
-      onPointerUp: (event) => {
-        const current = session.current;
-        if (current?.pointerId !== event.pointerId) return;
-        measure();
-        end();
-        if (current.moved && current.landing !== current.index) onDrop(current.number, current.landing);
-      },
-      onPointerCancel: (event) => {
-        if (session.current?.pointerId === event.pointerId) end();
-      },
-    }),
-  };
-}
-
 function StepRow({
   step,
   rowRef,
@@ -332,6 +179,7 @@ function StepRow({
   onMove,
   grip,
   lift,
+  saving,
   contextShown,
   onToggleContext,
   onSave,
@@ -345,6 +193,8 @@ function StepRow({
   grip: GripProps;
   /** How far the step is dragged, while it is. */
   lift: number | null;
+  /** The change to the step that is being saved, if any. */
+  saving: StepPatch | null;
   contextShown: boolean;
   onToggleContext: () => void;
   /** Resolves to whether the save landed; a failure is shown by the list. */
@@ -408,27 +258,32 @@ function StepRow({
         )}
         {dropped ? (
           <span className={`${slotClass} text-muted`}>
-            <Minus aria-hidden="true" className="size-4" />
+            {saving?.state !== undefined ? <Saving pending /> : <Minus aria-hidden="true" className="size-4" />}
             <span className="sr-only">Dropped</span>
           </span>
         ) : (
           <Checkbox
             isSelected={step.state === "ticked"}
             isDisabled={!canEdit}
+            isReadOnly={saving?.state !== undefined}
             onChange={(ticked) => onSave({ state: ticked ? "ticked" : "open" })}
             aria-label={step.title}
             className={`${slotClass} group outline-none`}
           >
-            {({ isSelected }) => (
-              <span
-                aria-hidden="true"
-                className={`flex size-5 items-center justify-center rounded-md border group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-accent ${
-                  isSelected ? "border-done bg-done text-surface" : "border-line-strong bg-surface"
-                } ${canEdit ? "" : "opacity-60"}`}
-              >
-                {isSelected && <Check className="size-3.5" strokeWidth={3} />}
-              </span>
-            )}
+            {({ isSelected }) =>
+              saving?.state !== undefined ? (
+                <Saving pending />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className={`flex size-5 items-center justify-center rounded-md border group-data-[focus-visible]:outline-2 group-data-[focus-visible]:outline-accent ${
+                    isSelected ? "border-done bg-done text-surface" : "border-line-strong bg-surface"
+                  } ${canEdit ? "" : "opacity-60"}`}
+                >
+                  {isSelected && <Check className="size-3.5" strokeWidth={3} />}
+                </span>
+              )
+            }
           </Checkbox>
         )}
         <div className="flex min-h-9 min-w-0 flex-1 items-center pointer-coarse:min-h-11">
@@ -465,6 +320,7 @@ function StepRow({
               {step.title}
             </span>
           )}
+          <Saving pending={saving?.title !== undefined} />
         </div>
         {hasDisclosure && (
           <Button
@@ -512,6 +368,7 @@ function StepRow({
       </div>
       {contextShown && (
         <div className={`pr-1 pb-2 ${canEdit ? "pl-18 pointer-coarse:pl-22" : "pl-9 pointer-coarse:pl-11"}`}>
+          <Saving pending={saving?.context !== undefined} className="mb-1" />
           {canEdit && (editingContext || !step.context) ? (
             <LazyMarkdownEditor
               aria-label="Step context"
@@ -592,7 +449,7 @@ function StepRow({
  * first is saved; a refused add puts its title back when the field is still empty, so it loses nothing (it shows again
  * when the field is opened again, if the field was closed meanwhile).
  */
-function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
+function AddStep({ saving, onAdd }: { saving: boolean; onAdd: (title: string) => Promise<boolean> }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -617,7 +474,7 @@ function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
         }}
         className="-ml-1 flex min-h-9 items-center gap-2 self-start rounded-lg px-1 text-sm text-ink-soft outline-none hover:text-ink data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent pointer-coarse:min-h-11"
       >
-        <Plus aria-hidden="true" className="size-4" />
+        {saving ? <Saving pending /> : <Plus aria-hidden="true" className="size-4" />}
         Add a step
       </Button>
     );
@@ -634,33 +491,36 @@ function AddStep({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) {
   };
 
   return (
-    <input
-      // The person asked for the field, and expects to type in it.
-      autoFocus
-      aria-label="New step"
-      value={draft}
-      maxLength={300}
-      placeholder="What needs doing?"
-      onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
+    <div className="flex items-center gap-2">
+      <input
+        // The person asked for the field, and expects to type in it.
+        autoFocus
+        aria-label="New step"
+        value={draft}
+        maxLength={300}
+        placeholder="What needs doing?"
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            takeDraft();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelled.current = true;
+            returnFocus.current = true;
+            setDraft("");
+            setAdding(false);
+          }
+        }}
+        onBlur={() => {
+          if (cancelled.current) return;
           takeDraft();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          cancelled.current = true;
-          returnFocus.current = true;
-          setDraft("");
           setAdding(false);
-        }
-      }}
-      onBlur={() => {
-        if (cancelled.current) return;
-        takeDraft();
-        setAdding(false);
-      }}
-      className="min-h-9 w-full rounded-lg border border-line bg-surface px-2 text-base outline-none focus:border-accent pointer-coarse:min-h-11"
-    />
+        }}
+        className="min-h-9 w-full rounded-lg border border-line bg-surface px-2 text-base outline-none focus:border-accent pointer-coarse:min-h-11"
+      />
+      <Saving pending={saving} />
+    </div>
   );
 }

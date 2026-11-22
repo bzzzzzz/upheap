@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
 import type { AskQuestionRequest, Item, Question, QuestionReplyRequest, Waiting } from "../schema";
-import { rankedKey, closedKey, itemKey, waitingKey, acrossHeapsKey } from "./keys";
+import { rankedKey, closedKey, itemKey, waitingKey, acrossHeapsKey, acrossClosedKey, invalidateCounts } from "./keys";
 
 /**
  * Asks a question or a request on the item `itemId` (its key). Not optimistic: the item the server returns, with the
@@ -28,7 +28,7 @@ export function useAskQuestion(heap: HeapRef, itemId: string) {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
+      void invalidateCounts(queryClient);
     },
   });
 }
@@ -89,9 +89,11 @@ export function useReplyToQuestion(heap: HeapRef, itemId: string) {
     onSettled: (saved) => {
       void queryClient.invalidateQueries({ queryKey: rankedKey(heap) });
       void queryClient.invalidateQueries({ queryKey: acrossHeapsKey });
-      void queryClient.invalidateQueries({ queryKey: waitingKey });
-      if (saved && (saved.state === "done" || saved.state === "wont_do"))
+      void invalidateCounts(queryClient);
+      if (saved && (saved.state === "done" || saved.state === "wont_do")) {
         void queryClient.invalidateQueries({ queryKey: closedKey(heap) });
+        void queryClient.invalidateQueries({ queryKey: acrossClosedKey });
+      }
     },
   });
 }

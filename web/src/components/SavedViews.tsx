@@ -18,6 +18,7 @@ import { problemMessage, ProblemText } from "./ProblemText";
 import { Section } from "./Section";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
+import { Saving } from "./Saving";
 
 /** The row of a view's button, or of the "Save as view…" button. */
 const rowClass =
@@ -288,7 +289,13 @@ function NameField({
         maxLength={100}
         className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm max-sm:text-base pointer-coarse:h-11"
       />
-      <button type="submit" disabled={pending || name.trim() === ""} className={compactButtonClass.primary}>
+      <button
+        type="submit"
+        disabled={pending || name.trim() === ""}
+        aria-busy={pending || undefined}
+        className={compactButtonClass.primary}
+      >
+        <Saving pending={pending} />
         Save
       </button>
       <button type="button" onClick={onCancel} className={compactButtonClass.quiet}>

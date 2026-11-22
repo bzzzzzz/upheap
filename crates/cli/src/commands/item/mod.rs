@@ -7,6 +7,7 @@ pub mod became;
 pub mod edit;
 pub mod list;
 pub mod move_item;
+pub mod place;
 pub mod search;
 pub mod show;
 pub mod state;

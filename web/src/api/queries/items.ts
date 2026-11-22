@@ -1,14 +1,14 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api, unwrap, type HeapRef } from "../client";
 import type { CreateItemRequest, Item, ItemPatchRequest, ItemState } from "../schema";
 import {
   apiKey,
   itemKey,
   invalidateHeap,
-  invalidateOpenCounts,
   replaceListedItem,
   dropWaitingRows,
   itemEditsScope,
+  itemEditKey,
 } from "./keys";
 
 /**
@@ -48,7 +48,6 @@ export function useCreateItem() {
       unwrap(await api.POST("/api/v1/teams/{team}/heaps/{heap}/items", { params: { path: heap }, body })),
     // Not returned: the mutation is done once the server has the item, and the lists catch up after.
     onSettled: (_item, _error, { heap }) => {
-      invalidateOpenCounts(queryClient);
       void invalidateHeap(queryClient, heap);
     },
   });
@@ -81,16 +80,29 @@ async function patchAtNewestVersion(
 export function useUpdateItem(heap: HeapRef) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: itemEditKey(heap),
     scope: itemEditsScope,
     mutationFn: ({ item, patch }: { item: Item; patch: ItemPatchRequest }) =>
       patchAtNewestVersion(queryClient, heap, item, patch),
     onSuccess: (saved) => queryClient.setQueryData(itemKey(heap, saved.key), saved),
     // Always re-render from the server, also after a conflict, so the row shows the latest version.
-    onSettled: (_saved, _error, { patch }) => {
-      if (patch.state !== undefined) invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
+    onSettled: () => invalidateHeap(queryClient, heap),
+  });
+}
+
+/**
+ * The fields of the item `itemKey` that a pending `useUpdateItem` is saving, whichever component pressed. One mutation
+ * instance tracks only its latest call and several saves can be pending at once, so a row or a field asks here.
+ */
+export function useSavingFields(heap: HeapRef, itemKey: string): ReadonlySet<keyof ItemPatchRequest> {
+  const saving = useMutationState({
+    filters: { mutationKey: itemEditKey(heap), status: "pending" },
+    select: (mutation) => {
+      const { item, patch } = mutation.state.variables as { item: Item; patch: ItemPatchRequest };
+      return item.key === itemKey ? (Object.keys(patch) as (keyof ItemPatchRequest)[]) : [];
     },
   });
+  return new Set(saving.flat());
 }
 
 /**
@@ -117,10 +129,7 @@ export function useChangeStates(heap: HeapRef) {
       }
       return { changed, refused };
     },
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
   });
 }
 
@@ -151,10 +160,7 @@ export function useUnblock(heap: HeapRef) {
     onError: (_error, item) => {
       void queryClient.invalidateQueries({ queryKey: itemKey(heap, item.key) });
     },
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
   });
 }
 
@@ -167,9 +173,20 @@ export function useReopenItem(heap: HeapRef) {
           params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${item.version}"` } },
         }),
       ),
-    onSettled: () => {
-      invalidateOpenCounts(queryClient);
-      return invalidateHeap(queryClient, heap);
-    },
+    onSettled: () => invalidateHeap(queryClient, heap),
+  });
+}
+
+/** Reopens a closed item of any heap, for the closed list across heaps: each call names the item's heap. */
+export function useReopenAcrossHeaps() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ heap, item }: { heap: HeapRef; item: Item }) =>
+      unwrap(
+        await api.POST("/api/v1/teams/{team}/heaps/{heap}/items/{item}/reopen", {
+          params: { path: { ...heap, item: item.key }, header: { "If-Match": `"${item.version}"` } },
+        }),
+      ),
+    onSettled: (_saved, _error, { heap }) => invalidateHeap(queryClient, heap),
   });
 }

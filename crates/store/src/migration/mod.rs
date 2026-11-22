@@ -57,6 +57,8 @@ mod m20261222_000051_revoke_reasons;
 mod m20261223_000052_tag_colors;
 mod m20261224_000053_heap_parameter_tags;
 mod m20261225_000054_operators;
+mod m20261226_000055_item_placement;
+mod m20261227_000056_comment_runs;
 
 pub struct Migrator;
 
@@ -118,6 +120,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20261223_000052_tag_colors::Migration),
             Box::new(m20261224_000053_heap_parameter_tags::Migration),
             Box::new(m20261225_000054_operators::Migration),
+            Box::new(m20261226_000055_item_placement::Migration),
+            Box::new(m20261227_000056_comment_runs::Migration),
         ]
     }
 }

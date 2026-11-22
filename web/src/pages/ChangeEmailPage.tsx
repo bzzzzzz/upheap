@@ -6,6 +6,7 @@ import { problemMessage } from "../components/ProblemText";
 import { RequestId } from "../components/RequestId";
 import { AuthCard, authButtonClass } from "./AuthPage";
 import { Heading, Notice, useMoveFocus, type MoveFocus } from "./authStates";
+import { Saving } from "../components/Saving";
 
 /** The way on from a state of the page: the Account page, which sends a signed-out visitor to sign-in. */
 function AccountLink() {
@@ -91,7 +92,14 @@ function Confirm({
           <RequestId error={error} />
         </>
       )}
-      <button type="button" disabled={pending} onClick={onApply} className={authButtonClass}>
+      <button
+        type="button"
+        disabled={pending}
+        aria-busy={pending || undefined}
+        onClick={onApply}
+        className={authButtonClass}
+      >
+        <Saving pending={pending} />
         Use this address
       </button>
     </div>

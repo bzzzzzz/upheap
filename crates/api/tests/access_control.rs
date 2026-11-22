@@ -66,6 +66,8 @@ enum Target {
     ItemAndSecondHeap,
     /// An open item in the shared heap, and a second heap of the team to move it to, both in the request's body.
     ItemsAndSecondHeap,
+    /// An open item in `{item}`, and another open item of the heap, whose ID the body names as the anchor.
+    ItemAndAnchor,
     /// A task with one step, in `{item}` and `{step}`, with the step's version for `If-Match`.
     TaskWithStep,
     /// An item with one open question, in `{item}` and `{question}`, with the question's version for `If-Match`.
@@ -163,6 +165,8 @@ enum RequestBody {
     Rename,
     /// The second heap of [`Target::ItemAndSecondHeap`], to move the item to.
     MoveItem,
+    /// The other item of [`Target::ItemAndAnchor`], to place the item above.
+    PlaceItem,
     /// The item and the second heap of [`Target::ItemsAndSecondHeap`], to move the item to.
     MoveItems,
     /// The task of [`Target::NoteAndTask`], to make the note a step of.
@@ -430,6 +434,22 @@ fn endpoints() -> Vec<Endpoint> {
         row(
             Method::GET,
             "/me/items",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/me/items/closed",
+            SignedIn,
+            Target::Nothing,
+            RequestBody::Empty,
+            StatusCode::OK,
+        ),
+        row(
+            Method::GET,
+            "/me/audit",
             SignedIn,
             Target::Nothing,
             RequestBody::Empty,
@@ -1066,6 +1086,22 @@ fn endpoints() -> Vec<Endpoint> {
             edit,
             Target::ItemAndSecondHeap,
             RequestBody::MoveItem,
+            StatusCode::OK,
+        ),
+        row(
+            Method::POST,
+            "/teams/{team}/heaps/{heap}/items/{item}/place",
+            edit,
+            Target::ItemAndAnchor,
+            RequestBody::PlaceItem,
+            StatusCode::OK,
+        ),
+        row(
+            Method::DELETE,
+            "/teams/{team}/heaps/{heap}/items/{item}/place",
+            edit,
+            Target::OpenItem,
+            RequestBody::Empty,
             StatusCode::OK,
         ),
         row(
@@ -1999,6 +2035,7 @@ impl World {
                 "origin_id": parameter["id"],
             })),
             RequestBody::MoveItem => Some(json!({ "heap_id": parameter["id"] })),
+            RequestBody::PlaceItem => Some(json!({ "anchor": parameter["id"], "side": "above" })),
             RequestBody::MoveItems => Some(parameter.clone()),
             RequestBody::NewStep => Some(json!({ "title": "A step" })),
             RequestBody::TickStep => Some(json!({ "state": "ticked" })),
@@ -2177,6 +2214,13 @@ impl World {
                 if_match = Some(version);
                 // The body reads the heap's ID from here, as it reads a parameter's.
                 parameter = self.create_heap().await?;
+            }
+            Target::ItemAndAnchor => {
+                let (key, version) = self.create_item(false).await?;
+                path = path.replace("{item}", &key);
+                if_match = Some(version);
+                // The body reads the anchor's ID from here.
+                parameter = self.create_task().await?;
             }
             Target::ItemsAndSecondHeap => {
                 let (key, _) = self.create_item(false).await?;

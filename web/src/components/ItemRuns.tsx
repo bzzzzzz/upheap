@@ -54,7 +54,7 @@ export function ItemRuns({ item }: { item: Item }) {
   const label = `Runs ${runs.length}${item.runs_cost_usd == null ? "" : ` · ${usd(item.runs_cost_usd)}`}`;
   return (
     <section aria-label="Runs" className="border-t border-line pt-1">
-      <Disclosure key={visit} label={label} className="" defaultOpen={linked != null}>
+      <Disclosure key={visit} label={label} className="" defaultOpen={linked != null} section>
         <ul className="flex flex-col divide-y divide-line">
           {runs.map((run) => {
             const ranBy = toolAndModel(run);

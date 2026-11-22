@@ -1,17 +1,22 @@
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { Bot, Check, Eye } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Check, Eye, GripVertical } from "lucide-react";
 import { animate, motion, useMotionValue, type PanInfo } from "motion/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { Button, Menu, MenuTrigger } from "react-aria-components";
 
 import type { HeapRef } from "../api/client";
+import { useSavingFields } from "../api/queries/items";
 import type { Item, ItemState, RankedItem, RankedList, Turn } from "../api/schema";
 import { useSendWithUndo } from "./ItemTurn";
 import { Kbd } from "./Kbd";
 import { KindIcon, StageIcon, TargetIcon } from "./kindIcons";
 import { GOAL_LABELS, STAGE_LABELS, STATE_LABELS } from "./labels";
+import { MenuEntry, MenuPopover } from "./Menu";
 import { TOUCH, useMedia } from "./media";
 import { ParameterChips } from "./ParameterPicker";
+import type { RowPlace } from "./placeRows";
 import { formatDate } from "./reminders";
+import { Saving } from "./Saving";
 import { TagChips } from "./TagChips";
 import { useFocusAfterRender } from "./useFocusAfterRender";
 
@@ -78,6 +83,10 @@ export function rowOf(key: string) {
  * robot are left out, swipes are off, and the row is a checkbox button in place of the link. A click toggles it, with
  * Shift it selects the rows up to it; Shift+↑ and Shift+↓ move to the next row and select it.
  *
+ * With `place`, the row can be placed by hand (ux.md, The list): a wide screen shows a grip at the row's end, whose menu
+ * has Move up and Move down, and drags; a touch screen lifts the row after a long press and drags it; Alt+↑ and Alt+↓
+ * move it with the keyboard.
+ *
  * Another page can show the row for its own list: `link` opens the item there instead of over its heap's list,
  * `heapLabel` says which heap it is in, and without `filters` the row shows no tag or parameter chips.
  */
@@ -91,6 +100,7 @@ export function ItemRow({
   link = { to: "/teams/$team/heaps/$heap/items/$item", params: { ...heapRef, item: entry.item.key }, search: true },
   heapLabel,
   selection,
+  place,
   onChangeState,
 }: {
   entry: RankedItem;
@@ -102,6 +112,7 @@ export function ItemRow({
   link?: LinkProps;
   heapLabel?: string;
   selection?: { selected: boolean; onToggle: (range: boolean) => void };
+  place?: RowPlace;
   onChangeState: ChangeState;
 }) {
   const { item, contributors } = entry;
@@ -109,6 +120,8 @@ export function ItemRow({
   const canChangeState = item.allowed_actions.includes("change_state");
   const canSend = !item.turn && item.allowed_actions.includes("send_to_agent");
   const { sendWithUndo, pending: sending } = useSendWithUndo(heapRef);
+  // Whoever pressed (a button, a key, a swipe, Undo), a pending state change of this item shows in its state slot.
+  const changingState = useSavingFields(heapRef, item.key).has("state");
   const focusAfterRender = useFocusAfterRender();
   // One step at once, with no line. The robot turns into a mark once the list shows the turn, so the focus goes to the
   // row's link. Undo moves nothing.
@@ -128,11 +141,22 @@ export function ItemRow({
   const startable = item.state === "open" || item.state === "blocked";
   const blockable = canChangeState && (item.state === "open" || item.state === "in_progress");
   const touch = useMedia(TOUCH);
-  const swipe = useSwipe(canChangeState && touch && !selection, ACTION_WIDTH * (canSend ? 3 : 2), (state, onError) =>
-    onChangeState(item, state, onError),
+  // A row lifted by a long press doesn't swipe.
+  const swipe = useSwipe(
+    canChangeState && touch && !selection && place?.lift == null,
+    ACTION_WIDTH * (canSend ? 3 : 2),
+    (state, onError) => onChangeState(item, state, onError),
   );
 
   const onKeyDown = (event: KeyboardEvent<HTMLAnchorElement>) => {
+    if (place && event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+      const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+      if (delta !== 0) {
+        event.preventDefault();
+        if (delta < 0 ? place.canMoveUp : place.canMoveDown) place.onMove(delta, true);
+        return;
+      }
+    }
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -188,17 +212,24 @@ export function ItemRow({
   );
   const coverClass =
     "min-w-0 text-left font-medium break-words outline-none after:absolute after:inset-0 after:content-['']";
+  // A long press on a row that lifts opens no link menu or callout.
+  const linkClass = place && touch ? `${coverClass} [-webkit-touch-callout:none]` : coverClass;
 
   return (
     // `isolate` makes the row its own stacking context: the buttons' and chips' z-10 lifts them over the row's link,
     // not over the page's sticky bars.
     <motion.li
+      ref={place?.rowRef}
       layout="position"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="relative isolate overflow-hidden rounded-lg has-[[data-row-link]:focus-visible]:outline-2 lg:pointer-fine:scroll-mb-12 has-[[data-row-link]:focus-visible]:outline-accent"
+      // A lifted row follows the pointer over the others, with its shadow showing.
+      style={place?.lift == null ? undefined : { y: place.lift }}
+      className={`relative isolate rounded-lg has-[[data-row-link]:focus-visible]:outline-2 lg:pointer-fine:scroll-mb-12 has-[[data-row-link]:focus-visible]:outline-accent ${
+        place?.lift == null ? "overflow-hidden" : "z-10 shadow-lg"
+      }`}
     >
       {swipe.showActions && (
         <SwipeActions
@@ -214,6 +245,7 @@ export function ItemRow({
       )}
       <motion.div
         {...swipe.dragProps}
+        {...(place && touch ? { ...place.press, onContextMenu: (event: MouseEvent) => event.preventDefault() } : {})}
         className={`group/row relative flex items-center gap-3 px-2 py-2.5 pointer-coarse:py-3 ${
           selected || selection?.selected ? "bg-accent-soft" : "bg-canvas hover:bg-sunken"
         }`}
@@ -234,11 +266,11 @@ export function ItemRow({
             ) : (
               canChangeState &&
               (item.state === "open" ? (
-                <StartButton item={item} onPress={onStart} />
+                <StartButton item={item} busy={changingState} onPress={onStart} />
               ) : item.state === "blocked" ? (
-                <UnblockButton item={item} onPress={onOpen} />
+                <UnblockButton item={item} busy={changingState} onPress={onOpen} />
               ) : (
-                item.state === "in_progress" && <PauseButton item={item} onPress={onOpen} />
+                item.state === "in_progress" && <PauseButton item={item} busy={changingState} onPress={onOpen} />
               ))
             )}
           </span>
@@ -250,7 +282,7 @@ export function ItemRow({
               (item.turn ? (
                 <RobotMark item={item} turn={item.turn} link={link} itemOpen={itemOpen} />
               ) : (
-                canSend && <RobotButton item={item} disabled={sending} onPress={onSend} />
+                canSend && <RobotButton item={item} sending={sending} onPress={onSend} />
               ))}
           </span>
         </span>
@@ -292,7 +324,7 @@ export function ItemRow({
                 draggable={false}
                 {...{ [ROW_LINK]: item.key }}
                 aria-current={selected ? "true" : undefined}
-                className={coverClass}
+                className={linkClass}
               >
                 {item.title}
                 {readAloud}
@@ -360,8 +392,82 @@ export function ItemRow({
             <StageIcon stage={item.stage} />
           </span>
         </span>
+        {place && !touch && <RowGrip item={item} place={place} />}
       </motion.div>
     </motion.li>
+  );
+}
+
+/**
+ * A wide screen's grip for placing a row (ux.md, The list): quiet until the row is hovered or has focus, above the row's
+ * link so pressing it never opens the item. Dragging it moves the row; a click or Enter opens a menu with Move up and
+ * Move down.
+ */
+function RowGrip({ item, place }: { item: Item; place: RowPlace }) {
+  const [open, setOpen] = useState(false);
+  const name = `Move “${item.title}”`;
+  // The button under it stops a press from bubbling, so the drag starts on the way down. The menu's popover is in this
+  // tree too, though not in this element: a press in it is not a press on the grip.
+  const { onPointerDown, onPointerUp, onPointerCancel, ...gripProps } = place.grip;
+  // React Aria opens the menu as a mouse press starts, but that press may be the start of a drag. The request waits
+  // here until the press ends without having dragged. This is the grip's own element, not the button, because the
+  // drag's pointer capture keeps the button from seeing the press end.
+  const pressing = useRef(false);
+  const requested = useRef(false);
+  return (
+    <span
+      {...gripProps}
+      onPointerDownCapture={(event) => {
+        if (!event.currentTarget.contains(event.target as Node)) return;
+        pressing.current = event.pointerType === "mouse" || event.pointerType === "pen";
+        requested.current = false;
+        onPointerDown(event);
+      }}
+      onPointerUp={(event) => {
+        onPointerUp(event);
+        if (pressing.current && requested.current && !place.dragged()) setOpen(true);
+        pressing.current = false;
+        requested.current = false;
+      }}
+      onPointerCancel={(event) => {
+        onPointerCancel(event);
+        pressing.current = false;
+        requested.current = false;
+      }}
+      data-row-grip
+      className={`relative z-10 -mr-1 flex size-6 shrink-0 touch-none items-center justify-center text-muted opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 ${
+        place.lift === null ? "cursor-grab" : "cursor-grabbing opacity-100"
+      }`}
+    >
+      <MenuTrigger
+        isOpen={open}
+        onOpenChange={(next) => {
+          if (next && pressing.current) requested.current = true;
+          else setOpen(next);
+        }}
+      >
+        <Button
+          aria-label={name}
+          className="flex size-6 items-center justify-center rounded-md outline-none hover:bg-sunken data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent"
+        >
+          <GripVertical aria-hidden="true" className="size-4" />
+        </Button>
+        <MenuPopover placement="bottom end">
+          <Menu aria-label={name} className="outline-none">
+            {place.canMoveUp && (
+              <MenuEntry id="move-up" icon={ArrowUp} onAction={() => place.onMove(-1, false)}>
+                Move up
+              </MenuEntry>
+            )}
+            {place.canMoveDown && (
+              <MenuEntry id="move-down" icon={ArrowDown} onAction={() => place.onMove(1, false)}>
+                Move down
+              </MenuEntry>
+            )}
+          </Menu>
+        </MenuPopover>
+      </MenuTrigger>
+    </span>
   );
 }
 
@@ -592,16 +698,20 @@ const DONE_QUIET = "text-muted group-hover/row:text-done group-focus-within/row:
 const ROBOT_QUIET = "text-muted group-hover/row:text-ink group-focus-within/row:text-ink pointer-coarse:text-ink";
 
 /** The way to start an open item: a circle with a play mark. */
-function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
+function StartButton({ item, busy, onPress }: { item: Item; busy: boolean; onPress: () => void }) {
   return (
     <button
       type="button"
-      onClick={onPress}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
       aria-label={`Start ${item.title}`}
       title="Start"
       className={`${BUTTON} text-ink hover:text-accent`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+      <Saving pending={busy} />
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={busy ? "hidden" : "size-[22px]"}>
         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
         <path
           d="M10 8.5v7l5.5-3.5z"
@@ -620,18 +730,22 @@ function StartButton({ item, onPress }: { item: Item; onPress: () => void }) {
  * uses, the row's one sign that it waits on something. Its tooltip carries the reason in words, when there is one. It
  * is drawn open while the row is hovered or focused, and always with a finger.
  */
-function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
+function UnblockButton({ item, busy, onPress }: { item: Item; busy: boolean; onPress: () => void }) {
   const opens = "hidden group-hover/row:inline group-focus-within/row:inline pointer-coarse:inline";
   const closes = "group-hover/row:hidden group-focus-within/row:hidden pointer-coarse:hidden";
   return (
     <button
       type="button"
-      onClick={onPress}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
       aria-label={`Unblock ${item.title}`}
       title={item.blocked_reason ? `Unblock. Blocked: ${item.blocked_reason}` : "Unblock"}
       className={`${BUTTON} text-overdue-ink`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+      <Saving pending={busy} />
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={busy ? "hidden" : "size-[22px]"}>
         <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
         <rect x="8.5" y="11.5" width="7" height="5" rx="1" fill="currentColor" />
         <path
@@ -656,16 +770,20 @@ function UnblockButton({ item, onPress }: { item: Item; onPress: () => void }) {
 }
 
 /** The way to put an in-progress item back to open: an accent circle, lightly filled, with two pause bars. */
-function PauseButton({ item, onPress }: { item: Item; onPress: () => void }) {
+function PauseButton({ item, busy, onPress }: { item: Item; busy: boolean; onPress: () => void }) {
   return (
     <button
       type="button"
-      onClick={onPress}
+      // Not `disabled`, so a row's button keeps the focus it has while its change saves.
+      onClick={busy ? undefined : onPress}
+      aria-disabled={busy || undefined}
+      aria-busy={busy || undefined}
       aria-label={`Pause ${item.title}`}
       title="Back to open"
       className={`${BUTTON} text-accent`}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[22px]">
+      <Saving pending={busy} />
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={busy ? "hidden" : "size-[22px]"}>
         <circle cx="12" cy="12" r="9" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="2" />
         <path d="M10 9v6M14 9v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
@@ -699,17 +817,19 @@ function DoneButton({ item, onPress }: { item: Item; onPress: () => void }) {
 }
 
 /** The way to send an item to an agent, one step at once. Quiet until the row is hovered or focused, with a mouse. */
-function RobotButton({ item, disabled, onPress }: { item: Item; disabled: boolean; onPress: () => void }) {
+function RobotButton({ item, sending, onPress }: { item: Item; sending: boolean; onPress: () => void }) {
   return (
     <button
       type="button"
       onClick={onPress}
-      disabled={disabled}
+      disabled={sending}
+      aria-busy={sending || undefined}
       aria-label={`Send ${item.title} to an agent`}
       title="Send to an agent"
-      className={`${BUTTON} ${ROBOT_QUIET} hover:bg-sunken disabled:opacity-40`}
+      className={`${BUTTON} ${ROBOT_QUIET} hover:bg-sunken`}
     >
-      <Bot aria-hidden="true" className="size-5" />
+      <Saving pending={sending} />
+      {!sending && <Bot aria-hidden="true" className="size-5" />}
     </button>
   );
 }

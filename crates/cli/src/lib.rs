@@ -220,6 +220,9 @@ enum ItemCommand {
     /// Move one or several items to another heap, of any team you may edit items in, with their context, steps,
     /// questions and history
     Move(commands::item::move_item::MoveArgs),
+    /// Place an item right above or below another in its heap's list, or put it back where its fields put it. Its
+    /// fields don't change
+    Place(commands::item::place::PlaceArgs),
     /// Send an item to an agent: to its next stable state, or on until done with --all-the-way
     Send(commands::item::turn::SendArgs),
     /// Take an item back from the agent that has it; what the agent changed stays
@@ -327,7 +330,7 @@ enum WorkCommand {
     Reached(commands::work::reached::ReachedArgs),
     /// Give the turn back: there was nothing to do for its goal (needs UPHEAP_RUN)
     HandBack(commands::work::hand_back::HandBackArgs),
-    /// End the run to wait on its own pull request: the item comes back on a comment, a failed check, a merge or a close (needs UPHEAP_RUN)
+    /// End the run to wait on its own pull request: the item comes back on a comment, a failed check, a merge conflict, a merge or a close (needs UPHEAP_RUN)
     Watch(commands::work::watch::WatchArgs),
     /// End the run and record what it cost (needs UPHEAP_RUN)
     Finish(commands::work::finish::FinishArgs),
@@ -384,6 +387,7 @@ impl Command {
             Self::Item(ItemCommand::Block(args)) => &args.state.shared,
             Self::Item(ItemCommand::ToStep(args)) => &args.state.shared,
             Self::Item(ItemCommand::Move(args)) => &args.shared,
+            Self::Item(ItemCommand::Place(args)) => &args.shared,
             Self::Item(ItemCommand::Send(args)) => &args.shared,
             Self::Item(ItemCommand::TakeBack(args)) => &args.shared,
             Self::Step(StepCommand::Add(args)) => &args.shared,
@@ -567,6 +571,7 @@ async fn dispatch(command: Command, app: &App, work: WorkDeps, out: &mut Output)
         Command::Item(ItemCommand::Became(args)) => commands::item::became::run(args, app, out).await,
         Command::Item(ItemCommand::ToStep(args)) => commands::item::to_step::run(args, app, out).await,
         Command::Item(ItemCommand::Move(args)) => commands::item::move_item::run(args, app, out).await,
+        Command::Item(ItemCommand::Place(args)) => commands::item::place::run(args, app, out).await,
         Command::Item(ItemCommand::Send(args)) => commands::item::turn::run_send(args, app, out).await,
         Command::Item(ItemCommand::TakeBack(args)) => commands::item::turn::run_take_back(args, app, out).await,
         Command::Step(StepCommand::Add(args)) => commands::step::add::run(args, app, out).await,

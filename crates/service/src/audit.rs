@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use domain::audit::AuditField;
 use domain::comment::Comment;
 use domain::heap::{Heap, HeapPolicy};
-use domain::item::{Due, Item, Kind, Stage};
+use domain::item::{Due, Item, Kind, Placement, PlacementDirection, Stage};
 use domain::list_view::ListView;
 use domain::parameter::Parameter;
 use domain::question::Question;
@@ -70,6 +70,18 @@ pub(crate) fn diff_moved_out(before: &Item) -> Value {
 /// as the key, tags, values and blocker it had are the source team's.
 pub(crate) fn diff_moved_in(after: &Item) -> Value {
     json!({ AuditField::Heap.code(): { "before": null, "after": after.heap_id.to_string() } })
+}
+
+/// The change a place or a reset makes to an item's placement: which way it was and is placed, or `null` for not
+/// placed. Written even when the way doesn't change, since placing again is a change the history shows.
+pub(crate) fn diff_placed(before: Option<Placement>, after: Option<Placement>) -> Value {
+    let way = |placement: Option<Placement>| {
+        placement.map(|placement| match placement.direction() {
+            PlacementDirection::Up => "up",
+            PlacementDirection::Down => "down",
+        })
+    };
+    json!({ AuditField::Placement.code(): { "before": way(before), "after": way(after) } })
 }
 
 /// The changes freeing an item makes when its blocker is closed as done, in the shape of [`diff_items`], with

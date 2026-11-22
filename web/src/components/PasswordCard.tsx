@@ -9,6 +9,7 @@ import { useChangePassword } from "../api/queries/signIns";
 import { compactButtonClass } from "./buttons";
 import { problemMessage, ProblemText } from "./ProblemText";
 import { useReturnFocus } from "./useConfirmation";
+import { Saving } from "./Saving";
 
 /** The input a problem is about, when it is about one. */
 function inputOf(error: Error | null): "current" | "new" | null {
@@ -163,7 +164,13 @@ export function PasswordCard({ inputClass }: { inputClass: string }) {
           />
           {failed === null && <ProblemText error={change.error} className="text-overdue-ink" />}
           <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" disabled={change.isPending} className={compactButtonClass.primary}>
+            <button
+              type="submit"
+              disabled={change.isPending}
+              aria-busy={change.isPending || undefined}
+              className={compactButtonClass.primary}
+            >
+              <Saving pending={change.isPending} />
               Change password
             </button>
             <button type="button" disabled={change.isPending} onClick={close} className={compactButtonClass.quiet}>

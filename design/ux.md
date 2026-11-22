@@ -101,11 +101,11 @@ rest of the line shows as written.
 
 Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
 
-| Width                | Navigation                                                                                                                                                                                                                                               | List                                                     | Item                                                  |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                                                      | Full width, compact rows                                 | Bottom sheet over the list                            |
-| Tablet, 640–1023 px  | An 80 px rail: Waiting, Agents, All, the heap button, then the views as icons with labels, the heap's team, Teams and Account at the bottom                                                                                                              | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me, Agents and All items, each with its count, and a thin rule under them, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
+| Width                | Navigation                                                                                                                                                                                                                             | List                                                     | Item                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                                    | Full width, compact rows                                 | Bottom sheet over the list                            |
+| Tablet, 640–1023 px  | An 80 px rail: Waiting, the heap button, then the views as icons with labels, and Agents, the heap's team, Teams and Account at the bottom                                                                                             | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide, 1024 px and up | Sidebar: Waiting for me with its count, and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, and Agents, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
 **More** on a phone holds Closed, Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
 its cards, which are Profile, Email, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
@@ -127,27 +127,34 @@ icon, "Waiting for me" in the sidebar with its count on the right, "Waiting" in 
 as a small badge on the icon. There is no count at zero, and the entry stays. The count is the number of open
 questions across the person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the
 list is, so a question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and
-after a reply or an item's change.
+after every change the person makes to an item, a question, a step or an agent's turn. The heaps' open counts and
+the Agents page's Your decision are fetched again with it, all three after each such change, since one change can move
+any of them: a reply can close its item, and sending an item on takes it off Your decision.
 
-**Agents** sits under Waiting for me, in the same block: a bot icon, "Agents" with the number of rows under Your
-decision (Agents) shown as Waiting for me's count is: on the right in the sidebar, as a badge on the icon in the rail
-and the tabs, none at zero. It is fetched with the page and again every 30 seconds, on focus and after a change of an
-item, as that count is.
+**Agents** is the first entry of the block at the bottom of the sidebar and the rail, above the heap's team: a bot
+icon and "Agents", with no count. What agents finished is there to look through when the person wants to, not
+something that waits as a question does, so nothing in the navigation counts it; the page's Your decision heading
+does.
 
-**All items** sits under Agents, in the same bordered block of the sidebar and the rail: a layers icon, "All
-items" in the sidebar with the person's open items on the right, "All" in the rail with no count. The count is the sum
-of the open counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when
-those do. On a phone the heap switcher's sheet starts with an "All heaps" row, the same count at its right, marked
-current on `/all` with no team, where no heap's row is; the tablet's and wide screen's popovers don't have it, as they have the entry. While
-the person is on `/all` with a team chosen (All items §7), that count, the sidebar's and the phone row's, is the sum
-over that team's active heaps only; the sidebar link still goes to `/all` with no team. A person in more than one team
-also finds, at the top of each team's section in the switcher, on every width, a row "All <team> items" with that team's
-open count, which opens `/all?team=<slug>` and is marked current there; it isn't among search results. The tabs and the top
-bar are as on Waiting for me.
+**All items** is reached from the heap switcher, on every width: nothing in the sidebar, the rail or the tabs leads
+to it. The switcher starts with an "All heaps" row with the person's open items at its right: the sum of the open
+counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when those do. A
+person in more than one team also finds, at the right of each team's line, "All items · 16" with that team's open
+count, which opens `/all?team=<slug>` (All items §7) and which a screen reader hears as "All <team> items, 16 open";
+neither is among search results. On `/all` and
+its Closed and Activity pages the row opened is marked current, where no heap's row is, and the heap button reads as
+that row does, "All heaps" or "All <team> items", on the sidebar and the phone's top bar; the rail's button shows the
+layers icon in place of a heap's initial. No heap is the current one there, so the views are the pages across heaps
+(All items §8): Open with the count the row shows, Closed and Activity in the sidebar and the rail, with no Data or
+Settings; on a phone the Open tab and More's Closed and Activity are those pages, More has no Settings or Data, and
+the + still adds to the heap opened last. The heaps' open counts, on Open and in the heap switcher, are fetched with the page and
+again every 30 seconds while the tab is visible, on focus and after a change as Waiting for me's count is, so an item
+someone else adds or closes reaches them about when it reaches the list.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
-that is `/waiting`, `/agents` and `/all`; Teams, a team's page and its activity, and Account keep their shell without
+that is `/waiting`, `/agents` and `/all` with its Closed and Activity, which keep it for Add only (All items, above);
+Teams, a team's page and its activity, and Account keep their shell without
 one. The heap kept is the one opened last that is still there and active, else the first active heap, else the first.
 On a phone those pages have no tabs, so the top bar starts with Back: it goes to the page before, or, when the tab
 opened on the page from a link, to the heap kept.
@@ -210,8 +217,8 @@ what it would merge, and the app asks first, in a dialog on a wide screen and a 
 "Make “billing” a team tag?" or "Rename “old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
 "archived" and, for Make a team tag, "this heap" marked. Under the rows a total says "{n items} in {m heaps} will
 carry the team tag.", then the description the team tag will have, and the quiet line "The items keep their history.
-This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button reads
-"Making…" or "Renaming…" and nothing can be pressed or dismissed. If the list changed while it was open, the server
+This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button shows
+the saving ring (Rules §6) and nothing can be pressed or dismissed. If the list changed while it was open, the server
 refuses the button's write with the new list: the dialog stays, shows "This changed while it was open. Check the list
 again; the button confirms this one.", marks rows "new" and counts "was {n}", names what left the list, and the button
 confirms the new list. Another failure shows above the buttons, with its request ID, and the dialog stays; a rename
@@ -237,7 +244,7 @@ When one of its options matches an option the team parameter has archived, the r
 open items get the option in use that Silver was replaced by, while closed ones keep Silver. A row whose parameter
 is linked to tags says "links billing, urgent": its heap keeps those links to the team parameter. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
 whose options were in another order." and the quiet line "The items keep their history. This can't be undone."; the
-buttons are Cancel and Make team parameter ("Making…"). Success closes it with a toast, "“Customer tier” is a team
+buttons are Cancel and Make team parameter. Success closes it with a toast, "“Customer tier” is a team
 parameter now: 3 items in 2 heaps keep their values.".
 
 A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
@@ -292,6 +299,8 @@ the keyboard covers, from the visual viewport. The heap switcher and More open a
 tabs.
 
 Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
+In the heap switcher the check comes before the current row's name, as part of it, so the other names keep one left
+edge and the counts sit at the panel's right edge.
 The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". Each unarchived heap's
 row has its open count on the right, the number its Open view shows, which a screen reader hears as ", 2 open" in the
 row's name, as on the All rows; archived heaps and Recent have none. From 8 unarchived heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
@@ -304,7 +313,7 @@ it. "New heap" turns into the name and an optional Link name, with the same new 
 form ([Teams and Team](#teams-and-team)); Add heap opens the new heap. On a tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts
 with the search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each
 team's name, and Recent's title, sits on a band a shade off the panel, with space above it, and a team's fold header
-stays in view while its heaps scroll.
+stays in view while its heaps scroll, with the team's "All items" link at its right, folded or not.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 
@@ -313,6 +322,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    state it's in), until one is picked or the row is tapped. Each is followed by a toast with Undo. A tap just after a drag doesn't open the item.
 2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of 120 px
    springs it back.
+3. On a row that can be placed (The list point 20), a finger held for 400 ms within about 8 px lifts it, and from then
+   the finger drags it up or down. A move past 8 px before then ends the press, so a sideways move still swipes (point 1)
+   and a vertical one scrolls; a quick tap still opens the item. While a row is lifted the page doesn't scroll and the
+   row doesn't swipe. The press opens no link menu or callout.
 
 ## The list
 
@@ -460,6 +473,23 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     moved:" and a line for each, "Title — reason", with **Close**; Close keeps select mode with only the refused
     rows selected, so Move can be tried again. A request that fails as a whole shows its error above the buttons, and
     nothing moved.
+20. **Placing a row by hand** moves an item up or down in the ranked group, "Up next" or the untitled group when
+    nothing is pinned, and only in the Priority sort. It is off in any other sort, with text in the search box, in
+    select mode, on pinned and blocked rows and reminders to come, and for someone who can't edit the items (a reader,
+    an archived heap); tag and parameter filters leave it on, as the server places the item next to the row it is dropped
+    by. The item lands in the order of the list on screen, so the row stays where it was put as time passes, and the
+    server says which way it moved: the row's first reason is "Moved up" or "Moved down". On a wide screen a grip
+    sits at the end of the row after the kind and stage icons, in a slot of its own, quiet until the row is hovered or
+    has focus within, and above the row's link, so pressing it never opens the item. Dragging it moves the row with the
+    pointer; a 2 px accent line shows where it lands, which is always within the group; the pane scrolls near its edge;
+    Escape or a cancelled pointer puts the row back and saves nothing, as for a step. A click or Enter on the grip opens
+    a menu, "Move “title”", with Move up and Move down, each left out at its end of the group. Alt+↑ and Alt+↓ on the
+    focused row move it one place; the focus stays on the row. On a phone or tablet there is no grip: a long press
+    (Phone details, gesture 3) lifts the row, which then follows the finger with the same line and
+    scrolling, and lifting the finger drops it. A move that lands where the row was does nothing. A move saves at once,
+    and the toast says "Moved “Rotate the certs” up." (or down) with Undo, which takes the placing away when the item had
+    none, and otherwise puts the item back next to the row that was above it (below it, when it was first). A move the
+    server refuses, because the item changed meanwhile or the row it was dropped by closed, puts the row back and says why.
 
 ## The item
 
@@ -625,7 +655,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     all the way" for a turn sent all the way, whose goal is only its first stop), "Agent · waiting for you", or "Agent stuck" in the amber tone. It opens a popover (a sheet on a phone) titled "Who has it"
     with "With an agent since 14:02" (the time today, else the date as the server words it: "yesterday", "3 Nov"),
     "going to: <state>" and ", all the way" for that reach; while it watches a pull request, "Watching PR #276 since
-    14:05. It comes back on a new comment, a failed check, a merge or a close.", the PR a link that opens in a new tab;
+    14:05. It comes back on a new comment, a failed check, a merge conflict, a merge or a close.", the PR a link that opens in a new tab;
     the person's line in quotes, and "Prepared on add" for an
     item the heap's setting sent. If the item waits for the person it reads "An agent is waiting for your answer,
     going to: …", and if its turn is stuck, "An agent is stuck, going to: …." with no buttons: Retry and Take back are
@@ -689,9 +719,12 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     can't be edited any more; your text wasn't saved." and a Close button.
 
 18. **Comments n**, under the context at every width and always open (not a disclosure, not a sheet row), before
-    the Steps, lists the item's comments oldest first with a thin rule between them. Each is a quiet
-    line, "<name> · <time>" (the time today, else the date as the server words it), and the text under it rendered
-    as Markdown text (see Toolkit); a comment is never edited or deleted, so a row has no controls. The heading is
+    the Steps, lists the item's comments oldest first, each in its own bordered card on a sunken fill, so where one
+    ends and the next starts shows at a glance. Each is a line, the name in bold then " · <time>" (the time today,
+    else the date as the server words it), and the text under it rendered as Markdown text (see Toolkit). A comment
+    an agent wrote in a run reads as the agent's, as its entry in the history does (point 21): the card is tinted
+    with the agents' colour, and in place of the name are a robot and "Your agent" or "<name>'s agent", a link to
+    the run in Runs; a comment is never edited or deleted, so a row has no controls. The heading is
     "Comments 3", or just "Comments" when there are none. Under the list, where the server offers `comment` (also on
     a closed item), is the field "Add a comment" that grows with its text, and a Comment button, off until the field
     has text and while it is sending; on a phone the button spans the width and is 44 px, on wider screens it is at
@@ -733,6 +766,11 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     leaving after a walk shows the pane of the item walked to. The list stays under it, so it keeps its scroll
     position and selection. A phone has no button, as the sheet already fills most of the screen. A full link opened
     on a phone shows the sheet at full height.
+24. An item that was placed by hand (The list point 20) says so in a muted line under the status line: "Moved up in the
+    list" or "Moved down in the list", with a small **Reset** for someone who can edit it. Reset puts the item back by
+    its fields and says "Reset its place." in a toast with Undo, which places it next to the row it had above it (below
+    it, when it was first) in the ranked group on screen; with the item not in that group, the toast has no Undo. A
+    closed item shows no line, and the line goes with the placing.
 
 ## Adding an item
 
@@ -936,8 +974,18 @@ position numbers or reminders to come, and a tag or parameter filter only with a
    in use ("<name> (any)"), with the "(archived, ignored)" rows for chosen options of archived ones, all as a heap
    list shows them; their chips and the count in Filters work as there. Choosing another team or All teams drops
    them. A heap that doesn't use a parameter chosen has no rows.
-8. A team the person isn't in (never joined, left, or no such team) is the page's error with "You're not in this team."
-   in place of the server's message, with no controls and no fallback to all teams.
+8. Closed and Activity go with the list, at `/all/closed` and `/all/activity`, for every heap or, with
+   `?team=<slug>`, one team's, reached from the views while on any of the three (Layout, All items). **Closed** is a
+   heap's Closed page (Closed) over the same heaps, most recently closed first across them: each row ends with its
+   heap's name, and its team's after " · " when the person is in more than one and none is chosen. Reopen reopens the
+   item in its own heap, and an item opens over its own heap's list, as from that heap's Closed. **Activity** is a
+   heap's Activity page over the same heaps, newest first across them, each entry showing what that heap's own
+   Activity shows the person, by their role in its team, with the heap named after the time the same way. The line
+   under either heading names whose heaps they are, as the list's does. Neither has filters. Archived heaps have
+   their closed items and activity on their own pages only.
+9. A team the person isn't in (never joined, left, or no such team) is the page's error with "You're not in this team."
+   in place of the server's message, with no controls and no fallback to all teams; Closed and Activity show the
+   team's not-found page.
 
 ## Closed
 
@@ -1074,7 +1122,7 @@ link, so its hint says so. A problem about an input shows under it, with focus o
 many attempts, registration closed) shows above the button. A taken email offers **Sign in instead**, which switches
 to Sign in with the address carried over and focus on Password. Under Sign in's password, a small **Forgot your
 password?** button (`aria-expanded`) opens a disclosure and closes it again. When the server has mail set up, it holds
-an **Email** field (empty, no focus move on open) and a **Send me a link** button, disabled while the request is
+an **Email** field (empty, no focus move on open) and a **Send me a link** button, which shows the saving ring and ignores presses while the request is
 pending. Enter in the field sends the reset and never the sign-in. After the server accepts it, a line under the
 button says "If an account uses that address, a link is on its way. It works for an hour." and stays until the next
 send; the field and button stay, so the user can send again. An address problem shows under the field; any other
@@ -1083,7 +1131,7 @@ doesn't know yet, the disclosure shows one line, "Whoever runs this Upheap serve
 form. Create account has none. The invite page's Sign in side has it too.
 
 With mail set up, Create account doesn't sign in. The card shows **Check your mail** in place of the forms, focus on its
-heading: "We sent a link to a@x.dev. It works for a day.", a **Send it again** button (disabled while it is pending),
+heading: "We sent a link to a@x.dev. It works for a day.", a **Send it again** button (saving ring, no presses while it is pending),
 and "Wrong address? **Change it**" (below). Signing in with the
 right password for an account that hasn't confirmed its address shows the same card as **Confirm your address**: "We
 mailed you a new link. It works for a day." with Send it again and the same Wrong address line. Send it again signs in again
@@ -1094,7 +1142,7 @@ a sign-in would. Too many tries, or anything else, is the server's message in pl
 account and Sign in sides do the same.
 
 **Change it** replaces the Wrong address line with a small form under the buttons, for either way the card came up: a
-"Right address" email input, focused, with **Send a link there** (disabled while it is pending) and **Cancel**. Escape
+"Right address" email input, focused, with **Send a link there** (saving ring, no presses while it is pending) and **Cancel**. Escape
 and Cancel close the form and put focus back on Change it; Enter sends. It posts the login and password the form held
 with the address, and the server sets the address of the still unconfirmed account and mails the link there. On
 success the form closes, the card's text names the new address ("We sent a link to b@x.dev. It works for a day."),
@@ -1202,7 +1250,7 @@ the state, and the page only shows it:
   characters."), **Set password and sign in**, and under it "This signs you out everywhere else."
 
 The states that can't be used end in an **Open Upheap** button, which leads to sign-in when signed out. A failed read
-says why, with Try again. Enter submits, and the button is disabled while it is pending and until the landing. A
+says why, with Try again. Enter submits, and the button shows the saving ring and ignores presses while it is pending and until the landing. A
 problem about the password shows under the input, marked invalid and focused, with what was typed kept: "Enter a new
 password.", "Use at least 10 characters." and "That password is too long." The link stays working after them. A `404`
 or `409` means the link changed meanwhile (another tab used it, it ended), so the page reads it again and becomes the
@@ -1218,7 +1266,7 @@ the toast "Password changed. You're signed in.", shown once like the invite page
 `/change-email/{token}` is where an email change link leads, outside the app's shell in the Reset page's card, the same
 way at every width, and needs no sign-in: holding the link is the permission. Nothing is read when it opens, so a mail
 scanner that fetches the link changes nothing: the page asks "Use the address this link was mailed to for your Upheap
-account?" and has one button, **Use this address**, disabled while it is pending. What the server answers is the state:
+account?" and has one button, **Use this address**, which ignores presses and shows the saving ring while it is pending. What the server answers is the state:
 
 - **Changed:** "Your address is now sam@example.com." and **Go to your account**, which leads to `/account` and so to
   sign-in when signed out. A signed-in tab reads `me` again for the new address.
@@ -1237,7 +1285,7 @@ Anything else is the server's message above the button. When the page changes st
 `/confirm/{token}` is where an email confirmation link leads, outside the app's shell in the Change-email page's card,
 the same way at every width, and needs no sign-in: holding the link is the permission. Nothing is sent when it opens, so
 a mail scanner that fetches the link confirms nothing: the page asks "Confirm your address and sign in?" and has one
-button, **Confirm and sign in**, disabled while it is pending and until the landing. What the server answers is the
+button, **Confirm and sign in**, which ignores presses and shows the saving ring while it is pending and until the landing. What the server answers is the
 state:
 
 - **Confirmed:** the browser is signed in as the link's user, whoever it was signed in as. It lands on `/`, which goes
@@ -1382,6 +1430,13 @@ to an open History at once, and to a closed one by the time it is opened.
 4. **After the session expires, signing in returns the user to the page they were on.**
 5. **Editing lives in the item.** Rows are for reading, ordering and changing state; everything else is edited in
    the item ([decisions.md](decisions.md#23-editing-lives-in-the-item-rows-only-change-state)).
+6. **Saving.** The app is never optimistic, so between a press and the server's answer a small ring turns inside the
+   control that was pressed, or, when the control goes away on press, on the field or row it changed: a field shows
+   the ring before its old value, a list row in its state slot. It shows 150 ms after the press, so a quick answer
+   shows no flicker, and stays until the answer and the refetch it starts have landed; then the new state replaces
+   it. The control ignores presses meanwhile and isn't faded, as a control disabled for another reason is; its label
+   doesn't change. On a failure the ring goes, the old value stays and the error shows where it always did. With
+   reduced motion the ring pulses instead of turning.
 
 ## Testing
 
@@ -1395,9 +1450,10 @@ The wide screen shows its keys, and `?` lists them all:
 1. Hints, small key chips, show on a wide screen with a mouse or trackpad: `N` on Add item (on a tablet too), `/` in
    the search box, `S` `B` `X` at the end of the focused row, `⌘↵` (`Ctrl ↵` off a Mac) on Add in the Add dialog,
    `⌘K` (`Ctrl K`) on Find in the sidebar.
-2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list.
+2. ↑ ↓ to move between rows and Enter to open; ↑ ↓ in the item pane walk the list. Alt+↑ and Alt+↓ on a row move the
+   item up or down (The list point 20), on any width with a keyboard.
 3. A hint bar at the bottom of the window, under the heap's list however short it is, has the keys for what's on
-   screen: moving and opening, `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and
+   screen: moving and opening, `⌥↑↓` (`Alt ↑↓` off a Mac) where rows can be placed (The list point 20), `S` `B` `X` when a row can change state, `N` and `/` with no item open; walking and
    closing with one open; selecting in select mode. It ends with `?`, All keys.
 4. `?` anywhere in the app opens Keyboard shortcuts, the list of every key. Keys are ignored in a field. Open and
    Closed have no keys: they are one click away in the sidebar.

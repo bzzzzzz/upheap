@@ -7,9 +7,10 @@ import { borderedClass } from "../components/buttons";
 import { problemMessage } from "../components/ProblemText";
 import { AuthCard } from "./AuthPage";
 import { RequestId } from "../components/RequestId";
+import { Saving } from "../components/Saving";
 
 const primaryClass =
-  "h-[52px] w-full rounded-[14px] bg-ink text-base font-semibold text-surface disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
+  "flex h-[52px] w-full items-center justify-center gap-2 rounded-[14px] bg-ink text-base font-semibold text-surface disabled:not-aria-busy:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm";
 const secondaryClass = `h-[52px] w-full rounded-[14px] text-base font-medium disabled:opacity-40 sm:h-11 sm:rounded-[10px] sm:text-sm ${borderedClass}`;
 
 /**
@@ -93,7 +94,14 @@ export function AuthorizePage({
             </>
           )}
           <div className="flex flex-col gap-2">
-            <button type="button" className={primaryClass} disabled={approve.isPending} onClick={allow}>
+            <button
+              type="button"
+              className={primaryClass}
+              disabled={approve.isPending}
+              aria-busy={approve.isPending || undefined}
+              onClick={allow}
+            >
+              <Saving pending={approve.isPending} />
               Allow
             </button>
             <button type="button" className={secondaryClass} disabled={approve.isPending} onClick={cancel}>

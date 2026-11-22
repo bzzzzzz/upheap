@@ -5,8 +5,8 @@ import { motion, useDragControls, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { isNotFound, type HeapRef } from "../api/client";
-import type { Item, ItemPatchRequest, ItemState, RankedItem } from "../api/schema";
-import { useItem, useUpdateItem } from "../api/queries/items";
+import type { Item, ItemPatchRequest, ItemState, RankedItem, RankedList } from "../api/schema";
+import { useItem, useSavingFields, useUpdateItem } from "../api/queries/items";
 import { useMe } from "../api/queries/me";
 import { gerund, takesBack } from "./agentConfirm";
 import { HistoryDisclosure } from "./AuditHistory";
@@ -29,6 +29,7 @@ import { isClosed } from "./labels";
 import { itemAddress } from "./listView";
 import { PHONE, TABLET, TOUCH, useMedia } from "./media";
 import { useOverListLink } from "./overList";
+import { Saving } from "./Saving";
 import { Sheet } from "./Sheet";
 import { useToast } from "./UndoToast";
 import { useFocusAfterRender } from "./useFocusAfterRender";
@@ -58,6 +59,7 @@ export function ItemPane({
   nextKey,
   walkLink,
   listName,
+  list,
   onClose,
 }: {
   heapRef: HeapRef;
@@ -70,6 +72,8 @@ export function ItemPane({
   walkLink?: (key: string) => LinkProps;
   /** The name of the list behind the pane, for the button that closes a missing item; none where it's All items. */
   listName?: string | undefined;
+  /** The ranked group on screen behind the pane, for putting an item back where it was after Reset; none where there isn't one. */
+  list?: Pick<RankedList, "ranked" | "as_of"> | undefined;
   onClose: () => void;
 }) {
   const item = useItem(heapRef, itemKey);
@@ -134,7 +138,7 @@ export function ItemPane({
       </>
     );
   } else {
-    body = <ItemFields key={item.data.id} heapRef={heapRef} item={item.data} entry={entry} />;
+    body = <ItemFields key={item.data.id} heapRef={heapRef} item={item.data} entry={entry} list={list} />;
   }
 
   return (
@@ -430,9 +434,20 @@ function useDragToClose(onClose: () => void) {
  * for the person, the fields, the context, the steps, the questions and the history. Each change saves on its own, with
  * the item's version in `If-Match`.
  */
-function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; entry: RankedItem | undefined }) {
+function ItemFields({
+  heapRef,
+  item,
+  entry,
+  list,
+}: {
+  heapRef: HeapRef;
+  item: Item;
+  entry: RankedItem | undefined;
+  list: Pick<RankedList, "ranked" | "as_of"> | undefined;
+}) {
   const phone = useMedia(PHONE);
   const update = useUpdateItem(heapRef);
+  const savingTitle = useSavingFields(heapRef, item.key).has("title");
   const waits = useItemWaits(item);
   const focusAfterRender = useFocusAfterRender();
 
@@ -550,10 +565,18 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
             }}
             className="field-sizing-content -mx-1.5 min-w-0 flex-1 resize-none rounded-lg bg-transparent px-1.5 py-0.5 text-lg leading-snug font-semibold outline-none enabled:hover:bg-sunken disabled:opacity-100"
           />
+          <Saving pending={savingTitle} className="mt-2" />
           {!phone && actions("inline")}
         </div>
         {!phone && confirmAsking}
-        <StatusLine heapRef={heapRef} item={item} entry={entry} canReopen={canReopen} onTakenBack={focusMore} />
+        <StatusLine
+          heapRef={heapRef}
+          item={item}
+          entry={entry}
+          list={list}
+          canReopen={canReopen}
+          onTakenBack={focusMore}
+        />
       </div>
 
       <WaitsForYou heapRef={heapRef} item={item} waits={waits} />
@@ -586,7 +609,7 @@ function ItemFields({ heapRef, item, entry }: { heapRef: HeapRef; item: Item; en
       {/* History starts collapsed and loads once opened; each item opens with it collapsed again. Who added the
           item stays in view, on the same line as History's toggle. */}
       <section aria-label="History" className="relative border-t border-line pt-3">
-        <HistoryDisclosure scope={{ heap: heapRef }} entityId={item.id} className="" />
+        <HistoryDisclosure scope={{ heap: heapRef }} entityId={item.id} className="" section />
         <div className="absolute top-3 right-0 flex h-9 items-center pointer-coarse:h-11">
           <AddedBy item={item} />
         </div>
@@ -651,9 +674,11 @@ function TakeBackAndChange({
           type="button"
           autoFocus
           disabled={pending}
+          aria-busy={pending || undefined}
           onClick={onConfirm}
-          className="min-h-13 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:opacity-40"
+          className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:not-aria-busy:opacity-40"
         >
+          <Saving pending={pending} />
           {confirmLabel}
         </button>
         <button

@@ -4,7 +4,7 @@
 
 use domain::due::ClosedGroup;
 use domain::heap::Heap;
-use domain::item::{BlockerGone, Due, ItemSummary, Kind, Need, Size, Stage, StateKind};
+use domain::item::{BlockerGone, Due, ItemSummary, Kind, Need, PlacementDirection, Size, Stage, StateKind};
 use domain::permission::{ItemAction, QuestionAction, StepAction};
 use domain::question::{QuestionKind, QuestionState};
 use domain::ranking::{Contributor, Factor, Gap, HeldBack};
@@ -932,6 +932,13 @@ pub struct ItemDto {
     /// When a reminder joins the list: the start of its date. Before that it's out of the list. UTC milliseconds.
     /// Set only when `kind` is `reminder`; `null` otherwise, a task that was a reminder included.
     pub arrives_at: Option<i64>,
+    /// Which way a person placed the item against where its fields put it (`…/place`): `up` or `down`. `null` when it
+    /// is not placed. The multiplier itself is never shown.
+    // Decoding tolerates an older server that doesn't send it; every response of this server does, so the schema
+    // says required.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub placement: Option<PlacementDto>,
     /// By name.
     pub tags: Vec<ItemTagDto>,
     /// A value, or `null`, for every parameter of the heap in use, and the item's values of archived parameters,
@@ -1027,6 +1034,28 @@ pub struct ItemDto {
     pub allowed_actions: Vec<ItemActionDto>,
 }
 
+/// Which way a placed item sits against where its fields would put it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = Placement)]
+pub enum PlacementDto {
+    Up,
+    Down,
+    /// A direction this client doesn't know: one the server added later. Only read, never sent, so it isn't in the
+    /// API's schema.
+    #[serde(other, skip_serializing)]
+    Unknown,
+}
+
+impl From<PlacementDirection> for PlacementDto {
+    fn from(direction: PlacementDirection) -> Self {
+        match direction {
+            PlacementDirection::Up => Self::Up,
+            PlacementDirection::Down => Self::Down,
+        }
+    }
+}
+
 /// An item a note was split into, as the note's `became` lists it, with the heap it is in now.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = MadeItem)]
@@ -1103,6 +1132,8 @@ pub enum FactorDto {
     Tags,
     /// Priority taken on from an item this one blocks.
     Blocks,
+    /// The item was placed by hand: "Moved up" or "Moved down".
+    Placement,
     /// A factor this client doesn't know: one the server added later. Clients show the contributor's `label`, which
     /// the server writes, so they needn't know every factor. Only read, never sent, so it isn't in the API's schema.
     #[serde(other, skip_serializing)]
@@ -1119,6 +1150,7 @@ impl From<Contributor> for ContributorDto {
             Factor::Parameter => FactorDto::Parameter,
             Factor::Tags => FactorDto::Tags,
             Factor::Blocks => FactorDto::Blocks,
+            Factor::Placement => FactorDto::Placement,
         };
         Self {
             factor,

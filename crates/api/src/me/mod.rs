@@ -7,10 +7,12 @@ pub(crate) mod personal_tokens;
 pub(crate) mod sign_ins;
 
 use api_types::agents::{DecisionRowDto, DecisionsDto, ResultRowDto, ResultsDto, ResultsQuery, RunLinkDto};
+use api_types::audit::{AcrossHeapsAuditDto, AcrossHeapsAuditEntryDto, AcrossHeapsAuditQuery};
 use api_types::common::HeapSummaryDto;
 use api_types::common::{ItemActionDto, ItemRefDto};
 use api_types::items::{
-    AcrossHeapsItemDto, AcrossHeapsListDto, AcrossHeapsQuery, SearchQuery, SearchResultsDto, SearchRowDto,
+    AcrossHeapsClosedDto, AcrossHeapsClosedItemDto, AcrossHeapsClosedQuery, AcrossHeapsItemDto, AcrossHeapsListDto,
+    AcrossHeapsQuery, SearchQuery, SearchResultsDto, SearchRowDto,
 };
 use api_types::me::{HeapOverviewDto, MeActionDto, MeDto, MePatchDto, TeamDto, UserDto};
 use api_types::waiting::{
@@ -24,18 +26,22 @@ use domain::item::Item;
 use domain::run::RunReached;
 use domain::turn::Goal;
 use domain::user::DisplayName;
-use domain::{RunId, Timestamp, ValidationError};
+use domain::{RunId, TeamId, Timestamp, ValidationError};
 use jiff::tz::TimeZone;
+use service::Principal;
 use service::ServiceError;
 use service::across_heaps::AcrossHeapsEntry;
 use service::agents::{DecisionRow, ReachedCursor, ResultRow};
+use service::audit_log::AuditRequest;
 use service::me::{HeapOverview, MeView, TeamView};
 use service::waiting::{WaitingRow, WaitingSubject};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use uuid::Uuid;
 
-use crate::dto::{IfMatchHeader, to_blocker_gone_dto, to_item_heap_dto, to_question_dto, to_ranked_dto, to_turn_dto};
+use crate::dto::{
+    IfMatchHeader, to_blocker_gone_dto, to_item_dto, to_item_heap_dto, to_question_dto, to_ranked_dto, to_turn_dto,
+};
 use crate::error::Problem;
 use crate::extract::{ApiJson, ApiQuery, ClientTimeZone, CurrentUser, IfMatch, TimeZoneHeader};
 use crate::{ApiError, AppState};
@@ -47,6 +53,8 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(get_decisions))
         .routes(routes!(get_results))
         .routes(routes!(get_items))
+        .routes(routes!(get_closed_items))
+        .routes(routes!(get_audit))
         .routes(routes!(get_search))
 }
 
@@ -251,13 +259,7 @@ async fn get_items(
             detail: "tag and param need team".to_owned(),
         });
     }
-    let team = match &query.team {
-        Some(raw) => {
-            let handle = crate::paths::handle(raw)?;
-            Some(state.services.resolve_team(principal, &handle).await?)
-        }
-        None => None,
-    };
+    let team = resolve_team(&state, principal, query.team.as_deref()).await?;
     let list = state
         .services
         .list_ranked_across_heaps(principal, as_of, &view, team)
@@ -286,6 +288,93 @@ async fn get_items(
         blocked: group(list.blocked),
         hidden_count: list.hidden_count,
         in_progress_count: list.in_progress_count,
+    }))
+}
+
+/// The team a list across heaps is limited to, from its `team` parameter: `not_found` unless the caller is in it.
+async fn resolve_team(state: &AppState, principal: Principal, team: Option<&str>) -> Result<Option<TeamId>, ApiError> {
+    match team {
+        Some(raw) => {
+            let handle = crate::paths::handle(raw)?;
+            Ok(Some(state.services.resolve_team(principal, &handle).await?))
+        }
+        None => Ok(None),
+    }
+}
+
+/// The closed items of every active heap the signed-in user can view, in one list, most recently closed first, each
+/// as its own heap's closed list gives it. With `team`, only that team's heaps. Read-only, for any member.
+#[utoipa::path(get, path = "/me/items/closed", tag = "me", security(("session" = [])),
+    params(AcrossHeapsClosedQuery, TimeZoneHeader),
+    responses(
+        (status = 200, body = AcrossHeapsClosedDto),
+        (status = 400, description = "`invalid_cursor`", body = Problem),
+        (status = 401, description = "`unauthenticated`", body = Problem),
+        (status = 404, description = "`not_found`", body = Problem),
+    ))]
+async fn get_closed_items(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ClientTimeZone(tz): ClientTimeZone,
+    ApiQuery(query): ApiQuery<AcrossHeapsClosedQuery>,
+) -> Result<Json<AcrossHeapsClosedDto>, ApiError> {
+    let cursor = query.cursor.as_deref().map(crate::items::parse_cursor).transpose()?;
+    let team = resolve_team(&state, principal, query.team.as_deref()).await?;
+    let page = state
+        .services
+        .list_closed_across_heaps(principal, team, cursor, query.limit.unwrap_or(50))
+        .await?;
+    let now = state.services.now();
+    Ok(Json(AcrossHeapsClosedDto {
+        items: page
+            .rows
+            .into_iter()
+            .map(|row| AcrossHeapsClosedItemDto {
+                heap: to_item_heap_dto(&row.heap, &row.team),
+                item: to_item_dto(row.item, now, &tz),
+            })
+            .collect(),
+        next_cursor: page.next.map(|c| format!("{}.{}", c.closed_at.as_millis(), c.id)),
+    }))
+}
+
+/// What happened in every active heap the signed-in user can view, newest first: in each heap what its own history
+/// shows them, changes to items, tags and saved views for every member, and to the heap and its parameters for
+/// admins of its team too. With `team`, only that team's heaps. Read-only, for any member.
+#[utoipa::path(get, path = "/me/audit", tag = "me", security(("session" = [])),
+    params(AcrossHeapsAuditQuery, TimeZoneHeader),
+    responses(
+        (status = 200, body = AcrossHeapsAuditDto),
+        (status = 400, description = "`invalid_cursor`", body = Problem),
+        (status = 401, description = "`unauthenticated`", body = Problem),
+        (status = 404, description = "`not_found`", body = Problem),
+    ))]
+async fn get_audit(
+    State(state): State<AppState>,
+    CurrentUser(principal): CurrentUser,
+    ClientTimeZone(tz): ClientTimeZone,
+    ApiQuery(query): ApiQuery<AcrossHeapsAuditQuery>,
+) -> Result<Json<AcrossHeapsAuditDto>, ApiError> {
+    let request = AuditRequest {
+        entity_id: None,
+        after: query.cursor.as_deref().map(crate::audit::parse_cursor).transpose()?,
+        limit: query.limit.unwrap_or(50),
+    };
+    let team = resolve_team(&state, principal, query.team.as_deref()).await?;
+    let page = state
+        .services
+        .list_audit_across_heaps(principal, team, request, &tz)
+        .await?;
+    Ok(Json(AcrossHeapsAuditDto {
+        entries: page
+            .rows
+            .into_iter()
+            .map(|row| AcrossHeapsAuditEntryDto {
+                heap: to_item_heap_dto(&row.heap, &row.team),
+                entry: crate::audit::to_audit_entry_dto(row.entry),
+            })
+            .collect(),
+        next_cursor: page.next.map(crate::audit::format_cursor),
     }))
 }
 

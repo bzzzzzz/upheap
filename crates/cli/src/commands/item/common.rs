@@ -59,6 +59,23 @@ impl HeapApi<'_> {
         }
     }
 
+    /// `DELETE` of the item with `key`'s `place`, which is at `version`: take its place by hand away. A refusal is
+    /// reported like [`post_item_action`](Self::post_item_action)'s.
+    pub async fn reset_item_placement(&self, key: &str, version: u32) -> Result<Fetched<ItemDto>, CliError> {
+        match self
+            .client
+            .delete_at_version(&self.path(&["items", key, "place"]), version, self.token)
+            .await
+        {
+            Ok(item) => Ok(item),
+            Err(source @ ClientError::Problem { .. }) if is_stale_or_closed(&source) => Err(CliError::ItemRefused {
+                name: format!("{}/{key}", self.heap),
+                source,
+            }),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// `POST` to the item with `key`'s `became`: close the note as became. It says what the note should end up as, so
     /// it takes no version. A `404` is reported like [`get_item`](Self::get_item)'s.
     pub async fn became_item(&self, typed: &str, key: &str) -> Result<Fetched<ItemDto>, CliError> {

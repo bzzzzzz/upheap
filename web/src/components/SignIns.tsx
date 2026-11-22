@@ -10,6 +10,7 @@ import { compactButtonClass } from "./buttons";
 import { ProblemText } from "./ProblemText";
 import { PersonalTokensSection } from "./PersonalTokens";
 import { useReturnFocus } from "./useConfirmation";
+import { Saving } from "./Saving";
 
 const code = (text: string) => <code className="font-mono text-[0.92em]">{text}</code>;
 
@@ -125,7 +126,15 @@ function SignInRow({
           >
             Cancel
           </button>
-          <button type="button" autoFocus onClick={onConfirm} disabled={pending} className={compactButtonClass.danger}>
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            disabled={pending}
+            aria-busy={pending || undefined}
+            className={compactButtonClass.danger}
+          >
+            <Saving pending={pending} />
             Sign out
           </button>
         </div>

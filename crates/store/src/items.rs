@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use domain::handle::ItemKey;
 use domain::item::{
-    BlockReason, Description, Due, Item, ItemState, ItemSummary, Kind, Need, Size, Stage, StateKind, Title,
+    BlockReason, Description, Due, Item, ItemState, ItemSummary, Kind, Need, Placement, Size, Stage, StateKind, Title,
 };
 use domain::{HeapId, ItemId, OptionId, ParameterId, RunId, TagId, Timestamp, UserId, Version};
 use sea_orm::sea_query::{BinOper, Condition, Expr, ExprTrait, Func, Order};
@@ -314,11 +314,32 @@ pub async fn list_items_in_states(
     heap_id: HeapId,
     states: &[StateKind],
 ) -> Result<Vec<Item>, StoreError> {
-    let mut items = items::Entity::find()
+    read_items_in_states(db, heap_id, states, false).await
+}
+
+/// [`list_items_in_states`] with the item rows read with locking reads (`FOR SHARE` on MySQL and Postgres) like
+/// [`find_item_locking`], so a write that works from the whole heap calls it after [`crate::heaps::lock_heap`] and
+/// sees what committed while it waited, even on MySQL (REPEATABLE READ).
+pub async fn list_items_in_states_locking(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    states: &[StateKind],
+) -> Result<Vec<Item>, StoreError> {
+    read_items_in_states(db, heap_id, states, true).await
+}
+
+async fn read_items_in_states(
+    db: &impl ConnectionTrait,
+    heap_id: HeapId,
+    states: &[StateKind],
+    lock: bool,
+) -> Result<Vec<Item>, StoreError> {
+    let query = items::Entity::find()
         .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
         .filter(items::Column::State.is_in(states.iter().map(|s| s.code())))
         .order_by_asc(items::Column::CreatedAt)
-        .order_by_asc(items::Column::Id)
+        .order_by_asc(items::Column::Id);
+    let mut items = shared_if(query, lock)
         .all(db)
         .await?
         .into_iter()
@@ -374,8 +395,23 @@ pub async fn list_closed_items(
     after: Option<ClosedCursor>,
     limit: u64,
 ) -> Result<Vec<Item>, StoreError> {
+    list_closed_items_of_heaps(db, &[heap_id], after, limit).await
+}
+
+/// Up to `limit` closed items of `heap_ids` together, most recently closed first, starting after `after`.
+///
+/// `heap_ids` go in one `IN` list, as [`search_items`] puts them.
+pub async fn list_closed_items_of_heaps(
+    db: &impl ConnectionTrait,
+    heap_ids: &[HeapId],
+    after: Option<ClosedCursor>,
+    limit: u64,
+) -> Result<Vec<Item>, StoreError> {
+    if heap_ids.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut query = items::Entity::find()
-        .filter(items::Column::HeapId.eq(id_to_db(heap_id.as_uuid())))
+        .filter(items::Column::HeapId.is_in(heap_ids.iter().map(|id| id_to_db(id.as_uuid()))))
         .filter(items::Column::ClosedAt.is_not_null());
     if let Some(cursor) = after {
         let closed_at = cursor.closed_at.as_millis();
@@ -745,6 +781,7 @@ fn to_row(item: &Item) -> Result<items::ActiveModel, StoreError> {
         due_at: Set(item.due.map(|d| d.at.as_millis())),
         due_firm: Set(item.due.map(|d| d.firm)),
         arrives_at: Set(item.arrives_at.map(Timestamp::as_millis)),
+        placement: Set(item.placement.map(Placement::get)),
         created_at: Set(item.created_at.as_millis()),
         created_by: Set(item.created_by.map(|id| id_to_db(id.as_uuid()))),
         closed_at: Set(item.state.closed_at().map(Timestamp::as_millis)),
@@ -802,6 +839,10 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
     if item_kind == Kind::Reminder && (arrives_at.is_none() || due.is_none()) {
         return Err(read.corrupt("a reminder needs a due and an arrival".to_owned()));
     }
+    let placement = row
+        .placement
+        .map(|raw| Placement::new(raw).ok_or_else(|| read.corrupt(format!("invalid placement {raw}"))))
+        .transpose()?;
     let size = |raw: Option<String>| {
         raw.map(|r| Size::from_code(&r).ok_or_else(|| read.corrupt(format!("unknown size {r:?}"))))
             .transpose()
@@ -840,6 +881,7 @@ fn to_item(row: items::Model) -> Result<Item, StoreError> {
             .map(|raw| read.uuid(raw).map(RunId::from_uuid))
             .transpose()?,
         made_in_split: row.made_in_split,
+        placement,
         version: read.version(row.version)?,
     })
 }

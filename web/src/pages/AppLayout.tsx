@@ -38,13 +38,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useHeap, useSetHeapArchived } from "../api/queries/heaps";
-import { useMe, useDecisions, useWaiting } from "../api/queries/me";
+import { usePolledMe, useWaiting } from "../api/queries/me";
 import { AddItemDialog, OVERLAY } from "../components/AddItem";
 import { FindPalette } from "../components/FindPalette";
 import { Kbd, MAC, WIDE_HINT } from "../components/Kbd";
 import { KeysHelp } from "../components/KeysHelp";
 import { ConnectionBanner } from "../components/ConnectionBanner";
 import { readRecentHeaps, recordRecentHeap } from "../components/heapSwitcherStorage";
+import { acrossLabel, useAcrossHeaps } from "../components/acrossHeaps";
 import { HeapSwitcher, openItemCount } from "../components/HeapSwitcher";
 import { useListSearch, ListSearchProvider } from "../components/listSearch";
 import { Logo } from "../components/Logo";
@@ -54,9 +55,10 @@ import { Sheet, sheetRowClass } from "../components/Sheet";
 import { teamName, titleTeam } from "../components/teamName";
 import { ToastProvider, useToast } from "../components/UndoToast";
 import { useSelectMode } from "../components/useSelectMode";
+import { Saving } from "../components/Saving";
 
 export function AppLayout() {
-  const { data: me } = useMe();
+  const { data: me } = usePolledMe();
   useKeyboardInset();
   const { team, heap } = useParams({ strict: false });
   const heapRef = team !== undefined && heap !== undefined ? { team, heap } : undefined;
@@ -68,9 +70,10 @@ export function AppLayout() {
   const onWaiting = useMatch({ from: "/app/waiting", shouldThrow: false }) !== undefined;
   const onAgents = useMatch({ from: "/app/agents", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
-  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
-  const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
-  const shellHeap = heapRef ?? ((onWaiting || onAgents || onAll || onData) && me ? keptHeap(me, allTeam) : undefined);
+  const across = useAcrossHeaps();
+  const onAll = across?.view === "open";
+  const shellHeap =
+    heapRef ?? ((onWaiting || onAgents || across || onData) && me ? keptHeap(me, across?.team) : undefined);
   const heapId = me?.teams.find((t) => t.slug === heapRef?.team)?.heaps.find((h) => h.slug === heapRef?.heap)?.id;
   useEffect(() => {
     if (heapId !== undefined) recordRecentHeap(heapId);
@@ -225,6 +228,20 @@ function NoticeLine() {
   return null;
 }
 
+/**
+ * The views of the pages across heaps (ux.md, All items), where the sidebar and the phone's tabs show them in place of
+ * a heap's: the open list, the closed items and the activity, of every heap or of `team`'s.
+ */
+function acrossViews(team: string | undefined) {
+  const search = team === undefined ? {} : { team };
+  return {
+    // Active with an item open over the list too, which is in the search.
+    open: { to: "/all", search, activeOptions: { exact: true, includeSearch: false } },
+    closed: { to: "/all/closed", search, activeOptions: { includeSearch: false } },
+    activity: { to: "/all/activity", search, activeOptions: { includeSearch: false } },
+  } as const;
+}
+
 /** Where the shell's links go, for the signed-in user, the heap on screen and the team in the URL. */
 function useShellLinks(me: Me, heapRef: HeapRef | undefined) {
   const { team: teamSlug } = useParams({ strict: false });
@@ -270,28 +287,17 @@ function NavLink({
 }
 
 /**
- * A page of the shell with a number of things that wait: Waiting for me and Agents. The count is a badge on the icon in
- * the rail and the tabs, and on the right in the sidebar; it is part of the link's name, and there is none at zero.
+ * Waiting for me, with the number of questions that wait: a badge on the icon in the rail and the tabs, and on the
+ * right in the sidebar. The count is part of the link's name, and there is none at zero.
  */
-function CountLink({
-  to,
-  icon: Icon,
-  short,
-  long,
-  count,
-}: {
-  to: "/waiting" | "/agents";
-  icon: LucideIcon;
-  short: string;
-  long: string;
-  count: number;
-}) {
+function WaitingLink() {
+  const count = useWaiting().data?.count ?? 0;
   return (
-    <Link to={to} className={`${navItemClass} relative`}>
-      <Icon aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
+    <Link to="/waiting" className={`${navItemClass} relative`}>
+      <Inbox aria-hidden="true" className="size-5 shrink-0 lg:size-4" />
       <span className="max-w-full truncate">
-        <span className="lg:hidden">{short}</span>
-        <span className="max-lg:hidden">{long}</span>
+        <span className="lg:hidden">Waiting</span>
+        <span className="max-lg:hidden">Waiting for me</span>
       </span>
       {count > 0 && (
         <span className="absolute top-0.5 left-1/2 ml-1 min-w-4 rounded-full bg-accent-ink px-1 text-center text-[10px] leading-4 font-semibold text-canvas tabular-nums lg:static lg:ml-auto lg:min-w-0 lg:bg-transparent lg:px-0 lg:text-sm lg:leading-normal lg:font-normal lg:text-muted">
@@ -300,18 +306,6 @@ function CountLink({
       )}
     </Link>
   );
-}
-
-/** Waiting for me, with the number of questions that wait. */
-function WaitingLink() {
-  const count = useWaiting().data?.count ?? 0;
-  return <CountLink to="/waiting" icon={Inbox} short="Waiting" long="Waiting for me" count={count} />;
-}
-
-/** Agents, with the number of decisions that wait for the person (Your decision). */
-function AgentsLink() {
-  const count = useDecisions().data?.count ?? 0;
-  return <CountLink to="/agents" icon={Bot} short="Agents" long="Agents" count={count} />;
 }
 
 /** The heap's views, from both the sidebar and the phone's tabs. An open item sits over the open list. */
@@ -343,8 +337,12 @@ function heapViews(heapRef: HeapRef, itemOpen: boolean) {
 function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined; onFind: () => void }) {
   const links = useShellLinks(me, heapRef);
   const { item: itemKey } = useParams({ strict: false });
-  const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
-  const views = heapRef && heapViews(heapRef, itemKey !== undefined);
+  // On the pages across heaps no heap is the current one: the button reads as the switcher's row does, and the views
+  // are those pages. The kept heap is only where Add goes.
+  const across = useAcrossHeaps();
+  const allLabel = across && acrossLabel(me, across.team);
+  const all = across && acrossViews(across.team);
+  const views = heapRef && !across && heapViews(heapRef, itemKey !== undefined);
   const heapTeam = me.teams.find((team) => team.slug === heapRef?.team);
   const railTeam = titleTeam(me, heapRef);
 
@@ -370,18 +368,6 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
           <Kbd className={`${WIDE_HINT} ml-auto`}>{MAC ? "⌘K" : "Ctrl K"}</Kbd>
         </button>
         <WaitingLink />
-        <AgentsLink />
-        <NavLink
-          to="/all"
-          icon={Layers}
-          label={
-            <>
-              <span className="lg:hidden">All</span>
-              <span className="max-lg:hidden">All items</span>
-            </>
-          }
-          count={openItemCount(me, allTeam)}
-        />
       </div>
 
       <div className="lg:hidden">
@@ -390,10 +376,14 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
             <button
               type="button"
               {...props}
-              aria-label={`Switch heap${links.heap ? `: ${links.heap.name}${railTeam ? ` · ${railTeam}` : ""}` : ""}`}
+              aria-label={`Switch heap${allLabel ? `: ${allLabel}` : links.heap ? `: ${links.heap.name}${railTeam ? ` · ${railTeam}` : ""}` : ""}`}
               className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-ink text-lg font-semibold text-canvas outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
             >
-              {(links.heap?.name ?? "Upheap").charAt(0).toUpperCase()}
+              {allLabel ? (
+                <Layers aria-hidden="true" className="size-5" />
+              ) : (
+                (links.heap?.name ?? "Upheap").charAt(0).toUpperCase()
+              )}
             </button>
           )}
         </HeapSwitcher>
@@ -410,7 +400,9 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
               {/* The name is what the button shows, after what it does. */}
               <span className="min-w-0 flex-1 truncate">
                 <span className="sr-only">Switch heap: </span>
-                {links.heap ? (
+                {allLabel ? (
+                  <span className="font-semibold text-ink">{allLabel}</span>
+                ) : links.heap ? (
                   <>
                     <span className="font-semibold text-ink">{links.heap.name}</span>
                     {links.heap.archived && <span className="text-muted"> (archived)</span>}
@@ -426,6 +418,13 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
         </HeapSwitcher>
       </div>
 
+      {all && (
+        <nav aria-label="Heap views" className="flex flex-col gap-1 lg:gap-0.5">
+          <NavLink {...all.open} icon={List} label="Open" count={openItemCount(me, across.team)} />
+          <NavLink {...all.closed} icon={CircleCheck} label="Closed" />
+          <NavLink {...all.activity} icon={Activity} label="Activity" />
+        </nav>
+      )}
       {views && (
         <nav aria-label="Heap views" className="flex flex-col gap-1 lg:gap-0.5">
           <NavLink {...views.open} icon={List} label="Open" count={links.heap?.open_count} />
@@ -437,6 +436,7 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
       )}
 
       <div className="mt-auto flex flex-col gap-1 lg:gap-0.5">
+        <NavLink to="/agents" icon={Bot} label="Agents" />
         {links.team && (
           <NavLink
             to="/teams/$team"
@@ -459,6 +459,8 @@ function Sidebar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined
 function PhoneTopBar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undefined; onFind: () => void }) {
   const { heap } = useShellLinks(me, heapRef);
   const team = titleTeam(me, heapRef);
+  const across = useAcrossHeaps();
+  const allLabel = across && acrossLabel(me, across.team);
   return (
     <header className="sticky top-0 z-10 flex items-center bg-canvas/95 px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1 backdrop-blur sm:hidden">
       {!heapRef && <PhoneBack me={me} />}
@@ -467,12 +469,12 @@ function PhoneTopBar({ me, heapRef, onFind }: { me: Me; heapRef: HeapRef | undef
           <button
             type="button"
             {...props}
-            aria-label={`Switch heap${heap ? `: ${heap.name}${team ? ` · ${team}` : ""}` : ""}`}
+            aria-label={`Switch heap${allLabel ? `: ${allLabel}` : heap ? `: ${heap.name}${team ? ` · ${team}` : ""}` : ""}`}
             className="-ml-1 flex min-h-11 min-w-0 items-center gap-1.5 rounded-lg px-1 text-xl font-semibold tracking-tight outline-none focus-visible:outline-2 focus-visible:outline-accent"
           >
             <span className="truncate">
-              {heap?.name ?? "Upheap"}
-              {heap && team && <span className="font-normal text-muted"> · {team}</span>}
+              {allLabel ?? heap?.name ?? "Upheap"}
+              {!allLabel && heap && team && <span className="font-normal text-muted"> · {team}</span>}
             </span>
             <ChevronDown aria-hidden="true" className="size-5 shrink-0 text-ink-soft" />
           </button>
@@ -550,14 +552,18 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
   const view = useSearch({ from: "/app/teams/$team/heaps/$heap", shouldThrow: false });
   const { search } = useListSearch();
   // On All items there is no view to start from, but the item still opens over that page.
-  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
+  const across = useAcrossHeaps();
+  const onAll = across?.view === "open";
+  // On the pages across heaps, Open and More's Closed and Activity are those pages.
+  const all = across && acrossViews(across.team);
   const [more, setMore] = useState(false);
   // The heap's pages that only More leads to, so More shows as active on them.
   const onClosed = useMatch({ from: "/app/teams/$team/heaps/$heap/closed", shouldThrow: false }) !== undefined;
   const onActivity = useMatch({ from: "/app/teams/$team/heaps/$heap/activity", shouldThrow: false }) !== undefined;
   const onSettings = useMatch({ from: "/app/teams/$team/heaps/$heap/settings", shouldThrow: false }) !== undefined;
   const onData = useMatch({ from: "/app/teams/$team/data", shouldThrow: false }) !== undefined;
-  const onMorePage = onClosed || onActivity || onSettings || onData;
+  const onMorePage =
+    onClosed || onActivity || onSettings || onData || across?.view === "closed" || across?.view === "activity";
 
   return (
     <nav
@@ -565,7 +571,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       aria-label="Heap views"
       className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 items-end gap-1 border-t border-line bg-surface px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)] sm:hidden"
     >
-      <NavLink {...views.open} icon={List} label="Open" />
+      <NavLink {...(all?.open ?? views.open)} icon={List} label="Open" />
       <WaitingLink />
       <button
         type="button"
@@ -576,7 +582,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
       >
         <Plus aria-hidden="true" className="mx-auto size-6" strokeWidth={2.25} />
       </button>
-      <AgentsLink />
+      <NavLink to="/agents" icon={Bot} label="Agents" />
       <button
         type="button"
         aria-expanded={more}
@@ -596,7 +602,7 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
           onClose={() => setAdding(false)}
         />
       )}
-      <MoreSheet me={me} heapRef={heapRef} isOpen={more} onClose={() => setMore(false)} />
+      <MoreSheet me={me} heapRef={heapRef} all={all} isOpen={more} onClose={() => setMore(false)} />
     </nav>
   );
 }
@@ -608,11 +614,14 @@ function PhoneTabs({ me, heapRef }: { me: Me; heapRef: HeapRef }) {
 function MoreSheet({
   me,
   heapRef,
+  all,
   isOpen,
   onClose,
 }: {
   me: Me;
   heapRef: HeapRef;
+  /** The views across heaps, on their pages: Closed and Activity are theirs, and the heap's Settings and Data stay out. */
+  all: ReturnType<typeof acrossViews> | undefined;
   isOpen: boolean;
   onClose: () => void;
 }) {
@@ -628,18 +637,22 @@ function MoreSheet({
   return (
     <Sheet title="More" isOpen={isOpen} onClose={onClose} aboveTabs showTitle={false}>
       <nav aria-label="More" className="flex flex-col">
-        <Link {...views.closed} onClick={onClose} className={sheetRowClass}>
+        <Link {...(all?.closed ?? views.closed)} onClick={onClose} className={sheetRowClass}>
           {row("Closed")}
         </Link>
-        <Link {...views.settings} onClick={onClose} className={sheetRowClass}>
-          {row("Settings")}
-        </Link>
-        <Link {...views.activity} onClick={onClose} className={sheetRowClass}>
+        {!all && (
+          <Link {...views.settings} onClick={onClose} className={sheetRowClass}>
+            {row("Settings")}
+          </Link>
+        )}
+        <Link {...(all?.activity ?? views.activity)} onClick={onClose} className={sheetRowClass}>
           {row("Activity")}
         </Link>
-        <Link {...views.data} onClick={onClose} className={sheetRowClass}>
-          {row("Data")}
-        </Link>
+        {!all && (
+          <Link {...views.data} onClick={onClose} className={sheetRowClass}>
+            {row("Data")}
+          </Link>
+        )}
         {links.team && (
           <Link
             to="/teams/$team"
@@ -684,9 +697,11 @@ function ArchivedNotice({ heapRef }: { heapRef: HeapRef }) {
         <button
           type="button"
           disabled={setArchived.isPending}
+          aria-busy={setArchived.isPending || undefined}
           onClick={() => setArchived.mutate({ heap, archived: false })}
-          className="font-medium underline disabled:opacity-50"
+          className="inline-flex items-center gap-2 font-medium underline disabled:not-aria-busy:opacity-50"
         >
+          <Saving pending={setArchived.isPending} />
           Unarchive
         </button>
       )}

@@ -533,7 +533,44 @@ pub struct Item {
     /// The run that added it. `None` for an item a person added. Set together with `origin_id` by
     /// [`Item::added_in_run`].
     pub created_run_id: Option<RunId>,
+    /// Where a person placed it in the heap's list, as a multiplier on its own score (`ranking`); `None` when it
+    /// ranks by its fields alone. Kept through edits and dropped when the item moves to another heap.
+    pub placement: Option<Placement>,
     pub version: Version,
+}
+
+/// Which way a [`Placement`] moves an item against where its fields would put it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlacementDirection {
+    Up,
+    Down,
+}
+
+/// A positive, finite multiplier on an item's own score, set by placing the item by hand. A multiplier of 1 or more
+/// counts as up.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placement(f64);
+
+// A placement is never NaN, so equality is total.
+impl Eq for Placement {}
+
+impl Placement {
+    /// `None` unless `value` is finite and above 0.
+    pub fn new(value: f64) -> Option<Self> {
+        (value.is_finite() && value > 0.0).then_some(Self(value))
+    }
+
+    pub fn get(self) -> f64 {
+        self.0
+    }
+
+    pub fn direction(self) -> PlacementDirection {
+        if self.0 >= 1.0 {
+            PlacementDirection::Up
+        } else {
+            PlacementDirection::Down
+        }
+    }
 }
 
 impl Item {
@@ -566,6 +603,7 @@ impl Item {
             origin_id: fields.origin.map(|origin| origin.item_id),
             made_in_split: fields.origin.is_some(),
             created_run_id: None,
+            placement: None,
             version: Version::INITIAL,
         }
     }
@@ -754,7 +792,7 @@ impl Item {
 
     /// The item as it is after it moves to `heap_id` under `key`, carrying `tags` and `parameters` of that heap (see
     /// [`crate::item_move::carry_over`]). Everything else stays, and so does the version, which the store bumps on
-    /// write. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it
+    /// write. Its placement goes, since it was about the list the item left. An item that waits for another item still waits, with nobody picked: its blocker is in the heap it
     /// left. Its reason stays: it is about the world outside the heap.
     /// The items that waited for this one keep it as their blocker, now gone ([`Item::blocker_gone`]).
     pub fn moved_to(
@@ -777,6 +815,7 @@ impl Item {
             tags,
             parameters,
             state,
+            placement: None,
             ..self.clone()
         }
     }
@@ -1444,6 +1483,36 @@ mod tests {
             expect_that!(left.blocked_reason(), none(), "{target:?}");
         }
         expect_that!(blocked.freed().blocked_reason(), none());
+    }
+
+    #[gtest]
+    fn moving_to_another_heap_clears_the_placement() {
+        let placed = Item {
+            placement: Placement::new(2.0),
+            ..sample_item()
+        };
+        let moved = placed.moved_to(
+            HeapId::from_uuid(Uuid::from_u128(9)),
+            crate::handle::ItemKey::parse("c8c8c").expect("valid"),
+            BTreeSet::new(),
+            BTreeMap::new(),
+        );
+        expect_that!(moved.placement, none());
+    }
+
+    #[gtest]
+    fn a_placement_is_positive_and_finite() {
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            expect_that!(Placement::new(bad), none(), "{bad}");
+        }
+        expect_that!(
+            Placement::new(1.0).map(Placement::direction),
+            some(eq(PlacementDirection::Up))
+        );
+        expect_that!(
+            Placement::new(0.5).map(Placement::direction),
+            some(eq(PlacementDirection::Down))
+        );
     }
 
     #[gtest]

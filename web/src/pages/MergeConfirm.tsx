@@ -10,6 +10,7 @@ import { Sheet } from "../components/Sheet";
 import { listOf, plural } from "../components/words";
 import { chipClass, TagProblem, type TagSettings } from "./TagSettings";
 import { useMergeReachConfirm, type Send } from "./useMergeReachConfirm";
+import { Saving } from "../components/Saving";
 
 /** What the write does: makes a team tag, or renames one into a name heap tags have. */
 export type MergeAct = { kind: "make"; name: string } | { kind: "rename"; from: string; to: string };
@@ -84,7 +85,7 @@ export function MergeConfirm<V>({
   const title = make ? `Make “${name}” a team tag?` : `Rename “${act.from}” to “${act.to}”?`;
   const items = reach.heaps.reduce((sum, reached) => sum + reached.items, 0);
 
-  const actLabel = pending ? (make ? "Making…" : "Renaming…") : make ? "Make team tag" : "Rename and merge";
+  const actLabel = make ? "Make team tag" : "Rename and merge";
   const body: ReactNode = (
     <div id={bodyId} className="flex min-w-0 flex-col gap-3 text-sm text-ink-soft">
       {flow.changed && (
@@ -183,9 +184,11 @@ export function MergeDialog({
               type="button"
               autoFocus
               disabled={pending}
+              aria-busy={pending || undefined}
               onClick={onConfirm}
-              className="min-h-13 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:opacity-40"
+              className="flex min-h-13 items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-semibold text-stone-950 disabled:not-aria-busy:opacity-40"
             >
+              <Saving pending={pending} />
               {actLabel}
             </button>
             <button
@@ -217,7 +220,14 @@ export function MergeDialog({
             <button type="button" autoFocus disabled={pending} onClick={onCancel} className={compactButtonClass.quiet}>
               Cancel
             </button>
-            <button type="button" disabled={pending} onClick={onConfirm} className={compactButtonClass.primary}>
+            <button
+              type="button"
+              disabled={pending}
+              aria-busy={pending || undefined}
+              onClick={onConfirm}
+              className={compactButtonClass.primary}
+            >
+              <Saving pending={pending} />
               {actLabel}
             </button>
           </div>

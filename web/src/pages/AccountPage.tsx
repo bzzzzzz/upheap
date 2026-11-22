@@ -14,6 +14,7 @@ import { ProblemText } from "../components/ProblemText";
 import { SignInsSection } from "../components/SignIns";
 import { useTheme, type Theme } from "../components/theme";
 import { leaveAfterSignOut } from "../signOutRedirect";
+import { Saving } from "../components/Saving";
 
 /** The display name form in the design tokens, its buttons the size of the Your data confirm's. */
 const nameFormClasses: NameFormClasses = {
@@ -87,6 +88,7 @@ export function AccountPage() {
             <button
               type="button"
               disabled={signOut.isPending}
+              aria-busy={signOut.isPending || undefined}
               onClick={() =>
                 signOut.mutate(undefined, {
                   // The provider ends its session and sends the person back to /login; this page keeps nothing.
@@ -96,6 +98,7 @@ export function AccountPage() {
               }
               className={compactButtonClass.borderedDanger}
             >
+              <Saving pending={signOut.isPending} />
               Sign out
             </button>
             <ProblemText error={signOut.error} className="text-overdue-ink" />

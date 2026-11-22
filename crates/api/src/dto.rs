@@ -94,6 +94,7 @@ pub(crate) fn to_item_dto(mut view: ItemView, as_of: Timestamp, tz: &TimeZone) -
             .then_some(item.arrives_at)
             .flatten()
             .map(Timestamp::as_millis),
+        placement: item.placement.map(|placement| placement.direction().into()),
         tags: view.tags.iter().map(ItemTagDto::from).collect(),
         parameters: view.parameters.into_iter().map(to_item_parameter_dto).collect(),
         created_at: item.created_at.as_millis(),
@@ -225,6 +226,7 @@ pub(crate) fn to_comment_dto(view: CommentView, as_of: Timestamp, tz: &TimeZone)
         created_by: view.created_by.as_ref().map(UserRefDto::from),
         created_at: comment.created_at.as_millis(),
         created_label: describe_since(comment.created_at, as_of, tz),
+        run_id: comment.run_id.map(|id| *id.as_uuid()),
     }
 }
 

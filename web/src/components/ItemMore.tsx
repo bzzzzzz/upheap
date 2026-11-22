@@ -17,7 +17,7 @@ import {
 
 import type { HeapRef } from "../api/client";
 import type { Item, ItemPatchRequest, ItemState, Stage } from "../api/schema";
-import { useUpdateItem } from "../api/queries/items";
+import { useSavingFields, useUpdateItem } from "../api/queries/items";
 import { useBlockerCandidates } from "../api/queries/lists";
 import { useMe } from "../api/queries/me";
 import { useMoveItem } from "../api/queries/moves";
@@ -29,6 +29,7 @@ import { changeLabel, isClosed, NEXT_STATES, STAGE_LABELS } from "./labels";
 import { MenuChoice, MenuEntry, MenuHeading, MenuPopover } from "./Menu";
 import { MoveToHeap } from "./MoveToHeap";
 import { PopoverSheet } from "./PopoverSheet";
+import { Saving } from "./Saving";
 import { isToCome } from "./reminders";
 import { Sheet, SheetChoice, sheetRowClass } from "./Sheet";
 import { useToast } from "./UndoToast";
@@ -36,10 +37,11 @@ import { useFocusAfterRender } from "./useFocusAfterRender";
 
 /** The main state button is filled with the accent, the next action's colour, with dark text for contrast in both themes. */
 const stateButtonClass =
-  "h-9 rounded-lg bg-accent px-3 text-sm font-medium text-stone-950 hover:brightness-95 pointer-coarse:h-11";
+  "inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-accent px-3 text-sm font-medium text-stone-950 hover:brightness-95 pointer-coarse:h-11";
 
 /** The same, as the phone's bar shows it: 52 px tall and wide. */
-const barButtonClass = "h-13 min-w-0 flex-1 rounded-[14px] bg-accent text-[15px] font-semibold text-stone-950";
+const barButtonClass =
+  "inline-flex h-13 min-w-0 flex-1 items-center justify-center gap-2 rounded-[14px] bg-accent text-[15px] font-semibold text-stone-950";
 
 /** The state the main button moves the item to, or the kind it makes it. */
 type Main = { label: string; state: ItemState } | { label: "Make it a task"; state?: undefined };
@@ -136,6 +138,7 @@ export function ItemActions({
   const [editingReason, setEditingReason] = useState(false);
   // Awaitable, and apart from `save`, so the editor says its own failure and the pane doesn't say it twice.
   const saveReason = useUpdateItem(heapRef);
+  const changingState = useSavingFields(heapRef, item.key).has("state");
   const candidates = useBlockerCandidates(heapRef, item.state === "blocked");
   const move = useMoveItem(heapRef);
   const navigate = useNavigate();
@@ -220,7 +223,11 @@ export function ItemActions({
       ref={mainRef}
       type="button"
       aria-haspopup={actions.main.state === undefined ? "dialog" : undefined}
+      // Not `disabled`: a disabled button can't hold focus, and focus stays here, or comes here once ⋯ goes.
+      aria-disabled={changingState || undefined}
+      aria-busy={changingState || undefined}
       onClick={() => {
+        if (changingState) return;
         if (actions.main?.state !== undefined) {
           onState(actions.main.state);
         } else {
@@ -230,6 +237,7 @@ export function ItemActions({
       }}
       className={bar ? barButtonClass : stateButtonClass}
     >
+      <Saving pending={changingState} />
       {actions.main.label}
     </button>
   );

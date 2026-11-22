@@ -1,4 +1,4 @@
-import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Archive, Check, ChevronRight, Clock, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import {
@@ -18,6 +18,7 @@ import { ApiProblem, type HeapRef } from "../api/client";
 import type { Me } from "../api/schema";
 import { useCreateHeap } from "../api/queries/heaps";
 import { useTeam } from "../api/queries/teams";
+import { acrossTeam, useAcrossHeaps } from "./acrossHeaps";
 import { readFoldedTeams, readRecentHeaps, writeFoldedTeams } from "./heapSwitcherStorage";
 import { Kbd } from "./Kbd";
 import { PHONE, TOUCH, useMedia } from "./media";
@@ -26,6 +27,7 @@ import { PopoverSheet } from "./PopoverSheet";
 import { ProblemText, problemMessage } from "./ProblemText";
 import { sheetRowClass } from "./Sheet";
 import { teamName } from "./teamName";
+import { Saving } from "./Saving";
 
 type SwitcherTeam = Me["teams"][number];
 type Entry = { team: SwitcherTeam; heap: SwitcherTeam["heaps"][number] };
@@ -62,8 +64,8 @@ const chipClass =
 /**
  * Every heap, by team, with a check on the one on screen (ux.md, Phone details): a popover beside the rail on a
  * tablet or under the sidebar's heap button on a wide screen, a sheet on a phone. With many heaps it adds search,
- * Recent and folding teams. On a phone it starts with All heaps, the list across them, which a wider screen reaches
- * from the sidebar. It ends with a new heap in the heap's own team, where the user may create one.
+ * Recent and folding teams. It starts with All heaps, the list across them, which nothing else in the navigation
+ * leads to. It ends with a new heap in the heap's own team, where the user may create one.
  */
 export function HeapSwitcher({
   me,
@@ -142,15 +144,18 @@ function SwitcherBody({
   const phone = useMedia(PHONE);
   const coarse = useMedia(TOUCH);
   const entries: Entry[] = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
-  const onAll = useMatch({ from: "/app/all", shouldThrow: false }) !== undefined;
-  const allTeam = useSearch({ from: "/app/all", shouldThrow: false })?.team;
-  // On All items the kept heap is only where Add goes; only the All heaps row, or its team's, is the current one.
+  const across = useAcrossHeaps();
+  const onAll = across !== undefined;
+  const allTeam = across?.team;
+  // On the pages across heaps the kept heap is only where Add goes; only the All heaps row, or its team's, is the
+  // current one.
   const current = onAll
     ? undefined
     : entries.find((e) => e.team.slug === heapRef?.team && e.heap.slug === heapRef.heap);
   const long = entries.filter((e) => !e.heap.archived).length >= LONG_LIST;
   const several = me.teams.length > 1;
-  const onAllHeaps = onAll && allTeam === undefined;
+  // A team in the address that isn't one of several the person is in has no row of its own.
+  const onAllHeaps = onAll && acrossTeam(me, allTeam) === undefined;
 
   const [text, setText] = useState("");
   const [folded, setFolded] = useState(readFoldedTeams);
@@ -203,7 +208,8 @@ function SwitcherBody({
     const isFolded = canFold && folded.has(team.id);
     const showArchived = revealed.has(team.id);
     const label = teamName(team, me);
-    const indent = canFold ? indentClass : "";
+    // Under the team's line, which is two cells wide, every row spans both.
+    const indent = `${canFold ? indentClass : ""} ${several ? "col-span-2" : ""}`;
     const heapItem = (heap: Entry["heap"]) => (
       <HeapItem
         key={heap.id}
@@ -214,43 +220,46 @@ function SwitcherBody({
         onOpen={close}
       />
     );
+    const allCurrent = onAll && allTeam === team.slug;
     return (
-      <MenuSection key={team.id} aria-label={label} className={sectionClass}>
+      <MenuSection key={team.id} aria-label={label} className={several ? teamSectionClass : sectionClass}>
         {canFold ? (
           <MenuItem
             id={`fold:${team.id}`}
             textValue={label}
             aria-expanded={!isFolded}
             onAction={() => toggleFold(team.id)}
-            className={`${rowClass} sticky top-0 z-10 mb-1 bg-sunken text-xs font-semibold tracking-wide text-ink-soft uppercase hover:text-ink data-[focused]:text-ink max-sm:min-h-11 sm:min-h-8 sm:gap-1.5 sm:text-[11px]`}
+            className={`${rowClass} ${teamLineClass} bg-sunken text-xs font-semibold tracking-wide text-ink-soft uppercase hover:text-ink data-[focused]:text-ink max-sm:min-h-11 sm:min-h-8 sm:gap-1.5 sm:rounded-r-none sm:text-[11px]`}
           >
             <ChevronRight
               aria-hidden="true"
               strokeWidth={2.5}
-              className={`size-3.5 shrink-0 max-sm:order-last motion-safe:transition-transform ${isFolded ? "" : "rotate-90"}`}
+              className={`size-3.5 shrink-0 motion-safe:transition-transform ${isFolded ? "" : "rotate-90"}`}
             />
             <span className="min-w-0 flex-1 truncate">{label}</span>
-            <span className="shrink-0 font-normal">{unarchived.length}</span>
           </MenuItem>
         ) : (
-          several && <SectionTitle count={unarchived.length}>{label}</SectionTitle>
+          several && (
+            <Header className="mb-1 flex min-w-0 items-center px-3 text-xs font-semibold tracking-wide text-ink-soft uppercase sm:min-h-8 sm:rounded-l-lg sm:bg-sunken sm:px-2.5 sm:text-[11px]">
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+            </Header>
+          )
         )}
-        {!isFolded && several && (
+        {several && (
           <MenuItem
             id={`all:${team.id}`}
             textValue={`All ${label} items`}
             href={{ to: "/all", search: { team: team.slug } }}
             onAction={close}
-            className={`${rowClass} ${indent} ${onAll && allTeam === team.slug ? currentRowClass : ""}`}
+            className={`${canFold ? `${teamLineClass} bg-sunken` : "mb-1 sm:bg-sunken"} flex shrink-0 cursor-pointer items-center rounded-r-lg px-3 text-[13px] whitespace-nowrap text-ink-soft outline-none hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent data-[focus-visible]:outline-2 data-[focus-visible]:outline-accent data-[focused]:text-ink data-[focused]:underline max-sm:min-h-11 max-sm:rounded-l-lg sm:min-h-8 sm:px-2.5 sm:text-xs ${allCurrent ? "font-semibold text-ink" : ""}`}
           >
-            <span className="min-w-0 flex-1 truncate">
-              All {label} items
-              <span className="sr-only">, {openItemCount(me, team.slug)} open</span>
-              {onAll && allTeam === team.slug && <span className="sr-only">, current</span>}
-            </span>
-            <OpenCount count={openItemCount(me, team.slug)} />
-            <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
-              {onAll && allTeam === team.slug && <Check className="size-4" strokeWidth={3} />}
+            <span>
+              <CurrentCheck current={allCurrent} />
+              All <span className="sr-only">{label} </span>items<span aria-hidden="true"> · </span>
+              <span className="sr-only">, </span>
+              {openItemCount(me, team.slug)}
+              <span className="sr-only"> open</span>
+              {allCurrent && <span className="sr-only">, current</span>}
             </span>
           </MenuItem>
         )}
@@ -299,27 +308,23 @@ function SwitcherBody({
         </>
       ) : (
         <>
-          {phone && (
-            <MenuSection aria-label="All heaps" className={sectionClass}>
-              <MenuItem
-                id="all"
-                textValue="All heaps"
-                href={{ to: "/all" }}
-                onAction={close}
-                className={`${rowClass} ${onAllHeaps ? currentRowClass : ""}`}
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  All heaps
-                  <span className="sr-only">, {openItemCount(me, allTeam)} open</span>
-                  {onAllHeaps && <span className="sr-only">, current</span>}
-                </span>
-                <OpenCount count={openItemCount(me, allTeam)} />
-                <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink">
-                  {onAllHeaps && <Check className="size-4" strokeWidth={3} />}
-                </span>
-              </MenuItem>
-            </MenuSection>
-          )}
+          <MenuSection aria-label="All heaps" className={sectionClass}>
+            <MenuItem
+              id="all"
+              textValue="All heaps"
+              href={{ to: "/all" }}
+              onAction={close}
+              className={`${rowClass} ${onAllHeaps ? currentRowClass : ""}`}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                <CurrentCheck current={onAllHeaps} />
+                All heaps
+                <span className="sr-only">, {openItemCount(me)} open</span>
+                {onAllHeaps && <span className="sr-only">, current</span>}
+              </span>
+              <OpenCount count={openItemCount(me)} />
+            </MenuItem>
+          </MenuSection>
           {long && recent.length > 0 && (
             <MenuSection
               aria-label="Recent"
@@ -380,7 +385,8 @@ function SwitcherBody({
       {createIn && draft !== null ? (
         <NewHeapForm me={me} team={createIn} initialName={draft} onCancel={() => setDraft(null)} onCreated={close} />
       ) : (
-        <div className="flex items-center gap-3">
+        // A long team name leaves no room for the key hints beside the button: they go under it, whole.
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {/* While searching with a keyboard, the results' own row makes the heap, and the footer says what matched. */}
           {searching && hint ? (
             <p className="min-w-0 truncate text-[11px] text-muted">Archived heaps match too, listed last</p>
@@ -431,12 +437,30 @@ function SwitcherBody({
 
 /** A section of the list, set apart from the one above; its title is a band a shade off the panel. */
 const sectionClass = "flex flex-col not-first:mt-3";
+/**
+ * A team's section, for someone in several teams: its first line is the team's name and, at the right, the link to
+ * all of the team's items; the heaps under it span both cells.
+ */
+const teamSectionClass = "grid grid-cols-[minmax(0,1fr)_auto] not-first:mt-3";
+/** Both cells of a team's line that folds: they stay in view while its heaps scroll. */
+const teamLineClass = "sticky top-0 z-10 mb-1";
 
-export function SectionTitle({ children, count }: { children: ReactNode; count?: number }) {
+/**
+ * The check on the current row, before its name and part of it, so the other rows' names keep one left edge and the
+ * counts keep the right one.
+ */
+function CurrentCheck({ current }: { current: boolean }) {
+  return (
+    current && (
+      <Check aria-hidden="true" className="mr-1.5 inline size-4 align-[-0.15em] text-accent-ink" strokeWidth={3} />
+    )
+  );
+}
+
+export function SectionTitle({ children }: { children: ReactNode }) {
   return (
     <Header className="flex items-center px-3 text-xs font-semibold tracking-wide text-ink-soft uppercase max-sm:shrink-0 max-sm:pt-2.5 max-sm:pb-0.5 sm:mb-1 sm:min-h-8 sm:rounded-lg sm:bg-sunken sm:px-2.5 sm:text-[11px]">
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {count !== undefined && <span className="shrink-0 font-normal">{count}</span>}
     </Header>
   );
 }
@@ -514,6 +538,7 @@ function HeapItem({
         <>
           {recent && <Clock aria-hidden="true" className="size-3.5 shrink-0 text-muted max-sm:hidden" />}
           <span className="min-w-0 flex-1 truncate">
+            <CurrentCheck current={current} />
             {query === undefined ? heap.name : <Highlighted text={heap.name} query={query} />}
             {heap.archived &&
               (query === undefined ? (
@@ -528,11 +553,8 @@ function HeapItem({
             {current && <span className="sr-only">, current</span>}
           </span>
           {teamLabel && <span className="shrink-0 text-[13px] font-normal text-muted sm:text-xs">{teamLabel}</span>}
-          {count && <OpenCount count={heap.open_count} />}
           {enterHint && isFocused && <Kbd>↵</Kbd>}
-          <span aria-hidden="true" className="w-5 shrink-0 text-accent-ink sm:w-4">
-            {current && <Check className="size-4" strokeWidth={3} />}
-          </span>
+          {count && <OpenCount count={heap.open_count} />}
         </>
       )}
     </MenuItem>
@@ -540,7 +562,7 @@ function HeapItem({
 }
 
 const newHeapButtonClass =
-  "flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-[15px] hover:border-muted disabled:opacity-50";
+  "flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-[15px] hover:border-muted disabled:not-aria-busy:opacity-50";
 
 /** "New heap in <team>", for those the team lets create heaps. */
 function NewHeapButton({ me, team, onClick }: { me: Me; team: SwitcherTeam; onClick: () => void }) {
@@ -548,7 +570,7 @@ function NewHeapButton({ me, team, onClick }: { me: Me; team: SwitcherTeam; onCl
     <button
       type="button"
       onClick={onClick}
-      className={`${newHeapButtonClass} min-w-0 sm:min-h-[34px] sm:flex-none sm:rounded-lg sm:px-2.5 sm:text-[13px] sm:font-medium sm:pointer-coarse:min-h-11`}
+      className={`${newHeapButtonClass} max-w-full min-w-0 sm:min-h-[34px] sm:flex-none sm:rounded-lg sm:px-2.5 sm:text-[13px] sm:font-medium sm:pointer-coarse:min-h-11`}
     >
       <Plus aria-hidden="true" className="size-4 shrink-0 sm:size-3.5" strokeWidth={2.5} />
       <span className="truncate">New heap in {teamName(team, me)}</span>
@@ -651,8 +673,10 @@ function NewHeapForm({
         <button
           type="submit"
           disabled={create.isPending || name.trim() === ""}
+          aria-busy={create.isPending || undefined}
           className={`${newHeapButtonClass} border-ink bg-ink font-medium text-canvas`}
         >
+          <Saving pending={create.isPending} />
           Add heap
         </button>
       </div>

@@ -2,8 +2,8 @@
 
 use api_types::common::{HeapSummaryDto, ItemDto, ItemRefDto};
 use api_types::items::{
-    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemMoveDto, ItemNotMovedDto, ItemPatchDto, ItemToStepDto,
-    ItemsMoveDto, ItemsMovedDto, RankedListDto, RankedQuery, RankingPreviewDto, RankingPreviewItemDto,
+    ClosedItemsDto, ClosedQuery, CreateItemDto, ItemMoveDto, ItemNotMovedDto, ItemPatchDto, ItemPlaceDto,
+    ItemToStepDto, ItemsMoveDto, ItemsMovedDto, RankedListDto, RankedQuery, RankingPreviewDto, RankingPreviewItemDto,
     RankingPreviewRequestDto,
 };
 use api_types::turns::SendToAgentDto;
@@ -34,6 +34,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(get_item, update_item))
         .routes(routes!(reopen_item))
         .routes(routes!(move_item))
+        .routes(routes!(place_item, reset_placement))
         .routes(routes!(move_items))
         .routes(routes!(became_item))
         .routes(routes!(note_to_step))
@@ -309,6 +310,76 @@ async fn move_item(
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 
+/// Places an item right above or below another item of its heap in the ranked list, without changing any of its
+/// fields, and answers with the item. Send the item's `version` in `If-Match`. The item gets a multiplier on its own
+/// score, worked out so it lands between the anchor and the item next to it when the heap is ranked at `as_of`; the
+/// multiplier is never shown, only which way the item is placed (`placement`). It stays until the item is placed
+/// again, which replaces it, or reset (`DELETE`); field edits keep it, and moving the item to another heap drops it.
+/// A blocker never ranks below what it blocks, so a blocker placed below what it blocks stops just above it. The
+/// anchor must be another item of the heap that ranks: open, in progress or blocked, and not a reminder to come. The
+/// item must rank too: a reminder to come can't be placed.
+#[utoipa::path(post, path = "/teams/{team}/heaps/{heap}/items/{item}/place", tag = "items", security(("session" = [])),
+    params(ItemParams, IfMatchHeader, TimeZoneHeader), request_body = ItemPlaceDto,
+    responses(
+        (status = 200, body = ItemDto),
+        (status = 403, description = "From inside a run: `run_forbidden`", body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed`, `item_not_ranked` (a reminder to come) or `heap_archived`", body = Problem),
+        (status = 400, description = "A body that isn't an `anchor` and a `side`", body = Problem),
+        (status = 422, description = "`anchor_not_ranked`: the anchor is missing, the item itself, in another heap, closed or a reminder to come", body = Problem),
+        (status = 428, description = "`version_required`", body = Problem),
+    ))]
+async fn place_item(
+    State(state): State<AppState>,
+    path: ItemPath,
+    ClientTimeZone(tz): ClientTimeZone,
+    IfMatch(expected): IfMatch,
+    ApiJson(body): ApiJson<ItemPlaceDto>,
+) -> Result<Json<ItemDto>, ApiError> {
+    let as_of = body
+        .as_of
+        .map(|ms| Timestamp::from_millis(ms).ok_or(ValidationError::TimestampOutOfRange))
+        .transpose()
+        .map_err(ServiceError::from)?;
+    let view = state
+        .services
+        .place_item(
+            path.principal,
+            path.item_id,
+            ItemId::from_uuid(body.anchor),
+            body.side.into(),
+            as_of,
+            expected,
+        )
+        .await?;
+    Ok(Json(to_item_dto(view, state.services.now(), &tz)))
+}
+
+/// Takes an item's place by hand away, so it ranks by its fields again, and answers with the item. Send the item's
+/// `version` in `If-Match`. An item that isn't placed is answered unchanged after the version check, and nothing is
+/// recorded.
+#[utoipa::path(delete, path = "/teams/{team}/heaps/{heap}/items/{item}/place", tag = "items", security(("session" = [])),
+    params(ItemParams, IfMatchHeader, TimeZoneHeader),
+    responses(
+        (status = 200, body = ItemDto),
+        (status = 403, description = "From inside a run: `run_forbidden`", body = Problem),
+        (status = 404, body = Problem),
+        (status = 409, description = "`version_conflict`, `item_closed` or `heap_archived`", body = Problem),
+        (status = 428, description = "`version_required`", body = Problem),
+    ))]
+async fn reset_placement(
+    State(state): State<AppState>,
+    path: ItemPath,
+    ClientTimeZone(tz): ClientTimeZone,
+    IfMatch(expected): IfMatch,
+) -> Result<Json<ItemDto>, ApiError> {
+    let view = state
+        .services
+        .reset_placement(path.principal, path.item_id, expected)
+        .await?;
+    Ok(Json(to_item_dto(view, state.services.now(), &tz)))
+}
+
 /// Moves several items to one heap, each on its own: every item is moved as `POST …/items/{item}/move` moves one, in
 /// the order given, in its own transaction. One that can't move doesn't stop the others and doesn't undo them. Each item
 /// carries its own `version`, so there is no `If-Match`. `{team}` is the target heap's team, and the items may come
@@ -418,7 +489,7 @@ async fn note_to_step(
     Ok(Json(to_item_dto(view, state.services.now(), &tz)))
 }
 
-fn parse_cursor(raw: &str) -> Result<ClosedCursor, ApiError> {
+pub(crate) fn parse_cursor(raw: &str) -> Result<ClosedCursor, ApiError> {
     let invalid = || ApiError::BadRequest {
         code: "invalid_cursor",
         detail: "cursor is not one this server issued".to_owned(),

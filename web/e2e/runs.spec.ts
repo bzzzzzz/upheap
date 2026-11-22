@@ -327,6 +327,38 @@ test("History marks an agent's change with its run, and the link opens Runs at t
   await expect(runs.locator("details")).toHaveAttribute("open");
 });
 
+test("a comment an agent wrote is marked as the agent's and links to its run, and a person's is not", async ({
+  page,
+  heapPath,
+}) => {
+  const certs = await seed(page, heapPath, "Rotate the certs");
+  const claimed = await page.request.post("/api/v1/work/runs", { headers, data: { heaps: [refOf(heapPath)] } });
+  expect(claimed.status()).toBe(201);
+  const { run } = await claimed.json();
+  const byAgent = await page.request.post(`${certs.item}/comments`, {
+    headers: { ...headers, "upheap-run": run.id },
+    data: { body: "Wrote the context." },
+  });
+  expect(byAgent.status()).toBe(201);
+  const byPerson = await page.request.post(`${certs.item}/comments`, { headers, data: { body: "Thanks." } });
+  expect(byPerson.status()).toBe(201);
+
+  await page.goto(`${heapPath}/items/${certs.key}`);
+  const comments = itemPane(page).getByRole("region", { name: "Comments", exact: true }).getByRole("listitem");
+  await expect(comments).toHaveCount(2);
+
+  // The agent's comment names the agent and links to the run; the person's names the person.
+  const agent = comments.nth(0).getByRole("link", { name: "Your agent, see the run" });
+  await expect(agent).toBeVisible();
+  await expect(comments.nth(1).getByRole("link")).toHaveCount(0);
+  await expect(comments.nth(1)).not.toContainText("agent");
+
+  await agent.click();
+  const runs = itemPane(page).getByRole("region", { name: "Runs", exact: true });
+  await expect(runs.locator("details")).toHaveAttribute("open");
+  await expect(runs.locator(`#run-${run.id}`)).toBeVisible();
+});
+
 test("an item watching a pull request says so on its row and in its item, with the link", async ({
   page,
   heapPath,
@@ -348,6 +380,8 @@ test("an item watching a pull request says so on its row and in its item, with t
   await expect(itemPane(page).getByLabel("Title", { exact: true })).toHaveValue("Rotate the certs");
   await chip(page).click();
   await expect(who(page)).toContainText("Watching PR #7 since");
-  await expect(who(page)).toContainText("It comes back on a new comment, a failed check, a merge or a close.");
+  await expect(who(page)).toContainText(
+    "It comes back on a new comment, a failed check, a merge conflict, a merge or a close.",
+  );
   await expect(who(page).getByRole("link", { name: "PR #7", exact: true })).toHaveAttribute("href", pr);
 });
