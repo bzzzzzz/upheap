@@ -673,7 +673,9 @@ export function AddItemDialog({
       className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-canvas disabled:opacity-40"
     >
       {sending ? "Add and send" : "Add"}
-      <Kbd className={`${WIDE_HINT} items-center border-canvas/30 bg-transparent text-canvas/70`}>{submitKeys}</Kbd>
+      <Kbd onInk className={`${WIDE_HINT} items-center`}>
+        {submitKeys}
+      </Kbd>
     </button>
   );
 
