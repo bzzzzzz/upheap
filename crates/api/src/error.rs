@@ -343,6 +343,9 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Run(RunError::Forbidden(RunForbidden::AddNeedsContext)) => {
             simple(StatusCode::FORBIDDEN, "run_add_needs_context", Category::Permission)
         }
+        ServiceError::Run(RunError::Forbidden(RunForbidden::AddSent)) => {
+            simple(StatusCode::FORBIDDEN, "run_add_sent", Category::Permission)
+        }
         ServiceError::Run(RunError::Forbidden(RunForbidden::NeedAboveOrigin { highest })) => Classified {
             highest: Some(highest.code().to_owned()),
             field: Some("need"),

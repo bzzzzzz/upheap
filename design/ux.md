@@ -758,6 +758,16 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    is as for a note. Switching back to Note keeps the other fields and doesn't send the date. A reminder for a later
    date isn't in the list, so the toast says "Added. It joins the list on 12 March." instead of where it landed; one
    for today or earlier is in the list and gets the usual toast.
+6. **Agent** sends a note to an agent as it's added, in the same request, so there is no second step to forget. On a
+   wide screen and a tablet it is the last row of the fields: **Don't send** (picked), **With context**, **Defined**
+   and **All the way**, and, once a target is picked, a line for the agent under them. On a phone it is one chip in a
+   row of its own under the due chips, "Agent: Don't send ▾", opening a sheet of the same choices and the line; Done
+   or a tap outside closes it, and the chip then names the target. With a target picked and Note chosen, Add reads
+   **Add and send**. In a heap whose agents prepare, "Don't send" says "This heap's agents still take it one step,
+   to with context." under the choice, since prepare still opens its turn; a target replaces it. A reminder has no
+   Agent row or chip and sends nothing, and switching back to Note shows the choice as it was. The choice and the line
+   follow a change of heap, and go back to Don't send after an add with Add another. An item that was sent says so
+   at the end of the toast: "Added “X” at #4 in Up next, sent to an agent going to: defined."
 
 ## Due
 

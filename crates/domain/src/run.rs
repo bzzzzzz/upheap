@@ -327,6 +327,8 @@ pub enum RunForbidden {
     AddReminder,
     /// Adding an item with no context, which a run never does.
     AddNeedsContext,
+    /// Sending what it adds, which a run never does: the person sends it on.
+    AddSent,
     /// A task made in a split with a need above the note's.
     NeedAboveOrigin { highest: Need },
     /// A block on an item that no run of this turn made from the run's item.
@@ -342,6 +344,7 @@ impl fmt::Display for RunForbidden {
             ),
             Self::AddReminder => f.write_str("A run adds tasks and notes, not reminders."),
             Self::AddNeedsContext => f.write_str("What a run adds needs a context."),
+            Self::AddSent => f.write_str("A run doesn't send what it adds: the person sends it on."),
             Self::NeedAboveOrigin { highest } => write!(
                 f,
                 "An agent never gives a need above the note's, which is {}.",

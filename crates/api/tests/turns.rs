@@ -450,6 +450,181 @@ async fn a_task_added_in_a_prepare_heap_gets_a_turn_to_define_it() -> Result<()>
     Ok(())
 }
 
+/// How many items the heap's list shows.
+async fn listed_count(app: &TestApp, session: &str, heap: &str) -> Result<usize> {
+    let list = app
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(heap).await?),
+            Some(session),
+            None,
+        )
+        .await?;
+    Ok(["pinned", "ranked", "blocked"]
+        .iter()
+        .filter_map(|group| list.body[group].as_array())
+        .map(Vec::len)
+        .sum())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_added_with_a_send_has_its_turn_in_the_same_request() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let created = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Rotate the certs", "send": { "reach": "one", "line": "  Use the new CA.  " } }),
+        )
+        .await?;
+    let read = get(&app, &session, &heap, created["key"].as_str().context("no key")?).await?;
+    let entries = audit_actions(&app, &created).await?;
+
+    // Assert
+    expect_that!(created["turn"]["source"], eq(&json!("go_ahead")));
+    expect_that!(created["turn"]["reach"], eq(&json!("one")));
+    expect_that!(created["turn"]["goal"], eq(&json!("with_context")));
+    expect_that!(created["turn"]["line"], eq(&json!("Use the new CA.")));
+    expect_that!(created["turn"]["opened_by"]["display_name"], eq(&json!("Tester")));
+    expect_that!(created["with_agent"], eq(&json!(true)));
+    expect_that!(actions(&created), contains(eq(&"take_back")));
+    expect_that!(read["turn"], eq(&created["turn"]));
+    expect_that!(entries, eq(&vec!["item_created".to_owned(), "turn_opened".to_owned()]));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_added_with_a_send_to_defined_goes_to_defined() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let created = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Rotate the certs", "send": { "reach": "one", "goal": "defined" } }),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(created["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(created["turn"]["reach"], eq(&json!("one")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_note_added_with_a_send_all_the_way_opens_at_defined_and_goes_on_to_done() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let created = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Rotate the certs", "send": { "reach": "all_the_way" } }),
+        )
+        .await?;
+
+    // Assert
+    expect_that!(created["turn"]["goal"], eq(&json!("defined")));
+    expect_that!(created["turn"]["reach"], eq(&json!("all_the_way")));
+    expect_that!(created["turn"]["going_to"], eq(&json!("done")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_send_at_add_replaces_the_prepare_turn_and_no_send_keeps_it() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    set_prepare(&app, &session, &heap, true).await?;
+
+    // Act
+    let sent = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Sent", "send": { "reach": "all_the_way", "line": "Go." } }),
+        )
+        .await?;
+    let plain = app.new_item(&session, &heap, json!({ "title": "Plain" })).await?;
+    let sent_entries = audit_actions(&app, &sent).await?;
+    let turns = app.audit_entries(sent["id"].as_str().context("no id")?).await?;
+
+    // Assert
+    expect_that!(sent["turn"]["source"], eq(&json!("go_ahead")));
+    expect_that!(sent["turn"]["reach"], eq(&json!("all_the_way")));
+    expect_that!(sent["turn"]["line"], eq(&json!("Go.")));
+    expect_that!(
+        sent_entries.iter().filter(|action| *action == "turn_opened").count(),
+        eq(1)
+    );
+    expect_that!(turns.len(), eq(2));
+    expect_that!(plain["turn"]["source"], eq(&json!("prepare")));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn an_add_with_a_send_that_is_refused_adds_nothing() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let send = json!({ "reach": "one" });
+
+    // Act
+    let reminder = app
+        .create_item(
+            &session,
+            &heap,
+            json!({ "title": "Renew", "kind": "reminder", "due": { "date": "2027-03-12", "firm": true }, "send": send }),
+        )
+        .await?;
+    let outside_choices = app
+        .create_item(
+            &session,
+            &heap,
+            json!({ "title": "Task", "kind": "task", "send": { "reach": "one", "goal": "with_context" } }),
+        )
+        .await?;
+    let long_line = app
+        .create_item(
+            &session,
+            &heap,
+            json!({ "title": "Long", "send": { "reach": "one", "line": "x".repeat(2001) } }),
+        )
+        .await?;
+    app.set_heap_archived(&heap, true).await?;
+    let archived = app
+        .create_item(&session, &heap, json!({ "title": "Archived", "send": send }))
+        .await?;
+    app.set_heap_archived(&heap, false).await?;
+
+    // Assert
+    expect_that!(reminder.status, eq(StatusCode::CONFLICT));
+    expect_that!(reminder.body["code"], eq(&json!("turn_needs_note_or_task")));
+    expect_that!(outside_choices.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(outside_choices.body["code"], eq(&json!("field_not_allowed")));
+    expect_that!(outside_choices.body["field"], eq(&json!("goal")));
+    expect_that!(long_line.status, eq(StatusCode::UNPROCESSABLE_ENTITY));
+    expect_that!(archived.status, eq(StatusCode::CONFLICT));
+    expect_that!(archived.body["code"], eq(&json!("heap_archived")));
+    expect_that!(listed_count(&app, &session, &heap).await?, eq(0));
+    Ok(())
+}
+
 #[gtest]
 #[tokio::test]
 async fn setting_agents_prepare_is_audited_with_before_and_after() -> Result<()> {

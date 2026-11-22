@@ -5,6 +5,7 @@ use api_types::heaps::HeapDto;
 use api_types::items::{AgeDto, CreateItemDto, ItemPatchDto, OriginInputDto, RankedListDto, RankedQuery};
 use api_types::steps::AddStepDto;
 use api_types::tags::TagListDto;
+use api_types::turns::{ReachDto, SendToAgentDto};
 use clap::Args;
 use domain::item::Title;
 use domain::step::MAX_STEPS;
@@ -14,9 +15,12 @@ use super::common::{
     ParameterSetting, add_missing_tags, check_tag_names, dedupe, describe_due_flag, parameter_values,
     parse_parameter_setting, resolve_due, tags_not_added_note,
 };
+use super::show::turn_text;
 use crate::client::ApiClient;
 use crate::client::NO_QUERY;
-use crate::commands::heap_api::{HeapApi, named_heap, read_context, read_description, resolve_heap_handle};
+use crate::commands::heap_api::{
+    HeapApi, named_heap, read_context, read_description, read_text_flag, resolve_heap_handle,
+};
 use crate::commands::{HeapArgs, SharedArgs, UsageError, parse_api_value};
 use crate::lookup::{HeapHandle, ItemName, LookupError, resolve_tags, resolve_tags_or_missing};
 use crate::output::{Mode, Output};
@@ -73,6 +77,15 @@ pub struct AddArgs {
     /// Start it blocked by this item, named like ITEM. It must be in the same heap and not closed
     #[arg(long, value_name = "ITEM")]
     pub blocked_by: Option<String>,
+    /// Send it to an agent as it's added, to its next stable state
+    #[arg(long, conflicts_with = "reminder")]
+    pub send: bool,
+    /// With --send: go on through the stable states until the work is done, not just to the next one
+    #[arg(long, requires = "send")]
+    pub all_the_way: bool,
+    /// With --send: something to tell the agent, or - to read it from stdin. At most 2,000 characters
+    #[arg(long, value_name = "TEXT", requires = "send")]
+    pub line: Option<String>,
     #[command(flatten)]
     pub heap: HeapArgs,
     #[command(flatten)]
@@ -106,6 +119,21 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         (Some(raw), _) => Some(read_description(raw, app).await?),
         (None, Some(path)) => Some(read_context(path, app).await?),
         (None, None) => None,
+    };
+    let send = match args.send {
+        true => Some(SendToAgentDto {
+            reach: if args.all_the_way {
+                ReachDto::AllTheWay
+            } else {
+                ReachDto::One
+            },
+            goal: None,
+            line: match &args.line {
+                Some(raw) => Some(read_text_flag(raw, "--line", app).await?),
+                None => None,
+            },
+        }),
+        false => None,
     };
     let client = app.client(app.server(&args.shared)?)?;
     let token = app.access_token(&client).await?;
@@ -192,6 +220,7 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         parameter_values,
         origin,
         blocked_by,
+        send,
     };
     let mut added = api.post::<ItemDto>(&["items"], &body).await?;
     if needs_task_patch(args.task, &added.value) {
@@ -254,7 +283,11 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
                 .as_ref()
                 .ok()
                 .and_then(|list| find_landing(&list.value, added.value.id));
-            out.line(&added_line(&added.value, steps, landing.as_ref()))?;
+            let mut line = added_line(&added.value, steps, landing.as_ref());
+            if let Some(turn) = &added.value.turn {
+                line = format!("{line} {}", turn_text(turn));
+            }
+            out.line(&line)?;
             if let Err(err) = landed {
                 out.note(&format!("warning: couldn't read where it landed: {err}"))?;
             }

@@ -16,7 +16,10 @@ use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
 use domain::step::{Step, StepNumber, StepProgress, StepState, progress};
 use domain::tag::Tag;
 use domain::team::{Membership, Role, Team};
-use domain::turn::{AgentState, Goal, Reach, TakeBackWhy, Turn, TurnSource, agent_state, goal_for, with_agent};
+use domain::turn::{
+    AgentState, Goal, Reach, TakeBackWhy, Turn, TurnError, TurnLine, TurnSource, agent_state, goal_for, pick_goal,
+    with_agent,
+};
 use domain::user::User;
 use domain::validation::Field;
 use domain::{
@@ -740,17 +743,26 @@ impl Services {
     ///
     /// In a run (`check_run_add`) the item needs a context and isn't a reminder. Made from an origin, that must be
     /// the run's own item, with a need up to its own. It may wait only for an item a run of the same turn made from
-    /// that item (Runs). It gets no prepare turn.
+    /// that item (Runs). It gets no prepare turn, and is never sent at add ([`RunForbidden::AddSent`]).
+    ///
+    /// With `send` (the reach, goal and line of a send, as [`Self::send_to_agent`] takes them) a turn opens on the new
+    /// item in the same transaction, as a go-ahead from the creator, and the heap's prepare turn doesn't open: an item
+    /// never gets two. A reminder can't be sent ([`TurnError::NeedsNoteOrTask`]), and a goal the new item can't be sent
+    /// to is a validation error on the goal ([`pick_goal`]). Any refusal adds nothing.
     pub async fn create_item(
         &self,
         principal: Principal,
         heap_id: HeapId,
         mut fields: NewItem,
+        send: Option<(Reach, Option<Goal>, Option<TurnLine>)>,
     ) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
         let now = self.now();
         // In a run the heaps lock first, in heap ID order, then the run is read and checked live.
         let run = self.check_run_add(&txn, principal, heap_id, &fields, now).await?;
+        if send.is_some() && run.is_some() {
+            return Err(run_forbidden(RunForbidden::AddSent));
+        }
         let access = authorize_heap_write(&txn, principal, heap_id, Permission::EditItems).await?;
         let origin_item = match fields.origin {
             Some(origin) => Some(self.find_origin(&txn, &fields, &access.heap, origin).await?),
@@ -794,6 +806,13 @@ impl Services {
         if let Some(blocker) = blocker {
             check_blocker(&txn, &item, blocker).await?;
         }
+        if send.is_some() && item.kind == Kind::Reminder {
+            return Err(TurnError::NeedsNoteOrTask { item_id: item.id }.into());
+        }
+        let send = match send {
+            Some((reach, goal, line)) => Some((reach, pick_goal(&item, reach, goal)?, line, TurnSource::GoAhead)),
+            None => None,
+        };
         let item = match &run {
             Some(run) => item.added_in_run(run.item_id, run.id),
             None => item,
@@ -808,19 +827,23 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
-        // A heap set so agents prepare gives every new item a turn of one state, whoever added it (Work with agents,
-        // Opening a turn). A new task's turn goes to defined, never to done. It acts only here, on create, so it never
-        // opens a second turn on an item.
+        // A send asks for the turn that opens: one turn, never two. Without one, a heap set so agents prepare gives
+        // every new item a turn of one state, whoever added it (Work with agents, Opening a turn). A new task's turn
+        // goes to defined, never to done. It acts only here, on create, so it never opens a second turn on an item.
         // A reminder gets none: no turn opens on one. Nor does an item a run adds: it is already prepared (Opening a
         // turn).
-        let opened = if access.heap.agents_prepare && item.kind != Kind::Reminder && run.is_none() {
+        let wanted = send.or_else(|| {
+            (access.heap.agents_prepare && item.kind != Kind::Reminder && run.is_none())
+                .then(|| (Reach::One, goal_for(&item), None, TurnSource::Prepare))
+        });
+        let opened = if let Some((reach, goal, line, source)) = wanted {
             let turn = Turn::open(
                 TurnId::from_uuid(self.new_id(now)),
                 &item,
-                Reach::One,
-                goal_for(&item),
-                None,
-                TurnSource::Prepare,
+                reach,
+                goal,
+                line,
+                source,
                 principal.user_id,
                 now,
             );

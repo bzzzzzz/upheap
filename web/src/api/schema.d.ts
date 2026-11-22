@@ -2798,6 +2798,7 @@ export interface components {
             parameter_values?: {
                 [key: string]: string;
             } | null;
+            send?: null | components["schemas"]["SendToAgentRequest"];
             /** @description Tags of the same heap, at most 50. */
             tag_ids?: string[] | null;
             title: string;
@@ -8355,7 +8356,7 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
-            /** @description From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made` */
+            /** @description From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_add_sent` (a `send`), `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8372,7 +8373,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again) */
+            /** @description `heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8381,7 +8382,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`) */
+            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`), or `field_not_allowed` (`goal`, a goal in `send` the new item can't be sent to) */
             422: {
                 headers: {
                     [name: string]: unknown;
