@@ -1,11 +1,12 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ensureOk, unwrap } from "../client";
 import type { OperatorAccount } from "../schema";
+import { apiKey } from "./keys";
 
 // What an operator reads and does about accounts (ux.md, Accounts). Every endpoint answers `404` to anyone who isn't an
 // operator, so these are asked for only once `me.operator` says so.
 
-const accountsKey = ["operator", "accounts"] as const;
+const accountsKey = apiKey("/api/v1/operator/accounts");
 
 /** Every account on the server, by name. One request: the page searches, filters and pages the list itself. */
 export function useOperatorAccounts() {
@@ -16,12 +17,12 @@ export function useOperatorAccounts() {
 }
 
 /**
- * The history of one account as an operator reads it, a page at a time. Keyed under `"audit"`, so that `main.tsx`
+ * The history of one account as an operator reads it, a page at a time. `main.tsx`
  * refreshes it after any mutation, an action on the account included. It loads once mounted.
  */
 export function useOperatorAccountHistory(account: OperatorAccount) {
   return useInfiniteQuery({
-    queryKey: ["audit", "operator-account", account.id],
+    queryKey: apiKey("/api/v1/operator/accounts/{user_id}/history", { path: { user_id: account.id } }),
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) =>
       unwrap(

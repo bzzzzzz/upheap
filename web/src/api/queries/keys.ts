@@ -1,34 +1,88 @@
 // Server state lives in TanStack Query. Components read it through the hooks in this directory, one file per
 // resource, and never copy it. This file holds the query keys and the cache helpers that several resources' hooks
-// share, so prefix-based invalidations line up.
+// share. Every key is built from the path it reads, so prefix-based invalidations line up and a path that isn't in
+// the API fails the type check.
 import { type QueryClient } from "@tanstack/react-query";
 import { type HeapRef, type ListViewQuery } from "../client";
-import type { Item, RankedList, Waiting, WaitingRow } from "../schema";
+import type { Item, paths, RankedList, Waiting, WaitingRow } from "../schema";
+
+/** The operation a path's query reads: its `get`, or its `post` for a path with no `get`. */
+type ReadOperation<P extends keyof paths> = [NonNullable<paths[P]["get"]>] extends [never]
+  ? NonNullable<paths[P]["post"]>
+  : NonNullable<paths[P]["get"]>;
+type OperationParameter<O, K extends "path" | "query"> = O extends { parameters: { [Part in K]?: infer T } }
+  ? NonNullable<T>
+  : never;
+type OperationBody<O> = O extends { requestBody: { content: { "application/json": infer B } } } ? B : never;
+
+/** What a key names of its path, as openapi-fetch's `params` does. Some path parameters are enough, to match several queries. */
+export type ApiKeyParams<P extends keyof paths> = {
+  path?: Partial<OperationParameter<ReadOperation<P>, "path">>;
+  query?: OperationParameter<ReadOperation<P>, "query">;
+  body?: Partial<OperationBody<ReadOperation<P>>>;
+};
+
+/**
+ * The query key of a path and the parameters it was read with. A path that isn't in `paths`, or a parameter it doesn't
+ * have, fails the type check. Without `params` the key is `[path]` and not `[path, undefined]`, which would match no
+ * query with params; TanStack matches the object part of a key partially, so fewer parameters cover every query that
+ * has them.
+ */
+export function apiKey<P extends keyof paths>(path: P, params?: ApiKeyParams<P>) {
+  return params === undefined ? ([path] as const) : ([path, params] as const);
+}
+
+const ITEMS = "/api/v1/teams/{team}/heaps/{heap}/items";
+
+/** Every non-closed item, unfiltered: what an item can be blocked by, whatever the list view shows. */
+export const EVERY_NON_CLOSED_ITEM: ListViewQuery = { open: "shown", in_progress: "shown", blocked: "shown" };
 
 // Heaps and teams are cached by their slugs, as their paths name them; a new slug is a new path, and the app moves
-// there. Every list query of a heap sits under `["ranked", team, heap]`, so one invalidation covers them all. The
-// blocker candidates have a key of their own, so they never share a cache entry (and its `as_of`) with a list view.
-export const rankedKey = (heap: HeapRef) => ["ranked", heap.team, heap.heap] as const;
-export const rankedViewKey = (heap: HeapRef, view: ListViewQuery) => [...rankedKey(heap), "view", view] as const;
-export const blockerCandidatesKey = (heap: HeapRef) => [...rankedKey(heap), "blocker-candidates"] as const;
-export const closedKey = (heap: HeapRef) => ["closed", heap.team, heap.heap] as const;
-export const tagsKey = (heap: HeapRef) => ["tags", heap.team, heap.heap] as const;
-export const savedViewsKey = (heap: HeapRef) => ["saved-views", heap.team, heap.heap] as const;
-export const parametersKey = (heap: HeapRef) => ["parameters", heap.team, heap.heap] as const;
-export const itemKey = (heap: HeapRef, key: string) => ["item", heap.team, heap.heap, key] as const;
-export const teamKey = (team: string) => ["team", team] as const;
-/** The team's own tags, under its key, so invalidating the team refreshes them too. */
-export const teamTagsKey = (team: string) => [...teamKey(team), "tags"] as const;
-/** The team's own parameters, under its key, as its tags are. */
-export const teamParametersKey = (team: string) => [...teamKey(team), "parameters"] as const;
-/** Under the team's key, so invalidating the team refreshes its links too. */
-export const inviteLinksKey = (team: string) => [...teamKey(team), "invite-links"] as const;
-export const heapKey = (heap: HeapRef) => ["heap", heap.team, heap.heap] as const;
-export const waitingKey = ["waiting"] as const;
-export const decisionsKey = ["decisions"] as const;
+// there. Every list query of a heap sits under `apiKey(ITEMS, { path: heap })`, so one invalidation covers them all.
+export const rankedKey = (heap: HeapRef) => apiKey(ITEMS, { path: heap });
+export const rankedViewKey = (heap: HeapRef, view: ListViewQuery) => apiKey(ITEMS, { path: heap, query: view });
+// The marker keeps the candidates apart from a list view whose query is `EVERY_NON_CLOSED_ITEM`, which would share
+// their cache entry (and its `as_of`).
+export const blockerCandidatesKey = (heap: HeapRef) =>
+  [...apiKey(ITEMS, { path: heap, query: EVERY_NON_CLOSED_ITEM }), "blocker-candidates"] as const;
+export const closedKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/items/closed", { path: heap });
+export const tagsKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/tags", { path: heap });
+export const savedViewsKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/views", { path: heap });
+export const parametersKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}/parameters", { path: heap });
+export const itemKey = (heap: HeapRef, key: string) =>
+  apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}", { path: { ...heap, item: key } });
+export const teamKey = (team: string) => apiKey("/api/v1/teams/{team}", { path: { team } });
+export const teamTagsKey = (team: string) => apiKey("/api/v1/teams/{team}/tags", { path: { team } });
+export const teamParametersKey = (team: string) => apiKey("/api/v1/teams/{team}/parameters", { path: { team } });
+export const inviteLinksKey = (team: string) => apiKey("/api/v1/teams/{team}/invite-links", { path: { team } });
+export const heapKey = (heap: HeapRef) => apiKey("/api/v1/teams/{team}/heaps/{heap}", { path: heap });
+export const waitingKey = apiKey("/api/v1/me/waiting");
+export const decisionsKey = apiKey("/api/v1/me/decisions");
 /** Every view of the list across heaps, by prefix. */
-export const acrossHeapsKey = ["across-heaps"] as const;
-export const meKey = ["me"] as const;
+export const acrossHeapsKey = apiKey("/api/v1/me/items");
+export const meKey = apiKey("/api/v1/me");
+
+/**
+ * The team's own queries: its record, tags, parameters, invite links and data. With no `team`, every team's.
+ */
+export function teamKeys(team?: string) {
+  const params = team === undefined ? undefined : { path: { team } };
+  return [
+    apiKey("/api/v1/teams/{team}", params),
+    apiKey("/api/v1/teams/{team}/tags", params),
+    apiKey("/api/v1/teams/{team}/parameters", params),
+    apiKey("/api/v1/teams/{team}/invite-links", params),
+    apiKey("/api/v1/teams/{team}/data", params),
+  ];
+}
+
+/** The heap's record and its ranking previews. With no `heap`, those of every heap of the team. */
+export function heapRecordKeys(heap: { team: string; heap?: string }) {
+  return [
+    apiKey("/api/v1/teams/{team}/heaps/{heap}", { path: heap }),
+    apiKey("/api/v1/teams/{team}/heaps/{heap}/ranking/preview", { path: heap }),
+  ];
+}
 
 /**
  * How often what others change on the server reaches a page left open: the ranked list and the Waiting count are
@@ -43,7 +97,7 @@ export function invalidateHeap(queryClient: QueryClient, heap: HeapRef) {
     queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
     queryClient.invalidateQueries({ queryKey: closedKey(heap) }),
     // Any open item may show a changed blocker or tag, so every cached item is refetched.
-    queryClient.invalidateQueries({ queryKey: ["item"] }),
+    queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}") }),
     // An item's state or order changes what waits for the person, and in what order.
     queryClient.invalidateQueries({ queryKey: waitingKey }),
     // Starting, closing or sending on an item takes it off Your decision.
@@ -60,17 +114,21 @@ export function invalidateTeamTags(queryClient: QueryClient, team: string, renam
   return Promise.all([
     ...(merged
       ? [
-          queryClient.invalidateQueries({ queryKey: ["parameters", team] }),
-          queryClient.invalidateQueries({ queryKey: ["heap", team] }),
+          queryClient.invalidateQueries({
+            queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/parameters", { path: { team } }),
+          }),
+          ...heapRecordKeys({ team }).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
         ]
       : []),
     queryClient.invalidateQueries({ queryKey: teamTagsKey(team) }),
-    queryClient.invalidateQueries({ queryKey: ["tags", team] }),
+    queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/tags", { path: { team } }) }),
     ...(renamed
       ? [
-          queryClient.invalidateQueries({ queryKey: ["ranked", team] }),
-          queryClient.invalidateQueries({ queryKey: ["closed", team] }),
-          queryClient.invalidateQueries({ queryKey: ["item"] }),
+          queryClient.invalidateQueries({ queryKey: apiKey(ITEMS, { path: { team } }) }),
+          queryClient.invalidateQueries({
+            queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/closed", { path: { team } }),
+          }),
+          queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}") }),
           queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
           queryClient.invalidateQueries({ queryKey: waitingKey }),
         ]
@@ -86,12 +144,16 @@ export function invalidateTeamTags(queryClient: QueryClient, team: string, renam
 export function invalidateTeamParameters(queryClient: QueryClient, team: string, items = true) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: teamParametersKey(team) }),
-    queryClient.invalidateQueries({ queryKey: ["parameters", team] }),
+    queryClient.invalidateQueries({
+      queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/parameters", { path: { team } }),
+    }),
     ...(items
       ? [
-          queryClient.invalidateQueries({ queryKey: ["ranked", team] }),
-          queryClient.invalidateQueries({ queryKey: ["closed", team] }),
-          queryClient.invalidateQueries({ queryKey: ["item"] }),
+          queryClient.invalidateQueries({ queryKey: apiKey(ITEMS, { path: { team } }) }),
+          queryClient.invalidateQueries({
+            queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/closed", { path: { team } }),
+          }),
+          queryClient.invalidateQueries({ queryKey: apiKey("/api/v1/teams/{team}/heaps/{heap}/items/{item}") }),
           queryClient.invalidateQueries({ queryKey: acrossHeapsKey }),
           queryClient.invalidateQueries({ queryKey: waitingKey }),
         ]
@@ -146,12 +208,15 @@ export function dropWaitingRows(queryClient: QueryClient, itemId: string, kind: 
 
 /** Team changes also change what `/me` lists: teams, roles and heaps. */
 export function invalidateTeam(queryClient: QueryClient, team: string) {
-  return Promise.all([queryClient.invalidateQueries({ queryKey: teamKey(team) }), invalidateMe(queryClient)]);
+  return Promise.all([
+    ...teamKeys(team).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    invalidateMe(queryClient),
+  ]);
 }
 
-export const oidcProviderKey = ["oidc-provider"] as const;
-export const passwordResetOptionsKey = ["password-reset-options"] as const;
-export const registrationOptionsKey = ["registration-options"] as const;
+export const oidcProviderKey = apiKey("/api/v1/auth/oidc");
+export const passwordResetOptionsKey = apiKey("/api/v1/password-resets");
+export const registrationOptionsKey = apiKey("/api/v1/auth/registration");
 const SERVER_WIDE_KEYS = new Set<unknown>([oidcProviderKey[0], passwordResetOptionsKey[0], registrationOptionsKey[0]]);
 
 /**

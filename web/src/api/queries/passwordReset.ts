@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, ensureOk, unwrap } from "../client";
-import { passwordResetOptionsKey, removeUserQueries } from "./keys";
+import { apiKey, passwordResetOptionsKey, removeUserQueries } from "./keys";
 
 /**
  * Whether the server mails password reset links, and who to ask when someone needs the operator's help. Read once: the
@@ -21,7 +21,7 @@ export function useRequestPasswordReset() {
   });
 }
 
-const passwordResetKey = (token: string) => ["password-reset", token] as const;
+const passwordResetKey = (token: string) => apiKey("/api/v1/password-resets/{token}", { path: { token } });
 
 /**
  * Reads the password reset link a page was opened with: whose account it is for and whether it works (ux.md, Reset

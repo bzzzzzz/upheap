@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { api, ApiProblem, unwrap } from "../client";
 import type { InviteRegistration } from "../schema";
 import { registeredFrom } from "./auth";
-import { inviteLinksKey, invalidateMe, removeUserQueries } from "./keys";
+import { apiKey, inviteLinksKey, invalidateMe, removeUserQueries } from "./keys";
 
 /** The team's invite links, every one made and past, newest first. Admins only: `enabled` is whether the caller is. */
 export function useInviteLinks(team: string, enabled: boolean) {
@@ -14,7 +14,7 @@ export function useInviteLinks(team: string, enabled: boolean) {
   });
 }
 
-const invitationKey = (token: string) => ["invitation", token] as const;
+const invitationKey = (token: string) => apiKey("/api/v1/invites/{token}", { path: { token } });
 
 /**
  * What the invite link with `token` says: its team, its maker, whether it works and where the viewer stands

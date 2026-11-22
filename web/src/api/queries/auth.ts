@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiProblem, ensureOk, unwrap } from "../client";
 import type { ConfirmationSent, OAuthAuthorizationRequest } from "../schema";
-import { oidcProviderKey, registrationOptionsKey, removeUserQueries } from "./keys";
+import { apiKey, oidcProviderKey, registrationOptionsKey, removeUserQueries } from "./keys";
 
 export function useSignIn() {
   const queryClient = useQueryClient();
@@ -80,7 +80,7 @@ export function useRegistrationOptions() {
 /** Who the provider vouched for, for the username step. A `404` is the step having ended, which stays so. */
 export function useOidcPending() {
   return useQuery({
-    queryKey: ["oidc-pending"],
+    queryKey: apiKey("/api/v1/auth/oidc/pending"),
     queryFn: async () => unwrap(await api.GET("/api/v1/auth/oidc/pending")),
     retry: false,
   });
@@ -105,7 +105,7 @@ export function useAuthorizationCheck(
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   return useQuery({
-    queryKey: ["oauth-authorization", request],
+    queryKey: apiKey("/api/v1/oauth/authorize", { query: request }),
     queryFn: async () => unwrap(await api.GET("/api/v1/oauth/authorize", { params: { query: request } })),
     enabled,
     retry: false,

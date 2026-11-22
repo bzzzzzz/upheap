@@ -2,7 +2,7 @@ import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from "@t
 import { useRef } from "react";
 import { api, unwrap, type HeapRef, type ListViewQuery } from "../client";
 import type { RankedList } from "../schema";
-import { rankedViewKey, blockerCandidatesKey, closedKey, POLL_INTERVAL } from "./keys";
+import { rankedViewKey, blockerCandidatesKey, closedKey, EVERY_NON_CLOSED_ITEM, POLL_INTERVAL } from "./keys";
 
 /**
  * The ranked list in one view, kept stable within a session: the first response's `as_of` is sent back on every
@@ -27,9 +27,6 @@ export function useRankedList(heap: HeapRef, view: ListViewQuery) {
   });
   return query;
 }
-
-/** Every non-closed item, unfiltered: what an item can be blocked by, whatever the list view shows. */
-const EVERY_NON_CLOSED_ITEM: ListViewQuery = { open: "shown", in_progress: "shown", blocked: "shown" };
 
 /** The heap's non-closed items as blocker candidates. Fetched only while `enabled`. */
 export function useBlockerCandidates(heap: HeapRef, enabled = true) {
