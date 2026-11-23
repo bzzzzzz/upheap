@@ -281,3 +281,27 @@ async fn a_bad_name_or_expiry_is_refused() -> Result<()> {
     expect_that!(list(&app, &session).await?.body["tokens"], eq(&json!([])));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_token_request_does_not_have_is_refused_and_no_token_is_made() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, _) = app.register(EMAIL).await?;
+
+    // Act
+    let made = app
+        .send(
+            Method::POST,
+            "/api/v1/me/personal-tokens",
+            Some(&session),
+            Some(json!({ "name": "laptop", "expires": "never" })),
+        )
+        .await?;
+    let listed = list(&app, &session).await?;
+
+    // Assert
+    expect_that!(made.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(listed.body["tokens"].as_array().map(Vec::len), some(eq(0)));
+    Ok(())
+}

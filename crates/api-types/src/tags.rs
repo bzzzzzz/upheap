@@ -163,6 +163,7 @@ pub struct TeamTagListDto {
 
 #[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateTagRequest)]
+#[serde(deny_unknown_fields)]
 pub struct CreateTagDto {
     /// 1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case.
     pub name: String,
@@ -192,6 +193,7 @@ impl CreateTagDto {
 /// A partial edit. Leave a field out to keep it; send `null` to clear the description.
 #[derive(Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = TagPatchRequest)]
+#[serde(deny_unknown_fields)]
 pub struct TagPatchDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,

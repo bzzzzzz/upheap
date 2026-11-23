@@ -443,3 +443,44 @@ async fn changing_a_colour_bumps_the_version_and_shows_in_the_history() -> Resul
     );
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_tag_requests_do_not_have_is_refused_and_nothing_is_saved() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let tags = format!("{}/tags", app.heap_url(&heap).await?);
+    let tag = app.create_tag(&session, &heap, "infra").await?;
+    let tag_id = tag.body["id"].as_str().unwrap_or_default();
+
+    // Act
+    let created = app
+        .send(
+            Method::POST,
+            &tags,
+            Some(&session),
+            Some(json!({ "name": "ops", "shade": "dark" })),
+        )
+        .await?;
+    let renamed = app
+        .patch(
+            &session,
+            &format!("{tags}/{tag_id}"),
+            &tag.body["version"],
+            json!({ "name": "platform", "shade": "dark" }),
+        )
+        .await?;
+    let listed = app.send(Method::GET, &tags, Some(&session), None).await?;
+
+    // Assert
+    expect_that!(created.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(renamed.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(
+        listed.body["tags"]
+            .as_array()
+            .map(|tags| tags.iter().filter_map(|t| t["name"].as_str()).collect::<Vec<_>>()),
+        some(elements_are![eq(&"infra")])
+    );
+    Ok(())
+}

@@ -564,6 +564,7 @@ impl CreateItemDto {
 /// A partial edit. Leave a field out to keep it; send `null` to clear it.
 #[derive(Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = ItemPatchRequest)]
+#[serde(deny_unknown_fields)]
 pub struct ItemPatchDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,

@@ -13,6 +13,9 @@ pub const CLI_CLIENT_ID: &str = domain::oauth::CLI_CLIENT.id;
 
 /// An authorization request, as the client put it in the consent page's address (RFC 6749 §4.1.1, RFC 7636 §4.3).
 /// Every value is checked on the server; a missing one is refused with the problem for that value.
+// Unknown parameters are ignored, not refused, unlike other request bodies: this is also the query of the consent
+// page, where RFC 6749 §3.1 says the server MUST ignore a parameter it doesn't recognise. A misspelt one still fails,
+// as the value it was meant for is missing.
 #[derive(Clone, Debug, Serialize, Deserialize, IntoParams, ToSchema)]
 #[into_params(parameter_in = Query)]
 #[schema(as = OAuthAuthorizationRequest)]
@@ -69,6 +72,8 @@ pub struct ApprovalDto {
 }
 
 /// A token request (RFC 6749 §4.1.3 and §6), form-encoded.
+// Unknown parameters are ignored, not refused, unlike other request bodies: RFC 6749 §3.2 says the server MUST
+// ignore a parameter it doesn't recognise.
 #[derive(Clone, Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = OAuthTokenRequest)]
 pub struct TokenRequestForm {
@@ -90,6 +95,8 @@ pub struct TokenRequestForm {
 }
 
 /// A token revocation request (RFC 7009 §2.1), form-encoded.
+// Unknown parameters are ignored, not refused, unlike other request bodies, as for the token request: OAuth clients
+// expect the server to ignore a parameter it doesn't recognise (RFC 6749 §3.2).
 #[derive(Clone, Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = OAuthRevokeRequest)]
 pub struct RevokeRequestForm {
