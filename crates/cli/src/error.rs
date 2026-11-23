@@ -436,8 +436,8 @@ fn refusal_reason(refused: &ClientError) -> &'static str {
     }
 }
 
-/// What a run is told when the server refuses a write it made (design: What a run is refused), or `None` for any other
-/// refusal.
+/// What a run is told when the server refuses a write it made (architecture.md, Data model, Runs), or `None` for any
+/// other refusal.
 fn run_hint(problem: &api_types::problem::Problem) -> Option<String> {
     match problem.code.as_str() {
         "run_over" => Some("This run is over. Stop.".to_owned()),

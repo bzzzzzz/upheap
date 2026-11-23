@@ -1058,13 +1058,14 @@ impl Services {
             commit_if_in_run(txn, principal).await?;
             return Ok(view);
         };
-        // Starting or closing an item takes it back from the agent first, and closing withdraws its open questions;
+        // Starting or closing an item takes it back from the agent first, and closing withdraws its open questions,
+        // so reopening doesn't bring them back;
         // each has its own entry, written before the item's so the history reads in the order things happened.
         let mut turns_taken_back = 0_usize;
         let mut questions_withdrawn = 0_usize;
         if principal.run.is_some() {
-            // An agent that starts the item it works on keeps its turn (design, Queue). Closing isn't allowed in a
-            // run, so there is nothing else to take back.
+            // An agent that starts the item it works on keeps its turn. Closing isn't allowed in a run, so there is
+            // nothing else to take back.
         } else if edited.state.kind() == StateKind::InProgress && current.state.kind() != StateKind::InProgress {
             turns_taken_back = self
                 .take_back_open_turn(&txn, &access.heap, principal, current.id, TakeBackWhy::Started, now)
@@ -2195,7 +2196,7 @@ const fn run_forbidden(reason: RunForbidden) -> ServiceError {
 }
 
 /// Refuses a patch made in a run unless it only sets the context, makes a note or a reminder a task, or starts the
-/// item (design, Queue and Runs). Any other field, or any other state, refuses the whole patch.
+/// item. Any other field, or any other state, refuses the whole patch.
 fn check_run_patch(patch: &ItemPatch) -> Result<(), ServiceError> {
     match patch.state {
         None | Some(StateKind::InProgress) => {}

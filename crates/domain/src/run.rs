@@ -2,7 +2,7 @@
 //!
 //! A run is claimed from the queue, holds one item, and ends one of seven ways. An agent that goes quiet is not waited
 //! for: a run nobody has heard from in [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and is written
-//! as failed the next time something touches it (architecture.md, Runs).
+//! as failed the next time something touches it (architecture.md, Data model, Runs).
 
 use std::fmt;
 
