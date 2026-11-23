@@ -274,8 +274,8 @@ function placeLabel(me: Me, row: SearchRow): string {
 
 /**
  * One found item: its kind, title and key, and where it is. A closed one has a muted title and its state just before
- * the key, at every width (ux.md, Find); one in progress or blocked has its state after the place. `at` is its
- * place in the results.
+ * the key, at every width (ux.md, Keyboard, point 5); one in progress or blocked has its state after the place. `at`
+ * is its place in the results.
  */
 function ItemResult({ row, at, me, onAction }: { row: SearchRow; at: number; me: Me; onAction: () => void }) {
   const { item } = row;

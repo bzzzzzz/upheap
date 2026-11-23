@@ -1,5 +1,5 @@
 // The Command line card on Account: where the `upheap` CLI is signed in as the user, each with a way to end it
-// (ux.md, Account). Server build only; the server says so with the `manage_sign_ins` action.
+// (ux.md, Command line). Server build only; the server says so with the `manage_sign_ins` action.
 import { Terminal } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
