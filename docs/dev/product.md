@@ -17,7 +17,7 @@ agent picks up, and an agent that needs the person leaves a question on the item
 files keep what it is, not how far along it is.
 
 Upheap waits for the person. It shows what's important and what needs them when they come and look, and it doesn't
-interrupt.
+interrupt, except where they asked to be notified.
 
 It answers questions like:
 
@@ -31,7 +31,8 @@ What it is not:
 
 - **Not a plan that gets finished.** A heap holds more than can be done. It orders the work and doesn't promise all
   of it.
-- **Not something that interrupts.** Information appears when the person asks for it.
+- **Not something that interrupts.** Information appears when the person asks for it, or where they asked to be
+  notified (Notifications).
 - **Not a model host.** It runs no models. It drives an agent command-line tool the person already has, on their own
   machine.
 - **Not a wiki.** A heap's context is short and points at where the knowledge lives.
@@ -73,8 +74,9 @@ What it is not:
 
 1. Mail is optional. On a server without it, the operator makes reset links by hand, and accounts sign in without
    confirming their address.
-2. The server mails only about the account itself: links the user asked for, and notices of changes to their
-   account. Never about items, questions, reviews or agents' work.
+2. The server mails about the account itself: links the user asked for, and notices of changes to their account.
+   About items, questions, reviews or agents' work it mails only what the person asked to be notified of
+   (Notifications).
 3. With mail set up, a user who forgot their password gets a reset link by mail, asked for on the sign-in page.
    Asking answers the same whether an account uses the address or not.
 4. With mail set up, a new account confirms its address by a link mailed to it before it can sign in, an account
@@ -197,6 +199,16 @@ What it is not:
 4. Answering a question, or saying a request is done or can't be done, closes it. When an item's last open
    question closes, the item goes back to whoever asked.
 
+## Notifications
+
+1. A person is notified about an item only if they asked to be, for that item. Nobody asks for someone else, and
+   nothing is on until asked.
+2. A reminder the person asked about notifies them on the morning of its date.
+3. An item the person asked about notifies them when something starts waiting for them on it: a question, a
+   request, a stuck agent or a gone blocker. What merely changed never notifies.
+4. A notification says what waits and links to it. Acting on it happens in Upheap.
+5. Notifications go by mail, so a server without mail sends none.
+
 ## Working with agents
 
 1. Work moves between stable states: points where an agent counts its part as finished and the item is the
@@ -215,8 +227,8 @@ What it is not:
 6. An agent refines and does: it fills in context, turns a note into tasks, asks, adds steps, and does the work,
    ticking the steps as it goes.
 7. An agent that makes several tasks says which block which. A blocked task is never given to an agent.
-8. Nothing reaches the person unless they look: a question, a finished task and an agent's progress all wait in
-   Upheap. The person can see what agents have done across their heaps as one short history of results.
+8. Nothing reaches the person unless they look, or asked to be notified (Notifications): a question, a finished
+   task and an agent's progress all wait in Upheap. The person can see what agents have done across their heaps as one short history of results.
 
 ## Review
 
