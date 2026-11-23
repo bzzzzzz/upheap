@@ -2905,6 +2905,11 @@ export interface components {
                 [key: string]: string;
             } | null;
             send?: null | components["schemas"]["SendToAgentRequest"];
+            /**
+             * @description The task's steps, in order, written with the item: at most 100, and only for a task. Each is as `POST …/steps`
+             *     takes it, without `after`.
+             */
+            steps?: components["schemas"]["NewStepRequest"][];
             /** @description Tags of the same heap, at most 50. */
             tag_ids?: string[] | null;
             title: string;
@@ -3963,6 +3968,13 @@ export interface components {
          * @enum {string}
          */
         Need: "idea" | "nice_to_have" | "expected" | "critical";
+        /** @description A step written with a new task: as `POST …/steps` takes one, without `after`. */
+        NewStepRequest: {
+            /** @description Markdown, at most 20,000 characters; blank means none. */
+            context?: string | null;
+            /** @description 1 to 300 characters. */
+            title: string;
+        };
         /** @description Where to send the browser now that the user allowed the request. */
         OAuthApproval: {
             /** @description The request's redirect URI with `code` and `state` added. */
@@ -5635,6 +5647,7 @@ export type MemberPatchRequest = components['schemas']['MemberPatchRequest'];
 export type MergeReach = components['schemas']['MergeReach'];
 export type MergeReachHeap = components['schemas']['MergeReachHeap'];
 export type Need = components['schemas']['Need'];
+export type NewStepRequest = components['schemas']['NewStepRequest'];
 export type OAuthApproval = components['schemas']['OAuthApproval'];
 export type OAuthAuthorizationRequest = components['schemas']['OAuthAuthorizationRequest'];
 export type OAuthClient = components['schemas']['OAuthClient'];
@@ -8625,7 +8638,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again) */
+            /** @description `heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder), `steps_need_task` (`steps` on a note or reminder) or `too_many_steps` (more than 100); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again) */
             409: {
                 headers: {
                     [name: string]: unknown;

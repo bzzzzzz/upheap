@@ -3,7 +3,7 @@
 use api_types::common::{ItemDto, KindDto, NeedDto, SizeDto};
 use api_types::heaps::HeapDto;
 use api_types::items::{AgeDto, CreateItemDto, ItemPatchDto, OriginInputDto, RankedListDto, RankedQuery};
-use api_types::steps::AddStepDto;
+use api_types::steps::{AddStepDto, NewStepDto};
 use api_types::tags::TagListDto;
 use api_types::turns::{ReachDto, SendToAgentDto};
 use clap::Args;
@@ -97,9 +97,11 @@ fn parse_step_title(raw: &str) -> Result<String, String> {
     Title::parse(raw).map(|_| raw.to_owned()).map_err(|err| err.to_string())
 }
 
-/// Adds the item, then its steps one by one, in order. Human output says where it landed, from one read of the list
-/// after the add; `--quiet` prints the new item's key and `--json` the created item, with its steps when there are
-/// any. A failed step add stops there, so the item keeps the steps sent so far.
+/// Adds the item with its steps in the one request, so they are written with it and before any turn it opens. A
+/// server that drops them (from before steps on create) returns the item without them, and then they are added one by
+/// one, in order. Human output says where it landed, from one read of the list after the add; `--quiet` prints the new
+/// item's key and `--json` the created item, with its steps when there are any. A failed step add stops there, so the
+/// item keeps the steps sent so far.
 pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     if args.step.len() > MAX_STEPS {
         return Err(UsageError::TooManySteps {
@@ -221,6 +223,14 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         origin,
         blocked_by,
         send,
+        steps: args
+            .step
+            .iter()
+            .map(|title| NewStepDto {
+                title: title.clone(),
+                context: None,
+            })
+            .collect(),
     };
     let mut added = api.post::<ItemDto>(&["items"], &body).await?;
     if needs_task_patch(args.task, &added.value) {
@@ -244,7 +254,12 @@ pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliEr
         };
     }
     let steps = args.step.len();
-    for (sent, title) in args.step.iter().enumerate() {
+    let to_post = if needs_step_posts(&args.step, &added.value) {
+        args.step.as_slice()
+    } else {
+        &[]
+    };
+    for (sent, title) in to_post.iter().enumerate() {
         let body = AddStepDto {
             title: title.clone(),
             context: None,
@@ -333,6 +348,12 @@ async fn origin_id_of(name: ItemName, typed: &str, heap_named: bool, api: &HeapA
 /// create does.
 fn needs_task_patch(task: bool, added: &ItemDto) -> bool {
     task && added.kind != KindDto::Task
+}
+
+/// Whether the steps asked for still have to be added one by one: the item came back without them, which only a server
+/// older than steps on create does.
+fn needs_step_posts(steps: &[String], added: &ItemDto) -> bool {
+    !steps.is_empty() && added.steps.as_ref().is_none_or(Vec::is_empty)
 }
 
 /// Whether `item` is a reminder whose date hasn't come at `now`: it is out of the list.
@@ -557,6 +578,22 @@ mod tests {
         expect_that!(needs_task_patch(true, &note), eq(true));
         expect_that!(needs_task_patch(true, &task), eq(false));
         expect_that!(needs_task_patch(false, &note), eq(false));
+        Ok(())
+    }
+
+    #[gtest]
+    fn steps_are_posted_only_when_the_item_came_back_without_them() -> googletest::Result<()> {
+        let bare = sample_item("task")?;
+        let mut with_step = sample_item("task")?;
+        with_step.steps = serde_json::from_value(serde_json::json!([{
+            "id": Uuid::new_v4(), "number": 1, "title": "Renew", "context": null, "state": "open", "version": 1,
+            "origin": null, "allowed_actions": [],
+        }]))?;
+        let asked = vec!["Renew".to_owned()];
+
+        expect_that!(needs_step_posts(&asked, &bare), eq(true));
+        expect_that!(needs_step_posts(&asked, &with_step), eq(false));
+        expect_that!(needs_step_posts(&[], &bare), eq(false));
         Ok(())
     }
 
