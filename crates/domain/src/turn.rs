@@ -315,8 +315,8 @@ impl Turn {
     }
 
     /// The turn as it reads right now: when it has a run nobody has heard from for [`crate::run::CLAIM_LAPSE`]
-    /// (`lapsed_unended`), that run counts as failed though it isn't written yet (architecture.md, Runs), so
-    /// `failed_runs` is one more. Every place that reads whether a turn is stuck, or how many runs failed, reads
+    /// (`lapsed_unended`), that run counts as failed though it isn't written yet (architecture.md, Data model, Runs),
+    /// so `failed_runs` is one more. Every place that reads whether a turn is stuck, or how many runs failed, reads
     /// through this, so none disagrees with another. Never write the result back: the stored count only grows when a
     /// lapsed run is written.
     #[must_use]

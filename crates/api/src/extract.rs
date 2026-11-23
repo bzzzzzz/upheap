@@ -29,7 +29,7 @@ pub(crate) const TIME_ZONE_HEADER: &str = "time-zone";
 pub(crate) const RUN_HEADER: &str = "upheap-run";
 
 /// What a request made in a run (with the `Upheap-Run` header) may do besides read: the one place that says which
-/// writes an agent has (design: Agent runs, Queue and Runs). A request is allowed when its method and route template
+/// writes an agent has (architecture.md, Data model, Runs). A request is allowed when its method and route template
 /// are listed here, and the service then checks the run and the item, and for the item's `PATCH`, which fields. Every
 /// other write is refused with `run_forbidden`: replying to a question, sending and taking back, retrying, claiming
 /// another run, heaps, teams, tags, parameters and views belong to the person. A run adds a task or a note, with a

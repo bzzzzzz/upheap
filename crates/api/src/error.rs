@@ -328,6 +328,8 @@ fn classify_service(err: &ServiceError) -> Classified {
         ServiceError::Run(RunError::CostRecorded) => {
             simple(StatusCode::CONFLICT, "run_cost_recorded", Category::Conflict)
         }
+        // Every refusal of a run has a code of its own, and this one names the run's item in a field, so the CLI's
+        // hint never has to read a message.
         ServiceError::Run(RunError::WrongItem { key }) => Classified {
             item_key: Some(key.to_string()),
             ..simple(StatusCode::FORBIDDEN, "run_wrong_item", Category::Permission)
