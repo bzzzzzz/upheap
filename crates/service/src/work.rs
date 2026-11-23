@@ -5,7 +5,7 @@
 //! (the turn stays open, with a watch the loop checks), or by the person taking it back. A turn whose item is already
 //! at its goal is never claimed: the claim ends it as reached. There is no lock to give up: a run nobody has heard
 //! from for [`CLAIM_LAPSE`] counts as ended, failed, wherever it is read, and is written as failed the next time a
-//! claim, its own `finish` or a take back touches it (architecture.md, Runs).
+//! claim, its own `finish` or a take back touches it (architecture.md, Data model, Runs).
 
 use std::collections::{HashMap, HashSet};
 
@@ -157,7 +157,8 @@ fn parse_heap_refs(refs: &[String]) -> Result<Vec<(Handle, Handle)>, ValidationE
 
 impl Services {
     /// The queue over `heaps` (each `team/heap` by slug), in the order a claim takes it, and how many items wait for
-    /// the person.
+    /// the person. Unpaged: the queue is at most the open items of the given heaps, which are few; past a few hundred
+    /// it would need a cap.
     /// A turn whose item is already at its goal is skipped, not ended. Writes nothing: a lapsed run counts as ended,
     /// failed, but isn't written (decision: lapses are written lazily).
     ///
@@ -934,7 +935,8 @@ impl Services {
     /// What the queue holds in `heaps`, which are sorted as ties between heaps are broken. `live` holds the items that
     /// have a live run, and `lapsed` the turns that have a lapsed run not written yet, which counts as failed
     /// ([`Turn::counting_lapse`]). Ranks each heap that has something in the queue once. The candidates come best
-    /// first: those whose turn's latest run ended as limited (the agent tool's usage limit); then the highest score
+    /// first: those whose turn's latest run ended as limited (the agent tool's usage limit), so the work a limit cut
+    /// off is the one claimed once it resets; then the highest score
     /// times the caller's priority for its heap, times [`STARTED_BOOST`] when a run has already worked on its send
     /// (its turn, or an earlier stage of the same all-the-way send or the note it was split from), then by heap, then
     /// by position.

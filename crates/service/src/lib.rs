@@ -61,7 +61,7 @@ pub use store::StoreError;
 pub struct Principal {
     pub user_id: UserId,
     /// The run the request is made in, when an agent makes it (the `Upheap-Run` header). Only the API sets it; a
-    /// write made in a run is held to what a run may do (architecture.md, Runs).
+    /// write made in a run is held to what a run may do (architecture.md, Data model, Runs).
     pub run: Option<RunId>,
 }
 
