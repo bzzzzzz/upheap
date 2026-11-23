@@ -138,6 +138,7 @@ mod tests {
                 "heap_archived",
                 "heap_unarchived",
                 "heap_priority_changed",
+                "default_heap_changed",
                 "item_created",
                 "item_updated",
                 "item_moved",

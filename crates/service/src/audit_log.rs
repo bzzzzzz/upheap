@@ -375,12 +375,14 @@ impl Services {
         if let Some(team) = store::teams::find_team(&self.db, team_id).await? {
             names.insert(*team.id.as_uuid(), team.name.as_str());
         }
-        // A priority change sits in the person's personal team but names a heap of any of their teams. Only the
-        // heaps of teams they're in now are named; the rest read as unknown.
-        let teams = if entries
-            .iter()
-            .any(|entry| entry.action == AuditAction::HeapPriorityChanged)
-        {
+        // A priority or default heap change sits in the person's personal team but names a heap of any of their
+        // teams. Only the heaps of teams they're in now are named; the rest read as unknown.
+        let teams = if entries.iter().any(|entry| {
+            matches!(
+                entry.action,
+                AuditAction::HeapPriorityChanged | AuditAction::DefaultHeapChanged
+            )
+        }) {
             store::teams::list_teams_for_user(&self.db, principal.user_id)
                 .await?
                 .into_iter()
@@ -704,6 +706,7 @@ const fn describe_action(action: AuditAction, about_actor: bool) -> (&'static st
         (AuditAction::InviteLinkCreated, _) => ("made an invite link", false),
         (AuditAction::InviteLinkRevoked, _) => ("revoked", true),
         (AuditAction::HeapPriorityChanged, _) => ("changed their priority for a heap", false),
+        (AuditAction::DefaultHeapChanged, _) => ("changed their default heap", false),
         (AuditAction::PasswordChanged, _) => ("changed their password", false),
         (AuditAction::PasswordResetLinkMade, _) => ("got a reset link", false),
         (AuditAction::PasswordReset, _) => ("set a new password with a reset link", false),
@@ -769,6 +772,7 @@ const fn classify_diff(action: AuditAction) -> DiffShape {
         | AuditAction::HeapArchived
         | AuditAction::HeapUnarchived
         | AuditAction::HeapPriorityChanged
+        | AuditAction::DefaultHeapChanged
         | AuditAction::ItemUpdated
         | AuditAction::ItemMoved
         | AuditAction::ItemPlaced
@@ -1755,6 +1759,26 @@ mod tests {
         expect_that!(
             unknown,
             contains(eq(&change("heap_id", "Heap", None, Some("Unknown heap"))))
+        );
+    }
+
+    #[gtest]
+    fn a_default_heap_change_names_the_heap_before_and_after() {
+        let (old, new) = (Uuid::from_u128(20), Uuid::from_u128(21));
+        let mut names = Names::default();
+        names.insert(old, "Launch");
+        names.insert(new, "Garden");
+        let diff = json!({ "heap_id": { "before": old.to_string(), "after": new.to_string() } });
+
+        let changes = describe_changes(
+            &entry(AuditAction::DefaultHeapChanged, EntityType::User, diff),
+            &names,
+            &TimeZone::UTC,
+        );
+
+        expect_that!(
+            changes,
+            elements_are![eq(&change("heap_id", "Heap", Some("Launch"), Some("Garden")))]
         );
     }
 

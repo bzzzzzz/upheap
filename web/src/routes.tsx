@@ -327,16 +327,18 @@ const indexRoute = createRoute({
   path: "/",
   beforeLoad: async ({ context, location }) => {
     const me = await context.queryClient.ensureQueryData(meQuery);
-    for (const team of me.teams) {
-      const heap = team.heaps.find((h) => !h.archived);
-      if (heap) {
-        // The state goes along, so the line the reset page lands with (`notice`) reaches the heap.
-        throw redirect({
-          to: "/teams/$team/heaps/$heap",
-          params: { team: team.slug, heap: heap.slug },
-          state: location.state,
-        });
-      }
+    // The person's default heap, while it is active and still one of theirs; otherwise the first active heap of the
+    // first team that has one. The state goes along, so the line the reset page lands with (`notice`) reaches the heap.
+    const heaps = me.teams.flatMap((team) => team.heaps.map((heap) => ({ team, heap })));
+    const start =
+      heaps.find(({ heap }) => heap.id === me.default_heap && !heap.archived) ??
+      heaps.find(({ heap }) => !heap.archived);
+    if (start) {
+      throw redirect({
+        to: "/teams/$team/heaps/$heap",
+        params: { team: start.team.slug, heap: start.heap.slug },
+        state: location.state,
+      });
     }
   },
   component: function NoHeaps() {

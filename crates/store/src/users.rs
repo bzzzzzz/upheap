@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use domain::handle::Handle;
 use domain::user::{DisplayName, Email, User, UserQuery};
-use domain::{Timestamp, UserId, Version};
+use domain::{HeapId, Timestamp, UserId, Version};
 use sea_orm::ExprTrait;
 use sea_orm::sea_query::{BinOper, Expr, Func, LikeExpr};
 use sea_orm::{
@@ -34,6 +34,7 @@ pub async fn insert_user(db: &impl ConnectionTrait, user: &User) -> Result<(), S
         operator_since: Set(None),
         deactivated_at: Set(None),
         last_sign_in_at: Set(None),
+        default_heap_id: Set(None),
     };
     users::Entity::insert(row).exec_without_returning(db).await?;
     Ok(())
@@ -326,6 +327,34 @@ pub async fn clear_turned_off(db: &impl ConnectionTrait, user_id: UserId) -> Res
         .exec(db)
         .await?;
     Ok(result.rows_affected == 1)
+}
+
+/// The heap the user marked as their default, as stored: it may be archived, or of a team they have left. A missing
+/// user has none.
+pub async fn find_default_heap(db: &impl ConnectionTrait, user_id: UserId) -> Result<Option<HeapId>, StoreError> {
+    let id = id_to_db(user_id.as_uuid());
+    let row = users::Entity::find_by_id(id.clone()).one(db).await?;
+    let read = RowReader { table: TABLE, id: &id };
+    row.and_then(|row| row.default_heap_id)
+        .map(|raw| read.uuid(&raw).map(HeapId::from_uuid))
+        .transpose()
+}
+
+/// Sets the user's default heap, or clears it with `None`. Doesn't touch the user's `version`.
+pub async fn set_default_heap(
+    db: &impl ConnectionTrait,
+    user_id: UserId,
+    heap_id: Option<HeapId>,
+) -> Result<(), StoreError> {
+    users::Entity::update_many()
+        .col_expr(
+            users::Column::DefaultHeapId,
+            Expr::value(heap_id.map(|id| id_to_db(id.as_uuid()))),
+        )
+        .filter(users::Column::Id.eq(id_to_db(user_id.as_uuid())))
+        .exec(db)
+        .await?;
+    Ok(())
 }
 
 /// Records that a session was opened for the user at `now`.

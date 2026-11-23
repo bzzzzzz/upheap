@@ -4,7 +4,8 @@ import { Switch, ToggleButton, ToggleButtonGroup } from "react-aria-components";
 
 import { ApiProblem, type HeapRef } from "../api/client";
 import type { Heap } from "../api/schema";
-import { useHeap, useSetHeapPriority, useUpdateHeap } from "../api/queries/heaps";
+import { useDefaultHeap, useHeap, useSetHeapPriority, useUpdateHeap } from "../api/queries/heaps";
+import { useMe } from "../api/queries/me";
 import { useArchiveHeap } from "../components/archiveHeap";
 import { HistoryDisclosure } from "../components/AuditHistory";
 import { compactButtonClass } from "../components/buttons";
@@ -164,6 +165,9 @@ export function HeapGeneralSettings({ heap: heapRef }: { heap: HeapRef }) {
 
       <PriorityCard team={heapRef.team} heap={data} canSet={can("set_priority")} />
 
+      {/* The default heap is the same kind of per-person setting as the priority, so it shows where that does. */}
+      <DefaultHeapCard team={heapRef.team} heap={data} canSet={can("set_priority")} />
+
       {can(archiveAction) && (
         <section aria-labelledby="heap-archive" className={cardClass}>
           <h2 id="heap-archive" className={cardTitleClass}>
@@ -287,6 +291,43 @@ function PriorityCard({ team, heap, canSet }: { team: string; heap: Heap; canSet
         scores are multiplied by this. 1 to 10. Only you see it.
       </p>
       <ProblemText error={setPriority.error} className="mt-2 text-overdue-ink" />
+    </section>
+  );
+}
+
+/**
+ * Whether the heap is the caller's default heap, which Upheap opens on (ux.md, Heap settings): a button that saves as
+ * it is pressed and keeps focus as its label changes.
+ */
+function DefaultHeapCard({ team, heap, canSet }: { team: string; heap: Heap; canSet: boolean }) {
+  const { data: me } = useMe();
+  const setDefault = useDefaultHeap(team);
+  if (!canSet || !me) return null;
+  const isDefault = me.default_heap === heap.id;
+  return (
+    <section aria-labelledby="heap-default" className={cardClass}>
+      <h2 id="heap-default" className={cardTitleClass}>
+        Default heap
+      </h2>
+      <p className="mt-2 text-sm/normal text-ink-soft">
+        {isDefault
+          ? "This is your default heap: Upheap opens on it while it's active."
+          : "Upheap opens on your default heap, on every device. Only you see it."}
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          // Not `disabled` while it saves, which would drop the focus the button keeps as its label changes.
+          aria-disabled={setDefault.isPending || undefined}
+          aria-busy={setDefault.isPending || undefined}
+          onClick={() => !setDefault.isPending && setDefault.mutate({ heap, makeDefault: !isDefault })}
+          className={`${compactButtonClass.bordered} max-sm:w-full`}
+        >
+          <Saving pending={setDefault.isPending} />
+          {isDefault ? "Clear" : "Make this my default heap"}
+        </button>
+      </div>
+      <ProblemText error={setDefault.error} className="mt-2 text-overdue-ink" />
     </section>
   );
 }

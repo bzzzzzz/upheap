@@ -303,6 +303,12 @@ pub struct MeDto {
     #[serde(default)]
     #[schema(required = true)]
     pub operator: bool,
+    /// The heap the user marked as their default, as stored, or null: it may be archived, or of a team the user has
+    /// left, so check it against `teams`. The web app opens on it.
+    // Defaults so this client reads a server older than default heaps, which has none.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub default_heap: Option<Uuid>,
 }
 
 #[derive(Deserialize, ToSchema)]

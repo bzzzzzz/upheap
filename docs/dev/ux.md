@@ -159,6 +159,9 @@ one. The heap kept is the one opened last that is still there and active, else t
 On a phone those pages have no tabs, so the top bar starts with Back: it goes to the page before, or, when the tab
 opened on the page from a link, to the heap kept.
 
+Opening `/` lands on the person's default heap (Heap settings) while it is active and one of theirs, else on the first
+active heap of the first team that has one. The heap kept, above, is unchanged by it.
+
 On a wide screen the sidebar and the content are one centred block, at most the sidebar, the content column and the
 item pane wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The block is
 that wide whether or not an item is open, so opening or closing one never moves the sidebar or the list's left edge:
@@ -197,6 +200,13 @@ line "How this heap ranks against your other heaps in Waiting for me and the age
 multiplied by this. 1 to 10. Only you see it." Pressing a number saves it at once, as the Agents switch does, and
 another can't be saved until that save ends. Everyone who can open Settings may set theirs (`set_priority`),
 archived heaps too; an error shows under the card.
+
+The **Default heap** card follows it, shown where the priority card is: the person's own choice of the heap Upheap
+opens on, kept on the server so it follows them to every device. A heap that isn't the default reads "Upheap opens on
+your default heap, on every device. Only you see it." with a "Make this my default heap" button; the default reads "This
+is your default heap: Upheap opens on it while it's active." with "Clear". The button saves at once and keeps focus as
+its label changes; an error shows under the card. One heap is the default at a time, and archiving it stops `/` opening
+on it without clearing it.
 
 The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
 Description, Add tag) and a card headed "{n} tags of this heap" whose rows read as the tag's name in a chip and its

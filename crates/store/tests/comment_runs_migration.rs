@@ -83,7 +83,16 @@ async fn existing_comments_get_the_run_of_their_audit_entry() -> Result<()> {
         created_at: at(1_000)?,
         version: Version::INITIAL,
     };
-    store::users::insert_user(&db, &user).await?;
+    // By hand: the store inserts the columns of the current schema, which this one lacks.
+    run(
+        &db,
+        &format!(
+            "INSERT INTO users (id, email, display_name, created_at, version) \
+             VALUES ('{}', 'sam@example.com', 'Sam', 1000, 1)",
+            user.id,
+        ),
+    )
+    .await?;
     let team = Team {
         id: TeamId::from_uuid(Uuid::now_v7()),
         slug: Handle::parse("team", Field::Slug)?,

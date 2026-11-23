@@ -45,7 +45,7 @@ impl Permission {
 /// Leaving a team is the exception: every member may leave, but leaving is a membership change, which the offering
 /// shows to admins only. Display name changes are shown to every member, since that is where teammates see the name.
 ///
-/// A heap priority change, a password change, a reset link being made, a password set with one, an address change asked or made and an address confirmed are recorded in the user's personal team,
+/// A heap priority change, a default heap change, a password change, a reset link being made, a password set with one, an address change asked or made and an address confirmed are recorded in the user's personal team,
 /// whose one member is its admin, so only the user sees them.
 pub const fn audit_permission(action: AuditAction) -> Permission {
     match action {
@@ -63,6 +63,7 @@ pub const fn audit_permission(action: AuditAction) -> Permission {
         | AuditAction::InviteLinkRevoked
         | AuditAction::PasswordChanged
         | AuditAction::HeapPriorityChanged
+        | AuditAction::DefaultHeapChanged
         | AuditAction::PasswordResetLinkMade
         | AuditAction::PasswordReset
         | AuditAction::AccountDeactivated

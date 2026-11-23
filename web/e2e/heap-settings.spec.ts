@@ -1,5 +1,5 @@
 // The heap's settings (ux.md, Heap settings): General, Context, Tags, Parameters and Ranking as tabs, each at its own path.
-import { addItem, expect, expectOrder, fillEditor, goTo, test } from "./fixtures";
+import { addHeaps, addItem, expect, expectOrder, fillEditor, goTo, test } from "./fixtures";
 
 test("General renames the heap, changes its link name and archives it", async ({ page, heapPath }) => {
   await goTo(page, "Settings");
@@ -377,4 +377,31 @@ test("a context saved by someone else meanwhile is shown above the draft, which 
   await expect(field).toHaveCount(0);
   await expect(card.getByText("My version", { exact: true })).toBeVisible();
   await expect(card.getByText("Their version")).toHaveCount(0);
+});
+
+test("the default heap is where / opens, until it is cleared or archived", async ({ page, heapPath }) => {
+  await addHeaps(page, ["Zeta"]);
+  const zeta = heapPath.replace(/[^/]+$/, "zeta");
+  await page.goto(`${zeta}/settings`);
+
+  const setDefault = page.getByRole("button", { name: "Make this my default heap" });
+  await setDefault.click();
+  await expect(page.getByText("This is your default heap: Upheap opens on it while it's active.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Clear" })).toBeFocused();
+  await page.goto("./");
+  await expect(page).toHaveURL(new RegExp(`${zeta}$`));
+
+  await page.goto(`${zeta}/settings`);
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.getByRole("button", { name: "Make this my default heap" })).toBeVisible();
+  await page.goto("./");
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
+
+  await page.goto(`${zeta}/settings`);
+  await page.getByRole("button", { name: "Make this my default heap" }).click();
+  await expect(page.getByRole("button", { name: "Clear" })).toBeVisible();
+  await page.getByRole("button", { name: "Archive heap" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "This heap is archived and read-only." })).toBeVisible();
+  await page.goto("./");
+  await expect(page).toHaveURL(new RegExp(`${heapPath}$`));
 });

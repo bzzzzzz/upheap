@@ -4070,6 +4070,112 @@
         ]
       }
     },
+    "/api/v1/teams/{team}/heaps/{heap}/default": {
+      "put": {
+        "tags": [
+          "heaps"
+        ],
+        "summary": "Makes the heap your default heap, the one the web app opens on, replacing any other. Any role that may view the heap\nmay do it, on an active or an archived heap; nobody else sees it. Repeating it succeeds.",
+        "operationId": "set_default_heap",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "heaps"
+        ],
+        "summary": "Clears your default heap if it is this heap. When your default is another heap, or none, it succeeds and changes\nnothing. Access as for setting it.",
+        "operationId": "clear_default_heap",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "description": "The team's slug.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "my-team"
+          },
+          {
+            "name": "heap",
+            "in": "path",
+            "description": "The heap's slug, unique within the team.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "backlog"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/teams/{team}/heaps/{heap}/items": {
       "get": {
         "tags": [
@@ -12136,6 +12242,7 @@
           "heap_archived",
           "heap_unarchived",
           "heap_priority_changed",
+          "default_heap_changed",
           "item_created",
           "item_updated",
           "item_moved",
@@ -15337,7 +15444,8 @@
           "user",
           "teams",
           "allowed_actions",
-          "operator"
+          "operator",
+          "default_heap"
         ],
         "properties": {
           "allowed_actions": {
@@ -15346,6 +15454,14 @@
               "$ref": "#/components/schemas/MeAction"
             },
             "description": "What the user may do with their account, such as signing out and making teams."
+          },
+          "default_heap": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The heap the user marked as their default, as stored, or null: it may be archived, or of a team the user has\nleft, so check it against `teams`. The web app opens on it."
           },
           "operator": {
             "type": "boolean",

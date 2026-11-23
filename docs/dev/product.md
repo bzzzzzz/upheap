@@ -304,7 +304,8 @@ The factors above are the commitment; the numbers aren't. The formula and its nu
 
 The main view and the answer to "what should I work on?"
 
-1. The app opens on this view, with items ordered by combined priority, highest first.
+1. The app opens on this view, of the heap the person marked as their default when they have one, with items ordered
+   by combined priority, highest first.
 2. In-progress items stay pinned at the top in a compact form so they aren't forgotten. Blocked items are hidden by
    default. All other open items follow in priority order. Closed items appear only in the Closed items view.
 3. The user can configure which non-closed states are pinned, shown, or hidden. Shown blocked items can be mixed in

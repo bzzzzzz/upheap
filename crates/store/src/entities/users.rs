@@ -15,6 +15,7 @@ pub struct Model {
     pub operator_since: Option<i64>,
     pub deactivated_at: Option<i64>,
     pub last_sign_in_at: Option<i64>,
+    pub default_heap_id: Option<String>,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

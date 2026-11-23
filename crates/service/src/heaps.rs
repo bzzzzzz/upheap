@@ -468,6 +468,62 @@ impl Services {
         Ok(view)
     }
 
+    /// Makes the heap the caller's default heap, replacing any other. Like the priority, it is the caller's own
+    /// setting: any role that may view the heap may do it, on an active or an archived heap, and non-members get
+    /// [`ServiceError::NotFound`]. Setting the heap that already is the default succeeds and writes nothing.
+    pub async fn set_default_heap(&self, principal: Principal, heap_id: HeapId) -> Result<(), ServiceError> {
+        self.change_default_heap(principal, heap_id, true).await
+    }
+
+    /// Clears the caller's default heap if it is this heap. When their default is another heap, or none, it
+    /// succeeds and changes nothing. Access as for [`Services::set_default_heap`].
+    pub async fn clear_default_heap(&self, principal: Principal, heap_id: HeapId) -> Result<(), ServiceError> {
+        self.change_default_heap(principal, heap_id, false).await
+    }
+
+    /// Makes `heap_id` the caller's default heap (`set`), or clears the default if it is `heap_id`. A change is
+    /// recorded in the caller's personal team, as for the priority.
+    async fn change_default_heap(&self, principal: Principal, heap_id: HeapId, set: bool) -> Result<(), ServiceError> {
+        let user = store::users::find_user(&self.db, principal.user_id)
+            .await?
+            .ok_or(ServiceError::Unauthenticated)?;
+        let personal_team = self.load_personal_team(&self.db, &user).await?;
+        let txn = self.db.begin().await.map_err(StoreError::from)?;
+        // The personal team first, for the lock order and so each entry's "before" is the value it replaced.
+        store::teams::lock_team(&txn, personal_team).await?;
+        authorize_heap(&txn, principal, heap_id, Permission::ViewHeap).await?;
+        let before = store::users::find_default_heap(&txn, principal.user_id).await?;
+        let after = if set {
+            Some(heap_id)
+        } else if before == Some(heap_id) {
+            None
+        } else {
+            return Ok(());
+        };
+        if before == after {
+            return Ok(());
+        }
+        store::users::set_default_heap(&txn, principal.user_id, after).await?;
+        let entry = self.team_audit_entry(
+            principal,
+            personal_team,
+            AuditAction::DefaultHeapChanged,
+            EntityType::User,
+            *principal.user_id.as_uuid(),
+            json!({
+                AuditField::HeapId.code(): {
+                    "before": before.map(|id| id.to_string()),
+                    "after": after.map(|id| id.to_string()),
+                },
+            }),
+            self.now(),
+        );
+        store::audit::insert_audit_entry(&txn, &entry).await?;
+        txn.commit().await.map_err(StoreError::from)?;
+        tracing::info!(user_id = %principal.user_id, ?after, "default heap changed");
+        Ok(())
+    }
+
     /// Makes the heap read-only for everyone. Archiving an archived heap succeeds and changes nothing.
     pub async fn archive_heap(&self, principal: Principal, heap_id: HeapId) -> Result<HeapView, ServiceError> {
         self.set_archived(principal, heap_id, true).await
