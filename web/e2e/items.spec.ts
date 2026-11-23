@@ -1844,9 +1844,16 @@ test("a step is dragged by its grip to a new place, and the server keeps it", as
   const fromY = (start?.y ?? 0) + (start?.height ?? 0) / 2;
   const toY = (target?.y ?? 0) + 2;
   for (let i = 1; i <= 6; i++) await page.mouse.move((start?.x ?? 0) + 4, fromY + ((toY - fromY) * i) / 6);
+  // The grip starts near the bottom of a wide screen, in the edge zone that scrolls the pane while a row is lifted, so
+  // step 1 may have moved since `target` was read: the drop aims at where it is now, out of the zone.
+  const landing = await fields.nth(0).boundingBox();
+  await page.mouse.move((start?.x ?? 0) + 4, (landing?.y ?? 0) + 2);
   const saved = page.waitForResponse((r) => r.request().method() === "PATCH" && /\/steps\/3$/.test(r.url()));
   await page.mouse.up();
-  await saved;
+  const response = await saved;
+  // To the top: after no step.
+  expect(response.request().postDataJSON()).toEqual({ after: null });
+  expect(response.status()).toBe(200);
   await expectStepOrder(steps, ["Three", "One", "Two"]);
   await page.reload();
   await expectStepOrder(steps, ["Three", "One", "Two"]);
