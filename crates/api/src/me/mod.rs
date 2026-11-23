@@ -86,6 +86,7 @@ fn to_me_dto(me: MeView) -> MeDto {
         teams: me.teams.into_iter().map(team).collect(),
         allowed_actions,
         operator: me.operator,
+        default_heap: me.default_heap.map(|id| *id.as_uuid()),
     }
 }
 

@@ -829,6 +829,24 @@ fn endpoints() -> Vec<Endpoint> {
             RequestBody::HeapPriority,
             StatusCode::OK,
         ),
+        // The caller's own default heap, a setting like the priority: setting it again, or clearing one that isn't the
+        // default, succeeds without a change.
+        row(
+            Method::PUT,
+            "/teams/{team}/heaps/{heap}/default",
+            view,
+            Target::Heap,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
+        ),
+        row(
+            Method::DELETE,
+            "/teams/{team}/heaps/{heap}/default",
+            view,
+            Target::Heap,
+            RequestBody::Empty,
+            StatusCode::NO_CONTENT,
+        ),
         // A read that carries a body, so it works on an archived heap too.
         row(
             Method::POST,

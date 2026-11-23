@@ -22,6 +22,8 @@ pub struct MeView {
     pub can_change_email: bool,
     /// Whether the user is an operator.
     pub operator: bool,
+    /// The heap the user marked as their default, as stored: it may be archived or no longer theirs.
+    pub default_heap: Option<HeapId>,
     pub teams: Vec<TeamView>,
 }
 
@@ -86,6 +88,7 @@ impl Services {
             has_password,
             can_change_email: has_password && self.has_mail(),
             operator: store::users::is_operator(&self.db, principal.user_id).await?,
+            default_heap: store::users::find_default_heap(&self.db, principal.user_id).await?,
             teams,
         })
     }

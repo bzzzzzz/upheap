@@ -23,6 +23,7 @@ coded_enum! {
         HeapArchived = "heap_archived",
         HeapUnarchived = "heap_unarchived",
         HeapPriorityChanged = "heap_priority_changed",
+        DefaultHeapChanged = "default_heap_changed",
         ItemCreated = "item_created",
         ItemUpdated = "item_updated",
         ItemMoved = "item_moved",

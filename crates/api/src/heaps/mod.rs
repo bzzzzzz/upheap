@@ -7,6 +7,7 @@ use api_types::heaps::{
 };
 use axum::Json;
 use axum::extract::State;
+use axum::http::StatusCode;
 use domain::handle::Handle;
 use domain::heap::{HeapPolicyPatch, HeapPriority};
 use domain::parameter::Weight;
@@ -31,6 +32,7 @@ pub(crate) fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(get_heap, update_heap))
         .routes(routes!(update_weights))
         .routes(routes!(set_heap_priority))
+        .routes(routes!(set_default_heap, clear_default_heap))
         .routes(routes!(archive_heap))
         .routes(routes!(unarchive_heap))
 }
@@ -195,6 +197,32 @@ async fn set_heap_priority(
         .set_heap_priority(path.principal, path.heap.heap_id, priority)
         .await?;
     Ok(Json(to_heap_dto(view)))
+}
+
+/// Makes the heap your default heap, the one the web app opens on, replacing any other. Any role that may view the heap
+/// may do it, on an active or an archived heap; nobody else sees it. Repeating it succeeds.
+#[utoipa::path(put, path = "/teams/{team}/heaps/{heap}/default", tag = "heaps", security(("session" = [])),
+    params(HeapParams),
+    responses((status = 204), (status = 404, body = Problem)))]
+async fn set_default_heap(State(state): State<AppState>, path: HeapPath) -> Result<StatusCode, ApiError> {
+    state
+        .services
+        .set_default_heap(path.principal, path.heap.heap_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Clears your default heap if it is this heap. When your default is another heap, or none, it succeeds and changes
+/// nothing. Access as for setting it.
+#[utoipa::path(delete, path = "/teams/{team}/heaps/{heap}/default", tag = "heaps", security(("session" = [])),
+    params(HeapParams),
+    responses((status = 204), (status = 404, body = Problem)))]
+async fn clear_default_heap(State(state): State<AppState>, path: HeapPath) -> Result<StatusCode, ApiError> {
+    state
+        .services
+        .clear_default_heap(path.principal, path.heap.heap_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Archives the heap, making it read-only for everyone. Admins only. Archiving an archived heap succeeds.

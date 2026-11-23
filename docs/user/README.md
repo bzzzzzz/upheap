@@ -46,6 +46,8 @@ upheap heap add "Website"        # in your personal team; --team infra for a sha
 upheap heap use website          # the default for the commands that follow
 ```
 
+That default is the command line's own. The web app has its own default heap, which you set in the heap's Settings.
+
 ## 4. Put everything in
 
 Add items as they come up, each with how much it's needed and whatever else you know. Only the title is required.

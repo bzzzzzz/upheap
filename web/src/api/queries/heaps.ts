@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { api, unwrap, type HeapRef } from "../client";
+import { api, ensureOk, unwrap, type HeapRef } from "../client";
 import type { CreateHeapRequest, Heap, HeapWeightsPatchRequest, ParameterList, RankingPreviewRequest } from "../schema";
 import {
   apiKey,
@@ -9,6 +9,7 @@ import {
   heapKey,
   heapRecordKeys,
   heapPath,
+  meKey,
   waitingKey,
   invalidateHeap,
   invalidateTeam,
@@ -106,6 +107,25 @@ export function useSetHeapPriority(team: string) {
         invalidateTeam(queryClient, team),
         queryClient.invalidateQueries({ queryKey: waitingKey }),
       ]),
+  });
+}
+
+/**
+ * Makes a heap of the team `team` the caller's default heap, or clears it. Declarative, so no `If-Match`. The default
+ * is on `me`, which the card and `/` read, so it is fetched again.
+ */
+export function useDefaultHeap(team: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ heap, makeDefault }: { heap: Heap; makeDefault: boolean }) => {
+      const params = { params: { path: { team, heap: heap.slug } } };
+      ensureOk(
+        makeDefault
+          ? await api.PUT("/api/v1/teams/{team}/heaps/{heap}/default", params)
+          : await api.DELETE("/api/v1/teams/{team}/heaps/{heap}/default", params),
+      );
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: meKey }),
   });
 }
 
