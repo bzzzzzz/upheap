@@ -12,7 +12,7 @@ use crate::config::Config;
 
 const USAGE: &str = "usage: upheap-server mail test <address>";
 
-/// Exit codes, as documented in the README (Setting up mail). `0` is a mail sent.
+/// Exit codes, as documented in mail.md (Setting it up). `0` is a mail sent.
 const EXIT_UNEXPECTED: u8 = 1;
 const EXIT_USAGE: u8 = 2;
 const EXIT_MAIL: u8 = 6;

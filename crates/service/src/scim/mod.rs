@@ -45,7 +45,7 @@ pub const MAX_PAGE: i64 = 100;
 /// The longest `userName`, `displayName` and `externalId`, which the columns hold.
 const MAX_TEXT_CHARS: usize = 255;
 
-/// The provider's access to the SCIM endpoints, from the operator's configuration (README, Configuration).
+/// The provider's access to the SCIM endpoints, from the operator's configuration (configuration.md).
 #[derive(Clone)]
 pub struct ScimSettings {
     /// SHA-256 of the token in lowercase hex: the token itself isn't kept.

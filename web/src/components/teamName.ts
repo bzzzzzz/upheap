@@ -6,7 +6,7 @@ type NamedTeam = { name: string; personal: boolean };
 
 /**
  * How the web app names a team. Display only: the stored name is unchanged. A personal team shows as "<display
- * name>'s team" (design/ux.md, Teams and Team), as its stored name is its owner's and reads as a person.
+ * name>'s team" (ux.md, Teams and Team), as its stored name is its owner's and reads as a person.
  */
 export function teamName(team: NamedTeam, me: Me): string {
   return team.personal ? `${me.user.display_name}'s team` : team.name;

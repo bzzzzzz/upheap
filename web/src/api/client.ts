@@ -14,7 +14,7 @@ export type ListViewQuery = Omit<
 export type AcrossHeapsQuery = Omit<NonNullable<paths["/api/v1/me/items"]["get"]["parameters"]["query"]>, "as_of">;
 
 /**
- * A heap as paths name it: its team's slug and its own (design/architecture.md, Handles). It is exactly the path parameters
+ * A heap as paths name it: its team's slug and its own (architecture.md, Handles). It is exactly the path parameters
  * of the heap's API routes, so it goes into `params.path` as it is.
  */
 export type HeapRef = { team: string; heap: string };

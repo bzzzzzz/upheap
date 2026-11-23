@@ -1,5 +1,5 @@
 # Checks every pull request, and main after each merge (Deploy waits for that run). The rules come from
-# design/engineering-principles.md:
+# engineering-principles.md:
 # rustfmt and clippy are law, the OpenAPI file and the web types are generated and must not drift, and the web
 # app lints with no warnings.
 
@@ -100,7 +100,7 @@ jobs:
       - name: Test on MySQL
         run: cargo test -p store -p api --locked
 
-  # The same suites on Postgres, which production runs on (design/operations.md). It catches what neither
+  # The same suites on Postgres, which production runs on (operations.md). It catches what neither
   # SQLite nor MySQL does: stricter types, ambiguous names in upserts, and a failed statement ending its transaction.
   postgres:
     name: Postgres

@@ -1,4 +1,4 @@
-// The Teams and Team pages (design/ux.md, Teams and Team): making a team, sharing it, and managing its heaps
+// The Teams and Team pages (ux.md, Teams and Team): making a team, sharing it, and managing its heaps
 // and members.
 import type { APIRequestContext, Browser, Page, TestInfo } from "@playwright/test";
 

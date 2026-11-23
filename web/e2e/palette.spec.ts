@@ -1,4 +1,4 @@
-// The Find palette (design/ux.md, Keyboard): ⌘K finds items in every heap, goes to a heap, adds an item, and acts on one.
+// The Find palette (ux.md, Keyboard): ⌘K finds items in every heap, goes to a heap, adds an item, and acts on one.
 import type { Page } from "@playwright/test";
 
 import { addDialog, addItem, expect, isPhone, seed, test } from "./fixtures";

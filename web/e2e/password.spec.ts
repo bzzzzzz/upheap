@@ -1,4 +1,4 @@
-// The Password card on Account (design/ux.md, Password): changing the password, which ends the user's other sign-ins.
+// The Password card on Account (ux.md, Password): changing the password, which ends the user's other sign-ins.
 import { expect, test, type Page } from "@playwright/test";
 
 import { goTo, HEAP_URL, PASSWORD, registerThroughApi } from "./fixtures";

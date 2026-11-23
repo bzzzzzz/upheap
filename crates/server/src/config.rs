@@ -8,7 +8,7 @@ use anyhow::{Context, bail};
 use service::oidc::OidcSettings;
 use service::scim::ScimSettings;
 
-/// Every option the server reads. Documented in the README; validated by [`Config::from_env`].
+/// Every option the server reads. Documented in configuration.md; validated by [`Config::from_env`].
 #[derive(Debug)]
 pub struct Config {
     /// `DATABASE_URL`, required: `sqlite://path/to/heap.db?mode=rwc`, `mysql://user:pass@host/db` or

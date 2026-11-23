@@ -16,7 +16,7 @@ use crate::terminal::for_terminal;
 
 const USAGE: &str = "usage: upheap-server team make-admin <team slug> <username>";
 
-/// Exit codes, as documented in the README (Making a team admin). `0` is an admin made, or one already.
+/// Exit codes, as documented in accounts.md (Making a team admin). `0` is an admin made, or one already.
 const EXIT_UNEXPECTED: u8 = 1;
 const EXIT_USAGE: u8 = 2;
 const EXIT_NOT_FOUND: u8 = 3;

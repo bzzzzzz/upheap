@@ -1,8 +1,8 @@
 // A server whose registration is closed, with six accounts that already exist: how a real server gets to the state
-// the invite page is for (design/ux.md, Invite page). The third is for the reset page's spec, which changes its
-// password; it can make reset links the way the operator does, with the server's own command (design/ux.md, Reset
+// the invite page is for (ux.md, Invite page). The third is for the reset page's spec, which changes its
+// password; it can make reset links the way the operator does, with the server's own command (ux.md, Reset
 // page). The fourth is for the email change spec, which changes its address. The fifth is an operator, made one with
-// the server's own command, and the sixth is the account the Accounts spec turns off and on (design/ux.md,
+// the server's own command, and the sixth is the account the Accounts spec turns off and on (ux.md,
 // Accounts). The suite's main server (playwright.config.ts) has
 // registration open, and a golden path that must prove an invite link is the only way in needs one that doesn't.
 import { expect, test as base } from "@playwright/test";

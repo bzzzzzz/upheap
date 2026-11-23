@@ -42,7 +42,7 @@ pub struct Client {
     pub display_name: &'static str,
 }
 
-/// The `upheap` command-line client (design/architecture.md, Authentication and authorization §2).
+/// The `upheap` command-line client (architecture.md, Authentication and authorization §2).
 pub const CLI_CLIENT: Client = Client {
     id: "upheap-cli",
     display_name: "Upheap CLI",

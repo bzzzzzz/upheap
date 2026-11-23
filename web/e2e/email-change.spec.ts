@@ -1,4 +1,4 @@
-// The Email card on Account and the change-email page (design/ux.md, Email and Change-email page): the golden path of
+// The Email card on Account and the change-email page (ux.md, Email and Change-email page): the golden path of
 // a person who changes their address, confirmed by a link mailed to the new one, on a server with mail set up.
 import { test as closed } from "./closedServer";
 import { expect, expectFitsWidth, goTo, HEAP_URL, PASSWORD, uniqueUser } from "./fixtures";

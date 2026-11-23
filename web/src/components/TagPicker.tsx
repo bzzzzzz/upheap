@@ -27,7 +27,7 @@ type TagSource = { heapRef: HeapRef; team?: never } | { team: string; heapRef?: 
  * when nothing matches the typed name exactly. Backspace in the empty input removes the last tag.
  *
  * With `team` instead of `heapRef`, it lists that team's tags only and the new tag is a team tag. A name that heap tags
- * of the team have opens the merge confirm first (design/ux.md, Tags); Cancel makes and adds nothing.
+ * of the team have opens the merge confirm first (ux.md, Tags); Cancel makes and adds nothing.
  *
  * Unless `inline`, the matches float in a popover under the field, or above it when there's no room below, outside
  * any scrolling panel around the picker, so a dialog's footer never covers them. Focus stays in the input throughout.

@@ -1,4 +1,4 @@
-// The app shell at each width (design/ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
+// The app shell at each width (ux.md, Layout): a sidebar on a wide screen, a rail on a tablet, and on a
 // phone the heap name at the top with tabs at the bottom. Each part shows at its own widths through CSS alone, so
 // the layout never waits for script to measure the screen.
 import {

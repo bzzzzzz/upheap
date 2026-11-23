@@ -84,36 +84,38 @@ What it is not:
 
 ## Teams
 
-1. Users form teams. A team has one or more admins, unless its groups took the last one out (§9).
+1. Users form teams. A team has one or more admins, unless its groups took the last one out (Group-managed teams §1).
 2. Any user can create a team and becomes its admin.
 3. Every new user gets a personal team, shown as "\<their name\>'s team", with a first heap called "Personal". The personal
    team is theirs alone: it holds as many heaps as they like, but it can't be shared. Anything shared lives in
    another team.
-4. A team owns its heaps, and can have more than one, and its own tags, used in all of them (Manage tags §2).
+4. A team owns its heaps, and can have more than one, and its own tags, used in all of them (Tags §2).
 5. A heap belongs to exactly one team, and only that team's members can access it. Everyone in the team sees the
    same items and ranking in its heaps, and can add and edit items.
 6. Users join a team in two ways: an admin picks an existing user, who is added directly, or the person comes
-   through one of the team's invite links (Invite links). A group-managed team takes neither (§9).
+   through one of the team's invite links (Invite links). A group-managed team takes neither (Group-managed teams §1).
 7. A team admin can make any other member an admin, remove admin rights from another admin, and remove another admin
    from the team.
 8. A team always has at least one admin. The last admin can't leave, be demoted or be removed until another member
-   has been made admin. The one exception is a group-managed team's sync (§9).
-9. The operator can map groups of the identity provider to existing teams in the server's settings. Such a team is
+   has been made admin. The one exception is a group-managed team's sync (Group-managed teams §1).
+## Group-managed teams
+
+1. The operator can map groups of the identity provider to existing teams in the server's settings. Such a team is
    group-managed: the groups decide who joins it. Each sign-in through the provider adds the person to the mapped
    teams their groups name and takes them out of those their groups no longer name, the team's last admin
    included. Groups never make an admin or a team. When the provider doesn't say which groups a person is in,
    nobody is added or removed.
-10. A team with no admin keeps working for its members. The operator makes one of its members admin with a
-    command on the server.
-11. The operator can also let the provider push its changes (SCIM). Then a change to a person's groups at the
-    provider adds them to or takes them out of the group-managed teams at once, and a person the provider
-    deactivates leaves every group-managed team, without waiting for a sign-in, and loses access to Upheap until the
-    provider turns them back on. A push never makes an account.
+2. A team with no admin keeps working for its members. The operator makes one of its members admin with a
+   command on the server.
+3. The operator can also let the provider push its changes (SCIM). Then a change to a person's groups at the
+   provider adds them to or takes them out of the group-managed teams at once, and a person the provider
+   deactivates leaves every group-managed team, without waiting for a sign-in, and loses access to Upheap until the
+   provider turns them back on. A push never makes an account.
 
 ## Invite links
 
 1. A team admin can make an invite link for a team they administer. A personal team has none, nor does a
-   group-managed team (Teams §9): its links stop working while it is one.
+   group-managed team (Group-managed teams §1): its links stop working while it is one.
 2. A link works for one week, for any number of people. It can't be extended; the admin makes a new one.
 3. Any admin of the team can revoke a link, and it stops working at once. People who already joined through it
    stay.
@@ -125,7 +127,7 @@ What it is not:
 ## Heaps
 
 1. A heap is a collection of items with its own ranking, tags and custom parameters. Its team's tags work in it too
-   (Manage tags §2), and so do the team's parameters it uses (Custom parameters §1).
+   (Tags §2), and so do the team's parameters it uses (Custom parameters §1).
 2. Every heap is owned by a team (Teams §4–5). A personal heap is one in the user's personal team.
 3. A person can belong to several teams and heaps, and switches between them.
 4. Items have no assignee or owner. A shared heap has one ranking for the whole team, and "my plate" means the heaps I
@@ -169,6 +171,9 @@ What it is not:
    back to open on its own. When it's closed as won't do or became, or moved to another heap, the blocked item stays
    blocked and waits for the person, who decides what happens to it. A blocked item can also say in words why it's
    blocked, when what it waits for isn't an item of the heap; the reason goes when the item leaves blocked.
+9. An item can move to another heap, in any team the person may edit in, and keeps its context, steps, questions
+   and history. Moved within its team, it keeps its team tags; its heap tags go to the target heap's tags of the
+   same name, and the rest are dropped.
 
 ## Notes, tasks and reminders
 
@@ -263,6 +268,8 @@ What it is not:
 1. Each item has a combined priority score based on need, age, deadline proximity, effort and impact, custom
    parameters, and the heap's tag order. Each factor has a weight, set per heap by its admins, and the weights apply
    to everyone in the team. The weights are the heap's whole ranking policy; there is no separate policy setting.
+   An unset value counts as the lowest-priority option (Items §4), and ties go to the older item, unless one
+   blocks a longer chain.
 2. **Age** counts from the item's creation, including any time spent in progress or blocked. Items are not expected
    to stay in those states long. A reopened item keeps its original creation time. How fast an item ages depends on
    its need: an idea ages slowly, so old ideas don't climb past fresh work someone is waiting for, and a critical
@@ -272,32 +279,28 @@ What it is not:
 3. **Deadline proximity** rises as the due date approaches. Past an exact deadline the score jumps, and keeps
    climbing the longer the item is overdue. A loose due time never becomes overdue (Items §3): past its date, the
    score keeps rising, slowly.
-4. **Unset values** count as the lowest-priority option (Items §4).
-5. **Blockers** take on the priority of the most important item they block, with a small boost, because finishing
+4. **Blockers** take on the priority of the most important item they block, with a small boost, because finishing
    both takes more effort than finishing one. This carries through chains: if A blocks B and B blocks C, A can
    inherit C's priority. Blocking cycles are not allowed; the app refuses a block that would create one.
-6. The score is calculated live when someone views the list. Once a list has been sorted, it doesn't reorder on its
+5. The score is calculated live when someone views the list. Once a list has been sorted, it doesn't reorder on its
    own during that session. When the user edits an item, that item moves to its new position right away, and the
    list may re-sort as a whole at that point.
-7. **Ties** go to the older item: earlier creation comes first.
-8. Only the item's position is shown, never the score itself.
-9. In the list view, each item shows the biggest contributors to its position. This is how the app answers "why is
-   this here?" and "why isn't this higher?"; there is no separate item-by-item comparison.
-10. **Tag order:** a heap's admins can put its tags in an order. An item's highest-ranked tag lifts it when that tag
-    is high in the order and pushes it down when it is low; an item with no ranked tag sits in the middle. The tag
-    order has a weight like any other factor, and starts at 0, so ordering tags moves nothing until it is turned up.
-11. **Placing by hand:** anyone who may edit items can put an item right above or below another one in the heap's
-    list, without changing any of its fields, from the web app, the CLI or the API. It is part of the heap's one
-    ranking, so it holds for everyone in the team and for agents. It lasts until the item is placed again or its
-    place is reset; field edits keep it. The ranking stays computed, so a placed item can drift a place or two over
-    days as others age or near their deadlines. The list says the item was moved up or down, never by how much.
+6. Only an item's position is shown, never the score. Each item shows the biggest contributors to its position,
+   which is how the app answers "why is this here?" and "why isn't this higher?"; there is no separate item-by-item
+   comparison.
+7. **Tag order:** a heap's admins can put its tags in an order. An item's highest-ranked tag lifts it when that tag
+   is high in the order and pushes it down when it is low; an item with no ranked tag sits in the middle. The tag
+   order has a weight like any other factor, and starts at 0, so ordering tags moves nothing until it is turned up.
+8. **Placing by hand:** anyone who may edit items can put an item right above or below another one in the heap's
+   list, without changing any of its fields, from the web app, the CLI or the API. It is part of the heap's one
+   ranking, so it holds for everyone in the team and for agents. It lasts until the item is placed again or its
+   place is reset; field edits keep it. The ranking stays computed, so a placed item can drift a place or two over
+   days as others age or near their deadlines. The list says the item was moved up or down, never by how much.
 
 The factors above are the commitment; the numbers aren't. The formula and its numbers live in the code, versioned
 ([decisions.md](decisions.md), decision 4).
 
-## Views
-
-### List items
+## List items
 
 The main view and the answer to "what should I work on?"
 
@@ -306,36 +309,12 @@ The main view and the answer to "what should I work on?"
    default. All other open items follow in priority order. Closed items appear only in the Closed items view.
 3. The user can configure which non-closed states are pinned, shown, or hidden. Shown blocked items can be mixed in
    with the other items in the current sort order, or listed as a separate group sorted by priority.
-4. Each item shows its biggest score contributors (Priority §9).
-5. The user can instead sort by any single parameter that has an order (for example deadline, need, effort, impact, or a
+4. The user can instead sort by any single parameter that has an order (for example deadline, need, effort, impact, or a
    custom parameter).
-6. The user can search items by text and filter by state, tag, and parameter values. Filtering preserves the relative
+5. The user can search items by text and filter by state, tag, and parameter values. Filtering preserves the relative
    priority order of matching items.
-7. The user can change an item's state directly in the list. Everything else is edited in the item.
 
-### Closed items
-
-1. Shows done and won't-do items, sorted by when they were closed.
-2. An item closed less than a week ago can be reopened from here.
-
-### Add item
-
-The fastest path in the app.
-
-1. The user enters a title, picks how much the item is needed, and optionally adds a description, effort, impact, due
-   time and tags. Everything except the title and the need is optional.
-2. Typing a tag that doesn't exist yet creates it, as a tag of the heap (Manage tags §2).
-
-### Edit item
-
-1. The user can change any field of an existing item, add or remove tags and parameters, and move it between states.
-   They can move an item to another heap, in any team they may edit in, and it keeps its context, steps, questions
-   and history. Moved within its team, it keeps its team tags; its heap tags go to the target heap's tags of the
-   same name, and the rest are dropped.
-
-### Manage tags
-
-A supporting view.
+## Tags
 
 1. Any team member can create and rename tags and edit their descriptions. Tags can't be deleted, but a tag can be
    taken off any item.
@@ -352,15 +331,6 @@ A supporting view.
    order and in a parameter's links. A person needn't know which kind a tag is to use it, and can see which kind it
    is.
 6. A team's tags also filter the list across the team's heaps.
-
-### Manage parameters
-
-A supporting view, for team admins only.
-
-1. An admin can create and rename custom parameters, edit and reorder their options, link them to tags, and
-   archive them (Nothing is deleted §5).
-2. A team's parameters are made and edited on the Team page; a heap's settings choose which of them it uses.
-3. A heap's parameter can be made a team parameter from its card, after a confirm that shows what merges.
 
 ## Nothing is deleted
 

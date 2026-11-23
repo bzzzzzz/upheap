@@ -276,7 +276,7 @@ export const isCurrentView = (view: ListView, search: ListSearch) =>
 
 /**
  * The API query for the list on screen: the view's, and while search text is entered, the reminders to come too, so
- * a search finds them whatever the view says (design/ux.md, The list).
+ * a search finds them whatever the view says (ux.md, The list).
  */
 export const listQueryFor = (search: ListSearch, text: string): ListViewQuery =>
   toListQuery(text.trim() === "" ? search : { ...search, reminders: "shown" });

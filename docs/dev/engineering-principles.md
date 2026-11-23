@@ -2,31 +2,42 @@
 
 How we write code here. **Must follow.** Where code and a principle disagree, fix one of them; don't leave them
 disagreeing. The shared rules are taken from the maintainer's engineering knowledge base (`engineering/` in the
-dotfiles, commit `edb2c95`); every section of it applies here, so none is left out. This project's own rules, and
+dotfiles, commit `422e2fe`); every section of it applies here, so none is left out. This project's own rules, and
 the shared rules it overrides, are in the second part. [architecture.md](architecture.md) says how the code is
-built, and [CLAUDE.md](../CLAUDE.md#docs) holds the rules for the docs.
+built, and [CLAUDE.md](../../CLAUDE.md#docs) holds the rules for the docs.
 
 ## Shared rules
 
 ### General
 
 1. **Simple first.** Write the most direct code that meets the requirement. Add an abstraction when there is a
-   second real use for it, not a guessed one.
-2. **One source of truth.** Each fact lives in one place: a rule in the core, a type in the API contract, the schema
+   second real use for it, not a guessed one. Between two changes that meet the requirement, the smaller one wins.
+   Every other rule in this file says how to build a thing the project needs; none of them is a reason to build
+   one it doesn't need yet.
+2. **Build for the cases that happen.** Handle a case when a real caller or real data can reach it and the plain
+   behaviour would be wrong. No guard for a state the types or the boundary check already rule out, no fallback
+   that hides a failure which should surface, no option nobody asked for, no compatibility path for data or callers
+   that don't exist. Check once, at the boundary, and trust it inside.
+3. **Open first, restrict on evidence.** A limit nobody asked for, on what the owner or their own tools may do,
+   waits until use shows where it belongs: an allow list, a cap, a timeout, a narrowed mode. The first version is
+   open and a note says what to tighten. The exception is harm that can't be undone or that reaches someone else,
+   which the [Security](#security) rules cover: they protect one person from another, not a person from the tool
+   they run themselves.
+4. **One source of truth.** Each fact lives in one place: a rule in the core, a type in the API contract, the schema
    in the migrations, a command in the README. Everything else is derived or generated from it, and generated files
    are checked in and checked for drift.
-3. **Make invalid states unrepresentable.** Use types to rule out bad data rather than checking for it later. An
+5. **Make invalid states unrepresentable.** Use types to rule out bad data rather than checking for it later. An
    order that shipped has a `shipped_at`; an order that hasn't can't have one.
-4. **Fail loudly and early.** Validate at the boundary and reject bad input with a clear, stable error. Never
+6. **Fail loudly and early.** Validate at the boundary and reject bad input with a clear, stable error. Never
    silently coerce or guess.
-5. **Small, reviewable changes.** One concern per change. A refactor goes in a separate change from the behaviour
+7. **Small, reviewable changes.** One concern per change. A refactor goes in a separate change from the behaviour
    it makes room for.
-6. **Boring technology.** Prefer well-known, maintained libraries (`stack.md` in the base). Every dependency justifies
+8. **Boring technology.** Prefer well-known, maintained libraries (`stack.md` in the base). Every dependency justifies
    its weight and is pinned through the lockfile.
-7. **Document the why.** Code says what it does. Comments and design docs say why, especially where the obvious
-   approach was rejected ([CLAUDE.md](../CLAUDE.md#docs)).
-8. **Delete dead code.** Version control remembers it. Don't comment it out, and don't leave a flag on that nobody
-   turns off.
+9. **Document the why.** Code says what it does. Comments and design docs say why, especially where the obvious
+   approach was rejected ([CLAUDE.md](../../CLAUDE.md#docs)).
+10. **Delete dead code.** Version control remembers it. Don't comment it out, and don't leave a flag on that nobody
+    turns off.
 
 ### Boundaries
 
@@ -156,7 +167,7 @@ built, and [CLAUDE.md](../CLAUDE.md#docs) holds the rules for the docs.
 1. **Every pull request passes every check** the repository defines: formatter, linters, type checks, test suites,
    drift checks.
 2. **The docs change with the code.** A pull request that makes a doc wrong fixes the doc in the same change, by the
-   rules in [CLAUDE.md](../CLAUDE.md#docs).
+   rules in [CLAUDE.md](../../CLAUDE.md#docs).
 3. **A pull request description says what changed and why,** how it works where that isn't obvious, what's left for
    later, and how it was checked.
 4. **Read before you move.** Read the module you're changing end to end, and understand its layer, before moving or
@@ -190,8 +201,10 @@ and use cases. **Operations** are functions that do one job and return a result.
 3. **Doc comments say what the name can't:** units, when a field is `None`, what a return value means, when a
    function fails, and what it touches outside its arguments. Skip them when they would only repeat the name.
    Public items in the core and the use-case layer are documented.
-4. **Module docs say what the module owns** and cite, by section name, the permanent design doc that holds the
-   mechanism they implement. Never a doc in `design/work/`: it goes once the work is built.
+4. **Module docs say what the module owns, and why it behaves as it does, in their own words.** Cite a doc
+   sparingly, as a judgement call: when the mechanism is too long for a comment and shared by many places, not
+   in place of the reason. A citation names a permanent doc by file name and section (`architecture.md,
+   Handles`). Never a doc in `docs/dev/work/`: it goes once the work is built.
 
 #### Structure and types
 
@@ -317,8 +330,10 @@ and use cases. **Operations** are functions that do one job and return a result.
    `dark:` pairs.
 5. **Accessibility is part of done:** semantic HTML, full keyboard support, visible focus, labelled controls,
    `prefers-reduced-motion` honoured for every animation.
-6. **A comment that cites a design doc cites a permanent one, by section name,** so the citation survives a doc
-   restructure. Never a doc in `design/work/`: it goes once the work is built.
+6. **A comment says why in its own words.** Cite a doc sparingly, as a judgement call: when the reason is a
+   mechanism or a rule too long for a comment and shared by many places, not in place of the reason. A citation
+   names a permanent doc by file name and section (`ux.md, Keyboard`), so it survives a doc restructure or a
+   folder move. Never a doc in `docs/dev/work/`: it goes once the work is built.
 7. **Focus moves after a render, never on a timer.** After a dialog, sheet, menu or form closes, move focus with
    `useFocusAfterRender` (or an effect keyed on the state that brings the target), not with `setTimeout` or a guessed
    number of animation frames: those race React Aria's own focus restore, and lose on a slow machine.
@@ -683,7 +698,7 @@ saying so.
 1. **`domain` is the core** of [Boundaries](#boundaries) §1–2: no IO, no clock, no randomness, and time comes in as
    `as_of`, so every ranking is reproducible. `service` holds the use cases, `store` the storage, `api` the HTTP
    layer, `api-types` the shared API types and `cli` a client; who may depend on whom is in
-   [CLAUDE.md](../CLAUDE.md#components). `domain` depends on nothing in the workspace, and `store` and `api` never
+   [CLAUDE.md](../../CLAUDE.md#components). `domain` depends on nothing in the workspace, and `store` and `api` never
    depend on each other.
 
 ### Thin clients

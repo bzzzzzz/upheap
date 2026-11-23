@@ -1,4 +1,4 @@
-// The Password card on Account: changing the password, which ends the user's other sign-ins (design/ux.md,
+// The Password card on Account: changing the password, which ends the user's other sign-ins (ux.md,
 // Password). The server says so with the `change_password` action; a user without a password, who signs in through
 // the server's OpenID Connect provider, sees the card's frame with a line in place of the button.
 import { useRef, useState, type FormEvent, type ReactNode } from "react";

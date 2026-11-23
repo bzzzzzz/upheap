@@ -1,4 +1,4 @@
-# Releases the `upheap` CLI and the `upheap-server` binary (design/operations.md, "Releasing the CLI and the server").
+# Releases the `upheap` CLI and the `upheap-server` binary (operations.md, "Releasing the CLI and the server").
 # Pushing a tag `vX.Y.Z` that matches the workspace version, on a commit of main, builds static binaries of both for
 # Apple silicon macOS and x86_64 and aarch64 Linux on native runners, the server with the web app embedded, publishes
 # them as a GitHub Release, and updates the Homebrew cask in bzzzzzz/homebrew-tap, which installs only the CLI. A pull
@@ -306,7 +306,7 @@ jobs:
           merge-multiple: true
           path: dist
 
-      # A published release's assets are never replaced (design/operations.md).
+      # A published release's assets are never replaced (operations.md).
       - name: Check the release doesn't exist
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
@@ -349,7 +349,7 @@ jobs:
           DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then
-            echo "::error::Secret HOMEBREW_TAP_DEPLOY_KEY is empty. Create it as described in design/operations.md, section \"Releasing the CLI and the server\", then re-run the failed jobs."
+            echo "::error::Secret HOMEBREW_TAP_DEPLOY_KEY is empty. Create it as described in operations.md, section \"Releasing the CLI and the server\", then re-run the failed jobs."
             exit 1
           fi
           key="$RUNNER_TEMP/tap_key"
@@ -417,8 +417,8 @@ jobs:
           brew uninstall --cask upheap
           brew untap bzzzzzz/tap
 
-      # The README's Linux commands, as written, with a temporary home so ~/.local/bin is a temporary directory.
-      - name: Install from the README's commands
+      # The user's guide's Linux commands (user/README.md), as written, with a temporary home so ~/.local/bin is a temporary directory.
+      - name: Install from the user's guide's commands
         if: runner.os == 'Linux'
         run: |
           export HOME="$RUNNER_TEMP/home"

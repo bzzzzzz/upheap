@@ -1,4 +1,4 @@
-//! Readable handles (design/architecture.md, Handles): team and heap slugs, item keys, and the personal team that holds each
+//! Readable handles (architecture.md, Handles): team and heap slugs, item keys, and the personal team that holds each
 //! user's username as its slug.
 //!
 //! The columns are added nullable, filled, then indexed. Filling them:
@@ -15,7 +15,7 @@
 //! which its foreign keys make unsafe inside a migration, so there they stay nullable and the store always writes
 //! them.
 //!
-//! This migration was edited after release, against the rule (design/engineering-principles.md, Data §1): it made
+//! This migration was edited after release, against the rule (engineering-principles.md, Data §1): it made
 //! the columns `NOT NULL` on MySQL only, and now does on every backend but SQLite, so that Postgres gets them too.
 //! What it does on SQLite and MySQL is unchanged, and no Postgres database had run it before.
 

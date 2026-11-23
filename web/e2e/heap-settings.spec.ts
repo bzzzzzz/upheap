@@ -1,4 +1,4 @@
-// The heap's settings (design/ux.md, Heap settings): General, Context, Tags, Parameters and Ranking as tabs, each at its own path.
+// The heap's settings (ux.md, Heap settings): General, Context, Tags, Parameters and Ranking as tabs, each at its own path.
 import { addItem, expect, expectOrder, fillEditor, goTo, test } from "./fixtures";
 
 test("General renames the heap, changes its link name and archives it", async ({ page, heapPath }) => {

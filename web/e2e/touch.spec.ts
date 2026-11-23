@@ -1,6 +1,6 @@
 import { addItem, drag, expect, itemPane, openItem, row, test } from "./fixtures";
 
-// Gestures for a finger (design/ux.md, Phone details), on the phone and tablet projects, where the pointer is coarse.
+// Gestures for a finger (ux.md, Phone details), on the phone and tablet projects, where the pointer is coarse.
 test.beforeEach(({ isMobile }) => {
   test.skip(!isMobile, "Swipes and drags are for touch screens.");
 });

@@ -146,7 +146,7 @@ pub struct Heap {
     pub tag_order: Vec<TagId>,
     /// What the project is and where its work lives, as written; `None` when nobody has written one.
     pub context: Option<Context>,
-    /// Whether every item added here is sent to an agent to take it one stable state forward (Work with agents, Opening a turn).
+    /// Whether every item added here is sent to an agent to take it one stable state forward (product.md, Working with agents §4).
     pub agents_prepare: bool,
     /// The note this heap was made from, when a note became it. Never changed.
     pub origin_id: Option<ItemId>,

@@ -50,7 +50,7 @@ const DEFAULT_GROUPS_CLAIM: &str = "groups";
 /// The claim identities are keyed on when the operator names none.
 const DEFAULT_SUBJECT_CLAIM: &str = "sub";
 
-/// The provider, from the operator's configuration (README, Configuration).
+/// The provider, from the operator's configuration (configuration.md).
 #[derive(Clone, Debug)]
 pub struct OidcSettings {
     /// As configured, trailing `/` included: the ID token's `iss` must equal it byte for byte, and identities are

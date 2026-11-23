@@ -1,4 +1,4 @@
-// The Check your mail card and the confirm page (design/ux.md, Sign in and create account, Invite page and Confirm
+// The Check your mail card and the confirm page (ux.md, Sign in and create account, Invite page and Confirm
 // page): the golden path of a person who creates an account through an invite link on a server with mail set up, asks
 // for the link again, and confirms their address.
 import { test as closed } from "./closedServer";

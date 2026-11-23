@@ -1,5 +1,5 @@
 # Template for the cask in bzzzzzz/homebrew-tap. scripts/release/render-cask.sh fills in the version and the checksum
-# (design/operations.md, "Releasing the CLI and the server"). This first comment is dropped when it is rendered.
+# (operations.md, "Releasing the CLI and the server"). This first comment is dropped when it is rendered.
 cask "upheap" do
   version "@VERSION@"
   sha256 "@SHA256@"
@@ -20,7 +20,7 @@ cask "upheap" do
   binary "upheap"
 
   # The binary isn't notarized, so Gatekeeper would refuse to run it while it carries the quarantine flag Homebrew
-  # sets on downloads (design/decisions.md, decision 30).
+  # sets on downloads (decisions.md, decision 30).
   postflight_steps do
     run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{staged_path}}/upheap"]
   end

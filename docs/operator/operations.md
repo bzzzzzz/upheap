@@ -2,9 +2,9 @@
 
 Running Upheap in production: Google Cloud Run in front of a Neon Postgres database. Both scale to zero, so a
 deployment with little use costs close to nothing. Why this pair, rather than a machine with a disk, is in
-[decisions.md](decisions.md#20-production-runs-on-cloud-run-with-neon-postgres). How the server itself is configured
-and deployed in general is in [architecture.md](architecture.md#configuration-and-deployment). Last reviewed
-2026-11-08.
+[decisions.md](../dev/decisions.md#20-production-runs-on-cloud-run-with-neon-postgres). How the server itself is configured
+and deployed in general is in [architecture.md](../dev/architecture.md#configuration-and-deployment). Last reviewed
+2026-11-11.
 
 ## Production setup
 
@@ -33,7 +33,7 @@ people.
 
 ## Deploying
 
-[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) deploys `main` after CI passes on it. CI runs on
+[`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) deploys `main` after CI passes on it. CI runs on
 `main` after every merge as well as on pull requests, because a pull request may merge without being rebased onto
 the latest `main`. Every check CI runs, Postgres among them, is required on `main`. The deploy can also be run by
 hand from the Actions tab, without waiting for CI.
@@ -98,7 +98,7 @@ gh variable set BASE_URL --body https://upheap-$PROJECT_NUMBER.us-west1.run.app
 ## Resetting a password
 
 Unless the server has mail set up, a user who forgot their password needs a reset link from whoever runs the server
-([README](../README.md#resetting-a-password)). Cloud Run has no shell, so run the image locally with the two
+([accounts.md](accounts.md#resetting-a-password)). Cloud Run has no shell, so run the image locally with the two
 variables the command needs, the secret's value and the production address:
 
 ```sh
@@ -123,11 +123,11 @@ Only revisions whose image is still in the repository can start, so a rollback r
 
 ## Releasing the CLI and the server
 
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) builds the `upheap` CLI and the `upheap-server`
+[`.github/workflows/release.yml`](../../.github/workflows/release.yml) builds the `upheap` CLI and the `upheap-server`
 binary (web app embedded) for Apple silicon macOS and x86_64 and aarch64 Linux when a `vX.Y.Z` tag is pushed,
 publishes the six archives and `SHA256SUMS` as a GitHub Release, and updates the cask in `bzzzzzz/homebrew-tap`, which
 installs only the CLI. Why it is built this way is in
-[decisions.md](decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow).
+[decisions.md](../dev/decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow).
 
 To cut a release:
 
@@ -162,9 +162,9 @@ rm -rf $TMP
 ## Cautions
 
 - **The macOS binary isn't notarized**
-  ([decisions.md](decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow)):
+  ([decisions.md](../dev/decisions.md#30-the-cli-ships-as-a-homebrew-cask-from-its-own-tap-built-by-a-hand-written-workflow)):
   Gatekeeper is handled by the cask. The keychain doesn't ask after an upgrade, since the entry is read through
-  the system's `security` tool ([architecture.md](architecture.md#cli)). A sign-in made by a
+  the system's `security` tool ([architecture.md](../dev/architecture.md#cli)). A sign-in made by a
   version before that asks for `security` until the entry is next written, at the next refresh or sign-in, which
   makes it `security`'s; "Always Allow" ends it at once. A cask's
   `zap` doesn't remove keychain entries; `upheap auth logout` does.
@@ -173,7 +173,7 @@ rm -rf $TMP
   the direct endpoint in the secret, or have `store::connect` stop sending the parameter
   (`PgConnectOptions::extra_float_digits(None)`; no column is a float).
 - **Several instances start at once.** Migrations run under a transaction-scoped advisory lock, so each is applied
-  once ([architecture.md](architecture.md#configuration-and-deployment)). Nothing else needs coordinating between
+  once ([architecture.md](../dev/architecture.md#configuration-and-deployment)). Nothing else needs coordinating between
   instances today.
 - **No work between requests.** Cloud Run pauses the CPU between requests. The server has no background timers;
   any added later must be triggered by Cloud Scheduler calling an endpoint instead.

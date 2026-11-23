@@ -1,4 +1,4 @@
-// Accounts (design/ux.md, Accounts): the golden path of an operator of the server, who finds an account, makes a reset
+// Accounts (ux.md, Accounts): the golden path of an operator of the server, who finds an account, makes a reset
 // link for it, turns it off and back on, and the page that is not found for anyone else. On the closed server, whose
 // seeded accounts include an operator, made with the server's own command.
 import type { Page } from "@playwright/test";

@@ -3,7 +3,7 @@
 //! A heap's tags are its own and its team's. A heap tag write locks its heap row, after a shared lock on the team's
 //! lowest heap when that is another one, and a team tag write locks every heap of the team in heap ID order, so a
 //! heap tag and a team tag can't take one name at once, even in a heap made while the team tag write runs, and a
-//! merge, which writes in every heap, can't deadlock with an item write (design/architecture.md, Cycle detection and
+//! merge, which writes in every heap, can't deadlock with an item write (architecture.md, Cycle detection and
 //! locking).
 //!
 //! Making a team tag, or renaming one, into a name that heap tags of the team have merges them into it, once the

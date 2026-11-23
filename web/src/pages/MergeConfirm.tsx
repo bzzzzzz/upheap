@@ -1,4 +1,4 @@
-// The confirm before a team tag merges heap tags (design/ux.md, Tags): a dialog on a wide screen, a sheet on a phone.
+// The confirm before a team tag merges heap tags (ux.md, Tags): a dialog on a wide screen, a sheet on a phone.
 import type { ReactNode } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 

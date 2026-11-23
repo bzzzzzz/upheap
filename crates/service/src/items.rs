@@ -842,10 +842,9 @@ impl Services {
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
         // A send asks for the turn that opens: one turn, never two. Without one, a heap set so agents prepare gives
-        // every new item a turn of one state, whoever added it (Work with agents, Opening a turn). A new task's turn
+        // every new item a turn of one state, whoever added it (product.md, Working with agents §4). A new task's turn
         // goes to defined, never to done. It acts only here, on create, so it never opens a second turn on an item.
-        // A reminder gets none: no turn opens on one. Nor does an item a run adds: it is already prepared (Opening a
-        // turn).
+        // A reminder gets none: no turn opens on one. Nor does an item a run adds: it is already prepared.
         let wanted = send.or_else(|| {
             (access.heap.agents_prepare && item.kind != Kind::Reminder && run.is_none())
                 .then(|| (Reach::One, goal_for(&item), None, TurnSource::Prepare))

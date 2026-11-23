@@ -1,4 +1,4 @@
-// The reset page and the forgot-password disclosure on sign-in (design/ux.md, Reset page and Sign in and create account):
+// The reset page and the forgot-password disclosure on sign-in (ux.md, Reset page and Sign in and create account):
 // the golden paths of a person who forgot their password, on a server whose operator makes the link with the server's
 // own command and one with mail set up, where they ask for it, and a small test for each state of the page.
 import type { Browser, TestInfo } from "@playwright/test";
