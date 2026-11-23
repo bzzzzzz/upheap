@@ -243,7 +243,8 @@ pub(super) async fn resolve_due(raw: &str, client: &ApiClient, token: &str) -> R
 }
 
 /// The help for `--due`, naming every rough choice the way it's typed, `next-week`, so an agent reading the guide
-/// needn't guess one. The labels are the shared rule's, not a copy.
+/// needn't guess one. The labels are the shared rule's, not a copy, since help is read offline; the dates and the match
+/// still come from the server's list.
 pub(super) fn describe_due_flag() -> String {
     let choices: Vec<String> = domain::due::list_due_choice_labels()
         .into_iter()

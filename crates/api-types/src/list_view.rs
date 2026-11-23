@@ -1,6 +1,10 @@
 //! How the ranked list is shown, in the API's terms: the query parameters of `GET /teams/{team}/heaps/{heap}/items`
 //! and the view a saved view stores. Both use the same names and values, so a client can turn a saved view into a
 //! list query field by field.
+//!
+//! Sharing them has a cost: [`StateModeDto`], [`BlockedLayoutDto`] and [`SortDto`] are strict, as a request's
+//! values are, so a value a newer server adds to a saved view would stop an older CLI reading the heap's views.
+//! Making them lenient, as [`KindDto`](crate::common::KindDto) is, is left for when one is added.
 
 use domain::item::{Need, Size};
 use domain::list_view::{BlockedLayout, ListFilter, ListView, RemindersMode, SortKey, StateMode};

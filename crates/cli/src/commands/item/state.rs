@@ -1,6 +1,8 @@
 //! `upheap item start | block | done | wontdo | reopen <item>`: move an item to another state.
 //!
-//! The server owns every transition rule. The CLI only notices an item that is already where it's asked to go, which
+//! The server owns every transition rule. Every verb, `reopen` too, is one `PATCH` with a `state` (not the reopen
+//! endpoint), so the rules apply exactly as in the web app, the same state is a no-op and the reopen window is the
+//! server's refusal. The CLI only notices an item that is already where it's asked to go, which
 //! it has in hand from the read that gives it the version, and then makes no write.
 
 use api_types::common::{ItemDto, StateDto};

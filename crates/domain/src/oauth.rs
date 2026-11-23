@@ -262,6 +262,9 @@ pub struct DeviceNameError;
 /// The name a client gives the machine it signs in on, such as its hostname: shown to the user in their list of
 /// sign-ins. It is the client's claim and only a label, so nothing is decided by it.
 ///
+/// It comes with the code exchange, not the authorization request, so the consent page never shows it: a familiar
+/// name there could make a phishing request look legitimate.
+///
 /// Trimmed, at most 64 characters and without control characters. A blank one is no name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeviceName(String);
