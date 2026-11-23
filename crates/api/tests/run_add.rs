@@ -685,3 +685,26 @@ async fn someone_who_cannot_see_the_origin_sees_that_an_agent_added_the_item() -
     expect_that!(seen.body["added_in_run"], eq(&json!(true)));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_run_adds_a_task_with_steps() -> Result<()> {
+    // Arrange
+    let s = scene().await?;
+
+    // Act
+    let added = s
+        .add(json!({
+            "title": "Rotate the certs",
+            "kind": "task",
+            "description": "Came up while fixing the CA",
+            "steps": [{ "title": "Order the cert" }, { "title": "Install it" }],
+        }))
+        .await?;
+
+    // Assert
+    expect_that!(added.status, eq(StatusCode::CREATED));
+    expect_that!(added.body["added_in_run"], eq(&json!(true)));
+    expect_that!(added.body["steps"].as_array().map(Vec::len), some(eq(2)));
+    Ok(())
+}

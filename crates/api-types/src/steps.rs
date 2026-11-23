@@ -41,6 +41,29 @@ impl AddStepDto {
     }
 }
 
+/// A step written with a new task: as `POST …/steps` takes one, without `after`.
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+#[schema(as = NewStepRequest)]
+pub struct NewStepDto {
+    /// 1 to 300 characters.
+    pub title: String,
+    /// Markdown, at most 20,000 characters; blank means none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+}
+
+impl NewStepDto {
+    /// The new step's fields, placed last. Fails on the first invalid field.
+    pub fn to_new_step(&self) -> Result<NewStep, ValidationError> {
+        Ok(NewStep {
+            title: Title::parse(&self.title)?,
+            context: self.context.as_deref().map(Context::parse).transpose()?.flatten(),
+            after: None,
+        })
+    }
+}
+
 /// A partial edit of a step. Leave a field out to keep it; send `null` to clear the context.
 #[derive(Default, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

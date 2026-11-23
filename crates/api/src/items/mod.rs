@@ -6,6 +6,7 @@ use api_types::items::{
     ItemToStepDto, ItemsMoveDto, ItemsMovedDto, RankedListDto, RankedQuery, RankingPreviewDto, RankingPreviewItemDto,
     RankingPreviewRequestDto,
 };
+use api_types::steps::NewStepDto;
 use api_types::turns::SendToAgentDto;
 use axum::Json;
 use axum::extract::State;
@@ -181,9 +182,10 @@ async fn list_closed(
     params(HeapParams, TimeZoneHeader), request_body = CreateItemDto,
     responses(
         (status = 201, body = ItemDto),
+        (status = 400, description = "`invalid_body`, such as an unknown field", body = Problem),
         (status = 403, description = "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_add_sent` (a `send`), `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`", body = Problem),
         (status = 404, body = Problem),
-        (status = 409, description = "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)", body = Problem),
+        (status = 409, description = "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder), `steps_need_task` (`steps` on a note or reminder) or `too_many_steps` (more than 100); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)", body = Problem),
         (status = 422, description = "Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`), or `field_not_allowed` (`goal`, a goal in `send` the new item can't be sent to)", body = Problem),
     ))]
 async fn create_item(
@@ -199,9 +201,15 @@ async fn create_item(
         .map(SendToAgentDto::to_turn_fields)
         .transpose()
         .map_err(ServiceError::from)?;
+    let steps = body
+        .steps
+        .iter()
+        .map(NewStepDto::to_new_step)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(ServiceError::from)?;
     let view = state
         .services
-        .create_item(path.principal, path.heap.heap_id, fields, send)
+        .create_item(path.principal, path.heap.heap_id, fields, steps, send)
         .await
         .map_err(|error| match error {
             ServiceError::BlockerNotInHeap { .. } | ServiceError::BlockerClosed { .. } => ApiError::InField {

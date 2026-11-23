@@ -131,7 +131,8 @@ The tables and columns are in the migrations. These are the conventions they fol
   how the queue knows a send was worked on before. Who has an item (`with_agent`) and a listed item's agent state are
   derived from its turn, the turn's runs and its open questions, never stored. A heap's prepare setting and a send
   made while adding both open their turn in `create_item`'s transaction, so an item is never added unsent and never
-  gets two turns.
+  gets two turns. The request's steps are written in that transaction too, before the turn, so an agent never finds
+  the task without them.
 - **Runs** are rows of their own in `item_runs`: one go an agent has at a turn, claimed from the queue. Like turns,
   they are never deleted and never bump the item's `version`.
   **There is no lock to give up: a claim lapses.** A run is live while it hasn't ended and was heard from, by a
@@ -485,7 +486,9 @@ a fixed time.
 4. Updates are `PATCH` with partial bodies and the expected `version` in `If-Match`. Endpoints that say what
    something should end up as (archive, unarchive) take no `If-Match`, so repeating or racing them is safe, and a
    write that is already applied succeeds (adding a member who is one, removing someone who isn't). Request bodies
-   refuse unknown fields, so a misspelt field fails instead of saving nothing.
+   refuse unknown fields, so a misspelt field fails instead of saving nothing. So does a field newer than the
+   server: a client that sends one to an older server gets `400 invalid_body`, and since the rest of its body is
+   valid, that code is how it tells, rather than looking for the field in the response.
 5. List endpoints paginate with a cursor, except the ranked list ([Search](#search)).
 6. Responses are ready to show, so clients compute nothing: `due` as `{ at, firm, label, overdue }` in the
    request's timezone, `contributors`, who did what and when as a `UserRef` and a label ("4 days ago"),
@@ -1032,9 +1035,10 @@ section is how it maps onto this API.
    the heap's tags, its own and its team's: in a heap a name is one tag, so a name needs no kind. With
    `--create-tags`, the names the heap doesn't have are added as heap tags first, right before the item is written,
    and they stay if that write fails. `item add` reads the list once more to say where the item landed, a read
-   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` is sent as one step
-   add per step after the create, so a failure leaves the item with the steps sent so far, and the CLI says which: a
-   note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
+   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` goes in the
+   create request, so the steps are written with the item and before any turn it opens; against a server that drops
+   them, the CLI posts them one by one, and a failure there leaves the item with the steps sent so far, and the CLI
+   says which: a note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
 6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens), with the machine's hostname as the
    device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
    answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,

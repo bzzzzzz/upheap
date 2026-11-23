@@ -13,7 +13,7 @@ use domain::permission::{ItemAllowance, Permission, QuestionAction, allowed_ques
 use domain::question::{Question, QuestionState, changed_since, waits_for_you};
 use domain::ranking::{CURRENT_FORMULA, Contributor, HeldBack, ItemForRanking, RankedItem, rank};
 use domain::run::{LAPSE_FAILURE, Run, RunError, RunForbidden};
-use domain::step::{Step, StepNumber, StepProgress, StepState, progress};
+use domain::step::{NewStep, Step, StepNumber, StepProgress, StepState, place_step, progress};
 use domain::tag::Tag;
 use domain::team::{Membership, Role, Team};
 use domain::turn::{
@@ -23,7 +23,8 @@ use domain::turn::{
 use domain::user::User;
 use domain::validation::Field;
 use domain::{
-    Duration, HeapId, ItemId, OptionId, ParameterId, TagId, TeamId, Timestamp, TurnId, UserId, ValidationError, Version,
+    Duration, HeapId, ItemId, OptionId, ParameterId, StepId, TagId, TeamId, Timestamp, TurnId, UserId, ValidationError,
+    Version,
 };
 use store::audit::NewAuditEntry;
 use store::{ConnectionTrait, StoreError, TransactionTrait};
@@ -31,7 +32,9 @@ use store::{ConnectionTrait, StoreError, TransactionTrait};
 pub use store::items::ClosedCursor;
 
 use crate::access::{authorize_heap, authorize_heap_write};
-use crate::audit::{GoalMetHow, describe_new_item, describe_new_turn, describe_withdrawal, diff_freed, diff_items};
+use crate::audit::{
+    GoalMetHow, describe_new_item, describe_new_step, describe_new_turn, describe_withdrawal, diff_freed, diff_items,
+};
 use crate::work::split_in_turn;
 use crate::{Principal, RandomSource, ServiceError, Services};
 
@@ -763,11 +766,18 @@ impl Services {
     /// item in the same transaction, as a go-ahead from the creator, and the heap's prepare turn doesn't open: an item
     /// never gets two. A reminder can't be sent ([`TurnError::NeedsNoteOrTask`]), and a goal the new item can't be sent
     /// to is a validation error on the goal ([`pick_goal`]). Any refusal adds nothing.
+    ///
+    /// `new_steps` are written in the same transaction, in the order given (their `after` is ignored), each with its
+    /// `step_added` entry after the item's and before the turn's, so whoever sees the turn sees the steps. They are for
+    /// a task and at most [`MAX_STEPS`](domain::step::MAX_STEPS), or it fails with
+    /// [`StepError::NeedsTask`](domain::step::StepError::NeedsTask) or
+    /// [`StepError::TooMany`](domain::step::StepError::TooMany).
     pub async fn create_item(
         &self,
         principal: Principal,
         heap_id: HeapId,
         mut fields: NewItem,
+        new_steps: Vec<NewStep>,
         send: Option<(Reach, Option<Goal>, Option<TurnLine>)>,
     ) -> Result<ItemView, ServiceError> {
         let txn = self.db.begin().await.map_err(StoreError::from)?;
@@ -831,6 +841,17 @@ impl Services {
             Some(run) => item.added_in_run(run.item_id, run.id),
             None => item,
         };
+        let mut steps: Vec<Step> = Vec::with_capacity(new_steps.len());
+        for fields in new_steps {
+            let placement = place_step(&item, &steps, None)?;
+            steps.push(Step::new(
+                StepId::from_uuid(self.new_id(now)),
+                item.id,
+                placement,
+                fields,
+                now,
+            ));
+        }
         store::items::insert_item(&txn, &item).await?;
         let entry = self.item_audit_entry(
             &access.heap,
@@ -841,6 +862,18 @@ impl Services {
             now,
         );
         store::audit::insert_audit_entry(&txn, &entry).await?;
+        for step in &steps {
+            store::steps::insert_step(&txn, step).await?;
+            let entry = self.item_audit_entry(
+                &access.heap,
+                principal,
+                AuditAction::StepAdded,
+                &item,
+                describe_new_step(step),
+                now,
+            );
+            store::audit::insert_audit_entry(&txn, &entry).await?;
+        }
         // A send asks for the turn that opens: one turn, never two. Without one, a heap set so agents prepare gives
         // every new item a turn of one state, whoever added it (product.md, Working with agents §4). A new task's turn
         // goes to defined, never to done. It acts only here, on create, so it never opens a second turn on an item.
@@ -908,7 +941,7 @@ impl Services {
             now,
         );
         let values = describe_values(&item, &parameters);
-        // New items have no closer, no steps and nothing made from them, and their blocker is not gone.
+        // New items have no closer and nothing made from them, and their blocker is not gone.
         Ok(ItemView {
             became: Some(Vec::new()),
             became_steps: Some(Vec::new()),
@@ -921,8 +954,8 @@ impl Services {
             created_by,
             closed_by: None,
             allowance,
-            steps: Some(Vec::new()),
-            step_progress: None,
+            step_progress: progress(&steps),
+            steps: Some(steps),
             questions: Some(Vec::new()),
             comments: Some(Vec::new()),
             runs: Some(Vec::new()),

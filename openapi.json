@@ -4503,6 +4503,16 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_add_sent` (a `send`), `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`",
             "content": {
@@ -4524,7 +4534,7 @@
             }
           },
           "409": {
-            "description": "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)",
+            "description": "`heap_archived`, `origin_not_a_note` or `origin_closed` (`origin`), `turn_needs_note_or_task` (a `send` on a reminder), `steps_need_task` (`steps` on a note or reminder) or `too_many_steps` (more than 100); from inside a run `run_over`, or `version_conflict` when the run's item moved meanwhile (try again)",
             "content": {
               "application/json": {
                 "schema": {
@@ -13031,6 +13041,13 @@
               }
             ]
           },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NewStepRequest"
+            },
+            "description": "The task's steps, in order, written with the item: at most 100, and only for a task. Each is as `POST …/steps`\ntakes it, without `after`."
+          },
           "tag_ids": {
             "type": [
               "array",
@@ -13045,7 +13062,8 @@
           "title": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateNamedRequest": {
         "type": "object",
@@ -13436,7 +13454,8 @@
           "firm": {
             "type": "boolean"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "EmailChanged": {
         "type": "object",
@@ -15585,6 +15604,27 @@
           "critical"
         ]
       },
+      "NewStepRequest": {
+        "type": "object",
+        "description": "A step written with a new task: as `POST …/steps` takes one, without `after`.",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Markdown, at most 20,000 characters; blank means none."
+          },
+          "title": {
+            "type": "string",
+            "description": "1 to 300 characters."
+          }
+        },
+        "additionalProperties": false
+      },
       "OAuthApproval": {
         "type": "object",
         "description": "Where to send the browser now that the user allowed the request.",
@@ -15996,7 +16036,8 @@
             "type": "string",
             "format": "uuid"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Parameter": {
         "type": "object",

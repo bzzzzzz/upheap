@@ -20,6 +20,7 @@ use crate::common::{
 };
 use crate::list_view::{BlockedLayoutDto, ListViewInputDto, RemindersModeDto, SortDto, StateModeDto};
 use crate::problem::Problem;
+use crate::steps::NewStepDto;
 use crate::turns::{AgentStateDto, GoalDto, SendToAgentDto};
 use crate::waiting::ItemHeapDto;
 
@@ -444,6 +445,7 @@ pub struct AcrossHeapsClosedItemDto {
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(as = CreateItemRequest)]
 pub struct CreateItemDto {
     pub title: String,
@@ -481,10 +483,15 @@ pub struct CreateItemDto {
     /// and not from inside a run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send: Option<SendToAgentDto>,
+    /// The task's steps, in order, written with the item: at most 100, and only for a task. Each is as `POST …/steps`
+    /// takes it, without `after`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<NewStepDto>,
 }
 
 /// The item a new item is made from, and whose age it takes.
 #[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(as = OriginInput)]
 pub struct OriginInputDto {
     pub item_id: Uuid,
@@ -718,6 +725,7 @@ mod tests {
             origin: None,
             blocked_by: None,
             send: None,
+            steps: Vec::new(),
         };
 
         // Act

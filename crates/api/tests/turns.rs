@@ -1050,3 +1050,73 @@ async fn a_goal_the_item_cannot_go_to_is_refused_and_an_unknown_one_is_unknown()
     expect_that!(unknown.body["field"], eq(&json!("goal")));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_task_added_with_a_send_and_steps_has_the_steps_before_the_turn() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let created = app
+        .new_item(
+            &session,
+            &heap,
+            json!({
+                "title": "Rotate the certs",
+                "kind": "task",
+                "steps": [{ "title": "Order the cert" }, { "title": "Install it" }],
+                "send": { "reach": "one" },
+            }),
+        )
+        .await?;
+    let entries = audit_actions(&app, &created).await?;
+
+    // Assert
+    expect_that!(created["turn"]["source"], eq(&json!("go_ahead")));
+    expect_that!(created["steps"].as_array().map(Vec::len), some(eq(2)));
+    expect_that!(
+        entries,
+        eq(&vec![
+            "item_created".to_owned(),
+            "step_added".to_owned(),
+            "step_added".to_owned(),
+            "turn_opened".to_owned()
+        ])
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_task_added_with_steps_in_a_preparing_heap_has_the_prepare_turn_and_the_steps() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let on = set_prepare(&app, &session, &heap, true).await?;
+    anyhow::ensure!(on.status == StatusCode::OK, "prepare failed: {}", on.body);
+
+    // Act
+    let created = app
+        .new_item(
+            &session,
+            &heap,
+            json!({ "title": "Rotate the certs", "kind": "task", "steps": [{ "title": "Order the cert" }] }),
+        )
+        .await?;
+    let entries = audit_actions(&app, &created).await?;
+
+    // Assert
+    expect_that!(created["turn"]["source"], eq(&json!("prepare")));
+    expect_that!(created["steps"].as_array().map(Vec::len), some(eq(1)));
+    expect_that!(
+        entries,
+        eq(&vec![
+            "item_created".to_owned(),
+            "step_added".to_owned(),
+            "turn_opened".to_owned()
+        ])
+    );
+    Ok(())
+}

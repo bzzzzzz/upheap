@@ -799,3 +799,72 @@ async fn an_archived_heap_refuses_step_writes() -> Result<()> {
     expect_that!(actions(&fetched), not(contains(eq(&"add_step"))));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_task_created_with_steps_has_them_in_order_and_one_entry_each() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let created = app
+        .new_item(
+            &session,
+            &heap,
+            json!({
+                "title": "Rotate the certs",
+                "kind": "task",
+                "steps": [{ "title": "Order the cert", "context": "From the CA" }, { "title": "Install it" }],
+            }),
+        )
+        .await?;
+    let read = get(&app, &session, &heap, created["key"].as_str().context("no key")?).await?;
+    let entries = app.audit_entries(created["id"].as_str().context("no id")?).await?;
+
+    // Assert
+    expect_that!(numbers(&created), elements_are![eq(&1), eq(&2)]);
+    expect_that!(created["steps"][0]["title"], eq(&json!("Order the cert")));
+    expect_that!(created["steps"][0]["context"], eq(&json!("From the CA")));
+    expect_that!(created["steps"][1]["context"], eq(&Value::Null));
+    expect_that!(created["steps"][1]["state"], eq(&json!("open")));
+    expect_that!(created["step_progress"], eq(&json!({ "ticked": 0, "total": 2 })));
+    expect_that!(read["steps"], eq(&created["steps"]));
+    let kinds: Vec<&str> = entries.iter().map(|(action, _)| action.as_str()).collect();
+    expect_that!(
+        kinds,
+        elements_are![eq(&"item_created"), eq(&"step_added"), eq(&"step_added")]
+    );
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn steps_on_a_note_are_refused_and_nothing_is_added() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+
+    // Act
+    let refused = app
+        .create_item(
+            &session,
+            &heap,
+            json!({ "title": "Rotate the certs", "steps": [{ "title": "Order the cert" }] }),
+        )
+        .await?;
+    let list = app
+        .send(
+            Method::GET,
+            &format!("{}/items", app.heap_url(&heap).await?),
+            Some(&session),
+            None,
+        )
+        .await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::CONFLICT));
+    expect_that!(refused.body["code"], eq(&json!("steps_need_task")));
+    expect_that!(list.body["ranked"], eq(&json!([])));
+    Ok(())
+}
