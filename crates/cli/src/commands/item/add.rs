@@ -97,11 +97,12 @@ fn parse_step_title(raw: &str) -> Result<String, String> {
     Title::parse(raw).map(|_| raw.to_owned()).map_err(|err| err.to_string())
 }
 
-/// Adds the item with its steps in the one request, so they are written with it and before any turn it opens. A
-/// server that drops them (from before steps on create) returns the item without them, and then they are added one by
-/// one, in order. Human output says where it landed, from one read of the list after the add; `--quiet` prints the new
-/// item's key and `--json` the created item, with its steps when there are any. A failed step add stops there, so the
-/// item keeps the steps sent so far.
+/// Adds the item with its steps in the one request, so they are written with it and before any turn it opens. A server
+/// that drops them (from before steps on create, which also ignored unknown fields) returns the item without them, and
+/// then they are added one by one, in order. Every server that refuses unknown fields takes steps. Human output says
+/// where it landed, from one read of the list after the add; `--quiet` prints the new item's key and `--json` the
+/// created item, with its steps when there are any. A failed step add stops there, so the item keeps the steps sent so
+/// far.
 pub async fn run(args: AddArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     if args.step.len() > MAX_STEPS {
         return Err(UsageError::TooManySteps {

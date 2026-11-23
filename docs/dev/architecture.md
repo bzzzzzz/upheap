@@ -486,7 +486,9 @@ a fixed time.
 4. Updates are `PATCH` with partial bodies and the expected `version` in `If-Match`. Endpoints that say what
    something should end up as (archive, unarchive) take no `If-Match`, so repeating or racing them is safe, and a
    write that is already applied succeeds (adding a member who is one, removing someone who isn't). Request bodies
-   refuse unknown fields, so a misspelt field fails instead of saving nothing.
+   refuse unknown fields, so a misspelt field fails instead of saving nothing. So does a field newer than the
+   server: a client that sends one to an older server gets `400 invalid_body`, and since the rest of its body is
+   valid, that code is how it tells, rather than looking for the field in the response.
 5. List endpoints paginate with a cursor, except the ranked list ([Search](#search)).
 6. Responses are ready to show, so clients compute nothing: `due` as `{ at, firm, label, overdue }` in the
    request's timezone, `contributors`, who did what and when as a `UserRef` and a label ("4 days ago"),

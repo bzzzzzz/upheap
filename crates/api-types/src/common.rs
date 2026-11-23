@@ -846,6 +846,7 @@ pub struct DueDto {
 
 /// A due time as entered: a calendar date, stored as the end of that day in the request's timezone.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(as = DueInput)]
 pub struct DueInputDto {
     /// `YYYY-MM-DD`.

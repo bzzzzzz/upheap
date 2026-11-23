@@ -4397,6 +4397,16 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_body`, such as an unknown field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_add_sent` (a `send`), `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made`",
             "content": {
@@ -12945,7 +12955,8 @@
           "title": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateNamedRequest": {
         "type": "object",
@@ -13336,7 +13347,8 @@
           "firm": {
             "type": "boolean"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "EmailChanged": {
         "type": "object",
@@ -15908,7 +15920,8 @@
             "type": "string",
             "format": "uuid"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Parameter": {
         "type": "object",
