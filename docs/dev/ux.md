@@ -4,18 +4,21 @@ How the web app looks and behaves, at every width: the principles, the core flow
 width, each screen, and the rules that settle questions. What the product promises is in [product.md](product.md).
 The mockups live outside the repository, in the "Upheap layouts" canvas; a board is named where this doc relies on one.
 
-The app is one React app whose layout changes with the width: **phone** under 640 px, **tablet** 640 to 1023 px,
-**wide** 1024 px and up. It never ranks, checks permissions or works out labels; the server does
+This is the record of the agreed design: what each screen does, where things sit, and why. Exact copy, sizes,
+timings, routes, icons and keys are the code's (`web/src`); this doc says them only when the value is itself the
+rule. What a screen reader hears is part of the design and stays.
+
+The app is one React app whose layout changes with the width: **phone**, **tablet** and **wide**, at Tailwind's
+`sm` and `lg` breakpoints. It never ranks, checks permissions or works out labels; the server does
 ([architecture.md](architecture.md#principles)), and the client adds layout, gestures and animation.
 
 ## Principles
 
 1. **Consistent look.** One set of tokens: stone neutrals, amber for "in progress" and for the next action, teal
-   for done, red only for a firm due date that's overdue, violet only for parameters. Tags take their own colour from an
-   eight-colour palette (blue, sky, teal, green, lime, rose, pink, grey) on the chip's border and text, with no fill;
-   violet, amber and red are left out of it, so parameters, the accent and overdue keep their meaning. A control
-   looks the same wherever it appears: S M L XL buttons, the due choices and the tag chips are identical in the item
-   pane, the Add dialog and their phone sheets.
+   for done, red only for a firm due date that's overdue, violet only for parameters. Tags take their own colour from a
+   palette on the chip's border and text, with no fill; violet, amber and red are left out of it, so parameters, the
+   accent and overdue keep their meaning. A control looks the same wherever it appears: S M L XL buttons, the due
+   choices and the tag chips are identical in the item pane, the Add dialog and their phone sheets.
 2. **Predictable layout.** Every screen keeps the same areas in the same places. Wide: sidebar, then the list,
    then the item pane. Phone: top bar, then search and Filters, then the list, then the bottom tabs with + in the
    middle. Overlays come in only two kinds: a centred dialog or popover on a tablet or wide screen, a bottom sheet
@@ -40,19 +43,18 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
 
 ### A team
 
-1. **Sign up and sign in** (setup). Create account with a name, username, email and password lands on the empty
-   personal heap. Later visits sign in; when the session ends, sign-in brings the user back to the page they were on
-   (recovery).
+1. **Sign up and sign in** (setup). Creating an account lands on the empty personal heap. Later visits sign in; when
+   the session ends, sign-in brings the user back to the page they were on (recovery).
 2. **Getting into a shared heap** (setup). Someone creates a team on Teams and becomes its admin; the Team page
    opens. The admin adds a heap, adds each teammate (who must have an account, or sends an invite link to one who
    hasn't), and makes a second admin so the team doesn't hang on one person. A teammate finds the heap in the sidebar or the heap
    switcher.
-3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one with
-   its row's play button, `s`, a swipe left or Start in the item; finish it with its row's circle, a swipe right, or
-   Done in the item (its main button once started, else under ⋯); each change gets an undo toast. Add what came up with the Add button, `N`, or + on a phone.
-   Re-size or re-date in the item and watch it move. Block an item, naming what it waits for; it leaves the list,
-   since blocked items are hidden by default, and "Show them" brings them back to unblock. Find an item with search. In a shared heap,
-   teammates' changes arrive as the list refetches, and rows animate to their new places.
+3. **Daily loop** (loop). Pick the heap. The list shows in-progress items pinned on top, then Up next. Start one from
+   its row, a key, a swipe or the item; finish it the same ways; each change gets an undo toast. Add what came up
+   from anywhere in the heap, + on a phone. Re-size or re-date in the item and watch it move. Block an item, naming
+   what it waits for; it leaves the list, since blocked items are hidden by default, and the list offers to show them
+   to unblock. Find an item with search. In a shared heap, teammates' changes arrive as the list refetches, and rows
+   animate to their new places.
 4. **Weekly review** (weekly). Closed: reopen what was closed by mistake, within its week, which is also the fix for
    a missed Undo (recovery). Back in the list, close what won't happen as Won't do and re-size the rest. A reload
    re-ranks at the current time.
@@ -66,276 +68,250 @@ The jobs the app must support. **Loop** flows happen many times a day, **setup**
 
 ## Toolkit
 
-1. **Tailwind v4**, with the design tokens in `@theme` (surface, ink, muted, accent, state colours, radii), so light
-   and dark modes come from one place instead of `dark:` pairs on every element. Which one shows is the Account
-   page's Appearance setting: System (the default) follows the device, and Light or Dark overrides it. It's kept per
-   browser in localStorage, not on the server, as it's about the screen rather than the account, and applied by an
-   inline script in `index.html` before the first paint, so a reload doesn't flash the other theme.
-2. **React Aria Components** for behaviour: dialogs and sheets, menus, radio and toggle groups, date picker, tag
-   group, and the list itself (`GridList`, for keyboard navigation and selection). It is unstyled, so it takes our
-   Tailwind classes, and it is one dependency rather than copied code. It handles touch properly: a scroll doesn't
-   fire a press, focus stays sane when the on-screen keyboard opens, and every control is accessible
-   ([decisions.md](decisions.md#24-react-aria-components-rather-than-a-copied-component-library)).
-3. **Motion** for sheet drag, swipe rows and the list's reorder animation.
-4. **lucide-react** for icons.
-5. **CodeMirror 6** for the Markdown editor (see Markdown text).
+1. **Design tokens in one place** (`web/src/index.css`), so light and dark modes come from one place instead of
+   pairs on every element. Which one shows is the Account page's Appearance setting: System (the default) follows the
+   device, and Light or Dark overrides it. It's kept per browser, not on the server, as it's about the screen rather
+   than the account, and applied before the first paint, so a reload doesn't flash the other theme.
+2. **React Aria Components** for behaviour, the list included: unstyled, one dependency rather than copied code, and
+   sound on touch and for accessibility
+   ([decisions.md](decisions.md#24-react-aria-components-rather-than-a-copied-component-library)). The other
+   libraries are in `web/package.json`.
 
 ### Markdown text
 
-Longer text that people and agents write shows as rendered Markdown, through one component (`Markdown`): the context of
-a heap, an item and a step, a question's details, the comment in a reply, and an item's comments. It is
-GitHub-flavoured: headings, emphasis, links, code, lists, task lists as disabled checkboxes, quotes and tables. Raw
-HTML is never rendered and images are never loaded: an image shows as a link. An in-page anchor (a footnote's) moves
-in place, every other link opens in a new tab, and an unsafe one (`javascript:`) reads as plain text. A line break in
-the text stays one, so plain text written before reads as it did. Long words and addresses break, and code blocks and
-tables scroll sideways inside their box, so the page never does. Writing a context (a heap's, an item's, a step's) or a comment is in an editor that keeps the Markdown source as typed
-and styles it as you type: the markers (`#`, `**`, `-`, backticks, link brackets) stay visible and muted, headings are
-semibold, bold is bold, code is mono and link text takes the link colour. It has no toolbar and no preview, and the
-saved text is the plain Markdown. It is CodeMirror 6, loaded only when one of these fields is about to show, so pages
-that only read don't load it. A turn's line, a stuck reason, error messages and a question's short text and choices are
-one line each and stay plain, except that in a question's text and choices a web address (`https://…`) and a Markdown
-link to one (`[the mockup](https://…)`) are links that open a new tab; a link in a choice opens without picking it. The
-rest of the line shows as written.
+Longer text that people and agents write shows as rendered Markdown, through one component: the context of a heap,
+an item and a step, a question's details, the comment in a reply, and an item's comments. It is GitHub-flavoured.
+Raw HTML is never rendered and images are never loaded: an image shows as a link. An in-page anchor moves in place,
+every other link opens in a new tab, and an unsafe one reads as plain text. A line break in the text stays one, so
+plain text written before reads as it did. Nothing makes the page scroll sideways: long words break, and code blocks
+and tables scroll inside their box.
+
+Writing a context (a heap's, an item's, a step's) or a comment is in an editor that keeps the Markdown source as
+typed and styles it as you type, the markers visible and muted. It has no toolbar and no preview, and the saved text
+is the plain Markdown. It loads only when one of these fields is about to show, so pages that only read don't load
+it.
+
+Short text stays one plain line: a turn's line, a stuck reason, error messages, and a question's text and choices.
+In a question's text and choices, a web address and a Markdown link to one are links that open a new tab; a link in
+a choice opens without picking it.
 
 ## Layout
 
-Breakpoints are Tailwind's: `sm` 640 px and `lg` 1024 px.
+| Width  | Navigation                                                                                                                                                                                | List                                                     | Item                                                  |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Phone  | Heap name at the top, with its team unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                          | Full width, compact rows                                 | Bottom sheet over the list                            |
+| Tablet | A rail: Waiting, the heap button, then the views as icons with labels, and Agents, the heap's team, Teams and Account at the bottom                                                       | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
+| Wide   | Sidebar: Waiting for me with its count, a heap button that opens the heap switcher, then the heap's views with Open's count, and Agents, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
 
-| Width                | Navigation                                                                                                                                                                                                                             | List                                                     | Item                                                  |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| Phone, under 640 px  | Heap name at the top, with its team ("Product · Acme") unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                                                    | Full width, compact rows                                 | Bottom sheet over the list                            |
-| Tablet, 640–1023 px  | An 80 px rail: Waiting, the heap button, then the views as icons with labels, and Agents, the heap's team, Teams and Account at the bottom                                                                                             | Beside the rail, with the wide screen's toolbar and rows | Panel over the right of the list, the list still live |
-| Wide, 1024 px and up | Sidebar: Waiting for me with its count, and a thin rule under it, a heap button ("Product · Acme") that opens the heap switcher, then the heap's views with Open's count, and Agents, the heap's team, Teams and Account at the bottom | Middle column                                            | Pane beside the list while an item is selected        |
-
-**More** on a phone holds Closed, Settings, Activity, Data, Team, Teams and Account, as a card of 52 px rows above the tabs. Account is the last entry there and in the sidebar, and Sign out is on the Account page, under
-its cards, which are Profile, Email, Password, Appearance and Command line. The **+** in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so
-the Add button beside the heap name shows only from a tablet up.
+**More** on a phone holds Closed, Settings, Activity, Data, Team, Teams and Account, as a card above the tabs.
+Account is the last entry there and in the sidebar, and Sign out is on the Account page, under its cards. The **+**
+in the middle of the tabs opens the Add dialog from any of the heap's pages, under the thumb, so the Add button
+beside the heap name shows only from a tablet up.
 
 The sidebar and the rail list the heap's views (Open, Closed, Activity, Data, Settings) and, below them at the bottom,
-the team in the URL (a link to its page, shown on the heap's pages and the team's own), Teams and Account. The heap's title names its team too ("Product ·
-Acme"), on the phone's top bar as well, except for a heap in the personal team.
+the team in the URL (a link to its page, shown on the heap's pages and the team's own), Teams and Account. The heap's
+title names its team too, on the phone's top bar as well, except for a heap in the personal team.
 
-**Find** on a phone is a search icon at the end of the top bar, before Select, named "Find in all heaps", on every page
-with the top bar: one tap opens it (Keyboard, point 5). The list's own field below says "Search this list", so the
-search that covers every heap and the one that filters the list on screen don't read as the same thing.
+**Find** on a phone is at the end of the top bar, before Select, on every page with the top bar: one tap opens it
+(Keyboard, point 5). It and the list's own field are named apart, so the search that covers every heap and the one
+that filters the list on screen don't read as the same thing.
 
 A phone's tabs have room for four: Waiting sits left of the + and Agents right of it, and Closed, Settings, Activity
 and Data go into More with the account pages. More shows as active on the pages it holds, Closed among them.
 
-**Waiting for me** comes right after Find at the top of the sidebar and the rail, above the heap switcher: an inbox
-icon, "Waiting for me" in the sidebar with its count on the right, "Waiting" in the rail and the tabs with the count
-as a small badge on the icon. There is no count at zero, and the entry stays. The count is the number of open
-questions across the person's heaps, fetched with the page and again every 30 seconds while the tab is visible, as the
-list is, so a question an agent asks shows in the count as soon as on its row. It's also fetched again on focus and
-after every change the person makes to an item, a question, a step or an agent's turn. The heaps' open counts and
-the Agents page's Your decision are fetched again with it, all three after each such change, since one change can move
-any of them: a reply can close its item, and sending an item on takes it off Your decision.
+**Waiting for me** comes right after Find at the top of the sidebar and the rail, above the heap switcher, with its
+count; in the rail and the tabs the count is a badge on the icon. There is no count at zero, and the entry stays. The
+count is the number of open questions across the person's heaps, fetched with the page and again on the list's
+interval while the tab is visible, so a question an agent asks shows in the count as soon as on its row. It's also
+fetched again on focus and after every change the person makes to an item, a question, a step or an agent's turn. The
+heaps' open counts and the Agents page's Your decision are fetched again with it, all three after each such change,
+since one change can move any of them: a reply can close its item, and sending an item on takes it off Your decision.
 
-**Agents** is the first entry of the block at the bottom of the sidebar and the rail, above the heap's team: a bot
-icon and "Agents", with no count. What agents finished is there to look through when the person wants to, not
-something that waits as a question does, so nothing in the navigation counts it; the page's Your decision heading
-does.
+**Agents** is the first entry of the block at the bottom of the sidebar and the rail, above the heap's team, with no
+count. What agents finished is there to look through when the person wants to, not something that waits as a
+question does, so nothing in the navigation counts it; the page's Your decision heading does.
 
 **All items** is reached from the heap switcher, on every width: nothing in the sidebar, the rail or the tabs leads
 to it. The switcher starts with an "All heaps" row with the person's open items at its right: the sum of the open
 counts of the person's active heaps, the numbers the heaps show, so it costs no request and changes when those do. A
-person in more than one team also finds, at the right of each team's line, "All items · 16" with that team's open
-count, which opens `/all?team=<slug>` (All items §7) and which a screen reader hears as "All <team> items, 16 open";
-neither is among search results. On `/all` and
-its Closed and Activity pages the row opened is marked current, where no heap's row is, and the heap button reads as
-that row does, "All heaps" or "All <team> items", on the sidebar and the phone's top bar; the rail's button shows the
-layers icon in place of a heap's initial. No heap is the current one there, so the views are the pages across heaps
-(All items §8): Open with the count the row shows, Closed and Activity in the sidebar and the rail, with no Data or
+person in more than one team also finds, at the right of each team's line, a link to that team's items with its open
+count (All items §7), which a screen reader hears as "All <team> items, 16 open"; neither is among search results. On
+All items and its Closed and Activity pages the row opened is marked current, where no heap's row is, and the heap
+button reads as that row does, on the sidebar and the phone's top bar. No heap is the current one there, so the views
+are the pages across heaps (All items §8): Open with the count the row shows, Closed and Activity, with no Data or
 Settings; on a phone the Open tab and More's Closed and Activity are those pages, More has no Settings or Data, and
-the + still adds to the heap opened last. The heaps' open counts, on Open and in the heap switcher, are fetched with the page and
-again every 30 seconds while the tab is visible, on focus and after a change as Waiting for me's count is, so an item
-someone else adds or closes reaches them about when it reaches the list.
+the + still adds to the heap opened last. The heaps' open counts, on Open and in the heap switcher, are fetched as
+Waiting for me's count is, so an item someone else adds or closes reaches them about when it reaches the list.
 
 Pages with no heap in their address keep the heap opened last in the shell, so going back is one tap: the switcher
 shows it, the heap's views link to it with none marked active, the tabs show on a phone, and Add adds to it. For now
-that is `/waiting`, `/agents` and `/all` with its Closed and Activity, which keep it for Add only (All items, above);
-Teams, a team's page and its activity, and Account keep their shell without
-one. The heap kept is the one opened last that is still there and active, else the first active heap, else the first.
-On a phone those pages have no tabs, so the top bar starts with Back: it goes to the page before, or, when the tab
-opened on the page from a link, to the heap kept.
+that is Waiting for me, Agents and All items with its Closed and Activity, which keep it for Add only (All items,
+above); Teams, a team's page and its activity, and Account keep their shell without one. The heap kept is the one
+opened last that is still there and active, else the first active heap, else the first. On a phone those pages have
+no tabs, so the top bar starts with Back: it goes to the page before, or, when the tab opened on the page from a
+link, to the heap kept.
 
-Opening `/` lands on the person's default heap (Heap settings) while it is active and one of theirs, else on the first
-active heap of the first team that has one. The heap kept, above, is unchanged by it.
+Opening the app's root lands on the person's default heap (Heap settings) while it is active and one of theirs, else
+on the first active heap of the first team that has one. The heap kept, above, is unchanged by it.
 
 On a wide screen the sidebar and the content are one centred block, at most the sidebar, the content column and the
 item pane wide, so the menu stays next to what it opens; the sidebar's colour runs on to the left edge. The block is
 that wide whether or not an item is open, so opening or closing one never moves the sidebar or the list's left edge:
 an item is opened many times a session. Every page fills the room next to the sidebar, so the content's left and
 right edges are the same from one page to the next. On a list that opens items beside it (a heap's list, All items)
-the pane opens on the right, so the list narrows from the right. A card fills that room too, and a short field in it keeps the width its value needs.
+the pane opens on the right, so the list narrows from the right. A card fills that room too, and a short field in it
+keeps the width its value needs.
 
 ### Heap settings
 
-**Settings** is one page for a heap's configuration, with a tab each for **General**, **Context**, **Tags**, **Parameters** and **Ranking**.
-Each tab is a link with its own path (`/settings`, `/settings/context`, `/settings/tags`, `/settings/parameters`, `/settings/ranking`), so Back steps between
-them and a tab can be linked to; the old `/tags` and `/parameters` paths lead to their tabs. General holds the name
-and the link name, edited in place, a note that a new link name breaks old links, the heap's history, the Agents card, and Archive heap or Unarchive heap. While the link name is being changed, the new path shows under it ("New
-link: /teams/{team}/heaps/{slug}"). Each control shows only where `allowed_actions` allows it; everyone else reads
+**Settings** is one page for a heap's configuration, with a tab each for **General**, **Context**, **Tags**,
+**Parameters** and **Ranking**. Each tab has its own address, so Back steps between them and a tab can be linked to;
+the old addresses of Tags and Parameters lead to their tabs. General holds the name and the link name, edited in
+place, a note that a new link name breaks old links (the new link shows while it's changed), the heap's history, the
+Agents card, and Archive or Unarchive. Each control shows only where `allowed_actions` allows it; everyone else reads
 the values.
 
-The **Context** tab holds the Context card. A heap made from a note says "From: “<note title>”, a note in <heap
-name>" above it, linking to the note. It shows the heap's context as Markdown text (see Toolkit), or a muted
-line saying what a context holds when there is none. Anyone who can open Settings sees the tab. A member with
-`edit_context` sees an Edit button (not on an archived heap), which
-turns the card into a form: an editor (see Toolkit) that grows with its text, Save and Cancel. A failed save keeps the form and
-the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
-saved a different context meanwhile, it shows rendered above the kept draft under "Saved meanwhile", and Save again replaces
-it; when only the heap's other settings changed, the message says so and Save again saves the draft. Cancel drops
-the draft without asking. Save and Cancel give focus back to Edit.
+The **Context** tab holds the Context card. A heap made from a note names and links to that note above it. It shows
+the heap's context as Markdown text (see Toolkit), or a muted line saying what a context holds when there is none.
+Anyone who can open Settings sees the tab. A member who may edit the context sees Edit (not on an archived heap),
+which turns the card into a form: an editor that grows with its text, Save and Cancel. A failed save keeps the form
+and the draft open and says why; Escape does nothing, so a long draft is never lost to a stray key. When someone else
+saved a different context meanwhile, it shows rendered above the kept draft, and Save again replaces it; when only
+the heap's other settings changed, the message says so and Save again saves the draft. Cancel drops the draft without
+asking. Save and Cancel give focus back to Edit.
 
-The **Agents** card, on General under Details, has a switch, "Agents prepare new notes", with the line "Each note added here is
-sent to an agent to fill in its context, or to make it a defined task when it's small and clear, then comes back
-to you." It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the
-switch (`set_agents_prepare`); others, and everyone in an archived heap, read "Agents prepare new notes: on" or
-"off".
+The **Agents** card, on General, has a switch for whether agents prepare new notes: each note added is sent to an
+agent to fill in its context, or to make it a defined task when it's small and clear, then comes back to the person.
+It saves as it is turned, and can't be turned again until the save ends. Only an admin sees the switch; others, and
+everyone in an archived heap, read whether it's on.
 
 The **Your priority** card, on General after Agents, is the person's own priority for the heap, apart from the
-Ranking tab's factor weights: a row of numbers 1 to 10 (five a row on a phone), the current one filled, with the
-line "How this heap ranks against your other heaps in Waiting for me and the agents' queue: its items' scores are
-multiplied by this. 1 to 10. Only you see it." Pressing a number saves it at once, as the Agents switch does, and
-another can't be saved until that save ends. Everyone who can open Settings may set theirs (`set_priority`),
-archived heaps too; an error shows under the card.
+Ranking tab's factor weights: its items' scores in Waiting for me and the agents' queue are multiplied by it, and only
+they see it. Picking a number saves it at once, as the Agents switch does, and another can't be saved until that save
+ends. Everyone who can open Settings may set theirs, archived heaps too; an error shows under the card.
 
-The **Default heap** card follows it, shown where the priority card is: the person's own choice of the heap Upheap
-opens on, kept on the server so it follows them to every device. A heap that isn't the default reads "Upheap opens on
-your default heap, on every device. Only you see it." with a "Make this my default heap" button; the default reads "This
-is your default heap: Upheap opens on it while it's active." with "Clear". The button saves at once and keeps focus as
-its label changes; an error shows under the card. One heap is the default at a time, and archiving it stops `/` opening
-on it without clearing it.
+The **Default heap** card follows it: the person's own choice of the heap Upheap opens on, kept on the server so it
+follows them to every device, and seen only by them. One button makes the heap the default or clears it, saves at
+once and keeps focus as its label changes; an error shows under the card. One heap is the default at a time, and
+archiving it stops the app opening on it without clearing it.
 
-The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card (Name,
-Description, Add tag) and a card headed "{n} tags of this heap" whose rows read as the tag's name in a chip and its
-description (or "No description"), the chip in the tag's colour; an edit button on the row turns it into the form
-(name, description, Colour, Save, Cancel, History), where Colour is a row of eight round swatches, the picked one
-ringed, with a chip under them that previews the name in that colour (on a phone two rows of four),
-highlighted in the accent. Beside it a ⋯ holds Make a team tag, for anyone who may edit the tag (so not in an archived
-heap). A second card, "{n} tags of the team {team}", with a Team page link in its header, lists the
-team's tags the same way, with History, and edits them in place: the form adds "Changes in every heap of {team}."
-and saves through the team's tag (an archived heap too, as the server allows). A team tag's History reads its made,
-edited and merged entries, each naming the tag, and a merge lists each heap's tag and its items: "Launch's “billing”
-(12 items), Support's “Billing” (3 items)". Adding or renaming a heap tag to a team tag's name is refused under the
-field: "“security” is a team tag of Acme. Use it on items here instead."
+The tabs share one look: an intro line, then cards in the design tokens. **Tags** has a New tag card and a card of
+the heap's tags, each row the tag's name in a chip in its colour and its description; editing a row turns it into the
+form (name, description, colour, History), where the colour is picked from swatches with a chip that previews the
+name in it. Beside it a ⋯ holds Make a team tag, for anyone who may edit the tag (so not in an archived heap). A
+second card lists the team's tags the same way, with History and a link to the Team page, and edits them in place:
+the form says the change reaches every heap of the team, and saves through the team's tag (an archived heap too, as
+the server allows). A team tag's History reads its made, edited and merged entries, each naming the tag, and a merge
+lists each heap's tag and its items. Adding or renaming a heap tag to a team tag's name is refused under the field,
+pointing to the team tag.
 
-**The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, Create team tag in a team
-parameter's picker, Make a team tag, or a rename into a name heap tags have) is refused by the server with the list of
-what it would merge, and the app asks first, in a dialog on a wide screen and a bottom sheet on a phone. It is headed
-"Make “billing” a team tag?" or "Rename “old” to “new”?", and lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with
-"archived" and, for Make a team tag, "this heap" marked. Under the rows a total says "{n items} in {m heaps} will
-carry the team tag.", then the description the team tag will have, and the quiet line "The items keep their history.
-This can't be undone." Cancel and Make team tag (Rename and merge for a rename) end it; while saving the button shows
-the saving ring (Rules §6) and nothing can be pressed or dismissed. If the list changed while it was open, the server
-refuses the button's write with the new list: the dialog stays, shows "This changed while it was open. Check the list
-again; the button confirms this one.", marks rows "new" and counts "was {n}", names what left the list, and the button
-confirms the new list. Another failure shows above the buttons, with its request ID, and the dialog stays; a rename
-someone else changed meanwhile closes it and shows the form's version-conflict line. Success closes it with a toast,
-"“billing” is a team tag now: 2 items in 2 heaps carry it." (for a rename, "Renamed to “billing”: …"). Cancel changes
-nothing, and the form keeps what was typed.
+**The merge confirm.** A team tag's write that would merge heap tags (Add on the Team page, creating a team tag in a
+team parameter's picker, Make a team tag, or a rename into a name heap tags have) is refused by the server with the
+list of what it would merge, and the app asks first, in a dialog on a wide screen and a bottom sheet on a phone. It
+lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with archived heaps and, for
+Make a team tag, this heap marked. Under the rows it totals the items and heaps that will carry the team tag, shows
+the description the team tag will have, and says quietly that the items keep their history and this can't be undone.
+While saving, the button shows the saving ring (Rules §6) and nothing can be pressed or dismissed. If the list changed
+while it was open, the server refuses the button's write with the new list: the dialog stays, says it changed, marks
+new rows and the old counts, names what left the list, and the button confirms the new list. Another failure shows
+above the buttons, with its request ID, and the dialog stays; a rename someone else changed meanwhile closes it and
+shows the form's version conflict. Success closes it with a toast that says how many items in how many heaps carry
+the tag. Cancel changes nothing, and the form keeps what was typed.
 
-**Parameters** opens its add form from a New parameter button, and gives each parameter a
-card: the name with Rename, the weight, the options as a numbered list (↑ ↓ and Archive on each; Archive turns the
-row into a red confirm that asks where open items go), Add option, the tags that suggest it, and a foot with History
-and Archive parameter. Each option opens the heap's list filtered by it (`?param=<option id>`): for an admin, whose
-label is an input, a list icon after the label, named "Items with Energy: Low"; for a member who can't edit, the
-option row itself. Archived parameters are listed last, and their options aren't links. On a phone everything stacks
-in one column, main buttons span the width, and every control is 44 px to a finger.
+**Parameters** opens its add form from a button, and gives each parameter a card: the name with Rename, the weight,
+the options as a numbered list (reorder and Archive on each; Archive turns the row into a confirm that asks where open
+items go), Add option, the tags that suggest it, and a foot with History and Archive parameter. Each option opens the
+heap's list filtered by it: for an admin, whose label is an input, by a link after the label, named "Items with
+Energy: Low"; for a member who can't edit, the option row itself. Archived parameters are listed last, and their
+options aren't links. On a phone everything stacks in one column, main buttons span the width, and every control is
+finger-sized.
 
 A heap's own parameter, for an admin, has a ⋯ after Rename with **Make a team parameter**. It sends the write without a
-token and the server's refusal opens the **parameter merge confirm**. The confirm is the merge confirm of Tags, with the
-same dialog on a wide screen and sheet on a phone, the same "This changed while it was open" state, and the same failure
-line. It differs in what it lists: it is headed "Make “Customer tier” a team parameter?", a row per heap parameter (the
-starting one first, marked "this heap", then the same-named ones, "archived" where their heap is) shows the heap, the
-parameter as that heap wrote it, its item count and, when it brings options the team parameter lacks, "adds Platinum".
-When one of its options matches an option the team parameter has archived, the row says "moves Silver → Gold": its
-open items get the option in use that Silver was replaced by, while closed ones keep Silver. A row whose parameter
-is linked to tags says "links billing, urgent": its heap keeps those links to the team parameter. The total says "{n items} in {m heaps} keep their values.", then "Each heap keeps its weight. Rankings can shift in a heap
-whose options were in another order." and the quiet line "The items keep their history. This can't be undone."; the
-buttons are Cancel and Make team parameter. Success closes it with a toast, "“Customer tier” is a team
-parameter now: 3 items in 2 heaps keep their values.".
+token and the server's refusal opens the **parameter merge confirm**. The confirm is the merge confirm of Tags, with
+the same dialog and sheet, the same changed-while-open state, and the same failure line. It differs in what it lists:
+a row per heap parameter (the starting one first, marked as this heap, then the same-named ones, archived heaps
+marked) shows the heap, the parameter as that heap wrote it, its item count and the options it brings that the team
+parameter lacks. When one of its options matches an option the team parameter has archived, the row says so: its
+open items get the option in use that the archived one was replaced by, while closed ones keep theirs. A row whose
+parameter is linked to tags names them: its heap keeps those links to the team parameter. The total says how many
+items in how many heaps keep their values, that each heap keeps its weight, and that rankings can shift in a heap
+whose options were in another order, then the same quiet line about history.
 
-A team's parameters a heap uses are in the same list by name, each with the team icon after its name (", team
-parameter" to a screen reader), its weight read as "Weight {n}", its options read-only, the team's tags that suggest
-it read-only, and the heap's own tags that suggest it, which an admin edits in place (each change is saved at once), a
-line saying the weight is set on the Ranking page and the name and options on the Team page (both links), and Stop
-using for an admin (an error from the server shows under it). A card headed "{n} parameters of the team {team}", with a
-Team page link in
-its header, lists the team's others, each with its name, its options and a Use button for an admin; with none it says
-"{team} has no other team parameters. Make them on the Team page.". Using one gives it the weight it had, or 10.
+A team's parameters a heap uses are in the same list by name, each marked as a team parameter (", team parameter" to
+a screen reader), its weight read-only, its options read-only, the team's tags that suggest it read-only, and the
+heap's own tags that suggest it, which an admin edits in place (each change is saved at once), a line saying the
+weight is set on the Ranking page and the name and options on the Team page (both links), and Stop using for an admin
+(an error from the server shows under it). A card lists the team's other parameters, with a link to the Team page,
+each with its name, its options and a Use button for an admin; with none it points to the Team page. Using one gives
+it the weight it had, or the default.
 
 **Ranking** (the canvas boards "Wide · Ranking" and "Phone · Ranking") sets how much each factor counts. A Built in
 card has a row each for need, age, deadline and value per effort, and a Parameters card, shown when the heap has
-parameters in use, has one per parameter, with its options as the description ("Low, then Medium, then High"), each
-label a violet link to the heap's list filtered by that option. A team's parameter the heap uses is in the card with
-the team icon after its name, and its weight is set here with the others. On a phone the links stay inline, the one place they
-are smaller than 44 px. Every option shows, however many lines they take. Between them, a **Tags** card holds the
-Tags weight as a factor row ("Tag order") and the heap's tag order as a numbered list, the highest first. Each row
-says, dim, what the tag does next to an untagged item ("lifts", "as untagged", "holds back"), and a line under the list
-says where untagged items sit ("Untagged items score the same as #2."). Editors get ↑ ↓ and Remove on each row (a ⋯
-menu with Remove on a phone) and an "Add a tag to the order" picker of the tags not yet ranked, which adds one at the
-bottom; the order is a draft saved with Save weights, counts once in "{n} unsaved" and shows "Order changed" on the
-card. Others read the order without buttons, or "No tags ranked." A row shows the factor's name, its
-share of the total as a bar and a percentage (plain arithmetic on the weights on screen; "–" when all are 0), and for
-editors a slider and a number input that move together. One Save weights writes every changed weight at once; a "was
-{n}" chip and an "{n} unsaved" count mark what changed, Cancel (or Escape) puts the weights and the order back, and Reset
-all to 10 sets every weight's draft to the default, the Tags weight too, without saving or touching the order. Others read "Weight {n}" and a note that only admins can change it. A
-**Top of the list** card, for everyone, shows the first five items as the draft weights and tag order would rank them, each with how
-far it moves (↑2, ↓1, New), so the effect shows before saving. Wide: a sticky save bar under the cards and the preview
-beside them. Phone: one column, the preview under the cards, the save bar fixed above the bottom tabs.
+parameters in use, has one per parameter, with its options in order as the description, each a link to the heap's
+list filtered by that option. A team's parameter the heap uses is in the card, marked as the team's, and its weight is
+set here with the others. On a phone the links stay inline, the one place they are smaller than a finger's target.
+Every option shows, however many lines they take. Between them, a **Tags** card holds the Tags weight as a factor row
+and the heap's tag order as a numbered list, the highest first. Each row says, dim, what the tag does next to an
+untagged item (lifts, as untagged, holds back), and a line under the list says where untagged items sit. Editors can
+move and remove each row (a ⋯ menu on a phone) and add a tag not yet ranked, at the bottom; the order is a draft saved
+with the weights, counts once among the unsaved changes and is marked changed on the card. Others read the order
+without buttons. A row shows the factor's name, its share of the total as a bar and a percentage (plain arithmetic on
+the weights on screen; none when all are 0), and for editors a slider and a number input that move together. One
+save writes every changed weight at once; what changed is marked with its old value and counted, Cancel (or Escape)
+puts the weights and the order back, and Reset sets every weight's draft to the default, the Tags weight too, without
+saving or touching the order. Others read the weights and a note that only admins can change them. A **Top of the
+list** card, for everyone, shows the first few items as the draft weights and tag order would rank them, each with how
+far it moves, so the effect shows before saving. Wide: a sticky save bar under the cards and the preview beside them.
+Phone: one column, the preview under the cards, the save bar fixed above the bottom tabs.
 
 ### Tablet
 
 A tablet gets its own layout rather than a stretched phone or a squeezed wide screen:
 
-1. **The rail.** The sidebar folds into an 80 px rail. Its top button shows the heap's initial and opens the heap
-   list as a popover; below it are the heap's views (Open, Closed, Activity, Data, Settings) as icons with short labels;
-   the account sits at the bottom.
+1. **The rail.** The sidebar folds into a rail. Its top button shows the heap's initial and opens the heap list as a
+   popover; below it are the heap's views as icons with short labels; the account sits at the bottom.
 2. **The list** takes the rest of the width, with the wide screen's toolbar (search, Sort by, Filters) and rows at
-   touch sizes (44 px targets).
-3. **The item** opens as a 400 px panel over the right of the list. The list beside it stays live: tapping another
-   row switches the panel, and the selected row stays highlighted. Swiping the panel right or tapping ✕ closes it.
-   It uses the wide screen's layout, with popovers, and the touch cues of The item §16 (▾ always shown, 44 px targets).
+   touch sizes.
+3. **The item** opens as a panel over the right of the list. The list beside it stays live: tapping another row
+   switches the panel, and the selected row stays highlighted. Swiping the panel right or tapping ✕ closes it. It uses
+   the wide screen's layout, with popovers, and the touch cues of The item §16.
 4. Swipe actions on rows work here too, as on a phone.
 
 ### Phone details
 
-Phone pages respect the safe-area insets (`viewport-fit=cover`) under the bottom tabs and sheets, and inputs are at
-least 16 px so iOS doesn't zoom in on focus. Sheets sit above the on-screen keyboard: Android Chrome resizes the
-page for it (`interactive-widget=resizes-content`), and on iOS, which doesn't, the sheets are lifted by the height
-the keyboard covers, from the visual viewport. The heap switcher and More open as sheets too; More's sits above the
-tabs.
+Phone pages respect the safe-area insets under the bottom tabs and sheets, and inputs are large enough that iOS
+doesn't zoom in on focus. Sheets sit above the on-screen keyboard, on Android, which resizes the page for it, and on
+iOS, which doesn't. The heap switcher and More open as sheets too; More's sits above the tabs.
 
-Pickers that are lists (heaps, due choices, a parameter's options) are 52 px rows with a check on the current one.
-In the heap switcher the check comes before the current row's name, as part of it, so the other names keep one left
+Pickers that are lists (heaps, due choices, a parameter's options) are tall rows with a check on the current one. In
+the heap switcher the check comes before the current row's name, as part of it, so the other names keep one left
 edge and the counts sit at the panel's right edge.
-The heap switcher groups heaps by team, with archived ones folded per team behind "N archived". Each unarchived heap's
-row has its open count on the right, the number its Open view shows, which a screen reader hears as ", 2 open" in the
-row's name, as on the All rows; archived heaps and Recent have none. From 8 unarchived heaps it adds a search field that filters as you type, fold headers for the teams, and Recent: the last 4 heaps
-opened in this browser, not the one on screen, as chips on a phone. Recent and the folds are kept in localStorage,
-since a "last opened" on the server would cost a write on every heap visit;
-they don't follow the user to another device. Search gives a flat list with the team and an
-"archived" tag, a "New heap “…”" row, and a message when nothing matches. Arrows move, Enter opens and Escape
-clears the field, then closes. It ends with "New heap in \<team\>", in the heap's own team, when the team allows
-it. "New heap" turns into the name and an optional Link name, with the same new link under them as the Team page's
-form ([Teams and Team](#teams-and-team)); Add heap opens the new heap. On a tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts
-with the search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each
-team's name, and Recent's title, sits on a band a shade off the panel, with space above it, and a team's fold header
-stays in view while its heaps scroll, with the team's "All items" link at its right, folded or not.
+
+The heap switcher groups heaps by team, with archived ones folded per team. Each unarchived heap's row has its open
+count on the right, the number its Open view shows, which a screen reader hears as ", 2 open" in the row's name, as on
+the All rows; archived heaps and Recent have none. Once the list is long it adds a search field that filters as you
+type, fold headers for the teams, and Recent: the heaps last opened in this browser, not the one on screen, as chips
+on a phone. Recent and the folds are kept per browser and don't follow the user to another device. Search gives a
+flat list with the team and an archived mark, a row to make a heap of that name, and a message when nothing matches;
+the arrows, Enter and Escape work in it. It ends with a New heap row, in the heap's own team, when the team allows it,
+which turns into the same form as the Team page's ([Teams and Team](#teams-and-team)) and opens the new heap. On a
+tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts with the
+search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each team's name, and
+Recent's title, sits on a band a shade off the panel, and a team's fold header stays in view while its heaps scroll,
+with the team's All items link at its right, folded or not.
 
 Gestures are offered where the pointer is coarse (a finger), on phones and tablets alike:
 
-1. A row dragged right past about 100 px slides away and marks the item done; dragged left, it stays open on
-   buttons, Agent (when the row's robot would show, The list point 3), In progress and Blocked (Open in place of the
-   state it's in), until one is picked or the row is tapped. Each is followed by a toast with Undo. A tap just after a drag doesn't open the item.
-2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of 120 px
+1. A row dragged right far enough slides away and marks the item done; dragged left, it stays open on buttons, Agent
+   (when the row's robot would show, The list point 3), In progress and Blocked (Open in place of the state it's in),
+   until one is picked or the row is tapped. Each is followed by a toast with Undo. A tap just after a drag doesn't
+   open the item.
+2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of the distance
    springs it back.
-3. On a row that can be placed (The list point 20), a finger held for 400 ms within about 8 px lifts it, and from then
-   the finger drags it up or down. A move past 8 px before then ends the press, so a sideways move still swipes (point 1)
-   and a vertical one scrolls; a quick tap still opens the item. While a row is lifted the page doesn't scroll and the
-   row doesn't swipe. The press opens no link menu or callout.
+3. On a row that can be placed (The list point 20), a finger held still for a moment lifts it, and from then the finger
+   drags it up or down. A move before then ends the press, so a sideways move still swipes (point 1) and a vertical
+   one scrolls; a quick tap still opens the item. While a row is lifted the page doesn't scroll and the row doesn't
+   swipe. The press opens no link menu or callout.
 
 ## The list
 
