@@ -628,7 +628,7 @@ const rankClass =
 
 /**
  * What the tag at `index` of `count` does next to an untagged item. A ranked tag scores from 1 at the top to 0 at the
- * bottom, a single one 1, and an item with no ranked tag 0.5 (architecture.md, Priority score).
+ * bottom, a single one 1, and an item with no ranked tag 0.5 (`domain::ranking`, Tags).
  */
 function tagEffect(index: number, count: number): string {
   if (count === 1) return "lifts";

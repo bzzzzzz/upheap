@@ -1,5 +1,6 @@
 //! What a refused team tag write tells: the heap tags a merge would take in with the command that confirms it, or,
-//! in a run, the heaps the run wasn't given.
+//! in a run, the heaps the run wasn't given. The CLI has no prompts, so the confirming command is printed in full, with
+//! the reach it was shown.
 
 use api_types::problem::MergeReachDto;
 use api_types::teams::TeamDto;

@@ -1,5 +1,5 @@
 // The Tokens part of the Command line card on Account: the user's personal tokens for a machine with no browser or
-// keychain, each with a way to revoke it, and a form that makes one and shows its secret once (ux.md, Account).
+// keychain, each with a way to revoke it, and a form that makes one and shows its secret once (ux.md, Command line).
 import { KeyRound } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 

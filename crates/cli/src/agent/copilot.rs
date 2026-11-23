@@ -1,6 +1,6 @@
 //! GitHub Copilot's command-line tool as an agent: its command line for each kind of access, and what its stream
-//! says. Starting the process, and watching and stopping it, are in [`super::process`]; how the permission flags and
-//! the cost are chosen is in architecture.md, under the `work run` command.
+//! says. Starting the process, and watching and stopping it, are in [`super::process`]. Only Claude's usage limit is
+//! recognised: a Copilot run that stops at its limit is a failed run like any other.
 
 use std::path::PathBuf;
 use std::time::Duration;

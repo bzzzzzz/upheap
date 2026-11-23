@@ -1,7 +1,8 @@
 // What the heap switcher remembers about this browser (ux.md, Phone details): the heaps opened most recently and
 // the teams the user folded. Both are about this device's habits, so they live in localStorage like Add another and
-// the theme. Storage can be blocked or hold anything, so every read and write is guarded: a failed read is an empty
-// list, a failed write just isn't remembered. Ids that no longer match anything are the reader's to skip.
+// the theme, and a "last opened" kept on the server would cost a write on every heap visit. Storage can be blocked
+// or hold anything, so every read and write is guarded: a failed read is an empty list, a failed write just isn't
+// remembered. Ids that no longer match anything are the reader's to skip.
 
 const RECENT_HEAPS_KEY = "upheap.recentHeaps";
 const FOLDED_TEAMS_KEY = "upheap.foldedTeams";

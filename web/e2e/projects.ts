@@ -1,4 +1,4 @@
-// The widths the golden paths run at (ux.md, Testing), shared by both builds' configs: a wide screen, a
+// The widths the golden paths run at, against the real server, shared by both builds' configs: a wide screen, a
 // tablet and a phone, each in Chromium, the one browser CI installs.
 import { devices, type Project } from "@playwright/test";
 

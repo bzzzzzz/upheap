@@ -1,5 +1,5 @@
-// Comments on an item (ux.md, The item §3): the thread under the context, and the field that adds to it. Added here as
-// a person would, through the item's own field. Server build only.
+// Comments on an item (ux.md, The item §18): the thread under the context, and the field that adds to it. Added here
+// as a person would, through the item's own field. Server build only.
 import { expect, fillEditor, isPhone, itemPane, openItem, test } from "./fixtures";
 
 const headers = { "x-csrf-protection": "1" };

@@ -266,6 +266,7 @@ impl From<PersonalTokenExpiryDto> for TokenExpiry {
 /// What the signed-in user gives to make a personal token.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[schema(as = PersonalTokenMake)]
+#[serde(deny_unknown_fields)]
 pub struct PersonalTokenMakeDto {
     /// What to call it, to tell it from the others: at most 64 characters, trimmed, without control characters.
     pub name: String,
@@ -313,6 +314,7 @@ pub struct MeDto {
 
 #[derive(Deserialize, ToSchema)]
 #[schema(as = MePatchRequest)]
+#[serde(deny_unknown_fields)]
 pub struct MePatchDto {
     /// 1 to 100 characters.
     pub display_name: String,

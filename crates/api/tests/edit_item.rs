@@ -389,3 +389,31 @@ async fn an_unknown_kind_on_create_is_refused_and_adds_nothing() -> Result<()> {
     expect_that!(list.body["pinned"], eq(&json!([])));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_item_patch_does_not_have_is_refused_and_nothing_is_saved() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let item = create(&app, &session, &heap, json!({ "title": "A note" })).await?;
+
+    // Act
+    let edited = patch(
+        &app,
+        &session,
+        &item,
+        1,
+        json!({ "title": "Renamed", "titel": "Renamed" }),
+    )
+    .await?;
+    let fetched = app
+        .send(Method::GET, &app.item_url(&item).await?, Some(&session), None)
+        .await?;
+
+    // Assert
+    expect_that!(edited.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(fetched.body["title"], eq(&json!("A note")));
+    expect_that!(fetched.body["version"], eq(&json!(1)));
+    Ok(())
+}
