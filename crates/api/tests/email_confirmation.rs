@@ -572,3 +572,47 @@ async fn changing_the_address_cancels_a_working_reset_link() -> Result<()> {
     expect_that!(problem_code(&used), eq("reset_link_cancelled"));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_sign_in_requests_do_not_have_is_refused_and_does_nothing() -> Result<()> {
+    // Arrange
+    let dir = tempfile::tempdir()?;
+    let app = TestApp::start().await?.with_mail(dir.path())?;
+    let mut extra = body("grace@example.test");
+    extra["remember_me"] = json!(true);
+    register(&app, "ada@exmaple.test").await?;
+    common::wait_for_mails(dir.path(), 1).await?;
+
+    // Act
+    let registered = app
+        .send(Method::POST, "/api/v1/auth/register", None, Some(extra))
+        .await?;
+    let signed_in = app
+        .send(
+            Method::POST,
+            "/api/v1/auth/login",
+            None,
+            Some(json!({ "login": "ada", "password": PASSWORD, "remember_me": true })),
+        )
+        .await?;
+    let changed = app
+        .send(
+            Method::POST,
+            "/api/v1/auth/confirmation-address",
+            None,
+            Some(json!({ "login": "ada", "password": PASSWORD, "email": EMAIL, "remember_me": true })),
+        )
+        .await?;
+    let mailed = std::fs::read_dir(dir.path())?.count();
+    let grace = register(&app, "grace@example.test").await?;
+
+    // Assert
+    expect_that!(registered.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(signed_in.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(changed.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(mailed, eq(1));
+    // The refused registration made no account, so the address is still free.
+    expect_that!(grace.status, eq(StatusCode::ACCEPTED), "{}", grace.body);
+    Ok(())
+}

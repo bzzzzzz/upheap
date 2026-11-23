@@ -509,3 +509,31 @@ async fn the_context_is_on_the_heap_and_in_the_teams_heap_list_and_outsiders_get
     expect_that!(hidden.status, eq(StatusCode::NOT_FOUND));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_heap_patch_does_not_have_is_refused_and_nothing_is_saved() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, team) = ada(&app).await?;
+    let created = create_heap(&app, &session, &team, "Ops").await?;
+    let heap = created.body["id"].as_str().context("no id")?.to_owned();
+    let path = app.heap_url(&heap).await?;
+
+    // Act
+    let renamed = app
+        .patch(
+            &session,
+            &path,
+            &created.body["version"],
+            json!({ "name": "Infra", "colour": "red" }),
+        )
+        .await?;
+    let fetched = app.send(Method::GET, &path, Some(&session), None).await?;
+
+    // Assert
+    expect_that!(renamed.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(fetched.body["name"], eq(&json!("Ops")));
+    expect_that!(fetched.body["version"], eq(&created.body["version"]));
+    Ok(())
+}

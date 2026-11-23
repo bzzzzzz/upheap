@@ -129,6 +129,7 @@ pub struct HeapDto {
 /// A change to a heap. Leave a field out to keep it.
 #[derive(Default, Serialize, Deserialize, ToSchema)]
 #[schema(as = HeapPatchRequest)]
+#[serde(deny_unknown_fields)]
 pub struct HeapPatchDto {
     /// 1 to 100 characters.
     #[serde(default, skip_serializing_if = "Option::is_none")]

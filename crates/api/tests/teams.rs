@@ -618,3 +618,106 @@ async fn two_admins_leaving_at_once_leave_one_behind() -> Result<()> {
     expect_that!(remaining.body["role"], eq(&json!("admin")));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_team_requests_do_not_have_is_refused() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (admin, _) = app.register_as("ada@example.test", "Ada").await?;
+    let (grace, _) = app.register_as("grace@example.test", "Grace").await?;
+    let grace_id = user_id(&app, &grace).await?;
+    let team = create_team(&app, &admin, "Platform").await?;
+    let id = team["id"].as_str().context("no id")?.to_owned();
+    let path = app.team_url(&id).await?;
+    let extra = |body: Value| {
+        let mut body = body;
+        body["colour"] = json!("red");
+        Some(body)
+    };
+
+    // Act
+    let new_team = app
+        .send(
+            Method::POST,
+            "/api/v1/teams",
+            Some(&admin),
+            extra(json!({ "name": "Infra" })),
+        )
+        .await?;
+    let new_heap = app
+        .send(
+            Method::POST,
+            &format!("{path}/heaps"),
+            Some(&admin),
+            extra(json!({ "name": "Work" })),
+        )
+        .await?;
+    let new_member = app
+        .send(
+            Method::POST,
+            &format!("{path}/members"),
+            Some(&admin),
+            extra(json!({ "user_id": grace_id })),
+        )
+        .await?;
+    let renamed = app
+        .patch(
+            &admin,
+            &path,
+            &team["version"],
+            json!({ "name": "Ops", "colour": "red" }),
+        )
+        .await?;
+    add_member(&app, &admin, &id, &grace_id).await?;
+    let role = app
+        .send(
+            Method::PATCH,
+            &app.member_url(&id, &grace_id).await?,
+            Some(&admin),
+            extra(json!({ "role": "admin" })),
+        )
+        .await?;
+    let after = get_team(&app, &admin, &id).await?;
+    let me = app.send(Method::GET, "/api/v1/me", Some(&admin), None).await?;
+
+    // Assert
+    expect_that!(new_team.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(new_heap.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(new_member.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(renamed.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(role.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(after.body["name"], eq(&json!("Platform")));
+    expect_that!(after.body["heaps"].as_array().map(Vec::len), some(eq(0)));
+    expect_that!(member(&after.body, &grace_id)["role"], eq(&json!("member")));
+    // Her personal team and Platform: the refused request made no team.
+    expect_that!(me.body["teams"].as_array().map(Vec::len), some(eq(2)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_profile_patch_does_not_have_is_refused_and_nothing_is_saved() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (ada, _) = app.register_as("ada@example.test", "Ada").await?;
+    let me = app.send(Method::GET, "/api/v1/me", Some(&ada), None).await?;
+    let version = me.body["user"]["version"].clone();
+
+    // Act
+    let changed = app
+        .patch(
+            &ada,
+            "/api/v1/me",
+            &version,
+            json!({ "display_name": "Countess", "nickname": "Countess" }),
+        )
+        .await?;
+    let after = app.send(Method::GET, "/api/v1/me", Some(&ada), None).await?;
+
+    // Assert
+    expect_that!(changed.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(after.body["user"]["display_name"], eq(&json!("Ada")));
+    expect_that!(after.body["user"]["version"], eq(&version));
+    Ok(())
+}

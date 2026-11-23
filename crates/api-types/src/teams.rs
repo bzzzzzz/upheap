@@ -103,6 +103,7 @@ pub struct TeamDto {
 /// A new team or heap.
 #[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateNamedRequest)]
+#[serde(deny_unknown_fields)]
 pub struct CreateNamedDto {
     /// 1 to 100 characters.
     pub name: String,
@@ -115,6 +116,7 @@ pub struct CreateNamedDto {
 /// A new heap, optionally made from a note.
 #[derive(Serialize, Deserialize, ToSchema)]
 #[schema(as = CreateHeapRequest)]
+#[serde(deny_unknown_fields)]
 pub struct CreateHeapDto {
     /// 1 to 100 characters.
     pub name: String,
@@ -133,6 +135,7 @@ pub struct CreateHeapDto {
 
 #[derive(Deserialize, ToSchema)]
 #[schema(as = AddMemberRequest)]
+#[serde(deny_unknown_fields)]
 pub struct AddMemberDto {
     /// From `GET /users`. New members join as `member`.
     pub user_id: Uuid,
@@ -141,6 +144,7 @@ pub struct AddMemberDto {
 /// A change to a team. Leave a field out to keep it.
 #[derive(Deserialize, ToSchema)]
 #[schema(as = TeamPatchRequest)]
+#[serde(deny_unknown_fields)]
 pub struct TeamPatchDto {
     /// 1 to 100 characters. A new name is refused with `personal_team` on a personal team.
     pub name: Option<String>,
@@ -151,6 +155,7 @@ pub struct TeamPatchDto {
 
 #[derive(Deserialize, ToSchema)]
 #[schema(as = MemberPatchRequest)]
+#[serde(deny_unknown_fields)]
 pub struct MemberPatchDto {
     pub role: RoleDto,
 }

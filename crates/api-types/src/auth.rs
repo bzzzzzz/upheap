@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RegisterRequest {
     pub email: String,
     /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of
@@ -16,6 +17,7 @@ pub struct RegisterRequest {
 }
 
 #[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SignInRequest {
     /// An email address, or a username. `email` is still accepted in its place.
     #[serde(alias = "email")]
@@ -117,6 +119,7 @@ pub struct ConfirmationSentDto {
 }
 
 #[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ChangeConfirmationAddressRequest {
     /// The account's email address, or its username.
     pub login: String,
@@ -172,6 +175,7 @@ pub struct OidcPendingDto {
 /// The username a person picks to finish a first sign-in through the provider.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[schema(as = OidcRegisterRequest)]
+#[serde(deny_unknown_fields)]
 pub struct OidcRegisterRequest {
     /// Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of
     /// the personal team, and can't be changed later.

@@ -12042,7 +12042,8 @@
             "format": "uuid",
             "description": "From `GET /users`. New members join as `member`."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "AddOptionRequest": {
         "type": "object",
@@ -12597,7 +12598,8 @@
           "password": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ChangeHeapTagLinksRequest": {
         "type": "object",
@@ -12936,7 +12938,8 @@
             ],
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have\none made from the name: \"My Heap\" gets `my-heap`, or `my-heap-2` if that is taken."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateItemRequest": {
         "type": "object",
@@ -13083,7 +13086,8 @@
             ],
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Leave it out to have\none made from the name: \"My Team\" gets `my-team`, or `my-team-2` if that is taken."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateParameterRequest": {
         "type": "object",
@@ -13166,7 +13170,8 @@
             "type": "string",
             "description": "1 to 50 characters, unique among the tags of the heap, or of the team, ignoring case."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateTeamParameterRequest": {
         "type": "object",
@@ -13744,7 +13749,8 @@
             ],
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Links with the old\nslug stop working."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "HeapPriorityRequest": {
         "type": "object",
@@ -14849,7 +14855,8 @@
               "null"
             ]
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ItemPlaceRequest": {
         "type": "object",
@@ -15518,7 +15525,8 @@
             "type": "string",
             "description": "1 to 100 characters."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "MemberAction": {
         "type": "string",
@@ -15538,7 +15546,8 @@
           "role": {
             "$ref": "#/components/schemas/Role"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "MergeReach": {
         "type": "object",
@@ -15871,7 +15880,8 @@
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of\nthe personal team, and can't be changed later.",
             "example": "eugene"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "OidcRegistered": {
         "type": "object",
@@ -16600,7 +16610,8 @@
             "type": "string",
             "description": "What to call it, to tell it from the others: at most 64 characters, trimmed, without control characters."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "PlaceSide": {
         "type": "string",
@@ -17316,7 +17327,8 @@
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Becomes the slug of\nthe personal team, and can't be changed later.",
             "example": "eugene"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "RegistrationOptions": {
         "type": "object",
@@ -17857,7 +17869,8 @@
           "password": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SignInsToEnd": {
         "type": "object",
@@ -18200,7 +18213,8 @@
               "null"
             ]
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Team": {
         "type": "object",
@@ -18488,7 +18502,8 @@
             ],
             "description": "Lowercase letters, digits and single dashes, starting with a letter, 2 to 39 characters. Refused with\n`personal_team` on a personal team. Links with the old slug stop working."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "TeamSummary": {
         "type": "object",

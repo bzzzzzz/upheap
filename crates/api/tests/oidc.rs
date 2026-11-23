@@ -782,3 +782,31 @@ async fn a_local_person_signs_out_of_upheap_only_even_with_provider_logout_on() 
     expect_that!(me(&h.app, &session).await?.status, eq(StatusCode::UNAUTHORIZED));
     Ok(())
 }
+
+#[gtest]
+#[tokio::test]
+async fn a_field_the_username_step_does_not_have_is_refused_and_the_step_can_be_finished() -> Result<()> {
+    // Arrange
+    let h = harness().await?;
+    let started = begin(&h.app, None).await?;
+    finish(&h, &started, sam()).await?;
+
+    // Act
+    let refused = h
+        .app
+        .send_with(
+            Method::POST,
+            "/api/v1/auth/oidc/register",
+            None,
+            Some(json!({ "username": "sam", "display_name": "Sam" })),
+            &[CSRF, ("cookie", &format!("upheap_oidc={}", started.request.state))],
+        )
+        .await?;
+    let registered = register(&h.app, &started.request.state, "sam").await?;
+
+    // Assert
+    expect_that!(refused.status, eq(StatusCode::BAD_REQUEST));
+    expect_that!(refused.session_cookie, none());
+    expect_that!(registered.status, eq(StatusCode::CREATED), "{}", registered.body);
+    Ok(())
+}
