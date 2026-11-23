@@ -1033,9 +1033,10 @@ section is how it maps onto this API.
    the heap's tags, its own and its team's: in a heap a name is one tag, so a name needs no kind. With
    `--create-tags`, the names the heap doesn't have are added as heap tags first, right before the item is written,
    and they stay if that write fails. `item add` reads the list once more to say where the item landed, a read
-   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` is sent as one step
-   add per step after the create, so a failure leaves the item with the steps sent so far, and the CLI says which: a
-   note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
+   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` goes in the
+   create request, so the steps are written with the item and before any turn it opens; against a server that drops
+   them, the CLI posts them one by one, and a failure there leaves the item with the steps sent so far, and the CLI
+   says which: a note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
 6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens), with the machine's hostname as the
    device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
    answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,
