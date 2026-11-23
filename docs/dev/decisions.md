@@ -314,7 +314,7 @@ change in behaviour, before the CLI's.
 writes 3.1, and sharing the types the spec is generated from is simpler anyway.
 
 **Consequences.** The CLI links `domain` but never the services, the store or the database drivers. A response type
-both sides share must read values a newer server adds ([architecture.md](architecture.md#cli), §7).
+both sides share must read values a newer server adds ([architecture.md](architecture.md#cli), §8).
 
 ## 34. The local build is dropped
 

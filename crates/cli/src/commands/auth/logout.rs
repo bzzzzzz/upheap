@@ -20,7 +20,8 @@ pub struct LogoutArgs {
 
 /// Revokes the stored refresh token, which ends every token of the sign-in, then removes it from the keychain. Not
 /// being signed in is nothing to do. When the server can't revoke it the token is kept, so trying again later
-/// still revokes it; `--local` forgets it without asking.
+/// still revokes it; `--local` forgets it without asking. It uses `POST /oauth/revoke`, not `POST /auth/logout`,
+/// which ends only a session cookie and answers `204` to a bearer token without revoking it.
 pub async fn run(args: LogoutArgs, app: &App, out: &mut Output) -> Result<(), CliError> {
     let server = app.server(&args.shared)?;
     let key = server_key(&server);

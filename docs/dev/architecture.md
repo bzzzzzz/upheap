@@ -1000,156 +1000,57 @@ reused one revokes the whole sign-in. So a person makes a personal token in the 
 
 `crates/cli` is `upheap`, another client of the API. Its conventions (command shape, output, exit codes,
 configuration, signing in, layout and tests) are the [CLI rules](engineering-principles.md#cli) of the engineering
-principles; the exit codes are in `crates/cli/src/error.rs`, and the commands and flags in `upheap --help`. This
-section is how it maps onto this API.
+principles; the commands and flags are in `upheap --help`. This section is how it maps onto this API, and why.
 
-1. **Scope.** The everyday work in a heap: items (add, show with `--history`, edit, the state verbs, list), a
-   task's steps (add, tick, drop, edit), an item's questions (ask, request, review, propose-done) and comments (add,
-   list), tags (list, add, edit, promote; a heap's, or the team's with `--team`), parameters (list, add, edit,
-   archive, and their options; a team's with `--team`, and a heap's `use` and `stop-using` of one), heaps (list, pick a default) and signing in. Teams, members, heap settings and
-   saved-view editing stay in the web app. `parameter edit` sends one write per kind of change (name and weight,
-   tags, option order), each at the version the last returned, because the API has no single endpoint for them; a
-   failure midway leaves the earlier ones saved and the CLI says which.
-   A tag write that would merge heap tags is refused (exit 3) with the reach and the exact command that confirms it,
-   with `--confirm <token>` ([API](#api) §11): the CLI has no prompts, and the command names the reach shown.
-2. **Naming.** Items are named by key ([Handles](#handles)), or by `team/heap/key` for another heap, which is a short
-   link without its `/h/`. A pasted link works, short or in the long form the address bar shows after the redirect;
-   its host is ignored and requests go to the configured server. A path that names another heap than `--heap` is
-   exit 2. Heaps are `team/heap`, or a heap slug alone when only one of the caller's teams has a heap by it. A step
-   is its item and its number, `<item>.<number>` (`k3x9a.3`, `team/heap/k3x9a.3`), split at the last `.` after the
-   last `/`, since a link's host has dots and a key never does; `step add --after` also takes the bare number.
-   Questions and comments are named the same way in output, `k3x9a.q2` and `k3x9a.c3`.
-3. **State changes are one `PATCH` with a `state`,** `reopen` too (as `state: open`, not the reopen endpoint), so the
-   server's rules apply as in the web app: the same state is a no-op, the reopen window and `item_closed` are its
-   refusals. `item block --by` sets `blocked_by_item_id` and `--reason` sets `blocked_reason` in the
-   same request; a bare key there is in the blocked item's heap.
-4. **Due times** are a rough choice, matched by label against `GET /due-choices` (ignoring case, `-` as a space) and
-   sent with `firm: false`, or a `YYYY-MM-DD` date with `firm: true`. The server owns the list so that a choice
-   always reads back with the label it was picked by ([Time and timezones](#time-and-timezones) §5). Every request carries the
-   `Time-Zone` header with the machine's zone, so dates and labels read as they would in the browser. The `--due`
-   help names the choices from `domain::due`, the rule the server lists them by, since help is read offline; the
-   dates and the match still come from the server.
-5. **Lists.** `item list` takes the list's query parameters as flags with the same names and values. `--view` loads
-   a saved view and sends its settings, with any flag given replacing that setting. The optional text narrows the
-   result on the client, as the web app's search does ([Search](#search)). `--tag` takes names, resolved against
-   the heap's tags, its own and its team's: in a heap a name is one tag, so a name needs no kind. With
-   `--create-tags`, the names the heap doesn't have are added as heap tags first, right before the item is written,
-   and they stay if that write fails. `item add` reads the list once more to say where the item landed, a read
-   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` goes in the
-   create request, so the steps are written with the item and before any turn it opens; against a server that drops
-   them, the CLI posts them one by one, and a failure there leaves the item with the steps sent so far, and the CLI
-   says which: a note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
-6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens), with the machine's hostname as the
-   device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
-   answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,
-   keyed by the server's URL: the refresh token, and the last access token with its expiry, as JSON. `keyring` uses
-   the Secret Service over zbus on Linux, which is pure Rust, so a static binary needs no libdbus. On macOS the CLI
-   runs `/usr/bin/security` instead, with the secret on its standard input. A keychain entry lets the program that
-   made it read it without asking, and macOS tells programs apart by code signature, so an entry `upheap` made
-   itself was closed to its next build: a dialog after every upgrade and every rebuild, which a command run by a
-   script or an agent waits on for ever. An entry `security` made stays open to `security`. The cost: any program
-   running as the user can read it the same way, without a dialog.
-   `UPHEAP_TOKEN`, when set, wins over all of it: the CLI sends that personal token and reads no keychain, takes no
-   lock and needs no config directory, and a token never needs refreshing. A `401` while it is set means the
-   environment holds a token the server refuses, which `auth login` can't fix, so it is exit 6, not 4, and the message
-   says whether the token was revoked, has expired or isn't known. With the reason `password_changed`, the CLI says
-   the sign-in, or the token in `UPHEAP_TOKEN`, ended because the account's password changed.
-7. **`work run` is the agent loop** over the `/work` routes. It claims the next item (`POST /work/runs`), reads the
-   heap and the item, and starts the agent tool behind `AgentTools` (`crates/cli/src/agent/`) with a brief on its
-   standard input and `UPHEAP_RUN`, `UPHEAP_SERVER` and `UPHEAP_HEAP` in its environment. The code that starts the
-   process, feeds it, watches it for silence and stops it is `process.rs` there, shared by the tools; each tool has
-   a module of its own, `claude.rs` and `copilot.rs`, for its command line and what its stream says. While the tool runs it
-   sends a heartbeat every 5 minutes by the wall clock, checked every 30 seconds, so one goes out soon after the
-   machine wakes from sleep (the monotonic clock stands still in sleep). A failed heartbeat is tried again at each
-   check until one is heard, logged each time, and said on stderr from the second in a row, so the one that goes out
-   before the network is back after a wake isn't a false alarm. The heartbeat says the loop is up. Claude's streamed
-   output says claude is working: it is read by the loop only, saved to the run's log
-   (`<config dir>/runs/<run id>.jsonl`, pruned after 7 days) and never sent to the server. Copilot's stream
-   (`--output-format json`) is read for one event only, `session.usage_checkpoint`, whose `totalNanoAiu` is the
-   session's running usage: the last one is the run's cost, `totalNanoAiu / 1e11` dollars, since a billion nano AI
-   units make an AI credit and 100 credits are taken as a dollar (the owner's working figure, not GitHub's published
-   price). The other lines are only logged. When the tool shows no
-   output for 30 minutes the loop stops it and fails the run with its own message, "The agent showed no activity
-   for 30 minutes." That timer uses the monotonic clock on purpose: it stands still while the machine sleeps, as
-   claude does, so a sleep isn't silence. The loop stops the tool when the server answers
-   `run_over`. A run's model is read from the tool's own stream when it names one, else it is the `--model` the loop
-   was given (which it passes to the tool as it is): Claude's `system` event with subtype `init` carries `model`, and
-   Copilot's usage checkpoint carries `data.accountingSnapshot.currentModel`, the last one winning. `finish` sends
-   the tool's name and that model along with the tool's times, for a run whose tool was started. A run that was
-   stopped or taken back left no report, so it records the `--model` given, if any. When the tool ends it sends
-   `finish` with the cost the tool reported and, only if the tool itself failed, why: the server decides whether the
-   run reached its goal, asked, handed back, is watching, hit the limit, or failed, and
-   the loop never works that out. The exception is the agent tool's usage limit, recognised for Claude only: a run whose claude stream had a rejected
-   `rate_limit_event` (not overage use) or `api_error` `usage_limit_reached` on its result is sent with `limited`, and
-   ends as `limited`, not failed, so the turn's failed runs are left alone. The loop then holds every worker until the
-   reset plus a minute (30 minutes when no time is known), by the wall clock like heartbeats, with live runs ending as
-   usual; the queue then claims that item first (see the queue's order above). A Copilot run that stops at its limit
-   is a failed run like any other.
-   With `--once` the loop says when to run again and exits. With `--workers N` the loop runs N workers on one task, each claiming its own item;
-   the server's claim keeps them apart, and one Ctrl-C reaches them all. Above 1 worker it needs `--root`, because
-   runs in one directory would trample each other. The tool gets what its goal needs and nothing more: to prepare an
-   item it may run the `upheap` commands a run uses, read files under the directory it runs in and use the web; to do a task it may also edit files, and every other command follows the
-   person's own Claude settings, since Upheap keeps no tool list of its own. Copilot's rules can't allow one
-   subcommand of a program, only the whole program (`shell(upheap item:*)` allows nothing, `shell(upheap:*)` does),
-   while a deny rule can scope one; and with `UPHEAP_RUN` set the server already refuses whatever is outside the run's
-   own item. So a Copilot run is allowed all of `upheap` and denied `upheap auth` and `upheap heap use`, which write on the
-   person's own machine, last, since a
-   deny wins over every allow, `--allow-all-tools` included; to do a task it has file edits accepted too, and
-   the person's saved Copilot approvals decide the rest. With `--root` the loop names one
-   directory for each item, `<root>/<team>/<heap>/<key>` from the claimed run; the loop makes it if it is
-   missing and the tool writes its own instructions into it (`CLAUDE.md` for Claude, `AGENTS.md` for Copilot, with the same text),
-   and starts there. The path is the whole
-   record, with no index file to fall out of step. Later runs on the item start in the same directory as it was
-   left, so a clone and its caches are paid for once; the agent's session does not carry over. Each start rewrites
-   `.upheap-run` in it, naming the server, and that file's modification time is when a run last started or ended there. The
-   run holds a shared lock on that file until it ends. The loop sweeps the
-   root when it starts and about hourly before a claim, one worker at a time, and removes a directory whose
-   marker is 7 days old, or whose item is closed or answers 404 (deleted, or no longer the person's) while
-   its heap still reads fine: the server answers 404 for a heap the caller can't see too, so another account's
-   directories on a shared root are left alone. Only the server the marker names is asked; another server's
-   directories go only for age. Any other failure to read an item keeps its directory, so a server error or a changed permission never deletes work,
-   and a server out of reach ends the sweep. Only directories at that depth with a marker are looked at, so the
-   old `<key>-<run id>` ones and anything else are never touched, and a directory a run of this loop is in or
-   about to start in is skipped. A removal takes the marker's lock exclusively, so a run in another loop on the same
-   root keeps its directory too, checks the marker wasn't rewritten since the sweep listed it, renames the directory
-   away under the lock that guards that set, and deletes it after releasing both, since deleting a clone is slow. A
-   run that opened the marker just before finds it moved once it gets the lock, and makes the directory again. There the tool is allowed any command, edit and read, passed on its
-   command line, since Claude ignores a settings file's allow rules in a directory nobody has trusted. That is
-   wide for now, so in such a directory the limits above don't hold. The runner can add allow rules of their own with
-   `--allow` (every run) and `--allow-prepare` / `--allow-do` (one access), passed on the command line after Upheap's
-   own and before the denies of `upheap auth` and `upheap heap use` that every run gets, so a tool the runner's instructions ask for can be
-   allowed for the loop without loosening every session on the machine. With `--instructions` the brief also carries
-   the runner's own instructions, between Upheap's and the heap's context: a heap's context is shared by everyone who
-   works the heap and says what the work is, and how it is done is for the one who does it, so each
-   runner keeps that in files of its own (a shared one and one for its machine, say) and it wins over the context on how. The tool runs in its own process
-   group, so a Ctrl-C typed in the terminal reaches the loop and not the tool: the first lets the run end and stops
-   the loop, the second stops the tool, and the run counts as failed unless it had asked a question. Stopping asks the tool
-   to end and kills its group after a few seconds if it hasn't: Claude runs each command in a group of its own and
-   ends them only when asked, not when killed. `SIGTERM` does what the second Ctrl-C does; `SIGHUP` is left
-   alone, so `nohup` keeps a loop going.
-   Once the tool is gone, whatever it started and left running (a dev server, a watcher, a command Claude didn't end
-   because it was killed) is ended too, since it would keep its CPU and ports and go on writing into the item's
-   directory. Those processes are found by the `UPHEAP_RUN` entry in their environment, which they inherit and which
-   survives `setsid` and reparenting, where a process group or a process tree doesn't, and there are no cgroups on
-   macOS. Those of the run's id and the user's own get `SIGTERM`, then `SIGKILL` after 3 seconds. The sweep does the same
-   to the processes whose working directory is in a directory it is about to delete, once it is renamed away, since
-   a process still writing there makes the delete fail; that also covers what runs from before this existed. Reading
-   other processes' environment and directory is done through `sysinfo`, as `unsafe` is forbidden. The loop reads
-   the wall clock for every request, not the time it started, so a loop that lives for hours, through the machine's
-   sleep, refreshes its access token like any command.
+1. **Scope.** The everyday work in a heap: items, steps, questions, comments, tags, parameters, heaps and signing
+   in. Teams, members, heap settings and saved-view editing stay in the web app. Where the API takes one change in
+   several writes, the CLI makes them in order and says which were saved when one fails. The CLI has no prompts, so
+   a write the server wants confirmed (a tag merge, [API](#api) §11) is refused with the exact command that
+   confirms it.
+2. **Naming.** Items are named by key ([Handles](#handles)), by `team/heap/key` for another heap, or by a pasted
+   link, whose host is ignored: requests go to the configured server. A step is `<item>.<number>`, split at the last
+   `.` after the last `/`, since a link's host has dots and a key never does.
+3. **State changes are one `PATCH` with a `state`,** reopening too, so the server's transition rules apply exactly
+   as in the web app and the CLI keeps none of its own.
+4. **Due times.** The server owns the list of rough choices, so a choice always reads back with the label it was
+   picked by ([Time and timezones](#time-and-timezones) §5). Every request carries the machine's `Time-Zone`, so
+   dates and labels read as they would in the browser.
+5. **Lists** take the list's query parameters as flags with the same names and values, and a saved view is sent as
+   those settings. Text search narrows on the client, as the web app's does ([Search](#search)).
+6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens). On macOS the keychain is reached
+   through `/usr/bin/security`, not a keychain library: macOS lets the program that made an entry read it without
+   asking and tells programs apart by code signature, so an entry `upheap` made was closed to its next build. Every
+   upgrade or rebuild put up a dialog, which a command run by a script or an agent waits on for ever. The cost: any
+   program running as the user can read the entry the same way. `UPHEAP_TOKEN`, a personal token, wins over the
+   keychain; a `401` to it is a broken setup, not a sign-in `auth login` could fix.
+7. **`work run` is the agent loop** over the `/work` routes: it claims an item, starts the agent tool on it with a
+   brief, keeps the claim alive and reports how the tool ended. The server decides how the run ended; the loop never
+   works that out. What the loop relies on:
+   - **Two clocks.** The heartbeat and the usage-limit hold go by the wall clock, checked often, so they resume soon
+     after the machine wakes; the monotonic clock stands still in sleep. The silence timer that stops a tool with no
+     output for 30 minutes uses the monotonic clock on purpose, since a sleeping tool isn't a silent one.
+   - **The tool's stream stays local.** It is read for the cost, the model and the usage limit, kept in the run's
+     log, and never sent to the server.
+   - **Permissions are narrow by default.** The tool gets what its goal needs, the person's own settings decide the
+     rest, and the server refuses whatever lies outside the run's item. `upheap auth` and `upheap heap use` are
+     denied last, since they write on the person's machine and a deny wins over every allow. In a directory made
+     for the run the tool may do anything, because Claude ignores a settings file's allow rules in a directory
+     nobody has trusted.
+   - **Directories are kept per item**, so a clone and its caches are paid for once. The path is the whole record,
+     and the sweep removes a directory only when its age, or the server, says the item is gone. A failure to read
+     keeps it, and a 404 counts only when the heap still reads, so another account's directories on a shared root
+     are left alone.
+   - **Stopping.** The tool runs in its own process group, so Ctrl-C reaches the loop first: one lets the run
+     finish, a second stops the tool. Stopping asks before it kills, since Claude ends the commands it started only
+     when asked. Whatever the run left running is found by `UPHEAP_RUN` in its environment, which survives `setsid`
+     and reparenting where a process group doesn't, and macOS has no cgroups. `SIGHUP` is left alone, so `nohup`
+     works.
+   - **The runner's instructions** go in the brief between Upheap's and the heap's context. The heap's context is
+     shared and says what the work is; how it is done is the runner's, so theirs wins on how.
 8. **A newer server's values.** A new enum value is additive
    ([engineering principles](engineering-principles.md#the-contract), The contract §4), so a CLI built before it
-   still reads the response. The `allowed_actions` lists of every response type skip values the client doesn't know
-   (`deserialize_with`), and `Factor` (contributors), `HeldBackGap`, `ClosedGroup` and the audit log's `AuditAction`
-   read an unknown value as `Unknown`, a variant
-   marked `#[serde(other, skip_serializing)]`, which keeps it out of the OpenAPI schema and can never be sent; the
-   CLI prints a contributor's `label`, so an unknown factor reads as the server wrote it. An item's `Kind`, `Stage` and
-   state (`ItemState`, which gained `became`), and a step's `StepState`, are read in responses and sent in edits, so they take the same `Unknown` variant and the server refuses it in a
-   request when converting to the domain type, with `422 value_unknown` naming the field, rather than at parsing
-   (`400 invalid_body`). Other values the server reads in requests stay strict: `Need`, `Size`, `Role`,
-   and the list view's `StateMode`, `BlockedLayout` and `ListSort`. Saved views share the last three with the list query, so a new sort or state mode in a saved view
-   would still stop an older CLI reading the heap's views; making them lenient the way `Kind` is, left for when it
-   happens.
+   must still read the response: the shared response types read a value they don't know as `Unknown`, which is
+   never sent. The enums the server reads in requests stay strict.
 
 ## Testing
 
