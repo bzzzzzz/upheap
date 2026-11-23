@@ -8758,7 +8758,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by_item_id`), or `field_not_allowed` (`goal`, a goal in `send` the new item can't be sent to) */
+            /** @description Invalid fields, `value_unknown` (a `kind` the server doesn't know), `reminder_needs_date` (`due`, for a reminder without a date), `tag_not_in_heap`, `parameter_not_in_heap` or `option_not_in_parameter`, `invalid_fields` (`origin`, on a reminder), `origin_not_in_heap`, or `blocker_not_in_heap` and `blocker_closed` (`blocked_by`), or `field_not_allowed` (`goal`, a goal in `send` the new item can't be sent to) */
             422: {
                 headers: {
                     [name: string]: unknown;
