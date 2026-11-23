@@ -8621,6 +8621,15 @@ export interface operations {
                     "application/json": components["schemas"]["Item"];
                 };
             };
+            /** @description `invalid_body`, such as an unknown field */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description From inside a run: `run_add_reminder`, `run_add_needs_context`, `run_add_sent` (a `send`), `run_wrong_item` (an `origin` that is not the run's item), `run_need_above_origin` (`highest` names the origin's need) or `run_blocker_not_made` */
             403: {
                 headers: {
