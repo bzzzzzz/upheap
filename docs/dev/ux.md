@@ -365,7 +365,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    a popover from a tablet up and a sheet on a phone. The toolbar is search, Sort by, Filters and Select (point 19);
    on a phone it's search and Filters, with Select in the top bar, and the sheet starts with the views, then the sort.
    The Filters button counts the filters and changed settings, in the accent while any are on; on a phone, where the
-   sort is out of sight in the sheet, it counts a sort other than Priority too. The list updates live behind the
+   sort is out of sight in the sheet, it counts a sort other than Priority too ("Filters and sort, 1 on"). The list updates live behind the
    panel.
 8. Under the toolbar a chip takes off each filter or changed setting, with how many items show while filters are on,
    and Reset all. Reset all keeps the sort and the search.
@@ -456,8 +456,8 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     row after the kind and stage icons, in a slot of its own, quiet until the row is hovered or has focus within, and
     above the row's link, so pressing it never opens the item. Dragging it moves the row with the pointer; a line
     shows where it lands, which is always within the group; the pane scrolls near its edge; Escape or a cancelled
-    pointer puts the row back and saves nothing, as for a step. A click or Enter on the grip opens a menu to move it
-    up or down, each left out at its end of the group, and keys on the focused row move it one place, the focus
+    pointer puts the row back and saves nothing, as for a step. A click or Enter on the grip opens a menu, "Move
+    “title”", to move it up or down, each left out at its end of the group, and keys on the focused row move it one place, the focus
     staying on the row. On a phone or tablet there is no grip: a long press (Phone details, gesture 3) lifts the row,
     which then follows the finger with the same line and scrolling, and lifting the finger drops it. A move that lands
     where the row was does nothing. A move saves at once, and the toast offers Undo, which takes the placing away when
@@ -555,7 +555,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     once the server has it, and one that fails is said under the section; a moved step shows in its new place at
     once, and goes back if the server refuses. A closed item, an archived heap or a missing `edit` leaves the steps
     and the count to read, with nothing to change. A step's context reads as Markdown text (see Toolkit), for
-    everyone, and the disclosure shows only when there is one, or the step can be edited. An editor's Edit swaps the
+    everyone, and the disclosure shows only when there is one, or the step can be edited. An editor's Edit ("Edit step context") swaps the
     text for its source, focused; leaving the field saves a change and goes back to the rendered text once the save
     has landed; a failed save keeps the field and its draft, and Escape there does nothing, so a draft isn't lost to
     a stray key. An editor opening a step with no context gets the field at once. A refetch doesn't touch what is
@@ -694,7 +694,7 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
     alone says only spacing changed; spacing changed beside a word edit shows as the new spacing. Where there is
     nothing to diff (set from nothing, cleared, any other field) or too few words stayed the same for a diff to read
     better than both versions, the change shows as before: the old value struck through, an arrow, the new one.
-23. **Full screen** gives a long item room to read, on a tablet or wide screen, from a button in the header. It is
+23. **Full screen** gives a long item room to read, on a tablet or wide screen, from a button in the header, named "Full screen", then "Exit full screen". It is
     part of the item's address, so a reload or a shared link opens it the same way. It covers the area beside the
     sidebar or the rail, the item's content in a column of reading width. Going full screen from the pane is a step
     in the history. Escape or the button goes back to the pane, ✕ goes to the list, and Back goes one step back. ↑
@@ -914,8 +914,8 @@ the heap opened last, as on Waiting for me.
 
 Under the title come a heap filter and a period switch. The heap filter lists All heaps, the active heaps, then the
 archived ones apart; it is a popover on a tablet or wide screen and a sheet on a phone. Then four totals and four
-charts: agents' spend, items added, items closed, agent runs. Closed and runs are stacked by how they closed and how
-they ended. Under the spend total, how many runs reported no cost, when any did.
+charts: agents' spend, items added, items closed, agent runs. Closed and runs are stacked by how they closed (done, won't do, became) and
+how they ended (reached, asked, failed, other). Under the spend total, how many runs reported no cost, when any did.
 
 The days are the person's own, from their time zone: one bar per day for 7 and 30 days, the last being today, and one
 per week, from Monday, for 90 days (13 weeks). The last bar is the day or week so far, and says so. Days without
@@ -1000,7 +1000,7 @@ in the list.
 
 The ⋯ shows what the account's `allowed_actions` allow. A provider account, and your own row, have History only: the
 identity provider owns a provider account's state, and the server refuses turning yourself off. Focus goes back to the
-row's ⋯ after Done or Cancel. Errors show under the row.
+row's ⋯ when the reset link or the confirm closes. Errors show under the row.
 
 **What the person sees.** Signing in to an account that was turned off says the server's operator turned it off, with
 the operator's contact line when one is set. Their other tabs fall to sign-in on the next request, since every session
