@@ -107,167 +107,50 @@ The tables and columns are in the migrations. These are the conventions they fol
   (`POST …/heaps` with `origin_id`) keeps it the same way in `heaps.origin_id`, with an index for the lookup of the
   heaps a note became (`became_heaps`) and of the heaps made from the items of a given heap, which the agent queue
   follows. The note is in the heap's team, and making the heap leaves it open: it closes on `became`.
-- **An item's questions are rows of their own** in `item_questions`, built like steps: each has its own `version`, so
-  a question write never bumps the item's and an item write never bumps a question's, and a `number`, one past the
-  highest the item has had and never reused, which is its name (`k3x9a.q2`). Questions are never deleted: an answered
-  one stays, with its reply (`reply_picked`, indices into `choices`, and `reply_comment`), which the person may change
-  while the item is open (`reply_changed` marks it, and `replied_by`/`replied_at` are then the change's), and one withdrawn when its
-  item was closed stays, withdrawn (`withdrawn_at`, `withdrawn_by`). An item has at most 100,
-  so a single-item response carries all of them and a list row carries `questions: null`. Asking and replying take
-  the heap lock, then read the item and its questions with locking reads, like a step write, and answer with the
-  whole item. A closed item takes neither, and closing an item withdraws its open questions in the same transaction,
-  one `question_withdrawn` entry each, so reopening doesn't bring them back and nothing waits for the person on a
-  question no one can answer. An item waits for the person while it is open, in an active heap, and has an open question; that is
-  derived, not stored: `waits_for_you` on every item response comes from the questions a single-item response already
-  carries, and for list rows from one grouped count of open questions per listed item, as step progress is.
-  **`GET /me/waiting`** lists the open questions of open items in the active heaps of the caller's teams, one row per
-  question, across heaps: one query for them (joined to their items), then one ranking per heap that has any, the
-  same inputs and policy the heap's list ranks by (`RankedItem.score`, blocker inheritance included), and the users
-  who asked. Rows are ordered by the item's score in its own heap, highest first, then heap name, the item's
-  position and the question number, where the score is multiplied by the caller's heap priority (Across heaps). A question on a reminder to
-  come has no score: its rows come after the ranked ones, by the reminder's date, soonest first. It returns at most
-  500 rows, with `count` the true total, which is the size assumption that lets it skip paging. A request is a question
-  whose choices the server fixes as Done and Can't be done, so every kind shares one reply shape.
-  **A review and a done proposal are question kinds** with fixed choices too (Approved or Changes asked; Close as done
-  or Not yet), asked only by an agent in a run whose turn goes to done, on a task. A review's link, piece (the link
-  itself when none is named) and round live on its row; the round is fixed when it is asked, as one more than the
-  item's answered reviews of that piece, so later events never change it, and a withdrawn or open review doesn't count.
-  A done proposal is refused, with every blocker listed, while any question or step is open or a reviewed piece's
-  latest round isn't approved (`check_close_ready`); a task with no reviews can be proposed closed.
-  An agent never closes a task: its `PATCH` to done is always refused. The person's reply Close as done closes the task
-  in the reply's transaction, by the same path as their own Done: the open turn ends as reached by the person, other
-  open questions are withdrawn, and the items it blocks are freed.
+- **An item's questions are rows of their own** in `item_questions`, built like steps: a question write never bumps
+  the item's `version` and an item write never bumps a question's, and a question's `number` is never reused.
+  Questions are never deleted: an answered one keeps its reply, and closing an item withdraws its open ones in the
+  same transaction, so nothing waits for the person on a question no one can answer. Whether an item waits for the
+  person is derived, never stored: a single-item response reads it from the questions it carries, and a list from
+  one grouped count of open questions per listed item, as step progress is. A request, a review and a done proposal
+  are questions whose choices the server fixes, so every kind shares one reply shape. An agent never closes a task:
+  it proposes closing, and the person's Close as done closes the task in the reply's transaction, by the same path
+  as their own Done.
 - **An item's comments are rows of their own** in `item_comments`: an append-only thread under the item's context,
   so an agent or a person adds to an item without rewriting its context, which could change the author's words and
   clash with their edits. A comment has no `version` and is never changed or deleted, and adding one never bumps the
-  item's `version`, so it never conflicts with an edit and needs no `If-Match`. Its `number` is one past the highest the
-  item has had, given under the heap lock with a locking read like a step's, backed by a unique index on `(item_id,
-number)`, and never reused; it is the comment's name (`k3x9a.c3`). Any item takes one, open or closed, in an active
-  heap. An item has at most 200, and the 201st is refused (`too_many_comments`): the size assumption that lets a
-  single-item response carry all of them, at most 200 times 20,000 characters, while a list row carries `comments:
-null`; raising it means paging them. Moving an item keeps its comments, which hang off its ID. A comment written in a run keeps the run (`run_id`, from the request's `Upheap-Run`), as its
-  audit entry does, so clients show it as the agent's without reading the history; a person's has none.
-- **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, with the send it belongs to
-  (`send_id`, the ID of the send's first turn: a turn a person or the prepare setting opens starts a send, and the
-  next stage of an all-the-way send and a split's turn for its task carry it on), a reach (one state, or
-  all the way), the stable state it goes to (`goal`, worked out from the item when the turn opens, or picked by the
-  person: defined, for a note as written, which all the way opens at defined anyway; then stored), the person's optional line, who opened it and whether the person sent it or the heap's
-  prepare setting did, then when and by whom it ended and how (taken back, handed back, or reached), its watch, and how many of its runs in a
-  row failed (`failed_runs`).
-  Turns are never deleted, and a write to one never bumps the item's `version`, so sending an item doesn't conflict
-  with someone editing it, and sending and taking back need no `If-Match`. A turn sent all the way still goes one
-  stable state: when a run reaches it, the next turn opens in the same transaction with the same reach, line and
-  opener, going to where the item is by then, so the item never has a moment with the person. An item has at most
-  one open turn (`ended_at` null); the service keeps it so under the heap lock every item write takes, reading with locking reads,
-  so no constraint is needed. A turn is taken back by the person's own request, and implied by starting or closing the
-  item (in the same transaction as the change, with its own `turn_taken_back` entry first) and by archiving the heap
-  (one entry for each). Who has an item is derived, not stored: `with_agent` is the item being open, its heap active,
-  an open turn, and no open question; list rows get their open turns from one grouped query, like question counts.
-  The agent state of a listed item splits that: `stuck` for a stuck turn, `waits` for an open turn that isn't
-  `with_agent`, `watching` for one that is and has a watch, `running` or `queued` for one that is and hasn't, by whether the
-  turn has a live run (read at request time), and `none` without a turn. Rows carry it as `agent_state`. A turn's target (`going_to`) is its goal, except that a turn sent
-  all the way is `done`; the turn carries it as `going_to`, for the row's badge. The ranked list
-  filters by both, so it reads turns and open questions for every non-closed item, not only the listed ones, before
-  it filters (still none in an archived heap). Saved views don't store these filters.
-  `heaps.agents_prepare` makes `create_item` open a turn of one state on every new item, whoever added it, unless the
-  request sends the item itself (`send`): then `create_item` opens that turn instead, in the item's transaction, so
-  an item is never added but unsent and never gets two turns. Neither changes ranking. The request's steps are
-  written in that transaction too, before the turn, so an agent never finds the task without them. The agent queue (`work next`,
-  `work queue`, `work claim`, `work run`) reads the heaps it is given and every
-  active heap made from an item in one of them, and from an item in those in turn (`resolve_queue_heaps`), so a made
-  heap's items are given with the heap that held their note; the limit on how many heaps a request names counts only
-  the named ones.
-- **A turn is worked in runs,** rows of their own in `item_runs`: one go an agent has at the turn of an item, with who
-  claimed it, when it started and was last heard from (`heard_at`), the item's stage then, and, once over, how it
-  ended (`reached`, `asked`, `failed`, `taken_back`, `handed_back` or `limited`), what it said it reached and made (`result`, `links`), why it
-  failed, and its cost in micro-dollars. `work run` also sends the agent tool's own start and exit times with `finish`
-  (`tool_started_at`, `tool_ended_at`, each set once, null for older runs and for runs whose tool never started), and
-  the tool's name and model (`agent_tool`, `agent_model`: free text cut to 100 characters, null for older runs, set by
-  `finish` and replaced by a later one).
-  Like turns, runs are never deleted and never bump the item's `version`.
-  A run that ends as `reached` also records what it reached (`reached`: `with_context` or `defined`, the item's stage
-  after the reach, or `became` for a note that became items, heaps or a step), null for every other end and for runs
-  that ended before it was recorded. The Agents page's two lists are built from runs and turns, not the audit log:
-  history is the runs that ended as reached in the last 30 days, and Your decision is the items whose latest turn
-  ended as reached by such a run and that are still at that stage, not started and not closed.
-  `GET /work/next` and `POST /work/runs` pick the same item: the first of the given heaps' items that are open and not
-  blocked, in an active heap, with an open turn that isn't stuck or watching, no open question and no live run, ordered first by
-  whether the open turn's latest run ended `limited` (those come before all others, so the item a usage limit cut off
-  is the one claimed once the limit resets), then by the item's score in its own heap (`rank_open_items`, once per heap) times the caller's heap priority, times
-  `STARTED_BOOST` (3) when a run has already worked on the open turn's send, however it ended, then heap name, then
-  position. The boost lets half-done work go on before new work of about the same importance while something much
-  more important still passes it; it is the queue's alone, so the person's lists and Waiting for me order by the
-  plain score. `GET /work/queue` returns the whole list in that order, read-only like `/work/next`, with each item's
-  position in its group of the heap's default list and the heap's priority. It is unpaged: the queue is at most the
-  open items of the given heaps, which are few; past a few hundred items it would need a cap. A claim takes the locks
-  of every given heap in ID order, as the item writes do, so two claims at once get different items.
-  **There is no lock to give up: a claim lapses.** A run is live while it has not ended and was heard from less than
-  `CLAIM_LAPSE` (30 minutes) ago, by a heartbeat or a write made in it. A run past that counts as ended, failed,
-  wherever it is read, and is written as failed lazily, the next time a claim over its heap, its own `finish` or a
-  take back touches it; no job sweeps for them. A turn is **stuck** when `STUCK_AFTER` (3) of its runs in a row
-  failed: a count on the turn, set back to 0 by a run that asked a question or by Retry. A lapsed run not written yet
-  counts in that number too: wherever a turn is read, the queue, the item, a list row, Waiting for me, `Turn::counting_lapse`
-  adds one to its count when it has such a run, so a turn whose third run went quiet is stuck at once, though nobody
-  has claimed since. Retry writes that lapsed run as failed, then resets the count, so it doesn't count twice. A stuck
-  turn is out of the queue, its item `waits_for_you` and no agent `with_agent`, and Waiting for me lists it as a row of
-  its own kind with the latest failure as the reason (the lapse text, when a lapsed run is the latest). Taking a turn back ends its live or lapsed runs as `taken_back`, which is no
-  failure, and withdraws the open questions asked in a run of it; the person's own stay open. A turn also ends as
-  reached, with no run, when its item's stage is at the turn's goal (`Turn::goal_met_by`; never for done): at the
-  person's edit that sets the stage (`how: stage_set`), or, as a safety net for any other way an item got there, when
-  a claim finds it (`already_met`) before choosing, so a met turn never costs a run, or when a run's became
-  defines a task split from its note (`became`, below); `next` skips such turns without
-  writing. Runs and questions end as for a take back, and a turn sent all the way opens the next. `work hand-back`
-  ends the run as `handed_back` (its reason is the run's `result`) and the turn likewise, with no follow-on.
-  `work watch <pr-url>` ends the run as `watching` (the address is its one link) and leaves the turn open, with a
-  **watch** stored on it: `watch_url` and `watch_since`, both null or both set, so a watch lives and dies with its open turn and
-  an item has at most one. It is refused while the item has an open question, and a watching turn is out of the queue
-  without being waiting for the person. The server never reaches GitHub: the loop lists the open watches
-  (`GET /work/watches`), reads each pull request with the person's `gh` about once a minute, and when something is
-  newer than `watch_since` (a comment, a review, a failed check), or the pull request is in a state that fires at any
-  time (merged, closed, or `mergeable: CONFLICTING`), fires the watch
-  (`POST /work/watches/{turn}/fire`), which clears it and adds a comment on the item, written as the person running the
-  loop with the comment's usual audit entry.
-  **Writes in a run:** a client sends `Upheap-Run: <run ID>`, which `CurrentUser` reads into `Principal::run`. A write made in a run must be on the allowlist in
-  `extract.rs` (the item's `PATCH`, steps, questions, comments, creating an item, closing a note as became, and the run's own heartbeat, reached, hand-back, watch and finish) or it is
-  `run_forbidden`; the service then checks, under the heap lock, that the run is the caller's, live, with its turn
-  open, and on that item (`check_run_write`), refuses any `PATCH` field but the context, `kind: task` and starting,
-  and touches `heard_at`. Starting an item in a run keeps its turn.
-  **Adding an item in a run** (`check_run_add`) may target any heap the person can edit, in any of their teams. It
-  locks the heap of the run's item and the target heap in heap ID order (once when they are the same, as
-  `claim_run` and `move_item` do), then reads the run under lock and checks it is live; it refuses a reminder and an
-  item with no context. The item gets `origin_id` (the run's item) and `created_run_id`, starts `with_context` and
-  opens no Prepare turn. A run may add steps to an item whose `created_run_id` is that run, or that was split from
-  the run's item (`check_run_step_add`), and no other write to it. The one write outside those is `POST …/to-step`:
-  the run's own note becomes a step of any open task in its heap, which ends the run and the turn as reached. The other
-  is `POST …/heaps`: a run makes a heap from its own item, with its context, and goes on (`check_run_make_heap`); it
-  never edits a heap afterwards. An item shows its origin only to someone who can view the origin's heap; `added_in_run`
-  shows to everyone. **A run splits its note:** an item made with an `origin` (`item add --from`) in a run must name
-  the run's own item, with a need no higher than the note's, and may start blocked only by an item a run of the same turn split
-  from the note (`made_in_split`, `origin_id`, and `created_run_id` naming a run of that turn). A person's split sets `origin_id` alone. `POST …/became` in a run
-  checks that no question is open and every open task split from the note, in the note's heap, has a context and
-  a step
-  (`split_reached_check`); then, in one transaction, those tasks become defined, the note closes as became, and the
-  run and turn end as reached with no follow-on on the note. A task's own open turn that defined meets (the heap's
-  prepare turn, or one the person sent) ends as reached there too, as a stage edit ends it (`end_met_turn`, how
-  `became`). A heap made from the note counts as made: the same transaction defines the open tasks in it, and the
-  run's `became` first checks that each such heap has a context, an open item made from the note, and a context on
-  each open note made from it (`made_heaps_check`). A made heap the person archived is ignored. The tasks in a made heap get no turn from the note's. If the note's turn was sent all the way, each of those tasks not started and without an open turn gets
-  one in the same transaction (`Turn::passed_on`: the same reach, line, source and opener, to done), but not one
-  whose ended turn the person sent: that task stays as they left it; a follow-up a run added isn't split from the note, so it gets none. A later `work reached` on that run succeeds and does nothing. Audit entries of a write in a run carry
-  `audit_log.run_id`, and so does a question (`item_questions.run_id`). The audit API sends an entry's run (`run`, with
-  the run's item and its heap now when the caller may view that heap) and the web app marks the entry as the agent's;
-  a question's run isn't shown yet. `work reached` checks
-  the item as it is now against the goal (`reached_check`) and ends the run and the turn together, moving the item's
-  stage to the goal, unless the person has taken it further meanwhile: it never moves back. A run may name a stage
-  at or past the goal (`reported_goal`): in a turn to with context, `defined` checks and moves to defined instead, so
-  a note that comes out defined enough is a defined task in one turn. The turn's goal doesn't change; the
-  `turn_reached` entry's stages before and after show the skip. Each refusal of a run
-  has a code of its own, and the one for a write to another item names the run's item in a field, so the CLI's hint
-  never has to read a message.
-  **Redo** is the person's way to say a turn that reached a stable state short of done isn't right: it marks that turn
-  `redone` (`redone_at`, `redone_by`), puts the item's stage back to where the turn's first run found it, and opens a
-  turn to the same reach and goal with the person's line, in one transaction. Only the item's latest turn can be
-  redone, and only once; the kind isn't changed back and what the agent wrote stays.
+  item's `version`, so it never conflicts with an edit and needs no `If-Match`. A comment written in a run keeps the
+  run, so clients show it as the agent's without reading the history.
+- **An item's turns are rows of their own** in `item_turns`: an item handed to an agent, for one stable state or all
+  the way to done. A turn write never bumps the item's `version`, so sending an item and taking it back never
+  conflict with an edit and need no `If-Match`, and turns are never deleted. An item has at most one open turn,
+  which the service keeps under the heap lock every item write takes, so no constraint is needed; starting or
+  closing the item, or archiving its heap, takes the open turn back in the same transaction. A turn sent all the way
+  still goes one stable state at a time, but when a run reaches it the next turn opens in the same transaction, so
+  the item never has a moment with the person between stages. The turns of one send share its `send_id`, which is
+  how the queue knows a send was worked on before. Who has an item (`with_agent`) and a listed item's agent state are
+  derived from its turn, the turn's runs and its open questions, never stored. A heap's prepare setting and a send
+  made while adding both open their turn in `create_item`'s transaction, so an item is never added unsent and never
+  gets two turns. The request's steps are written in that transaction too, before the turn, so an agent never finds
+  the task without them.
+- **Runs** are rows of their own in `item_runs`: one go an agent has at a turn, claimed from the queue. Like turns,
+  they are never deleted and never bump the item's `version`.
+  **There is no lock to give up: a claim lapses.** A run is live while it hasn't ended and was heard from, by a
+  heartbeat or a write made in it, less than `CLAIM_LAPSE` ago. Past that it counts as ended, failed, wherever it is
+  read, and is written as failed only when something next touches it (a claim over its heap, its own `finish`, a
+  take back); no job sweeps for them, so an agent that dies costs nothing but the wait. A turn is stuck after
+  `STUCK_AFTER` failed runs in a row, and every read of a turn counts a lapsed run not yet written
+  (`Turn::counting_lapse`), so a turn whose last run went quiet is stuck at once, everywhere. A stuck turn leaves the
+  queue and waits for the person.
+  **A write in a run** carries `Upheap-Run`. What a run may write is listed in one place, `RUN_ALLOWED_WRITES` in
+  `crates/api/src/extract.rs`, and every other write is the person's. The service then checks, under the heap lock,
+  that the run is the caller's, live, with its turn open, and that the item is its own or one it made. Ending a run
+  is one transaction with what it reports (the item's stage, a note closing as became, the next turn of a send), so
+  a run that dies half-way leaves nothing half-done.
+  **A watch** lets a run wait on a pull request without holding a claim: the run ends, and the turn stays open with
+  the address on it, out of the queue but not waiting for the person. The server never reaches GitHub: the loop that
+  runs the agents reads each watched pull request with the person's own `gh`, and fires the watch when something
+  came, which adds a comment and puts the item back in the queue.
 - **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done,
   won't do or became (a note closed because items were made from it; only `POST …/became` sets it). In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
   close time can't be built. The store converts between the two and rejects rows that break the rule.
@@ -1150,10 +1033,9 @@ section is how it maps onto this API.
    the heap's tags, its own and its team's: in a heap a name is one tag, so a name needs no kind. With
    `--create-tags`, the names the heap doesn't have are added as heap tags first, right before the item is written,
    and they stay if that write fails. `item add` reads the list once more to say where the item landed, a read
-   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` goes in the
-   create request, so the steps are written with the item and before any turn it opens; against a server that drops
-   them, the CLI posts them one by one, and a failure there leaves the item with the steps sent so far, and the CLI
-   says which: a note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
+   `--quiet` and `--json` skip; if it fails, the add still stands and a warning says so. `--step` is sent as one step
+   add per step after the create, so a failure leaves the item with the steps sent so far, and the CLI says which: a
+   note on stderr, or with `--json` the item as it stands on stdout beside the problem body.
 6. **Signing in** is the flow of [Non-web client tokens](#non-web-client-tokens), with the machine's hostname as the
    device name. `auth logout` revokes with `POST /oauth/revoke`; `POST /auth/logout` ends only a session cookie and
    answers `204` to a bearer token without revoking it. The keychain holds one entry per server, service `upheap`,

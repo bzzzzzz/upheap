@@ -3,7 +3,8 @@
 //! never deleted.
 //!
 //! A run that nobody has heard from for [`domain::run::CLAIM_LAPSE`] is still stored as not ended until something
-//! touches it: whether it is lapsed is the caller's to say, from `heard_at` and the time (architecture.md, Runs).
+//! touches it: whether it is lapsed is the caller's to say, from `heard_at` and the time (architecture.md, Data model,
+//! Runs).
 
 use std::collections::{HashMap, HashSet};
 

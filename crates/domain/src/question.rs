@@ -15,7 +15,7 @@ use crate::validation::Field;
 use crate::{ItemId, QuestionId, RunId, Timestamp, UserId, ValidationError, Version};
 
 /// The most questions one item has, answered ones included. This is the size assumption that lets every response
-/// that carries an item carry all of its questions (architecture.md, Data model).
+/// that carries an item carry all of its questions.
 pub const MAX_QUESTIONS: usize = 100;
 
 /// The labels a request is replied to with, in the order `picked` indexes them: Done is 0, Can't be done is 1.
