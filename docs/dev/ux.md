@@ -6,7 +6,8 @@ The mockups live outside the repository, in the "Upheap layouts" canvas; a board
 
 This is the record of the agreed design: what each screen does, where things sit, and why. Exact copy, sizes,
 timings, routes, icons and keys are the code's (`web/src`); this doc says them only when the value is itself the
-rule. What a screen reader hears is part of the design and stays.
+rule. What a screen reader hears is part of the design and stays. When a cut detail carried a reason the code
+doesn't state, the reason moves into a code comment.
 
 The app is one React app whose layout changes with the width: **phone**, **tablet** and **wide**, at Tailwind's
 `sm` and `lg` breakpoints. It never ranks, checks permissions or works out labels; the server does
@@ -97,6 +98,8 @@ a choice opens without picking it.
 
 ## Layout
 
+Breakpoints are Tailwind's `sm` and `lg`.
+
 | Width  | Navigation                                                                                                                                                                                | List                                                     | Item                                                  |
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
 | Phone  | Heap name at the top, with its team unless the heap is personal, switches heap; bottom tabs Open, Waiting, + (Add), Agents, More                                                          | Full width, compact rows                                 | Bottom sheet over the list                            |
@@ -112,7 +115,8 @@ The sidebar and the rail list the heap's views (Open, Closed, Activity, Data, Se
 the team in the URL (a link to its page, shown on the heap's pages and the team's own), Teams and Account. The heap's
 title names its team too, on the phone's top bar as well, except for a heap in the personal team.
 
-**Find** on a phone is at the end of the top bar, before Select, on every page with the top bar: one tap opens it
+**Find** on a phone is a search button at the end of the top bar, before Select, which a screen reader hears as
+"Find in all heaps", on every page with the top bar: one tap opens it
 (Keyboard, point 5). It and the list's own field are named apart, so the search that covers every heap and the one
 that filters the list on screen don't read as the same thing.
 
@@ -137,7 +141,8 @@ counts of the person's active heaps, the numbers the heaps show, so it costs no 
 person in more than one team also finds, at the right of each team's line, a link to that team's items with its open
 count (All items §7), which a screen reader hears as "All <team> items, 16 open"; neither is among search results. On
 All items and its Closed and Activity pages the row opened is marked current, where no heap's row is, and the heap
-button reads as that row does, on the sidebar and the phone's top bar. No heap is the current one there, so the views
+button reads as that row does, on the sidebar and the phone's top bar; the rail's button shows a mark for it in
+place of a heap's initial. No heap is the current one there, so the views
 are the pages across heaps (All items §8): Open with the count the row shows, Closed and Activity, with no Data or
 Settings; on a phone the Open tab and More's Closed and Activity are those pages, More has no Settings or Data, and
 the + still adds to the heap opened last. The heaps' open counts, on Open and in the heap switcher, are fetched as
@@ -187,7 +192,7 @@ everyone in an archived heap, read whether it's on.
 
 The **Your priority** card, on General after Agents, is the person's own priority for the heap, apart from the
 Ranking tab's factor weights: its items' scores in Waiting for me and the agents' queue are multiplied by it, and only
-they see it. Picking a number saves it at once, as the Agents switch does, and another can't be saved until that save
+they see it. It goes from 1 to 10. Picking a number saves it at once, as the Agents switch does, and another can't be saved until that save
 ends. Everyone who can open Settings may set theirs, archived heaps too; an error shows under the card.
 
 The **Default heap** card follows it: the person's own choice of the heap Upheap opens on, kept on the server so it
@@ -211,8 +216,8 @@ list of what it would merge, and the app asks first, in a dialog on a wide scree
 lists a row per heap tag: the heap, the tag as that heap wrote it, and its item count, with archived heaps and, for
 Make a team tag, this heap marked. Under the rows it totals the items and heaps that will carry the team tag, shows
 the description the team tag will have, and says quietly that the items keep their history and this can't be undone.
-While saving, the button shows the saving ring (Rules §6) and nothing can be pressed or dismissed. If the list changed
-while it was open, the server refuses the button's write with the new list: the dialog stays, says it changed, marks
+Cancel and a confirm button end it. While saving, the confirm button shows the saving ring (Rules §6) and nothing can be pressed or dismissed. If the list changed
+while it was open, the server refuses the confirm's write with the new list: the dialog stays, says it changed, marks
 new rows and the old counts, names what left the list, and the button confirms the new list. Another failure shows
 above the buttons, with its request ID, and the dialog stays; a rename someone else changed meanwhile closes it and
 shows the form's version conflict. Success closes it with a toast that says how many items in how many heaps carry
@@ -243,7 +248,7 @@ heap's own tags that suggest it, which an admin edits in place (each change is s
 weight is set on the Ranking page and the name and options on the Team page (both links), and Stop using for an admin
 (an error from the server shows under it). A card lists the team's other parameters, with a link to the Team page,
 each with its name, its options and a Use button for an admin; with none it points to the Team page. Using one gives
-it the weight it had, or the default.
+it the weight it had, or the default weight.
 
 **Ranking** (the canvas boards "Wide · Ranking" and "Phone · Ranking") sets how much each factor counts. A Built in
 card has a row each for need, age, deadline and value per effort, and a Parameters card, shown when the heap has
@@ -256,7 +261,7 @@ untagged item (lifts, as untagged, holds back), and a line under the list says w
 move and remove each row (a ⋯ menu on a phone) and add a tag not yet ranked, at the bottom; the order is a draft saved
 with the weights, counts once among the unsaved changes and is marked changed on the card. Others read the order
 without buttons. A row shows the factor's name, its share of the total as a bar and a percentage (plain arithmetic on
-the weights on screen; none when all are 0), and for editors a slider and a number input that move together. One
+the weights on screen; no share when all are 0), and for editors a slider and a number input that move together. One
 save writes every changed weight at once; what changed is marked with its old value and counted, Cancel (or Escape)
 puts the weights and the order back, and Reset sets every weight's draft to the default, the Tags weight too, without
 saving or touching the order. Others read the weights and a note that only admins can change them. A **Top of the
@@ -293,7 +298,7 @@ the All rows; archived heaps and Recent have none. Once the list is long it adds
 type, fold headers for the teams, and Recent: the heaps last opened in this browser, not the one on screen, as chips
 on a phone. Recent and the folds are kept per browser and don't follow the user to another device. Search gives a
 flat list with the team and an archived mark, a row to make a heap of that name, and a message when nothing matches;
-the arrows, Enter and Escape work in it. It ends with a New heap row, in the heap's own team, when the team allows it,
+the arrows move through it, Enter opens a heap, and Escape clears the field first, then closes. It ends with a New heap row, in the heap's own team, when the team allows it,
 which turns into the same form as the Team page's ([Teams and Team](#teams-and-team)) and opens the new heap. On a
 tablet it is a popover beside the rail. The popover, on a tablet or wide screen, has no title bar: it starts with the
 search field, or with the list when there are few heaps, and its rows are denser than a sheet's. Each team's name, and
@@ -306,10 +311,10 @@ Gestures are offered where the pointer is coarse (a finger), on phones and table
    (when the row's robot would show, The list point 3), In progress and Blocked (Open in place of the state it's in),
    until one is picked or the row is tapped. Each is followed by a toast with Undo. A tap just after a drag doesn't
    open the item.
-2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go short of the distance
-   springs it back.
+2. The item sheet drags down by its top bar to close; the tablet panel drags right. Letting go before it is dragged far
+   enough springs it back.
 3. On a row that can be placed (The list point 20), a finger held still for a moment lifts it, and from then the finger
-   drags it up or down. A move before then ends the press, so a sideways move still swipes (point 1) and a vertical
+   drags it up or down. A move of more than a small wobble before then ends the press, so a sideways move still swipes (point 1) and a vertical
    one scrolls; a quick tap still opens the item. While a row is lifted the page doesn't scroll and the row doesn't
    swipe. The press opens no link menu or callout.
 
