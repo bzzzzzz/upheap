@@ -3,8 +3,10 @@
 //! turn-offs, turn-ons and role changes, and their own heap priority changes (architecture.md, Authentication and
 //! authorization).
 //!
-//! The entries are the audit log's, in the user's personal team where their account entries go. A user reads their
-//! own history; an operator reads anyone's, worded for the operator.
+//! The entries are the audit log's, in the user's personal team where their account entries go. A heap priority
+//! change is recorded there and not in the heap's team, since the value is private to the user. Each entry's sentence
+//! is made from its diff on reading, so a wording fix reaches old entries. A user reads their own history; an operator
+//! reads anyone's, worded for the operator.
 
 use std::collections::{HashMap, HashSet};
 

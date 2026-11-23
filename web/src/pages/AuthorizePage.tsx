@@ -18,6 +18,10 @@ const secondaryClass = `h-[52px] w-full rounded-[14px] text-base font-medium dis
  * checks the request first, so nothing is offered, and the browser is sent nowhere, unless the client and its
  * redirect URI are good. Allow has the server approve it and sends the browser on with the code; Cancel sends it on
  * with `access_denied`, as RFC 6749 §4.1.2.1 has the page do for a request the server accepted.
+ *
+ * A request that is wrong in another way is shown as an error here, not sent back to the client as the RFC suggests:
+ * the only client is first-party, so such a request is a bug the person at the browser should see, and the CLI gives
+ * up waiting after a few minutes.
  */
 export function AuthorizePage({
   request,

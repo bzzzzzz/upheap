@@ -114,7 +114,7 @@ impl InviteLink {
 
     /// Whether a person whose last removal from the team was at `last_removed_at` (`None` if never removed) may
     /// join through this link: only if the removal came strictly before the link was made. A tie goes to the
-    /// removal. Leaving by choice is not a removal.
+    /// removal. Leaving by choice is not a removal, and neither is being taken out by the sign-in provider's groups.
     pub fn admits_after_removal(&self, last_removed_at: Option<Timestamp>) -> bool {
         last_removed_at.is_none_or(|removed_at| removed_at < self.created_at)
     }

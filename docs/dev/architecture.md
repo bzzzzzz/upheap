@@ -528,286 +528,99 @@ a fixed time.
 
 ## Authentication and authorization
 
-1. **Web app:** a cookie session (`HttpOnly`, `Secure`, `SameSite=Lax`). The cookie holds a random 256-bit token;
-   the database stores only its SHA-256, so a leaked database can't be used to sign in, and no session secret is
-   needed. Every state-changing request, sign-in included, must carry an `X-CSRF-Protection` header. Browsers only
-   let same-origin scripts set custom headers (cross-origin ones need a CORS preflight, which the server never
-   approves), so the header together with `SameSite=Lax` blocks cross-site request forgery without a per-session
-   token.
-2. **Non-web clients:** the OAuth 2.0 authorization code flow with PKCE (S256) against the server's own endpoints
-   (RFC 6749, 7636 and 7009).
-   - The client opens the browser on the web app's `/oauth/authorize` page and listens on a loopback redirect URI.
-     The page checks the request with the API before it shows anything, so it never offers a request the server
-     would refuse. The user signs in if needed and chooses Allow, which approves the request with the session cookie
-     and CSRF header (a bearer token can't approve more access for itself), or Cancel. The client then exchanges the
-     code at `/oauth/token` for an access token and a refresh token.
-   - Only registered first-party public clients are allowed, and the registry is a constant in `domain::oauth`, not
-     a table. Redirect URIs are loopback only (RFC 8252), on any port, with no `localhost`, other hosts, user info,
-     query or fragment, so adding `?code=…` always gives the URI that was approved.
-   - Codes and tokens are random 256-bit values stored as SHA-256 hashes, like session tokens. Codes work once and
-     briefly; access tokens are short-lived and refresh tokens rotate ([Non-web client tokens](#non-web-client-tokens)).
-   - A bearer token may also be a personal token ([Personal tokens](#personal-tokens)), told apart by its `uph_`
-     prefix. A revoked or expired one is refused with the code `token_revoked` or `token_expired`, so the CLI can say why.
-     An OAuth access token in a revoked family is refused with `token_revoked` too, and an unknown or expired one
-     with `unauthenticated`. A revocation by a password change or reset records the reason `password_changed` next
-     to `revoked_at`; the problem's `reason` carries it, and `/oauth/token` adds it to the `invalid_grant` refusal as
-     an extra parameter (RFC 6749 §5.2 allows them). Other revocations record none.
-   - `Authorization: Bearer` resolves to the same `Principal` a cookie does, on every endpoint. A request with a
-     bearer token is authenticated by it alone, with no fallback to the cookie, and needs no CSRF header: a
-     cross-site page can't set that header either, and CSRF is a cookie problem. Other `Authorization` schemes, such
-     as the `Basic` credentials a browser sends to a proxy, are ignored and the cookie rules apply.
-   - No page of the web app may be framed by another site (`X-Frame-Options: DENY`, `Content-Security-Policy:
-frame-ancestors 'none'`), so a page can't hide the consent page under something that gets the user to click
-     Allow.
-   - A request that's wrong in some other way than its client or redirect URI is shown as an error on the page, not
-     sent back to the client as RFC 6749 suggests: the only client is first-party, so such a request is a bug the
-     person at the browser should see, and the CLI gives up waiting after a few minutes.
+Every secret the server hands out (a session, an OAuth code or token, a personal token, a reset, email change or
+confirmation link) is a random 256-bit value of which the database stores only the SHA-256, so a leaked database
+can't be used to sign in and no signing secret is needed. Sign-in rows (sessions, attempts, sign-ins in flight) are
+authentication plumbing, not domain data, so ending one deletes it. Every sign-in, registration and reset opens its
+session in one place, which is where a turned-off account is refused.
+
+1. **Web app:** a cookie session (`HttpOnly`, `Secure`, `SameSite=Lax`). Every state-changing request, sign-in
+   included, carries a custom header. Browsers only let same-origin scripts set one, and the server never approves a
+   CORS preflight, so the header and `SameSite=Lax` block cross-site request forgery without a per-session token.
+2. **Non-web clients:** the OAuth 2.0 authorization code flow with PKCE against the server's own endpoints.
+   - The client opens the web app's consent page and listens on a loopback redirect. The page checks the request with
+     the API before it shows anything, and Allow approves it with the session cookie, never a bearer token: a client
+     can't approve more access for itself.
+   - Only registered first-party public clients are allowed, and the registry is a constant, so adding one is
+     reviewed code. Redirect URIs are loopback only (RFC 8252), on any port, with no query or fragment, so the
+     redirect with the code always goes to the URI that was approved.
+   - Access tokens are short-lived and refresh tokens rotate; a reused refresh token revokes its whole family
+     ([Non-web client tokens](#non-web-client-tokens)). A bearer token may also be a personal token
+     ([Personal tokens](#personal-tokens)). A refusal says why (revoked, expired, ended by a password change), so the
+     CLI can tell the person.
+   - A bearer token resolves to the same principal a cookie does. A request that carries one is authenticated by it
+     alone, never by the cookie, and needs no CSRF header, since CSRF is a cookie problem. Other `Authorization`
+     schemes are ignored, as a browser adds them itself.
+   - No page of the web app may be framed, so another site can't hide the consent page under something that gets
+     the user to click Allow.
    - A proxy that puts HTTP Basic auth in front of the server works for the web app but not for the CLI, since a
      request carries one `Authorization` header. Such a proxy has to let `/api` through.
-3. **External identity provider:** one generic OpenID Connect provider per server, set with environment variables
-   ([sign-in.md](../operator/sign-in.md#setting-up-the-provider)). Discovery, PKCE, the nonce and the ID token's signature
-   and claims are security code, so the `openidconnect` crate does them.
-   - **Start and callback.** The start (`GET /auth/oidc/start`, a link the browser follows) stores a row in
-     `oidc_sign_ins` keyed by the SHA-256 of a random `state`, holding a nonce, a PKCE verifier and the app path to
-     return to, and sets the `upheap_oidc` cookie to the `state`, scoped to `/api/v1/auth/oidc`. The callback accepts
-     the provider's answer only from the browser that started: the cookie must equal the `state`, and the row must
-     exist and be under 15 minutes old. It then exchanges the code with the verifier and checks the ID token's
-     signature against the provider's keys, `iss`, `aud`, `exp` and the row's nonce. Every refusal sends the browser
-     back to sign-in with a code that the page words, and deletes the row.
+3. **External identity provider:** one generic OpenID Connect provider per server. Discovery, PKCE, the nonce and
+   the ID token's checks are security code, so the `openidconnect` crate does them.
+   - **Start and callback.** The start keeps the nonce and verifier on a row keyed by the hash of a random `state`,
+     and puts the `state` in a cookie, so the callback accepts an answer only from the browser that started, and only
+     for a few minutes.
    - **Discovery is fetched on every start and callback,** not cached and not at startup: sign-ins are rare, keys
      rotate, and a provider that is down never stops the server or local sign-in.
-   - **Matching is by `(issuer, subject)`, never by email.** `user_identities` ties a user to the subject at the
-     issuer string as configured. The subject is the claim `UPHEAP_OIDC_SUBJECT_CLAIM` names (`sub` by default). An
-     identity still keyed on the token's `sub` is re-keyed to the claim at sign-in, in the known person's transaction.
-     A known identity gets a normal session; name and email aren't refreshed from the provider later.
-   - **A new identity needs a verified email that no account has,** read from the ID token's claims; an email that
-     matches a local account is refused rather than linked ([decisions.md](decisions.md) §38). The callback keeps the
-     verified name and email on the row for 15 more minutes and sends the browser to the username step, which makes
-     the user, personal team, `personal` heap, identity and session in one transaction, also when registration is
-     closed. A failure rolls it all back and leaves the row, so the person can try another username.
-   - **Teams from groups.** The operator maps team slugs to provider groups with `UPHEAP_OIDC_GROUP_TEAMS`. The map is
-     read from configuration and resolved to team IDs once at startup (a slug no team has, or a personal team, stops
-     the server); it is in the settings, never stored on a team, so a team is group-managed while the map names it
-     and unmapping it frees it again. Only when the map is not empty does the callback read the groups: from the
-     payload of the ID token after its signature was checked, under the claim `UPHEAP_OIDC_GROUPS_CLAIM`. A list of
-     strings, or one string, is known, and an empty list is known and empty; a missing claim, any other type and
-     Entra ID's overage (the claim named in `_claim_names` and absent) are unknown. Unknown logs one warning and
-     changes nothing; it is not the same as empty, which takes the person out of every mapped team.
-     The sync runs in the transaction that opens the session. For each mapped team in ID order, so two sign-ins
-     never wait on each other in a cycle, it locks the team, reads its memberships, and adds the person as a member
-     when their groups name the team and they aren't in it, or deletes the membership, whatever the role, when they
-     don't and they are. The last-admin rule doesn't apply: the provider has already said the person is out, and
-     the operator makes an admin with a command. Each change has an audit entry (`group_member_added`,
-     `group_member_removed`) with the person as actor and the groups in the diff. A `group_member_removed` is not a
-     `member_removed`, so it doesn't void invite links made before it. Lock order where these meet: the mapped teams in
-     ID order, then a SCIM row, then on Postgres the subject's advisory lock (below), then a person's personal team;
-     a write that locks several of a person's teams (a display-name change) takes the mapped ones first. A sign-in of
-     a known person, by the provider or by password,
-     locks their personal team before it opens the session, and approving a CLI sign-in and exchanging its code lock
-     it before they store or use the code, so each waits for a SCIM write that is ending their sign-ins and then
-     sees the deactivation. A first sign-in has no user yet, so the callback keeps the groups on
-     the `oidc_sign_ins` row (a JSON array; `NULL` is unknown) and the username step runs the sync after making the
-     user. A SCIM write can't find that user until it commits, so the username step locks the SCIM rows with the
-     person's subject before it makes the user: it and a SCIM write to one of them run one after the other, and the
-     session is refused after a deactivation or ended by one that comes after it. The re-keying takes the same subject
-     locks as the username step, in the same order; when the person is already deactivated it still commits, and ends
-     their sign-ins as a push would. A record being created with the subject, or moved onto it, has no such row yet. On MySQL the lock's gap lock makes that write wait, and the SCIM
-     user writes run at READ COMMITTED so that after the wait they see the account; on Postgres both sides also take
-     an advisory lock on the subject. Password sign-in, invite registration and reset never sync.
-   - **Provisioning over SCIM.** With `UPHEAP_SCIM_TOKEN` set, the provider pushes its users and groups to
-     `/scim/v2`, outside `/api/v1`, in SCIM's own JSON and error shape and not in `openapi.json`: the RFCs (7643,
-     7644) are the contract and providers are the only clients
+   - **Matching is by `(issuer, subject)`, never by email.** The issuer is the string as configured, and the subject
+     is the claim the operator names. A new identity needs a verified email that no account has: an email that
+     matches a local account is refused rather than linked ([decisions.md](decisions.md) §38). The person then picks
+     a username, and their account is made in one transaction, also when registration is closed.
+   - **Teams from groups.** The operator maps teams to provider groups in configuration. The map is resolved at
+     startup and never stored on a team, so a team is group-managed while the map names it. At each sign-in the
+     person's membership in each mapped team follows the token's groups claim, in the transaction that opens the
+     session, with an audit entry per change. A claim that can't be read is unknown and changes nothing; it is not an
+     empty list, which takes the person out of every mapped team. The last-admin rule doesn't apply: the provider has
+     already said the person is out, and the operator makes an admin with a command. Writers of memberships lock the
+     mapped teams in one order, so sign-ins and SCIM pushes never wait on each other in a cycle.
+   - **Provisioning over SCIM.** With a SCIM token set, the provider pushes users and groups to `/scim/v2`, outside
+     `/api/v1` and `openapi.json`: the RFCs are the contract and providers are the only clients
      ([decisions.md](decisions.md#42-with-scim-set-up-the-providers-pushes-decide-a-persons-groups-at-a-scim-endpoint-of-their-own)).
-     The token is not a user: the server compares SHA-256 digests of what it got and of the setting, never logs it,
-     and `/api/v1` refuses it like any unknown bearer token. Unset, the SCIM routes aren't added at all.
-     Three tables mirror the provider (`scim_users`, `scim_groups`, `scim_group_members`), each resource kept whole
-     as it was sent. They are the provider's data, not the person's, so a SCIM `DELETE` removes the rows;
-     the audit log keeps every team change they caused. Users and
-     groups the map doesn't name are kept like the rest, so a group mapped later already has its members.
-     A SCIM user is linked to an account through `user_identities`: the configured issuer and the SCIM user's
-     `externalId` as the subject, never email or `userName`. The link is looked up each time and not stored, so a
-     person who signs in for the first time is linked from then on. `externalId` carries the subject by rule rather
-     than by a setting, since every provider that can push the subject can put it there. It isn't unique: several
-     SCIM users with one `externalId` are one person, read by one rule for a push, a sign-in and the refusal alike.
-     The person is inactive only when every record is, and their groups are those of the active records together.
-     A group matches a group in `UPHEAP_OIDC_GROUP_TEAMS` by its `displayName` or its `externalId`, so the operator
-     writes one map in the words the ID token already uses. Each mapped team is decided on its own: a team is
-     **pushed** when every one of its groups matches a stored group, and only then does a push change it. So pushing
-     the group of one team never empties another, pushing a team's groups one at a time doesn't empty it, and
-     pushing people before their groups empties nothing. A write that can change someone's groups runs in one
-     transaction with the team changes it causes, through the same sync a sign-in runs and with the same audit
-     entries. The write that makes a team pushed for the first time syncs every pushed person for it; the write that
-     makes it stop being pushed syncs the people it touched with their remaining groups, and from then on the team
-     follows the token again. At sign-in, a person with a SCIM record is synced from the pushed state for pushed
-     teams, not from the ID token, so a token minted a moment before a push can't undo it.
-     A write that leaves a linked person inactive, or deletes their last record, ends every sign-in of their account
-     in the same transaction and records `account_deactivated` in their personal team once; a repeated push records
-     nothing. While SCIM is set up and the person is inactive, opening a session fails where every sign-in,
-     registration and password reset opens one, and the surrounding transaction rolls back. The provider normally
-     refuses such a person itself; this is the backstop, there because a password reset could otherwise give a
-     provider-made account a password. A person with no record is not off. The `PATCH` forms and filters the
-     endpoints accept are the ones Okta and Entra ID send, and are in the module docs of `service::scim`.
-   - **Provider only.** `UPHEAP_PASSWORD_SIGN_IN=false` (it needs the provider, or the server stops at startup)
-     makes every password path in the service layer fail with `PasswordSignInOff`, so the API and the operator
-     command both refuse: sign-in, registration, invite registration, asking for and using a reset link, and the
-     operator's reset link. A local user is one with no `user_identities` row. Two things end their sign-ins, and
-     both are needed. The server's start deletes their sessions and revokes their OAuth families and personal
-     tokens in one transaction, so turning passwords back on doesn't revive them. The auth check of sessions, access
-     tokens and personal tokens also refuses a local user's, one indexed lookup per request while passwords are off,
-     because during a rolling deploy an instance that still has passwords on can make a sign-in after the new one
-     started. Passwords are never deleted, so setting the variable back to `true` is the recovery.
-
-   - **Signing out at the provider** (`UPHEAP_OIDC_PROVIDER_LOGOUT`, RP-initiated logout). Only when it is on, the
-     callback keeps the raw ID token on the session row (`sessions.id_token`); a first sign-in keeps it on the
-     `oidc_sign_ins` row until the username step copies it to the session, and the row's deletion removes it. With it
-     off nothing is stored, and the setting is checked again at sign-out. Sign-out deletes the session row and clears
-     the cookie first, then, if the row had a token, fetches discovery and, when it names `end_session_endpoint`,
-     answers `200` with that URL carrying `id_token_hint`, `client_id` and `post_logout_redirect_uri`
-     (`{BASE_URL}/login`); the web app goes there (every web sign-out does, the invite and consent pages too: they keep
-     the page to return to in `sessionStorage` for ten minutes, and the sign-in page reloads that page, as the plain
-     `204` does). Anything else, including a provider that is down, is the plain `204`: sign-out never fails because of
-     the provider. There is no `state`, since nothing is kept to check it. The token is stored as it is, not hashed,
-     because it has to be sent back; it can't sign anyone in to Upheap, which only accepts a code exchanged with the
-     stored verifier and nonce. The CLI's sign-out only revokes its OAuth tokens.
-   - **No password:** a provider user has no password row, so password sign-in can't succeed for them and Change
-     password isn't offered (`change_password` is left out of `/me`'s allowed actions).
-   - An invite page passes `redirect=/invite/<token>` through the round trip, so the person comes back to the invite
-     page signed in and joins with its own Join step; the provider flow has no invite logic.
-4. **Local accounts:** passwords are hashed with argon2id, sign-in takes an email address or a username, and
-   attempts are rate-limited per account, keyed by its email address whichever was typed, or per unknown address or
-   username.
-   - A fixed number of attempts per window (five per 15 minutes). Later attempts get `429` with `Retry-After`,
-     refused before any password is checked, so they cost no argon2 work. A successful sign-in clears the count.
-   - Unknown addresses are counted the same way, so a refusal doesn't reveal whether an account exists.
-   - Counts live in the database (`sign_in_attempts`), keyed by the SHA-256 of the normalised address, so they hold
-     across instances. Each attempt is one upsert in a transaction, so concurrent attempts are each counted.
-     Addresses are compared exactly on every database (`utf8mb4_bin` on MySQL), or MySQL would find one account
-     under many spellings, each with its own attempts.
-   - There is no per-IP limit, because the server sits behind a proxy and doesn't know client addresses. Spraying
-     one password across many accounts is left to the reverse proxy.
-   - **Mail is limited on every path that sends it**, each with the sign-in limit's numbers in `sign_in_attempts`
-     under a key of its own: a reset link per address (`reset:`), a confirmation link mailed by a refused sign-in per
-     address (the sign-in count), and an address change per account (`address-change:` and the user's id), shared
-     by a change asked from Account and a correction on the Check your mail card. The account's count is checked
-     only once the password verified, counts free and taken addresses alike so it reveals nothing, and is never
-     cleared: a new session, a changed address or a confirmation doesn't start it over, so one account can't mail
-     more than five addresses in 15 minutes. Registration mails each new address once but has no count, since
-     the server has no client to key one by and a cap for the whole server would let anyone stop all sign-ups:
-     [mail.md](../operator/mail.md#setting-it-up) asks operators to rate-limit `POST /auth/register` at the reverse proxy, or to close registration.
-     A notice to the old address follows an applied change, which a mailed link limits already.
-   - A password change (`POST /me/password`, the session cookie only) takes the current password. Each try counts
-     against the same limit per session, not per account, so someone using up the account's sign-in attempts can't
-     block the owner's change; a wrong current password also adds one to the account's sign-in count. Then, in one
-     transaction with the new hash and its audit entry, it deletes all the user's sessions and opens a new one for
-     the caller, so a copy of the old cookie stops working too, revokes all their token families, and expires their
-     unused authorization codes. It also cancels the user's working reset link.
-   - A forgotten password is reset with a **reset link**, because the operator who runs the server is the one who can
-     vouch for a person when it has no mail set up. The operator makes it with `upheap-server user reset-link`
-     (`create_password_reset_link`), which opens the database and builds the use cases like the server but runs no
-     migration and listens on nothing. The link is `{BASE_URL}/reset/{token}`: a 256-bit random token whose SHA-256 is
-     stored (`password_reset_links`), shown once. It works once, for an hour, and one is working per user: making a
-     new one cancels the earlier one, and so does a password change, in the same transaction. Its state is derived
-     from `used_at`, `cancelled_at` and `expires_at` (`domain::password_reset`), and using it is a conditional update,
-     so of two requests racing for one link exactly one wins. Setting a password with it
-     (`POST /password-resets/{token}`, no sign-in) ends every sign-in of the user as a change does, opens a session for
-     the caller whoever they were, and clears the user's sign-in attempts, since the holder of the link has shown who
-     they are. Not rate limited, because a 256-bit token can't be guessed. Making a link is audited with the user as
-     its actor, since an entry needs an account and the operator has none; its diff says `made_by: operator`.
-   - With mail set up, a user asks for a link themselves: `POST /password-resets` with an email address (and
-     `GET /password-resets` tells the web app whether the server does). A mailed link is the same kind, made in the
-     same transaction (`made_by: mail`), so each cancels the other. The request is counted per address in
-     `sign_in_attempts` under a `reset:` key of its own, before the account is looked up, so asking never uses up the
-     address's sign-in attempts and the reverse; the count is never cleared and runs out with its window. A known and
-     an unknown address get the same `202`, and the mail is sent after commit in a spawned task, so the answer
-     doesn't wait for the provider. A send that fails is logged once and not retried; in-flight sends aren't drained
-     at shutdown, and the user asks again. Without mail the endpoint is `404`.
-   - With mail set up and a local password, a user changes their **email address** from Account
-     (`POST /me/email-changes`, the session cookie only, as a password change is: it is the person's decision in their
-     browser). It takes the current password and the new address; the address changes only when a link mailed to the
-     new one is applied. Tries are counted per session in the password change's count with its limit, before the
-     password is checked, and a wrong password adds one to the account's sign-in count; an ask with the right one
-     counts as an address change of the account (above), which limits the addresses it mails. An address another account has gets the same
-     `202` and the same history entry as a free one, with no link and no mail, so the answer reveals nothing about
-     accounts. A free one is a row in `email_change_links` (a token's SHA-256, the user, the new address, an expiry a
-     day on), made in one transaction with the cancelling of the user's earlier working one. The table is apart from
-     `password_reset_links` because a link carries the address it changes to and has its own lifetime; the state and
-     the token are the reset link's (`domain::email_change`). Applying is `POST /email-changes/{token}`, no sign-in,
-     and there is no read of a link: mail scanners and previews fetch every link in a mail, so the link opens a page
-     with a button, and only the press, a `POST`, changes anything. Applying uses the link conditionally, sets the
-     address and bumps the user's version, and cancels the user's working reset link, since one mailed to the old
-     address must not keep working (a password change cancels it too, above), all in one transaction with its audit
-     entry; a unique-index refusal, the address taken since the ask, is `409 email_taken` and rolls the use back, so
-     the link keeps working. Sessions and tokens stay, and it signs no one in. After commit a notice goes to the old
-     address, in a spawned task like the other mails. Sign-in counts are keyed by address, so the new address starts
-     fresh. A password change or reset doesn't cancel a working email change link.
-   - With mail set up, a new password account **confirms its address** before it can sign in. `users.unconfirmed_since`
-     (millis) is set when a registration, plain or through an invite link, is made while the server has mail set up,
-     and `NULL` means confirmed, so every account that existed before, every account made while mail was off, and
-     every provider or SCIM account counts as confirmed with no backfill. Such a registration makes the account, its
-     personal team and heap (and the invite's membership) with no session and a confirmation link in the same
-     transaction, mails the link after commit like the others, and answers `202` with the address. The link is a row
-     in `email_confirmation_links` (a token's SHA-256, the user, an expiry a day on), apart from the other two link
-     tables as each purpose has its own, and one is working per user. Its state is the reset link's
-     (`domain::password_reset::ResetLink`) and a link that doesn't work fails as an email change link does
-     (`domain::email_change`). Sign-in checks the address only after the password verified, and only while mail is
-     set up: an unconfirmed account gets a new link (cancelling the earlier one) and `403 email_not_confirmed`, so a
-     wrong password reveals nothing and the attempt, still counted, caps the mails at the sign-in limit; with mail
-     off an account left unconfirmed signs in, and turning mail back on refuses it again. There is no resend
-     endpoint, since signing in again is how a person asks. Confirming is `POST /email-confirmations/{token}`, no
-     sign-in and no read of a link (scanners again): it uses the link conditionally, clears `unconfirmed_since`,
-     records `email_confirmed` (`made_by: link`) unless the address already was (a reset that confirms writes no entry of its own, its entry stands for it) and opens a session, in one transaction, with or without mail, then clears the address's sign-in count. Any
-     mailed link confirms: setting a password with a reset link, the operator's included, and applying an email
-     change clear `unconfirmed_since` too, so someone whose address a squatter used gets in through Forgot your
-     password?, which mails any account with the address. Sessions an unconfirmed account already holds stay. The
-     operator confirms by hand with `upheap-server user confirm <username or email>`, which needs no mail and records
-     `email_confirmed` (`made_by: operator`) unless the address already was.
-     A mistyped address is corrected with `POST /auth/confirmation-address` (login, password and the new address, no
-     session): it counts and verifies like a sign-in, under the same limit (keyed by the address, so a changed address
-     starts a fresh count), then counts as an address change of the account (above), and only works for an account that is
-     still unconfirmed (a confirmed one fails like a wrong password). In one transaction it sets the address (still
-     unconfirmed, since nothing proved it), cancels the working reset link, so whoever reads the wrong mailbox can't
-     take the account with one, makes a new confirmation link (cancelling the earlier one) and records
-     `email_changed`; the link is mailed after commit. An address another account has answers the same `202` and
-     changes, mails and records nothing.
-   - A user's **account history** is the audit entries about them in their personal team, where their account entries
-     go: a password change, a reset link made for them (actor: the user, for the reason above, or the operator who made it on the
-     Accounts page), a password set with
-     one, an email change asked and one made, an address confirmed, the sign-in provider turning them off or back on (no account acts, so the actor is the user, as with a
-     reset link made for them), an operator turning them off or on, the operator role given or taken away, and their own heap priority change (recorded here and not in the heap's team, since
-     the value is private to them). `GET /me/history` reads exactly those eleven actions for the caller, with no way to name another user or
-     team, so only the user sees them and team admins never do; an operator reads the same entries of any account
-     (below). It is not the team log: the server words each entry
-     as one sentence with no actor ("Password changed. 2 other sign-ins ended.", "You changed your priority for Work
-     from 1 to 3.") from the entry's diff, and the sentence is made on reading, so a wording fix reaches old entries.
-     A priority entry's diff carries the heap's name at the time of the change; an older entry without one reads the
-     heap's current name by its ID, and "a heap" when that is gone. Cookie or bearer token may read it.
-   - The **operator role** is `users.operator_since`, set and cleared only by the server's shell
-     (`upheap-server user make-operator` and `remove-operator`, each recorded as `operator_granted` or
-     `operator_removed` with the person as the actor, and nothing when it changes nothing); no API endpoint sets it.
-     It is read from the database on every operator request, so removing it takes effect on the person's next
-     request, and `GET /me` says whether the caller has it (`operator`). The operator endpoints (`/operator/accounts`:
-     the list, the counts that deactivating would end, deactivate, reactivate, a reset link, and an account's history)
-     answer the plain `404 not_found` to a caller who isn't an operator, before reading anything else, so the pages don't
-     show that operators exist. A team admin has no extra power there. The list is not paged: a server has tens to a
-     few hundred accounts, and the page searches and filters it in the browser (that changes when a server has
-     thousands). An account is a **provider** account when it has an identity at the configured provider, and a
-     **local** one otherwise; an operator turns off and on, and makes reset links for, local accounts only, and a
-     provider account answers `409 account_provider_managed`, since the provider owns its state. Each listed account
-     carries `allowed_actions`, worked out by the same rules the actions enforce: an operator can't turn off their own
-     account through the API (`409 own_account`; the shell can), and a reset link for an account an operator turned
-     off answers `403 account_turned_off`, since the link couldn't sign in.
-     `users.last_sign_in_at` is set wherever a session is opened (`open_session`) and shown in the list.
-   - An **operator's deactivation** sets `users.deactivated_at` where SCIM's keeps its state in `scim_users`. In one
-     transaction, after locking the person's personal team as SCIM does (sign-ins open a session under that lock), it
-     sets the column, ends every sign-in with the same `end_sign_ins`, and records `account_deactivated` with
-     `made_by: operator` and the count, the operator as the actor (the shell's has the person, as SCIM's does). The
-     account, its items, teams and memberships stay, and reactivating clears the column and restores nothing. Opening a
-     session for the account (`refuse_deactivated`, which every password sign-in, reset and code exchange passes
-     through) then fails with `403 account_turned_off`, a code of its own beside SCIM's `account_deactivated` so the
-     web can say who turned it off. Repeating either action changes and records nothing. A reset link made by an
-     operator records `made_by: operator` with the operator as the actor. An operator reads an account's history with
-     the same reading as the person's, worded for the operator: who did it is the entry's actor, or "from the server"
-     when the actor is the person themselves for an operator-made entry.
+     The pushes are kept as sent, as the provider's data. A SCIM user is linked to an account by the issuer and its
+     `externalId` as the subject, never email, looked up each time, so a person who signs in later is linked from
+     then on. A team follows the pushes once every one of its groups has been pushed, and the token until then, so
+     pushing groups one at a time, or people before their groups, empties nothing; at sign-in a pushed team follows
+     the pushes, not the token, so a token minted a moment earlier can't undo a push. A push that deactivates a
+     linked person ends every sign-in of theirs in the same transaction; a sign-in that races it waits on the same
+     lock, so it is either ended by the push or refused after it.
+   - **Provider only.** With password sign-in off, every password path in the service layer refuses, so the API and
+     the operator's commands agree. A local user's sign-ins end in two ways, and both are needed: the server's start
+     ends them, so turning passwords back on doesn't revive them, and the auth check refuses them, because during a
+     rolling deploy an older instance can still make one. Passwords are never deleted, so turning the setting back on
+     is the recovery.
+   - **Signing out at the provider** is opt-in. Only then is the raw ID token kept with the session, since it has to
+     be sent back as a hint; it can't sign anyone in to Upheap. Sign-out ends the Upheap session first, and never
+     fails because of the provider.
+   - An invite passes its page through the round trip, so the provider flow has no invite logic.
+4. **Local accounts:** passwords are hashed with argon2id, and sign-in takes an email address or a username.
+   - **Attempts are limited per account**, keyed by its address whichever was typed, and per unknown address alike,
+     so a refusal doesn't reveal whether an account exists. A refused attempt costs no argon2 work. Counts live in the
+     database, so they hold across instances. There is no per-IP limit: behind a proxy the server doesn't know client
+     addresses, so spraying one password across accounts is left to the proxy.
+   - **Mail is limited on every path that sends it**, with the sign-in limit's numbers under a key of its own, so
+     that no one address or account can be made to send much mail, and asking for mail never uses up sign-in
+     attempts. Registration is the exception (see `register`). Mail goes out after the transaction commits, so an
+     answer never waits for the mail provider.
+   - **A password change** takes the current password, counted per session so someone using up the account's
+     attempts can't block the owner. It ends every other sign-in and cancels any working reset link.
+   - **A reset link** is made by the operator, or mailed when the server has mail. It works once, briefly, and one
+     works per user. Using it ends every sign-in as a change does and signs the holder in, since the link proves who
+     they are.
+   - **Email links can't be read, only used.** Mail scanners and previews fetch every link in a mail, so an email
+     change or confirmation link opens a page with a button, and only the press, a `POST`, changes anything.
+   - **Changing the address** takes the password, and the address changes only when the link mailed to the new one
+     is applied. A taken address gets the same answer as a free one, so asking reveals nothing about accounts.
+     Applying cancels the working reset link, since one mailed to the old address must not keep working.
+   - **Confirming the address.** With mail set up, a new password account confirms its address before it can sign
+     in. Sign-in checks it only after the password verified, so a wrong password reveals nothing; with mail off an
+     unconfirmed account signs in. A mistyped address can be corrected before confirming, which cancels the working
+     reset link so whoever reads the wrong mailbox can't take the account.
+   - **Account history** is the audit entries about a user in their personal team, worded by the server. Only the
+     user reads theirs, and an operator reads any account's; team admins never do.
+   - **The operator role** is set only from the server's shell, and read on every request, so taking it away takes
+     effect at once. To anyone else the operator endpoints answer `404`, so the pages don't show that operators
+     exist. An operator turns off and on, and makes reset links for, local accounts only: the provider owns the state
+     of its accounts. Turning an account off keeps everything it owns and ends its sign-ins in one transaction.
 5. **Authorization:** the API resolves a cookie or a bearer token into one `Principal`, and the service layer
    enforces access ([Access control](#access-control)).
 

@@ -77,7 +77,8 @@ pub async fn resolve_group_teams(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Groups {
     Known(BTreeSet<String>),
-    /// The token didn't say: no membership changes. An empty list is [`Groups::Known`], not this.
+    /// The token didn't say: no membership changes. An empty list is [`Groups::Known`], not this: it takes the person
+    /// out of every mapped team, which a token that is merely silent must never do.
     Unknown(&'static str),
 }
 
