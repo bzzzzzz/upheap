@@ -26,56 +26,48 @@ This doc explains mechanisms and reasons. What the code states, it doesn't repea
 
 ## Stack
 
-| Area          | Choice                                                                                                                                                                                                                                                                                                                                                     |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend       | Rust (stable), a Cargo workspace                                                                                                                                                                                                                                                                                                                           |
-| HTTP          | axum on tokio, tower middleware                                                                                                                                                                                                                                                                                                                            |
-| API contract  | Code-first OpenAPI 3.1 with utoipa. The web app's TypeScript types are generated from it with openapi-typescript, and CI fails on drift                                                                                                                                                                                                                    |
-| Data access   | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres                                                                                                                                                                                                                                                      |
-| Migrations    | sea-orm-migration, embedded in the binary and run at startup                                                                                                                                                                                                                                                                                               |
-| Auth          | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients, and personal tokens for machines with no browser. One OpenID Connect provider per server, through the `openidconnect` crate, next to local accounts                                |
-| Web app       | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed                                                                                                                                                                                                                                    |
-| Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz`                                                                                                                                                                                                                                                                                            |
-| Testing       | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end                                                                                                                                                                                                                 |
-| Packaging     | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production ([operations.md](../operator/operations.md)); the CLI and the server as static binaries on GitHub Releases, with a Homebrew cask for the CLI in `bzzzzzz/homebrew-tap` ([operations.md](../operator/operations.md#releasing-the-cli-and-the-server)) |
+| Area          | Choice                                                                                                                                                                                                                                                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend       | Rust (stable), a Cargo workspace                                                                                                                                                                                                                                                                                            |
+| HTTP          | axum on tokio, tower middleware                                                                                                                                                                                                                                                                                             |
+| API contract  | Code-first OpenAPI 3.1 with utoipa. The web app's TypeScript types are generated from it with openapi-typescript, and CI fails on drift                                                                                                                                                                                     |
+| Data access   | SeaORM 2 over sqlx, with the backend chosen at startup from `DATABASE_URL`: SQLite, MySQL or Postgres                                                                                                                                                                                                                       |
+| Migrations    | sea-orm-migration, embedded in the binary and run at startup                                                                                                                                                                                                                                                                |
+| Auth          | argon2id for local passwords; an own session table with hashed random tokens for the web app; own OAuth 2.0 authorization-code endpoints with PKCE for non-web clients, and personal tokens for machines with no browser. One OpenID Connect provider per server, through the `openidconnect` crate, next to local accounts |
+| Web app       | React, Vite, TanStack Query and Router, Tailwind, React Aria Components, Motion; embedded in the binary with rust-embed                                                                                                                                                                                                     |
+| Observability | `tracing` with JSON logs, request IDs, `/healthz` and `/readyz`                                                                                                                                                                                                                                                             |
+| Testing       | `cargo test` with googletest matchers, proptest for ranking invariants, MySQL and Postgres service containers in CI, Playwright end to end                                                                                                                                                                                  |
+| Packaging     | A static binary in a minimal Alpine image; docker-compose with SQLite on a volume; Cloud Run with Neon Postgres in production; the CLI and the server as static binaries on GitHub Releases, with a Homebrew cask for the CLI ([operations.md](../operator/operations.md))                                                  |
 
 ## Workspace
 
 Dependencies point one way: `server → api → service → store, domain`, with `api → api-types → domain` and
-`server → mail` beside it, and `service → mail` for the mail it sends. `domain` depends on nothing in the workspace, so ranking and the state rules are unit- and
-property-tested in isolation, and `store` and `api` never depend on each other.
-`api-types` holds the request and response types with no IO, so a Rust client such as `cli` shares them without
-linking the server. It copies each domain enum as a type of its own on purpose: the API tolerates values it
-doesn't know in what it only reads, leaves some values out, and its list of values is the reviewed contract. The
-conversions are exhaustive `match`es, so a new value fails the build until it is added, and a macro declaring the
-copies was tried and dropped because it would hide that contract. In `domain`, an enum whose codes are stored is
-declared with `coded_enum!`, which exists for the one thing a `match` can't check: that the list of every value
-holds every variant. Files that nearly every feature edits (`domain::permission`, `api/src/error.rs`, the access
-control table test) are meant to be: the build or the test fails until the feature is classified there. The crates and their roles are listed in [README.md](../../README.md#layout); each crate's root
-module says what it owns.
+`server → mail` beside it, and `service → mail` for the mail it sends. `domain` depends on nothing in the
+workspace, so ranking and the state rules are unit- and property-tested in isolation, and `store` and `api` never
+depend on each other. `api-types` holds the request and response types with no IO, so a Rust client such as `cli`
+shares them without linking the server. It copies each domain enum as a type of its own on purpose: the API
+tolerates values it doesn't know in what it only reads, leaves some values out, and its list of values is the
+reviewed contract. The conversions are exhaustive `match`es, so a new value fails the build until it is added, and
+a macro declaring the copies was tried and dropped because it would hide that contract. In `domain`, an enum whose
+codes are stored is declared with `coded_enum!`, which exists for the one thing a `match` can't check: that the list
+of every value holds every variant. Files that nearly every feature edits (`domain::permission`, `api/src/error.rs`,
+the access control table test) are meant to be: the build or the test fails until the feature is classified there.
+Each crate's root module says what it owns.
 
 ## Data model
 
 The tables and columns are in the migrations. These are the conventions they follow.
 
 - **IDs** are UUIDv7 in `CHAR(36)`: sortable by creation time and safe to expose.
-- **Handles** name things in URLs, API paths and the CLI ([Handles](#handles)): usernames, team slugs, heap slugs
-  (unique per team) and item keys (unique per heap). They are extra columns with unique indexes, and every foreign
-  key still points at the UUID, so a handle can change without touching references.
-- **A reminder's arrival** is its own column, `items.arrives_at`: the first millisecond of its date in the time zone
-  of the request that set it, not worked out from the due's end of day (a day that changes the clocks is not 24
-  hours long). It is `NULL` for an item that was never a reminder, and kept when the reminder becomes a task, so the
-  task's age still counts from it. A reminder's due is firm and ends the same day. Ranking reads
-  `arrives_at.unwrap_or(created_at)` as the item's age, so `arrives_at` has a second use: an item made from another
-  with `age: keep` gets the origin's arrival (or its creation) there, and so counts its age from the note's creation.
-  It is still `NULL` for every other item, and the API shows it only for reminders.
-- **An item's origin** is `items.origin_id`: the note it was split from (`item add --from`), or the item of the run that
-  added it, with `created_run_id` set beside it then. `made_in_split` marks the first kind: only those are what the note
-  became, so a follow-up a run adds doesn't count toward `nothing_made`, the run's reached check or the Became list. All
-  three are set when the item is made and never changed, and stay when either item later moves to another heap or team,
-  as a blocker's link does; a reader sees the other end only where they may view its heap. An index on `origin_id`
-  serves the lookup of what a note became, which the item and the closed list show as `became`, each with the heap it is
-  in now: a handful of items per note, and at most one page of closed items, read in one query.
+- **Handles** name things in URLs, API paths and the CLI ([Handles](#handles)). They are extra columns with unique
+  indexes, and every foreign key still points at the UUID, so a handle can change without touching references.
+- **A reminder's arrival** is stored, not worked out from its due: the first moment of its date in the time zone of
+  the request that set it, since a day that changes the clocks is not 24 hours long. It is kept when the reminder
+  becomes a task, and ranking counts an item's age from it, so the task's age still counts from the reminder.
+- **An item's origin** is the note it was split from, or the item of the run that added it. Only the first kind is
+  what the note became, so a follow-up a run adds doesn't count toward what the note made. Both are set when the
+  item is made and never changed, and stay when either item moves, as a blocker's link does; a reader sees the
+  other end only where they may view its heap.
 - **Timestamps** are UTC Unix milliseconds in `BIGINT`, which sidesteps the differences between the databases'
   date types. No timezone is stored anywhere ([Time and timezones](#time-and-timezones)).
 - **Structured data** (audit diffs, saved list views) is JSON in `TEXT`, never queried inside the database.
@@ -84,29 +76,17 @@ The tables and columns are in the migrations. These are the conventions they fol
   taking a tag off an item sets `item_tags.removed_at`, and clearing a parameter value sets its `option_id` to
   `NULL`. Team membership is the one exception: removing a member deletes the `team_members` row, and the audit log
   keeps the history. The log is also where a removal is remembered: joining through an invite link reads the person's
-  last `member_removed` entry, so a link made before it doesn't let them back in.
+  last removal, so a link made before it doesn't let them back in.
 - **Optimistic concurrency:** every mutable row carries a `version`. Updates require the expected version and fail
   with `409` otherwise. A parameter is one aggregate: its options and tag links have no version of their own, and
   every change to them takes the parameter's version.
-- **A task's steps are rows of their own** in `item_steps`, each with its own `version`: a step write never bumps the
-  item's, and an item write never bumps a step's, so an agent ticking steps never makes an open edit of the item
-  conflict. A step has a `number`, given when it is added (one past the highest the item has had) and never changed
-  or reused, which is its name (`k3x9a.3`), and a `position` for its place in the order, kept apart so reordering
-  never renames a step. A move (an `after` in the step's patch) writes the item's positions afresh from 0 and bumps
-  only the moved step's version; the steps it displaced keep theirs, as when an added step shifts them. Steps are never deleted: a dropped one stays. A task has at most 100, which is the size
-  assumption that lets an item response carry all of its steps: only a single-item response does, and the ranked
-  and closed lists carry `steps: null` and just the progress, counted in one grouped query per chunk without
-  loading the steps. Progress is ticked of open plus ticked, so dropped steps don't count. A step write takes the
-  heap lock like any item write, then reads the item and its steps again with locking reads (see
-  [Cycle detection and locking](#cycle-detection-and-locking)), and answers with the whole item. Steps of a closed
-  item are read-only, and come back editable, unchanged, when it is reopened. A step made from a note
-  (`POST …/to-step`) keeps it in `item_steps.origin_id`, set once and never changed; an index on it serves the
-  lookup of the steps a note became, which the note and the closed list show as `became_steps`. The note was in the
-  task's heap then, but either may have moved to another team since, so a note shows as the step's origin only to
-  someone who may view its heap now. A heap made from a note
-  (`POST …/heaps` with `origin_id`) keeps it the same way in `heaps.origin_id`, with an index for the lookup of the
-  heaps a note became (`became_heaps`) and of the heaps made from the items of a given heap, which the agent queue
-  follows. The note is in the heap's team, and making the heap leaves it open: it closes on `became`.
+- **A task's steps are rows of their own**, each with its own `version`: a step write never bumps the item's, and an
+  item write never bumps a step's, so an agent ticking steps never makes an open edit of the item conflict. A step's
+  `number` is its name (`k3x9a.3`) and is never changed or reused; its place in the order is kept apart, so
+  reordering never renames a step. Steps are never deleted: a dropped one stays. A task has at most 100, which is
+  the size assumption that lets a single-item response carry all of them; lists carry only the progress. A step
+  write takes the heap lock like any item write ([Cycle detection and locking](#cycle-detection-and-locking)). A
+  step or a heap made from a note keeps the note as its origin, as an item does.
 - **An item's questions are rows of their own** in `item_questions`, built like steps: a question write never bumps
   the item's `version` and an item write never bumps a question's, and a question's `number` is never reused.
   Questions are never deleted: an answered one keeps its reply, and closing an item withdraws its open ones in the
@@ -151,73 +131,47 @@ The tables and columns are in the migrations. These are the conventions they fol
   the address on it, out of the queue but not waiting for the person. The server never reaches GitHub: the loop that
   runs the agents reads each watched pull request with the person's own `gh`, and fires the watch when something
   came, which adds a comment and puts the item back in the queue.
-- **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is done,
-  won't do or became (a note closed because items were made from it; only `POST …/became` sets it). In `domain`, the state is an enum where only the closed variants carry them, so an open item with a
-  close time can't be built. The store converts between the two and rejects rows that break the rule.
-- **A tag is owned by a heap or by a team:** exactly one of `tags.heap_id` and `tags.team_id` is set, and the store
-  checks it on every read. Both kinds share one table, so `item_tags`, parameter links, saved views and tag orders
-  name either by ID with one foreign key, and a team tag needs no copy per heap: a rename is one row written. A
-  heap's tags are its own and its team's, read together. Every tag has a `color`, a code from a fixed palette; a tag
-  made without one gets the least used among the tags it sits among.
-- **A parameter is owned by a heap or by a team:** exactly one of `parameters.heap_id` and `parameters.team_id` is
-  set, and the store checks it on every read. A heap's use of a team parameter is a row in `heap_parameters` with the
-  heap's weight, rather than a weight on the parameter, which would be one number for every heap; stopping sets
-  `stopped_at` and using again clears it, so the weight survives. The store reads a heap's parameters as its own plus
-  the team parameters it has a use row for, with that weight, and archived when the team archived the parameter or
-  the heap stopped using it. Ranking, item values, filters, saved views, moves and the audit's names read that, so
-  they see a used team parameter as the heap's own, and one a heap doesn't use isn't there. A team parameter has two
-  kinds of tag link. The team's links, to team tags only, are in `parameter_tags` like a heap parameter's and keep the
-  parameter's version. A heap's own links to a team parameter it uses, to its own tags or the team's, are in
-  `heap_parameter_tags`, a table of their own because a link belongs to the heap and `parameter_tags` rows have no
-  heap, and because it must stay the heap's when its tag becomes a team tag. They carry no version: a write names the
-  tags it links and unlinks and leaves the others, so two writes that race both take effect. The write also holds the
-  parameter only shared, and bumping its version would need the exclusive lock (see `lock_parameter_shared`). The
-  heap's read of its parameters puts them beside the team's links, and a tag that suggests the parameter in that heap
-  is in either.
+- **State and `closed_at`:** in the database, `closed_at` and `closed_by` are set exactly when the state is closed
+  (done, won't do or became). In `domain`, the state is an enum where only the closed variants carry them, so an
+  open item with a close time can't be built. The store converts between the two and rejects rows that break the
+  rule.
+- **A tag is owned by a heap or by a team**, in one table, so everything that names a tag (items, parameter links,
+  saved views, tag orders) does so by ID with one foreign key, and a team tag needs no copy per heap: a rename is
+  one row written. A heap's tags are its own and its team's.
+- **A parameter is owned by a heap or by a team.** A heap's use of a team parameter is a row of its own with the
+  heap's weight, rather than a weight on the parameter, which would be one number for every heap; stopping keeps the
+  row, so the weight survives using it again. Everything that reads a heap's parameters (ranking, values, filters,
+  views, moves, the audit's names) sees a used team parameter as the heap's own, and one the heap doesn't use isn't
+  there. A heap's own tag links to a team parameter are in a table of their own: the link belongs to the heap, and
+  must stay the heap's when its tag becomes a team tag. Those links carry no version, so two heaps' link writes that
+  race both take effect, and the write needs only a shared lock on the parameter.
 - **Case-insensitive uniqueness** (tag names per owner) is a lowercased key column with a unique index rather than a
   collation, because MySQL compares case-insensitively by default and SQLite doesn't. Where an index can't express
-  the rule, as for parameter names, which must be unique only among parameters in use, the service checks under the
-  heap lock. So it is for a name across the two kinds of tag: no heap tag in use may share a name with a team tag of
-  its team, which the tag writes check under the locks of [Cycle detection and locking](#cycle-detection-and-locking).
-  The same holds for a parameter's name across a team's parameters and the parameters of its heaps, which the
-  parameter writes check under those locks.
-- **A merged heap tag** keeps its row: `tags.merged_into` names the team tag it was merged into (`NULL` for a tag in
-  use), and its `name_key` becomes a space and its own ID, which frees the name for a new heap tag, keeps the key
-  unique, and can't match a name looked up, since names are trimmed. Its name and description stay, so the history of
-  what happened before the merge still names it. Only the history's name lookup reads merged tags; every other read
-  leaves them out, as if they were unknown.
-- **A merged heap parameter** is archived. Making a heap parameter a team parameter moves each item's value to the
-  team parameter and then archives the heap parameter, which the archiving rule allows since no item has a value for
-  it any more. Archiving is enough: it keeps the row, name and options, so the history from before still names them
-  (its name lookup reads archived parameters), frees the name, and can't be undone. The one that starts the merge
-  becomes the team parameter in place (same row and ID, no weight of its own, each heap's weight in its use row), so
-  its heap's items, views and history need no change.
+  the rule (a parameter name unique only among those in use, a name unique across a team's tags or parameters and
+  its heaps'), the service checks under the locks of [Cycle detection and locking](#cycle-detection-and-locking).
+- **A merged heap tag** keeps its row and names the team tag it was merged into. Its name key is changed so the name
+  is free for a new heap tag, and its name stays, so the history from before the merge still names it. Only the
+  history reads merged tags.
+- **A merged heap parameter** is archived, once its items' values have moved to the team parameter. That keeps its
+  row and options for the history, frees the name, and can't be undone. The parameter a merge starts from becomes
+  the team parameter in place, so its heap's items, views and history need no change.
 - **Insert-only tables:** the application can only insert into `audit_log`. There is no update or delete code path
   for it.
-- **The heap's ranking policy** is its row: the need, age, deadline, value and tags weights on `heaps`, plus each
-  parameter's weight, and the heap's tag order. The weights and the order change together through one endpoint, in
-  one transaction under the heap lock, because a weight only means something next to the others (a factor's share
-  is its weight out of the total) and separate writes per row could leave the policy half-saved. The heap's version
-  orders these saves, moving on also when one changes only parameter weights. A parameter's own `PATCH` still sets
-  its weight alone, guarded by the parameter's version only, so a weights save made meanwhile against other
-  parameters still succeeds; making every parameter edit move the heap's version would close that gap but make
-  renames conflict with parameter edits. The policy includes the weights of the team parameters the heap uses, which
-  are on its use rows. The tag order is a JSON list of tag IDs on `heaps.tag_order`, the highest
-  first (`NULL` when empty), rather than a rank column on `tags` or a table of its own: it belongs to the heap, it is
-  saved under the heap's version with the weights, and a tag shared by several heaps (a team tag) can then sit at its
-  own place in each heap's order without a schema change. A tag the list doesn't name is unranked.
-  Effort, impact and need are columns on `items` rather than custom parameters, because they are
-  fixed and apply to every heap ([decisions.md](decisions.md#6-effort-impact-and-need-are-item-columns-not-custom-parameters)).
-- **A user's username is the slug of their personal team**, so usernames and team slugs share one namespace under
-  one unique index. The personal team can't take members, and its slug never changes.
-- **Archived options always name their replacement** (`archived_at` and `replaced_by_option_id` are set together),
-  so a stored value can always be followed to an option in use.
+- **The heap's ranking policy** (its factor weights, its parameters' weights and its tag order) is saved through one
+  endpoint, in one transaction under the heap's version, because a weight only means something next to the others
+  and separate writes could leave the policy half-saved. A parameter's own edit still sets its weight alone under
+  the parameter's version; making every parameter edit move the heap's version would close that gap but make
+  renames conflict with parameter edits. The tag order is a list on the heap rather than a rank on each tag, so a
+  team tag sits at its own place in each heap's order. Effort, impact and need are item columns rather than custom
+  parameters, because they are fixed and apply to every heap
+  ([decisions.md](decisions.md#6-effort-impact-and-need-are-item-columns-not-custom-parameters)).
+- **Archived options always name their replacement**, so a stored value can always be followed to an option in use.
 - **Invite links keep their token readable**, unlike session tokens and OAuth secrets, which are stored hashed: a
   link is sent around for a week and admins copy it again, so the server must be able to show it. A leaked database
   therefore holds working links, each worth a membership for at most a week; revoking one ends it. A link's end is
-  derived from `created_at` and one constant in `domain`, not stored.
+  derived from its creation, not stored.
 - **Portable SQL in practice.** The differences met so far, which new SQL has to respect: in `ON CONFLICT DO
-UPDATE` Postgres refuses a bare column name that could mean the existing row or `excluded`, so upserts name
+  UPDATE` Postgres refuses a bare column name that could mean the existing row or `excluded`, so upserts name
   their columns with the table; Postgres pads `char(n)` and reads it back padded, so every `char` column holds
   values of exactly its length; identifiers are quoted per backend; SQLite's `LOWER` lowercases ASCII only and
   Postgres's all of Unicode, so a comparison lowercases both sides in SQL, never one side in Rust; and after any
@@ -239,111 +193,83 @@ the UUIDs stay the database keys.
 
 Display names, team names and heap names stay free text that can repeat. Only handles are unique.
 
-1. **A username is the slug of its user's personal team** (`teams.personal_user_id` points at the owner), so one
-   unique index covers both and `/teams/eugene` is always Eugene's personal team. The personal team is private: it
-   has exactly one member and refuses members, removal and leaving (`409 personal_team`, and its `allowed_actions`
-   don't offer them), and its slug can't change, since usernames never do. Its name can change, and it holds as
-   many heaps as the owner likes; anything shared lives in another team.
-2. **Format.** Usernames and slugs are lowercase letters, digits and single dashes, starting with a letter and not
-   ending with a dash, within the lengths `domain::handle` sets. Input is checked, never fixed silently: `My-Team`
-   is `422 invalid_handle` with a hint showing `my-team`. A team or heap created without a slug gets one derived
-   from its name, with `-2`, `-3`… where that's taken. Two creates of one name at once can both find the same slug
-   free; the one the unique index refuses starts again with the next suffix, so only a slug the caller chose is
-   ever `409 handle_taken`. A taken username at sign-up comes with a free one as the hint, made the same way:
-   `sam-2` for `sam`.
-3. **Item keys** are five characters from Crockford's base32 alphabet in lowercase (no `i`, `l`, `o` or `u`), with
-   at least one digit, so they're easy to read aloud and type and can't spell real words: about 30 million per
-   heap. They're random, so a key says nothing about when an item was made or how many a heap has. The key is drawn
-   inside the item's insert transaction, under the heap lock every item write takes, and checked against the unique
-   index on `(heap_id, key)`; a clash is retried, and with a few thousand items one happens about once in several
-   thousand inserts. `domain` turns random bytes into a key, and the service draws the bytes from the
-   `RandomSource` it's given, like its clock, so tests can script them. Items are never deleted, so a key is never
-   reused within a heap, except that one an item took with it when it moved to another heap can be drawn again, about
-   one chance in 30 million per insert. An item that moves to another heap keeps its key unless the
-   target heap has an item with it, and then gets a new one, drawn under the locks the move takes.
+1. **A username is the slug of its user's personal team**, so one unique index covers both and `/teams/eugene` is
+   always Eugene's personal team. The personal team is private: it has exactly one member and refuses members,
+   removal and leaving, and its slug can't change, since usernames never do. Anything shared lives in another team.
+2. **Format.** Input is checked, never fixed silently: `My-Team` is refused with `my-team` as the hint. A team or
+   heap created without a slug gets one derived from its name, with `-2`, `-3`… where that's taken. Two creates of
+   one name at once can both find the same slug free; the one the unique index refuses starts again with the next
+   suffix, so only a slug the caller chose is ever refused as taken.
+3. **Item keys** are five random characters, easy to read aloud and type, that can't spell real words, and say
+   nothing about when an item was made or how many a heap has. The key is drawn under the heap lock every item write
+   takes and checked against the unique index; a clash is retried. The service draws the bytes from the random
+   source it's given, like its clock, so tests can script them. An item that moves keeps its key unless the target
+   heap has an item with it.
 4. **Nothing is reserved.** Every handle sits after a fixed word in the URL (`teams/`, `heaps/`, `items/`), so it
    can't clash with a page the app has now or adds later. Teams start at `/teams/` rather than at the root because
    the root holds the app's own pages and the server's paths (`/api`, `/healthz`, `/oauth`). API paths have the
    same shape under `/api/v1`, so a web URL becomes its API call by adding the prefix.
 5. **Short links.** `/h/my-team/backlog/k3x9a` is the short form, one handle per position: team, then heap, then
-   item. The web app's router replaces it with the full URL as it opens. Items offer Copy link with the short form; the API has none. The CLI takes an
-   item as its key within the default heap, or as the full path `my-team/backlog/k3x9a`, a short link without its
-   `/h/`, so a pasted link works too.
+   item. The web app's router replaces it with the full URL as it opens; the API has none. The CLI takes the same
+   path without its `/h/`, so a pasted link works too.
 6. **Changes.** Usernames are fixed, and an item's key changes only when it moves to a heap that has the key. Team
-   and heap slugs can change, and an item's heap can, by a move. A move keeps the item's former
-   (heap, key) handles. An item path with one names the item where it is now, for reads and writes alike, unless an
-   item holds that handle now, and then that item; of several former holders the last to leave. It is read like any
-   item, against the heap it is in now, so after a move to another team it answers `404` to whoever can't view that
-   heap. The web app then shows the current address. A renamed team or heap slug still breaks old links.
-7. **Sign-up** asks for a username with the display name, email and password; the personal team takes it as its
-   slug, and the first heap is `personal`. A first OIDC sign-in asks for a username before creating the
-   user.
+   and heap slugs can change. A move keeps the item's former handles, so an old item path still names it where it is
+   now, unless another item holds that handle now; it is read against the heap it is in now, so after a move to
+   another team it answers `404` to whoever can't view that heap. A renamed team or heap slug still breaks old links.
+7. **Sign-up** asks for a username, which the personal team takes as its slug. A first OIDC sign-in asks for one
+   before creating the user.
 
 ## Ranking
 
 ### Computation
 
 Ranking is a pure function in `domain`: the heap's policy, its non-closed items with their parameter values and
-blocking edges, and an `as_of` time go in; positions, contributors and held-back entries come out. Nothing about scores is stored.
+blocking edges, and an `as_of` time go in; positions, contributors and held-back entries come out. Nothing about
+scores is stored. The module doc of `domain::ranking` explains the formula.
 
 1. The service loads everything the heap needs and ranks in memory on each request. Heaps are expected to hold at
    most a few thousand open items, so this is cheap. A per-heap cache invalidated on write can be added if
    measurements call for it.
-2. Each factor (need, age, deadline proximity, value per effort, each custom parameter, the tag order) produces a weighted
-   component. Age counts from when the item joined the list: its creation, or for an item that was a reminder, its
-   `arrives_at` (`ItemForRanking::from`), so a reminder arrives ranked as due that day rather than as an old item.
-   The score combines them. The formula is a named version (`FormulaVersion::V4`) behind one
-   function, set in code rather than stored per heap: tests pin orderings per version, so a formula change is an
-   explicit test update, and since scores are never stored, switching versions needs no migration. The module doc of
-   `domain::ranking` explains the current formula.
-3. **Blocker inheritance:** the blocking edges form a forest, because cycles are refused on write. An item's
-   effective score is the greater of its own and the boosted effective scores of the items it blocks, computed by
-   one memoized walk, so it's linear in the number of items and carries through chains. Ties go to the item blocking
-   the longer chain, so a blocker never ranks below what it blocks, even when every weight is zero.
+2. Each factor produces a weighted component, and the score combines them. The formula is a named version behind
+   one function, set in code rather than stored per heap: tests pin orderings per version, so a formula change is an
+   explicit test update, and since scores are never stored, switching versions needs no migration.
+3. **Blocker inheritance:** an item's effective score is the greater of its own and the boosted effective scores of
+   the items it blocks, computed by one memoized walk, so it's linear in the number of items and carries through
+   chains. Ties go to the item blocking the longer chain, so a blocker never ranks below what it blocks, even when
+   every weight is zero.
 4. **Contributors** are the largest weighted components, each with a label and a relative share ("Deadline in a few
-   days", "Blocks _Migrate auth_"). Scores themselves are never returned.
-   **Held back by** names what the person could change to lift an item: a low need, no due date, unset sizes, a tag
-   low in the heap's tag order. A
-   factor counts while its weight is above 0 (the need while its weight or the age weight is), and unset sizes are
-   labelled with the formula's defaults. It is empty for a blocker ranked by what it blocks; the service also
-   empties it for the item listed first in its group, which is the one the item pane calls "Why it's #1", and for
-   every item in a group sorted by something other than priority, where those fields don't move it.
+   days", "Blocks _Migrate auth_"). Scores themselves are never returned. **Held back by** names what the person
+   could change to lift an item. The service empties it for the item listed first in its group, which the item pane
+   calls "Why it's #1", and for every item in a group sorted by something other than priority, where those fields
+   don't move it.
 5. **Ties** that the chain length doesn't settle go to the older item, then to the ID, so the order is fully
    deterministic.
-6. **Placement** (product.md, Priority §8) is the one stored input that isn't a field: a positive multiplier on
-   one item, or none. Ranking multiplies the item's score (its own or what it inherits) by it, then applies the
-   blocker rule again, so a blocker still never ranks below what it blocks. On a drop the client sends the anchor,
-   the side and its list's `as_of`; the service ranks the heap at that `as_of` with the item's own placement left
-   out and sets the multiplier so the item lands halfway between the anchor and its neighbour on that side. Placing
-   again replaces the number, a move to another heap drops it, and nothing else touches it. The module doc of
-   `domain::ranking` has the details. The web app only offers it in the ranked group of a heap's priority list,
-   since the API can't know the view a client shows.
+6. **Placement** (product.md, Priority §8) is the one stored input that isn't a field: a multiplier on one item. On a
+   drop the client sends the anchor, the side and its list's `as_of`, and the service ranks the heap at that `as_of`
+   without the item's own placement to work the multiplier out. The web app only offers it in the ranked group of a
+   heap's priority list, since the API can't know the view a client shows.
 
-A ranking preview ranks the heap with draft weights beside the stored ones, at one `as_of`, and returns the top of
-the default view's ranked group with each item's position under both. It stores nothing.
+A ranking preview ranks the heap with draft weights beside the stored ones, at one `as_of`, and stores nothing.
 
 ### Across heaps
 
-`GET /me/items` is the ranked list across every active heap the caller may view. Each heap that has any non-closed
-item is ranked and grouped under the request's view by the same code as its own list, so a row is what that list
-would show. Then each group (pinned, ranked, blocked) is merged across heaps by the item's score in its own heap
-times the caller's **heap priority** for that heap, highest first, then heap name, then the item's position in its
-heap, the same rule `GET /me/waiting` and the agents' queue order by (the queue also boosts started work, as above). A heap priority is one person's own number
-for one heap, 1 to 10: a `heap_priorities` row per person and heap, 1 when there is none, so teammates in a shared
-heap each order it their own way. Since a heap's group is already in score order and the priority is the same
-positive factor for all of a heap's items, the merge keeps every heap's own order. A change to it is audited in the
-person's personal team, not the heap's, because the value is private and the heap's log is read by the team. A heap made from a note starts with a copy of the note's heap's rows, in the transaction that makes it, so it sits where its source did for everyone; the copy isn't a change anyone made, so it is not audited. The view takes no sort, which belongs to one heap. `tag` and `param` filter only with a `team`, as that team's tags and team parameters' options: they are checked against the team, and the options of archived team parameters are dropped, as a heap's list ignores them. A heap that doesn't use a named (non-archived) team parameter is left out, unranked, since none of its items can hold a value for it. Filtering picks rows after each heap's ranking, so the merged order is the unfiltered one with the non-matching rows taken out. An optional `team`, a team's slug, limits the
-list to that team's heaps: they are filtered from the viewable heaps before any is ranked or merged, so the order
-within them is the unscoped list's, and the cap below applies after. A team that doesn't exist, that the caller isn't
-in or that isn't a valid handle is `not_found`, as every handle lookup answers, so teams can't be probed. It returns at most
-500 rows, pinned first, with `count` the true total: the size assumption that lets it skip paging.
+`GET /me/items` is the ranked list across every active heap the caller may view. Each heap is ranked and grouped by
+the same code as its own list, so a row is what that list would show. Then each group is merged across heaps by the
+item's score in its own heap times the caller's **heap priority** for that heap, the same rule Waiting for me and the
+agents' queue order by. A heap priority is one person's own number for one heap, so teammates in a shared heap each
+order it their own way. Since it is the same positive factor for all of a heap's items, the merge keeps every heap's
+own order. A change to it is audited in the person's personal team, not the heap's, because the value is private and
+the heap's log is read by the team. A heap made from a note starts with a copy of the note's heap's priorities, so it
+sits where its source did for everyone; the copy isn't a change anyone made, so it is not audited.
 
-The closed items and the history across the same heaps (`GET /me/items/closed`, `GET /me/audit`, each with the
-optional `team`) are not merges of per-heap reads: one query reads a page over all the heaps, ordered and paged by
-the cursor a single heap's read uses, and each row is then built as its own heap builds it. A closed item gets its
-heap's tags, parameters and the caller's role there. The history reads each team's heaps with the actions the
-caller's role in that team may see, so a member of one team and an admin of another sees in each heap what its own
-history shows them. Archived heaps are left out of both, as they are from the list.
+Filtering picks rows after each heap's ranking, so the merged order is the unfiltered one with the non-matching rows
+taken out. Tags and parameters are a team's, so they filter only with a `team`, which also limits the list to that
+team's heaps before any is ranked. A team the caller can't see answers as every handle lookup does, so teams can't
+be probed. The list has a cap instead of paging, under the size assumption in `MAX_ACROSS_HEAPS_ROWS`.
+
+The closed items and the history across the same heaps are not merges of per-heap reads: one query reads a page
+over all the heaps, paged by the cursor a single heap's read uses, and each row is then built as its own heap builds
+it. The history reads each team's heaps with the actions the caller's role in that team may see.
 
 ### Session-stable order
 
@@ -366,31 +292,23 @@ a fixed time.
    expected size that's fine, and it's what keeps client-side search and stable positions simple.
 2. The client searches text itself, over the titles and descriptions it already has, keeping the ranked order and
    making no request per keystroke.
-3. Filters by state, tag, need, size and parameter option, and the sorts, stay on the server, because they change
-   which items are pinned and how they are grouped. Ranking always runs over every non-closed item, since a blocker
-   inherits from what it blocks even when that item is filtered out or hidden; the view then picks, groups and sorts
-   the result, and reports what it left out (`hidden_count`, `unfiltered_count`, `in_progress_count`) so a client
-   can say "6 of 14" or offer the next item without a second request. The view's defaults (in progress pinned,
-   blocked hidden) are the server's, so every client starts from the same list. Archived parameters and options are
-   accepted in filters and sorts, so a saved view keeps working after an option is archived.
-4. **Reminders to come** are not ranked: `rank_open_items` splits them off (`Item::is_to_come`) at the server's
-   clock, not at the time a list ranks at, so a reminder whose date comes while a list is open joins it on the next
-   fetch. No list or queue sees them, and every open count leaves them out (`count_items_by_heap` takes the time to
-   compare with). Waiting for me keeps a question on one, after the ranked rows and by the reminder's date. They are
-   not hidden from search: the list's `reminders` setting adds them to the response as a group of their own,
-   soonest first and filtered like the rest, and a client that searches asks for it. The client still searches the
-   text itself.
+3. Filters and sorts stay on the server, because they change which items are pinned and how they are grouped.
+   Ranking always runs over every non-closed item, since a blocker inherits from what it blocks even when that item
+   is filtered out or hidden; the view then picks, groups and sorts the result, and reports what it left out, so a
+   client can say "6 of 14" without a second request. The view's defaults are the server's, so every client starts
+   from the same list. Archived parameters and options are accepted in filters and sorts, so a saved view keeps
+   working after an option is archived.
+4. **Reminders to come** are not ranked, and are split off at the server's clock, not at the time a list ranks at,
+   so a reminder whose date comes while a list is open joins it on the next fetch. No list, queue or open count sees
+   them. They are not hidden from search: a client that searches asks for them as a group of their own.
 5. The web app keeps the view in the URL, so it survives reloads and can be shared, but not the search text, which
    is a momentary narrowing. Saved views store the same settings under the query parameters' names, so a client
    turns one into a list query field by field.
-6. **Search across heaps** (`GET /me/search?q=`) finds items by title or key in every heap the caller may view,
-   closed items included, which the lists can't: they hold open items only, per heap. The title is matched as a
-   case-insensitive substring by portable `LOWER(title) LIKE LOWER(pattern) ESCAPE '!'`, with `!`, `%` and `_` in the
-   text escaped so they match only themselves. An item whose key is exactly the text comes first, then open items,
-   newest created first, then closed items, most recently closed first. At most 50 rows come back, and `truncated`
-   says whether more matched. Case folding is the database's `LOWER`: Unicode on Postgres and MySQL, ASCII only on
-   SQLite, and MySQL's collation also ignores accents. It is `LIKE`, not full-text, by [decision 12](decisions.md#12-portable-sql-over-per-database-features):
-   a person sees thousands of items at most, and the scan is narrowed to their heaps by the `heap_id` index.
+6. **Search across heaps** finds items by title or key in every heap the caller may view, closed items included,
+   which the lists can't. It is `LIKE`, not full-text, by
+   [decision 12](decisions.md#12-portable-sql-over-per-database-features): a person sees thousands of items at most,
+   and the scan is narrowed to their heaps by the heap index. Case folding is the database's `LOWER`, so it is ASCII
+   only on SQLite.
 7. If heaps grow beyond this size, the list's search moves to the server with per-database full-text indexes behind a
    `q=` parameter; if a person's items outgrow `LIKE`, the search across heaps moves to full-text indexes too.
 
@@ -403,69 +321,36 @@ a fixed time.
 3. Dates without a time, such as a due date, are stored as the end of that day in the request's timezone, converted
    to UTC.
 4. The one-week reopen window is exactly 7 × 24 hours from `closed_at`, so it doesn't depend on any timezone.
-5. The server lists the rough due choices a picker offers (`GET /due-choices`), each with its date in the request's
-   timezone and the label it reads back with, so "Next week" can never come back as "in a few days".
+5. The server lists the rough due choices a picker offers, each with its date in the request's timezone and the
+   label it reads back with, so "Next week" can never come back as "in a few days".
 
 ### Cycle detection and locking
 
-1. Every item, parameter and saved-view write first locks the heap row (`SELECT … FOR UPDATE` on MySQL and
-   Postgres), before touching any other row, so writes in one heap run one after the other and always take locks in
-   the same order. The write checks that the heap isn't archived on the heap row read under that lock, and archiving
-   takes the same lock, so no write lands in a heap archived while it waited. Reads that a rule depends on (the
-   blocker chain, a parameter and its options, a saved view, an item and its steps for a step write) are locking
-   reads too, because on MySQL a plain read before the lock would fix the transaction's snapshot and hide changes
-   that committed while it waited. SQLite has one writer at a time, so there the second of two conflicting writes
-   fails instead of waiting; the outcome that matters, no inconsistent state, holds either way. The tag IDs a
-   write stores are checked with a locking read, since a merge can retire a heap tag while the write waited.
-   A heap tag write first takes a shared lock (`FOR SHARE`) on its team's lowest heap, unless that is its own heap,
-   then locks its own heap row, then reads. A team tag write reads the team's heap IDs before its
-   transaction, then locks each of those heaps in heap ID order, as a move does, and reads after that; if the team's
-   heaps read again under the locks differ, a heap was made in between, and the write starts again. A team tag
-   write that merges heap tags (making or renaming a team tag into a name the team's heaps have) writes items,
-   parameters, saved views and tag orders in every heap of the team, so it needs every heap row; locking the team
-   row instead would deadlock with an item write, which holds its heap row and then needs the team row's key for its
-   audit entry. A heap tag write and a team tag write of one team meet on the heap row, or on the team's lowest heap
-   for a heap made after the team tag write read the team's heaps again (heaps are never deleted and never change
-   team, and their IDs are UUIDv7, rising with time, so the lowest stays the lowest while the servers' clocks agree to
-   within the age of the team's first heap; every team tag write locks it exclusively), and two team tag writes on
-   that heap too. In a team with no heaps a team tag write locks the team row instead, which making the first heap
-   waits for (it checks the row's key), and there is no item write to deadlock with. So no two tags take one name.
-   A team parameter write takes the same locks as a team tag write, since archiving a team parameter or one of its
-   options reads and writes items in every heap of the team, and a heap parameter made or renamed takes the shared
-   lock on the team's lowest heap first, so no heap parameter and team parameter take one name. The lock order stays ascending. A merge does a
-   handful of queries per item it reaches while it holds every heap lock of the team, so item writes in the team wait
-   for it; that is fine for merges of up to a few hundred items, which is the size assumption, and there is no limit.
-   The plain reads of a tag write come after its locks, so on MySQL their snapshot sees what committed while it
-   waited; the name checks take no locking reads, which would take gap locks that deadlock tag writes of two teams.
-   Making a heap parameter a team parameter takes the locks of a team parameter write, since it writes items, saved
-   views, parameters and use rows in every heap of the team, and does the same handful of queries per item it reaches
-   under the same size assumption.
-2. A move of an item to another heap, in any team the caller may edit items in, locks both heaps in heap ID order, as
-   the agent's queue locks several, then reads the item with a locking read and checks its version. A run's `became`
-   locks the note's heap and the active heaps made from the note the same way, since it defines the tasks in them. Two
-   moves in opposite directions can't wait for each other, and the second of two moves of one item finds it changed. The
-   item's own blocker is part of its old heap's state, so the moved item stays blocked with nobody picked. The items
-   that waited for it keep it as their blocker, now in another heap, so they wait for the person (§3), and a move back
-   makes it hold them again; the move writes nothing to them. A blocker in another team than the item it blocks is never
-   named, to anyone: the item has no `blocked_by` and its `blocker_gone` says it moved, with no heap, whatever the
-   blocker's state there (`gone_blockers`); Waiting for me shows it as a row of its own kind, `blocker_left_team`, with
-   no blocker (a new kind, so released clients skip it, as the API adds rather than changes). A note that heaps were
-   made from, archived ones included, stays in its team, since a run's `became` defines the tasks in those heaps. Since
-   an item's heap can change, a write that finds the heap through a read before the lock (a step, a question, a turn, a
-   run) reads the item again under the lock and refuses with `409 version_conflict` when it has left that heap
-   (`find_item_locking_in`).
-3. Setting a blocker walks the chain inside that transaction and refuses a request that would reach the item
-   itself. A blocker is part of the blocked state: leaving the state clears it, and it must be an open item of the
-   same heap when it is set, also for an item made blocked (`blocked_by` on create). So is the reason in words
-   (`blocked_reason`): leaving the state clears it, and a move to another heap keeps it while the blocker is dropped.
-   Closing a blocker as done frees what it blocks in its heap: in the same transaction,
-   under the heap lock, each item it blocks goes to open with its own `item_updated` entry naming the blocker
-   (`blocker_done`), and gets its next version. Closing it as won't do writes nothing to them: an item whose blocker is
-   closed, closed as became, or in another heap after a move (§2), stays blocked and waits for the person, which is read off the item
-   and its blocker, never stored (`Item::blocker_gone`). It shows in Waiting for me and its count, in the item's Waits
-   for you, and in the agents' waiting count, until the person unblocks it, closes it or picks another blocker.
-   Reopening the blocker makes it hold them again; an item it freed stays open, and its history says why. Items
-   blocked by a done item before this rule weren't freed; they wait the same way.
+1. **One lock order.** Every item, parameter and saved-view write first locks the heap row, before touching any
+   other row, so writes in one heap run one after the other and always take locks in the same order. The write
+   checks that the heap isn't archived under that lock, and archiving takes the same lock. Reads that a rule depends
+   on are locking reads too, because on MySQL a plain read before the lock would fix the transaction's snapshot and
+   hide changes that committed while it waited. SQLite has one writer at a time, so there the second of two
+   conflicting writes fails instead of waiting; no inconsistent state holds either way.
+   A write that reaches every heap of a team (a team tag or team parameter write, which may merge or archive across
+   the heaps) locks each heap of the team in heap ID order. Locking the team row instead would deadlock with an item
+   write, which holds its heap row and then needs the team row's key for its audit entry. A heap tag or heap
+   parameter write first takes a shared lock on the team's lowest heap, so it meets a team-wide write there even in
+   a heap made after that write read the team's heaps; heap IDs rise with time, so the lowest stays the lowest. A
+   merge holds every heap lock of the team while it works, which is fine for merges of up to a few hundred items:
+   that is the size assumption. Name checks take no locking reads, which would take gap locks that deadlock the tag
+   writes of two teams. `service::access` has the details.
+2. **A move** to another heap locks both heaps in heap ID order, as the agent's queue locks several, so two moves in
+   opposite directions can't wait for each other. The items that waited for the moved item keep it as their blocker,
+   so they wait for the person (§3), and a move back makes it hold them again. A blocker in another team than the
+   item it blocks is never named, to anyone. Since an item's heap can change, a write that finds the heap through a
+   read before the lock reads the item again under the lock and refuses when it has left that heap.
+3. **Blocking.** Setting a blocker walks the chain inside that transaction and refuses a request that would reach
+   the item itself. A blocker must be an open item of the same heap when it is set, and leaving the blocked state
+   clears it. Closing a blocker as done frees what it blocks, in the same transaction and each with its own audit
+   entry. Closing it as won't do frees nothing: an item whose blocker is closed that way, or is in another heap after
+   a move (§2), stays blocked and waits for the person until they unblock it, which is read off the item and its
+   blocker, never stored.
 4. Ranking still tolerates a cycle in stored data, by ignoring the edge that closes it, so one bad row can't break
    the list.
 
@@ -473,58 +358,32 @@ a fixed time.
 
 1. Everything is under `/api/v1`, JSON over HTTPS. The spec is `openapi.json`.
 2. Errors are `application/problem+json` with a stable `code`, mapped in one place (`crates/api/src/error.rs`),
-   where every error variant must be classified or the build fails. The exception is `POST /oauth/token` and
-   `POST /oauth/revoke`, which refuse requests in the RFC 6749 format so any OAuth client library understands them;
-   a failure of the server itself there is still a problem response.
-3. Paths name things by handle: `{team}` and `{heap}` are slugs, `{item}` a key, `{username}` a username. Tags,
-   parameters, options and views keep their IDs, checked against the heap in the path (a team tag's in any heap of
-   its team). A team's own tags are listed, made and edited under `/teams/{team}/tags`, and a heap's tags list holds
-   both kinds apart. A team's parameters are under `/teams/{team}/parameters`; a heap's parameters list holds the
-   team parameters it uses among its own, marked by `kind`, and the team's others apart in `team_available`. A handle that's malformed or names nothing the caller can see is `404`. Responses carry both
-   the `id` and the handle; request bodies refer to other things by ID, since clients have the objects in hand.
-   Creating a team or heap takes an optional slug, derived from the name when left out.
+   where every error variant must be classified or the build fails. The exception is the OAuth token and revoke
+   endpoints, which refuse in the RFC 6749 format so any OAuth client library understands them.
+3. Paths name things by handle. Tags, parameters, options and views keep their IDs, checked against the heap in the
+   path. A handle that's malformed or names nothing the caller can see is `404`. Responses carry both the `id` and
+   the handle; request bodies refer to other things by ID, since clients have the objects in hand.
 4. Updates are `PATCH` with partial bodies and the expected `version` in `If-Match`. Endpoints that say what
    something should end up as (archive, unarchive) take no `If-Match`, so repeating or racing them is safe, and a
-   write that is already applied succeeds (adding a member who is one, removing someone who isn't). Request bodies
-   refuse unknown fields, so a misspelt field fails instead of saving nothing. So does a field newer than the
-   server: a client that sends one to an older server gets `400 invalid_body`, and since the rest of its body is
-   valid, that code is how it tells, rather than looking for the field in the response.
+   write that is already applied succeeds. Request bodies refuse unknown fields, so a misspelt field fails instead of
+   saving nothing. So does a field newer than the server, which is how a client tells it is talking to an older one.
 5. List endpoints paginate with a cursor, except the ranked list ([Search](#search)).
-6. Responses are ready to show, so clients compute nothing: `due` as `{ at, firm, label, overdue }` in the
-   request's timezone, `contributors`, who did what and when as a `UserRef` and a label ("4 days ago"),
-   `closed_group` as a code the client has headings for, `allowed_actions`, and `null` for unset values.
-7. Responses return the whole aggregate: a team with its members and heaps, each with their `allowed_actions`, so a
-   client re-renders from one response after any change (promoting someone changes what can be done with every
-   other admin); a parameter with its options and tag links; `GET /me` with the caller's teams and heaps and their
-   counts.
+6. Responses are ready to show, so clients compute nothing: due dates with their labels in the request's timezone,
+   contributors, who did what and when with a label ("4 days ago"), `allowed_actions`, and `null` for unset values.
+7. Responses return the whole aggregate, so a client re-renders from one response after any change (promoting
+   someone changes what can be done with every other admin).
 8. Saved views belong to the heap, not to whoever saved them: every member sees, changes and archives them, as with
-   tags. An archived view is left out of the list and refuses edits until it's unarchived, which keeps its ID, so
-   Undo after archiving gives back the same view a CLI's `--view <id>` names.
+   tags. Unarchiving keeps a view's ID, so Undo after archiving gives back the same view a CLI's `--view <id>` names.
 9. Archiving an option switches the open items that have it to the replacement and bumps their versions, so an edit
    made from the old value fails with a version conflict instead of undoing the switch. A closed item keeps the
-   archived option; when it's reopened, its values are brought up to date the same way, in the reopening's audit
-   entry. Archiving an option of a team parameter does this in every heap of the team.
+   archived option, and is brought up to date when it's reopened.
 10. A display name change is audited once in each of the user's teams, since the audit log is per team and that is
-    where teammates see the name. A user in no team has nowhere to record it.
-11. **A write that merges heap tags into a team tag** (making, renaming or promoting a team tag into a name heap
-    tags of the team have) is refused with `tag_merge_unconfirmed` and the reach: the heap tags it takes in and how
-    many items carry each, with a `token`, a hash of that reach (`domain::tag::reach_text`). The client sends the
-    write again with `confirm_reach=<token>`. If the reach changed in between, the token no longer matches and the
-    write is refused again with the new reach, so what happens is what the person was shown. Nothing is stored
-    between the two requests. A merged heap tag's items, parameter links (a heap's links to team parameters too),
-    saved views (archived ones too, so none comes back naming a merged-away tag) and tag-order places all move to the
-    team tag in that one transaction ([Data model](#data-model), a merged heap tag).
-
-    **Making a heap parameter a team parameter** works the same way, with `parameter_merge_unconfirmed` and its reach
-    (`domain::parameter::reach_text`): the parameter it starts from, then each same-named heap parameter it takes in,
-    each with its item count, the options it adds and the options it switches (a live option that matches one the team
-    parameter archived, whose open items get its replacement). A reach of the starting parameter alone still needs the
-    confirm, since the move to the team can't be undone. Each parameter's tag links become its heap's links to the
-    team parameter (`heap_parameter_tags`), never team links, so no other heap gets suggestions. The starting
-    parameter's own links end, as it is the team's now, and continue as its heap's links; a merged parameter keeps its
-    link rows. The reach lists the tags per row, but they aren't part of its token: links can be edited after the
-    merge, so a link changed in between carries over as it is at the confirm. Repeating the write on a team parameter
-    the heap uses succeeds with no confirm and changes nothing.
+    where teammates see the name.
+11. **A write that merges into a team tag or team parameter** is refused first with its reach: what it takes in and
+    how many items it changes, with a `token`, a hash of that reach. The client sends the write again with the
+    token. If the reach changed in between, the token no longer matches and the write is refused again with the new
+    reach, so what happens is what the person was shown. Nothing is stored between the two requests. Making a heap
+    parameter a team parameter needs the confirm even when it takes in nothing else, since it can't be undone.
 
 ## Authentication and authorization
 
@@ -825,75 +684,53 @@ frame-ancestors 'none'`), so a page can't hide the consent page under something 
 
 ### Resource scoping
 
-1. Every resource resolves to exactly one team: heap → team; item, heap tag, heap parameter, option and view →
-   heap → team; a team tag or team parameter → team. A team tag is the first resource a team owns beside its heaps
-   and members ([decisions.md](decisions.md#44-team-tags-belong-to-the-team-one-row-used-by-every-heap)), and a team
-   parameter the second ([decisions.md](decisions.md#45-team-parameters-belong-to-the-team-each-heap-opts-in-and-keeps-its-own-weight)).
-   The service resolves the owning team first, then loads the caller's membership in it.
+1. Every resource resolves to exactly one team, through its heap or directly (a team's tags and parameters). The
+   service resolves the owning team first, then loads the caller's membership in it.
 2. A caller who isn't a member gets `404`, the same as for a resource that doesn't exist, so an outsider can't probe
    for IDs. A member without the permission gets `403`.
 3. Every repository query that loads heap-level data filters by the resolved heap, so an ID from another heap can
-   never leak in; one sent in a request body is refused with `422`. A tag ID is checked against the heap's tags, its
-   own and its team's, so a team tag's ID passes in every heap of its team and in no other. A team parameter's ID passes in a heap that
-   uses it, and for a write on the parameter itself (not its weight there) it is `404` under a heap's path.
-4. Finding users to add (`GET /users`) is for admins of a shared team (everyone is admin of their personal team,
-   which doesn't count) and is built so it can't list addresses: a name matches by word prefix, an email only when
-   typed in full, and a match shows the email only when the email matched.
-
+   never leak in; one sent in a request body is refused. A team tag's or team parameter's ID passes in the heaps of
+   its team that see it, and in no other.
+4. Finding users to add is for admins of a shared team and is built so it can't list addresses: a name matches by
+   word prefix, an email only when typed in full, and a match shows the email only when the email matched.
 5. An invite link is the one thing opened by holding its token, signed in or not. That shows the team's name and the
-   maker's name, whatever the link's state, and nothing else of the team. Joining checks the link at that moment, under
-   the team lock, so a revocation that commits while a join waits for the lock wins.
+   maker's name and nothing else of the team. Joining checks the link under the team lock, so a revocation that
+   commits while a join waits for the lock wins.
 
 ### Archived heaps
 
-1. An archived heap is read-only for everyone, admins included. Every write use case on a heap and its contents
-   first checks that the heap is active, under the heap lock, and refuses with `409` otherwise.
-2. Unarchiving is the only write allowed on an archived heap, and only an admin can do it. `allowed_actions` is
-   empty for anything in an archived heap, apart from `unarchive` for admins.
+1. An archived heap is read-only for everyone, admins included. Every write on a heap and its contents checks that
+   the heap is active under the heap lock.
+2. Unarchiving is the only write allowed on an archived heap, and only an admin can do it, so `allowed_actions`
+   offers nothing else there.
 
 ### Rules that depend on state
 
-Rules such as a team keeping at least one admin, reopening within a week, closed items being read-only, no blocking
-cycles, an archived option needing a replacement, a parameter being archived only when unused, and names being
-unique run in the same transaction as the write, after the permission check, with the rows they depend on locked as
-described under [Cycle detection and locking](#cycle-detection-and-locking). Each failure is a `409` or `422` with
-a stable code; the codes are in `crates/api/src/error.rs`, and the rules themselves in `domain`. The team rule is
-the one that locks the team row rather than a heap: every team write locks it before any other read, then counts
-the remaining admins.
+Rules such as a team keeping at least one admin, closed items being read-only, no blocking cycles and unique names
+run in the same transaction as the write, after the permission check, with the rows they depend on locked as
+described under [Cycle detection and locking](#cycle-detection-and-locking). The rules themselves are in `domain`,
+and each failure has a stable code in `crates/api/src/error.rs`. The team rule is the one that locks the team row
+rather than a heap: every team write locks it before any other read, then counts the remaining admins.
 
 ### Non-web client tokens
 
 1. Access tokens issued to the CLI carry the user's full permissions; there are no narrower scopes yet. Scoped
    tokens could be added without changing the permission model, since a scope would only ever narrow a role's
    permissions.
-2. Access tokens are short-lived and refresh tokens rotate on each use. A family is one sign-in by a client: the
-   pair the code was exchanged for and every pair refreshed from it, one row in `oauth_token_families`. Refreshing
-   uses the refresh token up and issues a new pair in the same family, so a client in use stays signed in.
+2. Access tokens are short-lived and refresh tokens rotate on each use, within the family of one sign-in, so a client
+   in use stays signed in.
 3. A refresh token presented a second time means someone holds a copy, so the whole family is revoked, the
    legitimate client included, which then signs in again. A code presented twice within its lifetime revokes the
    family its first exchange issued (RFC 6749 §4.1.2); past that it's only refused, so a code left in a browser's
    history can't end the sign-in later.
-4. Single use is a conditional update (`used_at IS NULL`), so of two racing requests one wins and the other counts
-   as reuse. A refresh locks the family row and a revocation updates it, so the two run one after the other. On
-   SQLite, which has no row locks, the loser of such a race may fail with a server error rather than be refused as
-   reuse; tokens are never issued twice either way.
-5. Revoking either token of a family (`POST /oauth/revoke`) revokes the family, and answers `200` for unknown tokens
-   too (RFC 7009). `POST /auth/logout` ends only a session cookie.
-6. A user sees and ends their own sign-ins at `/me/sign-ins`, with a session cookie or a bearer token. The list is
-   the user's live families: not revoked, and holding a refresh token that is unused and unexpired. Each carries
-   `last_used_at`, the creation time of the family's newest token (the sign-in or its latest refresh), and
-   `device_name`, which the client sent with the code exchange. It also carries the wording, in the request's time
-   zone: `label` (the device name, else the client's name), `signed_in_label` and `last_used_label`.
-   `DELETE /me/sign-ins/{id}` revokes the family as `/oauth/revoke` does, answers `204` again for one that ended
-   within the last day (after that it's gone, point 7), and `404` for an unknown id or another user's, which it
-   doesn't tell apart. The device name is the client's claim and only a label: nothing decides by it, and
-   it is validated as text (`domain::oauth::DeviceName`), not trusted. It comes with the code exchange and not the
-   authorization request, so the consent page never shows it: a familiar name there could make a phishing request
-   look legitimate.
-7. Codes, families and their tokens are authentication plumbing, so each successful code exchange deletes a few
-   that ended over a day ago: expired codes, and families that are revoked or have no refresh token left unused and
-   unexpired. The day keeps a retry hearing why it was refused and ending a sign-in again succeeding. Used refresh
-   tokens of a live family stay, since they detect reuse.
+4. Single use is a conditional update, so of two racing requests one wins and the other counts as reuse. On SQLite,
+   which has no row locks, the loser of such a race may fail with a server error rather than be refused as reuse;
+   tokens are never issued twice either way.
+5. Revoking either token of a family revokes the family (RFC 7009). Signing out of the web app ends only its session.
+6. A user sees and ends their own sign-ins, with a session cookie or a bearer token. The device name on each is the
+   client's claim and only a label: nothing decides by it.
+7. Codes, families and their tokens are authentication plumbing, so they are deleted a day after they end. Used
+   refresh tokens of a live family stay, since they detect reuse.
 
 ### Personal tokens
 
@@ -901,100 +738,63 @@ A machine with no browser and no keychain, such as a cloud session, a container 
 [Non-web client tokens](#non-web-client-tokens), and an OAuth refresh token can't be copied there: it rotates, and a
 reused one revokes the whole sign-in. So a person makes a personal token in the web app and gives it to the machine.
 
-1. The secret is `uph_` and a random 256-bit value, made as session tokens are, and only its SHA-256 is stored. The
-   prefix tells it from an OAuth token, so the bearer check looks in one table, and lets secret scanners find a leaked
-   one. It is shown once, in the answer to making it.
-2. It never rotates, which is the point: the copy on the machine stays good until it expires or is revoked. The person
-   picks the expiry when making it, and "never" is allowed.
-3. A token is live when it isn't revoked and hasn't expired. The rows of revoked and expired ones are kept, so a request
-   that presents one can be told which it was. They are tiny, and only the holder of the secret can ask.
-4. The endpoints that make, list and revoke tokens take the session cookie only, so a token can't make another, and a
-   copy that leaks can't be used to keep access after it is revoked.
-5. Using a token records `last_used_at`, with a minute's precision: one conditional update, so a burst of requests
-   writes once a minute at most.
-6. A token has all the permissions of its person, as a command-line sign-in has. A scope that narrowed it would be
+1. The secret is made as session tokens are, and only its hash is stored. Its prefix tells it from an OAuth token,
+   so the bearer check looks in one table, and lets secret scanners find a leaked one.
+2. It never rotates, which is the point: the copy on the machine stays good until it expires or is revoked. The
+   person picks the expiry, and "never" is allowed.
+3. Revoked and expired tokens are kept, so a request that presents one can be told which it was.
+4. Tokens are made, listed and revoked with the session cookie only, so a token can't make another, and a copy that
+   leaks can't be used to keep access after it is revoked.
+5. A token has all the permissions of its person, as a command-line sign-in has. A scope that narrowed it would be
    added the way [Non-web client tokens](#non-web-client-tokens) point 1 says.
-7. A password change or reset revokes every live personal token, in the same transaction and counted in the sign-ins it
-   ends, as it ends the web sessions and the command-line sign-ins. Someone who resets a compromised account must cut
-   off a token that was made with the stolen session.
+6. A password change or reset revokes every live personal token, as it ends the web sessions and the command-line
+   sign-ins: someone who resets a compromised account must cut off a token made with the stolen session.
 
 ## Audit log
 
 1. Each use case runs in one database transaction, performs the change and inserts the audit entry before
    committing.
-2. `action` is a typed enum (`ItemCreated`, `OptionArchived`, `MemberPromoted`, …) and `diff` stores the changed
-   fields as before/after pairs.
+2. `action` is a typed enum and `diff` stores the changed fields as before/after pairs.
 3. Each action is shown to those who hold the permission it takes (`audit_permission` in `domain::permission`), and
-   the read filters on it in SQL so paging stays exact. Members see item, tag and saved view changes, changes to a
-   heap's context, and display name changes; admins additionally see heap, parameter, team and membership changes.
-   Leaving a team is a membership change, so only admins see it, although any member may leave.
-4. The heap log reads what is recorded against the heap. The team log reads the team's own entries and the heaps'
-   own entries (created, renamed, archived, context changed), but not what happens inside the heaps. A team tag's
-   entries (made, edited, merged) are the team's own, with no heap, so the team log reads them; a merge also writes
-   one on each item it changed, in that item's heap, so the item's History says its tag was merged. With
-   `entity_id`, either reads one entity's history; the team log with a team tag's ID is that tag's history, and its
-   merge entry shows the heap tags it took in (heap, name, items). The heap log then reads that entity's entries
-   from every heap of every team the reader is a member of, each team's limited to the actions the reader's role in that team may see,
-   in one query, so paging stays exact. A move within a team (`ItemMoved`) is recorded in the heap the item went to,
-   and its history from before it still shows after it, with the old heap's tags and parameters named. The log is
-   per team and its entries are never copied or re-homed, so a move to another team writes two: one in the heap the
-   item left, with the item's title (`item_title`, never shown as a change) and no target, and one in the heap it
-   went to, with the heap and nothing of the source team's. Someone in both teams sees the whole trail, and someone
-   in one sees that team's part. The old team's log names an item that is no longer in any of its heaps by the
-   `item_title` of its latest `ItemMoved` entry there. A turn the move takes back, because its person may not edit
-   items in the target heap, is recorded in the source heap.
-5. Entries come ready to show: the actor's and the entity's current names, a time label in the request's timezone,
-   a `phrase` to read after the actor's name, and `changes`, one per changed field with the values before and after
-   as text and IDs replaced by current names. The raw `diff` is returned too. An edited text people write (an
-   item's title and context, a step's, a heap's context) also comes with `text_diff`, a word diff computed when the
-   log is read (`domain::text_diff`), so nothing extra is stored and old entries get it too. It is the server's, not
-   the web app's, so every client shows the same diff, and none when too little stayed the same.
-6. A step's changes are recorded against its item (`StepAdded`, `StepUpdated`, with the item as the entity), so they
-   read in the item's History and the heap's Activity, shown to those who may edit items. The diff names the step
-   by number and title, and each changed field as `step_title`, `step_context` or `step_state`. A comment is
-   recorded the same way (`CommentAdded`, "commented on"), with its number and its whole text, so History shows what
-   was said. A question's are
-   recorded the same way (`QuestionAsked`, `QuestionAnswered`), shown to those who may edit items, with the
-   question's number and text and, once answered, the labels picked and the comment; changing a reply is
-   `ReplyChanged`, with the picks and comment before and after. So are a question withdrawn
-   by closing its item or taking it back from the agent that asked it (`QuestionWithdrawn`) and a turn
-   (`TurnOpened`, with its reach, goal, line and source, `TurnTakenBack`, with the goal and why: the person took it
-   back, started the item, closed it, or archived the heap, `TurnReached`, with the goal and the stage before and
-   after, `TurnRetried`, and `TurnRedone`, with the goal, the stage before and after and the line). Closing an item writes its take back, then a withdrawal for each open question, then its
-   own update.
-7. Invite links are never deleted. Making and revoking one are team entries (`InviteLinkCreated`,
-   `InviteLinkRevoked`) shown to admins, and a join through one is a membership entry (`MemberJoined`) naming the
-   link, so a link's own History is its entries by `entity_id`. A link ending by time is not an act and has no entry.
-8. The web app shows history where things are edited: under the item, in a collapsed History on each tag,
-   parameter, heap, member and invite link, and the whole logs on the heap's and the team's Activity pages. The
-   account's own history is under Account's Password card ([Authentication](#authentication-and-authorization)).
-   Parameters and heaps offer `view_history` only to those who may see their entries, so members aren't shown
-   histories that are always empty.
+   the read filters on it in SQL so paging stays exact. Members see what happens to items; admins also see heap,
+   parameter, team and membership changes.
+4. The heap log reads what is recorded against the heap, and the team log the team's own entries and the heaps' own
+   (created, renamed, archived), not what happens inside them. Either can read one entity's history. The log is per
+   team and its entries are never copied or re-homed, so a move to another team writes one entry in each: someone in
+   both teams sees the whole trail, and someone in one sees that team's part. The entry in the heap the item left
+   keeps its title, so the old team's log can still name it.
+5. Entries come ready to show: current names for the actor, the entity and every ID in the diff, a time label in the
+   request's timezone, and a phrase for each change. An edited text people write also comes with a word diff
+   computed when the log is read, so nothing extra is stored and old entries get it too. It is the server's, not the
+   web app's, so every client shows the same diff.
+6. A step's, comment's, question's and turn's changes are recorded against its item, so they read in the item's
+   History and the heap's Activity.
+7. Invite links are never deleted, and a join through one names the link, so a link's own History is its entries. A
+   link ending by time is not an act and has no entry.
+8. The web app shows history where things are edited, and the whole logs on the heap's and the team's Activity
+   pages. `view_history` is offered only to those who may see a thing's entries, so members aren't shown histories
+   that are always empty.
 
 ## Configuration and deployment
 
 1. Configuration comes from environment variables, validated at startup; the variables and their defaults are in
-   [configuration.md](../operator/configuration.md). No session secret is needed, because session tokens are random and
-   stored hashed rather than signed. The operator's contact line goes out with the public password-reset options
-   (`GET /password-resets`), because the sign-in page already reads them before anyone signs in.
+   [configuration.md](../operator/configuration.md). No session secret is needed, because session tokens are random
+   and stored hashed rather than signed.
 2. On startup the server runs pending migrations, then serves the API and the web app on one port. On Postgres the
    run holds a transaction-scoped advisory lock, so instances starting together apply each migration once; MySQL and
    SQLite aren't run with several instances.
 3. **Default deployment:** the Docker image with SQLite on a mounted volume.
 4. **Production:** `DATABASE_URL` points at Postgres or MySQL. TLS terminates at a reverse proxy, or at Cloud Run in
    front of a Neon database ([operations.md](../operator/operations.md)).
-5. **Health checks:** `/healthz` returns `200` while the process is up. `/readyz` returns `200` only once migrations
-   have finished and the database answers a ping, so orchestrators route traffic only to ready instances. Neither
-   needs authentication, and neither reveals versions or configuration.
-6. **Mail** is optional. The `mail` crate builds the mailer at startup from `MAIL_URL` and `MAIL_FROM` (lettre with
-   rustls, no connection pool). SMTP always uses TLS, implicit or STARTTLS. `file://` and `log:` are the development
-   transports, and the only places a mail's text is recorded. A failed send isn't retried. `service` sends the mail
-   it needs through that mailer (the reset mail, the email change link and the notice of a change, and the confirmation link, see Authentication).
+5. **Health checks:** `/healthz` answers while the process is up, and `/readyz` only once migrations have finished
+   and the database answers, so orchestrators route traffic only to ready instances. Neither needs authentication,
+   and neither reveals versions or configuration.
+6. **Mail** is optional. SMTP always uses TLS. The development transports are the only places a mail's text is
+   recorded. A failed send isn't retried.
 7. **Startup and shutdown:** invalid configuration, an unreachable database or a failed migration stops the server
-   with a clear message before it listens. The database gets time first: a database that scales to zero (Neon) can
-   take longer to wake than one try's 10 s timeout, so the connect is retried with backoff, every error alike, until
-   `DATABASE_CONNECT_DEADLINE_SECS` has passed. A try may start just before the deadline and run its full timeout,
-   so the deadline sits about 15 s under the startup probe's limit, leaving room for that try and the migrations. On SIGTERM it stops accepting connections and drains in-flight requests.
+   with a clear message before it listens. A database that scales to zero (Neon) can take longer to wake than one
+   try's timeout, so the connect is retried with backoff until a deadline set under the startup probe's limit. On
+   SIGTERM it stops accepting connections and drains in-flight requests.
 
 ## CLI
 
@@ -1071,9 +871,6 @@ principles; the commands and flags are in `upheap --help`. This section is how i
    widths. Each test registers its own account, so tests share no data and run in parallel; everything beyond these
    paths is tested lower down.
 6. **CLI:** `crates/cli/tests` runs each command against the real API router on in-memory SQLite, served on a
-   localhost port, and checks stdout, stderr and the exit code. The tests sign in through the real OAuth endpoints,
-   most by seeding the token store with tokens from a code they approved and exchanged, the login tests by running
-   `upheap auth login` with a browser that answers the consent page. The `UPHEAP_TOKEN` tests make a personal token
-   through the API and run with an empty keychain and no config directory.
+   localhost port, and checks stdout, stderr and the exit code. The tests sign in through the real OAuth endpoints.
 
 The commands are in [README.md](../../README.md#develop).
