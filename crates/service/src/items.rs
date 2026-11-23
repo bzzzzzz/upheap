@@ -767,10 +767,11 @@ impl Services {
     /// never gets two. A reminder can't be sent ([`TurnError::NeedsNoteOrTask`]), and a goal the new item can't be sent
     /// to is a validation error on the goal ([`pick_goal`]). Any refusal adds nothing.
     ///
-    /// `new_steps` are written in the same transaction, in the order given (their `after` is ignored), each with its `step_added` entry after the item's
-    /// and before the turn's, so whoever sees the turn sees the steps. They are for a task and at most
-    /// [`MAX_STEPS`](domain::step::MAX_STEPS), or it fails with [`StepError::NeedsTask`](domain::step::StepError::NeedsTask)
-    /// or [`StepError::TooMany`](domain::step::StepError::TooMany).
+    /// `new_steps` are written in the same transaction, in the order given (their `after` is ignored), each with its
+    /// `step_added` entry after the item's and before the turn's, so whoever sees the turn sees the steps. They are for
+    /// a task and at most [`MAX_STEPS`](domain::step::MAX_STEPS), or it fails with
+    /// [`StepError::NeedsTask`](domain::step::StepError::NeedsTask) or
+    /// [`StepError::TooMany`](domain::step::StepError::TooMany).
     pub async fn create_item(
         &self,
         principal: Principal,
