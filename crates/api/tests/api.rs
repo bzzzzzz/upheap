@@ -111,6 +111,67 @@ async fn items_are_ranked_with_contributors() -> Result<()> {
 
 #[gtest]
 #[tokio::test]
+async fn a_new_item_with_a_field_the_server_does_not_have_is_refused_and_not_created() -> Result<()> {
+    // Arrange
+    let app = TestApp::start().await?;
+    let (session, heap) = app.register("ada@example.test").await?;
+    let note = app.new_item(&session, &heap, json!({ "title": "Certs" })).await?;
+    let items = format!("{}/items", app.heap_url(&heap).await?);
+    let task = json!({ "title": "Rotate the certs", "need": "critical", "kind": "task" });
+    let with = |field: &str, value: serde_json::Value| {
+        let mut body = task.clone();
+        body[field] = value;
+        body
+    };
+
+    // Act
+    let top = app
+        .send(
+            Method::POST,
+            &items,
+            Some(&session),
+            Some(with("step", json!(["Renew"]))),
+        )
+        .await?;
+    let due = app
+        .send(
+            Method::POST,
+            &items,
+            Some(&session),
+            Some(with(
+                "due",
+                json!({ "date": "2027-03-12", "firm": true, "time": "09:00" }),
+            )),
+        )
+        .await?;
+    let origin = app
+        .send(
+            Method::POST,
+            &items,
+            Some(&session),
+            Some(with(
+                "origin",
+                json!({ "item_id": note["id"], "age": "keep", "why": "split" }),
+            )),
+        )
+        .await?;
+    let list = app.send(Method::GET, &items, Some(&session), None).await?;
+
+    // Assert
+    for (refused, field) in [(&top, "step"), (&due, "time"), (&origin, "why")] {
+        expect_that!(refused.status, eq(StatusCode::BAD_REQUEST));
+        expect_that!(refused.body["code"], eq(&json!("invalid_body")));
+        expect_that!(
+            refused.body["title"].as_str().unwrap_or_default(),
+            contains_substring(format!("unknown field `{field}`"))
+        );
+    }
+    expect_that!(list.body["ranked"].as_array().map(Vec::len), some(eq(1)));
+    Ok(())
+}
+
+#[gtest]
+#[tokio::test]
 async fn items_say_who_added_them_and_how_long_ago() -> Result<()> {
     // Arrange
     let app = TestApp::start().await?;

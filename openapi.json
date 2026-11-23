@@ -12945,7 +12945,8 @@
           "title": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateNamedRequest": {
         "type": "object",
@@ -13336,7 +13337,8 @@
           "firm": {
             "type": "boolean"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "EmailChanged": {
         "type": "object",
@@ -15908,7 +15910,8 @@
             "type": "string",
             "format": "uuid"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Parameter": {
         "type": "object",

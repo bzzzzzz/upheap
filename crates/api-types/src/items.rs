@@ -445,6 +445,7 @@ pub struct AcrossHeapsClosedItemDto {
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(as = CreateItemRequest)]
 pub struct CreateItemDto {
     pub title: String,
@@ -490,6 +491,7 @@ pub struct CreateItemDto {
 
 /// The item a new item is made from, and whose age it takes.
 #[derive(Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(as = OriginInput)]
 pub struct OriginInputDto {
     pub item_id: Uuid,
