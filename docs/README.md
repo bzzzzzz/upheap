@@ -18,8 +18,12 @@ Who each folder is for, what each doc holds, and when to update it. The rules th
 | [ux.md](dev/ux.md) | The web app's agreed design: principles, core flows, toolkit, layout at each width, each screen's behaviour, the rules that settle questions, and why. Not the copy, sizes, routes or keys the code holds | A principle, a layout or a behaviour changes |
 | [../web/e2e/CLAUDE.md](../web/e2e/CLAUDE.md) | The rules the Playwright tests follow so they don't race the app: what to wait for after a save, what not to assert, how to reproduce a flake | A flake teaches a rule, or the tests' setup changes |
 
-`dev/work/` holds the designs of unbuilt work, each deleted once it's built; there is none right now. Plans,
-progress and ideas are in Upheap. Everything beside it is permanent.
+`dev/work/` holds the designs of unbuilt work, each deleted once it's built. Plans, progress and ideas are in
+Upheap. Everything beside it is permanent.
+
+| Design | What it is |
+| --- | --- |
+| [notifications.md](dev/work/notifications.md) | Mail about a reminder on its date and about what starts waiting for the person, where they asked for it, and the timed run that sends it |
 
 The web app's mockups live outside the repository, in the "Upheap layouts" canvas. ux.md names a board where it
 relies on one.
