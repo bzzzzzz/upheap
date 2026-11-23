@@ -342,8 +342,8 @@ impl Services {
     /// the provider sent back.
     ///
     /// Every refusal deletes the sign-in, makes nothing and is logged with its reason. A known identity gets a
-    /// session, as after a password; a new one is kept on the sign-in for [`Services::register_oidc_user`], and
-    /// only if its email is verified and no account has it.
+    /// session, as after a password, and its name and email aren't refreshed from the provider; a new one is kept on
+    /// the sign-in for [`Services::register_oidc_user`], and only if its email is verified and no account has it.
     pub async fn finish_oidc_sign_in(
         &self,
         cookie_state: Option<&str>,

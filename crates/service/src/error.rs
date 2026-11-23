@@ -41,7 +41,8 @@ pub enum ServiceError {
     /// The identity provider turned the person's access off over SCIM, so no sign-in opens a session for them.
     #[error("the account is deactivated")]
     AccountDeactivated,
-    /// An operator turned the local account off, so no sign-in opens a session for the person.
+    /// An operator turned the local account off, so no sign-in opens a session for the person. A code of its own beside
+    /// [`ServiceError::AccountDeactivated`], so the web app can say who turned it off.
     #[error("the account is turned off")]
     AccountTurnedOff,
     /// An operator action on an account whose state the sign-in provider owns.

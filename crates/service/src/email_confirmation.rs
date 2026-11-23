@@ -3,6 +3,10 @@
 //!
 //! A link's token is a 256-bit random value. The database holds only its SHA-256, so the link exists only in the
 //! mail. The stored link is a [`ResetLink`], and a link that doesn't work fails like an email change link.
+//!
+//! Any mailed link confirms: setting a password with a reset link and applying an email change confirm the address
+//! too. So someone whose address a squatter registered gets in through Forgot your password?, which mails any account
+//! with the address. There is no resend endpoint: signing in again mails a new link.
 
 use std::sync::Arc;
 

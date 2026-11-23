@@ -1,5 +1,6 @@
 //! Password reset links: the operator makes one for a user, and whoever holds it sets a new password and is signed
-//! in (architecture.md, Authentication and authorization).
+//! in (architecture.md, Authentication and authorization). The operator makes them because, on a server with no mail,
+//! the person who runs it is the one who can vouch for someone who forgot their password.
 //!
 //! A link's token is a 256-bit random value. The database holds only its SHA-256, so the link is shown once, to the
 //! operator who made it.

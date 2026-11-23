@@ -171,6 +171,10 @@ impl Services {
     ///
     /// The team is named after the user and takes their username as its slug, and the user is its admin. Its first
     /// heap is `personal`.
+    ///
+    /// Unlike every other path that mails, registration has no count: the server has no client to key one by, and a cap
+    /// for the whole server would let anyone stop all sign-ups. Operators limit it at the reverse proxy, or close
+    /// registration (docs/operator/mail.md).
     pub async fn register(&self, registration: Registration<'_>) -> Result<Registered, ServiceError> {
         self.ensure_password_sign_in()?;
         if !self.settings.allow_registration {
@@ -528,6 +532,9 @@ impl Services {
     /// Opens a session for the user, the one place every sign-in, registration and password reset does. Refuses with
     /// [`ServiceError::AccountDeactivated`] when the provider has deactivated the person (see [`crate::scim`]), and with
     /// [`ServiceError::AccountTurnedOff`] when an operator has turned the account off. Sets the user's last sign-in.
+    ///
+    /// The provider normally refuses a person it deactivated itself; this is the backstop, there because a password
+    /// reset could otherwise give a provider-made account a password. A person with no SCIM record is not off.
     pub(crate) async fn open_session(
         &self,
         db: &impl store::ConnectionTrait,
