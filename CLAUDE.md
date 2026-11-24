@@ -74,6 +74,9 @@ Upheap with `/upheap:add`, which picks the heap it fits, when this workspace can
 installed and signed in. Leave no pointer to it in the file (rule 5). When it can't, name the follow-up in your reply
 and in the pull request's description, so the owner can add it.
 
+In a session with a person in it, don't add a task or a note to Upheap until they confirm it: list what you would
+add, one line each, and add what they say yes to. A session nobody is talking to adds without asking.
+
 ## Interface changes
 
 Before building a significant change to the web app's design, on wide screens or on a phone, make a mockup in
